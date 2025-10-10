@@ -1,4 +1,4 @@
-import { Home, Users, Truck, FileText, Mail } from "lucide-react";
+import { Home, Users, Truck, FileText, Mail, Award } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
   Sidebar,
@@ -17,6 +17,7 @@ const items = [
   { title: "Roster", url: "/roster", icon: Users },
   { title: "Transportation", url: "/transportation", icon: Truck },
   { title: "Daily Notes", url: "/notes", icon: FileText },
+  { title: "Awards", url: "/awards", icon: Award },
   { title: "Messages", url: "/messages", icon: Mail },
 ];
 

@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import Roster from "./pages/Roster";
 import Transportation from "./pages/Transportation";
 import DailyNotes from "./pages/DailyNotes";
+import Awards from "./pages/Awards";
 import ChildProfile from "./pages/ChildProfile";
 import Messages from "./pages/Messages";
 import NotFound from "./pages/NotFound";
@@ -34,6 +35,7 @@ const App = () => (
                   <Route path="/roster" element={<Roster />} />
                   <Route path="/transportation" element={<Transportation />} />
                   <Route path="/notes" element={<DailyNotes />} />
+                  <Route path="/awards" element={<Awards />} />
                   <Route path="/messages" element={<Messages />} />
                   <Route path="/child/:id" element={<ChildProfile />} />
                   <Route path="*" element={<NotFound />} />
