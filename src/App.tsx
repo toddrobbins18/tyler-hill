@@ -7,6 +7,8 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import Dashboard from "./pages/Dashboard";
 import Roster from "./pages/Roster";
+import Staff from "./pages/Staff";
+import StaffProfile from "./pages/StaffProfile";
 import Transportation from "./pages/Transportation";
 import DailyNotes from "./pages/DailyNotes";
 import Awards from "./pages/Awards";
@@ -33,6 +35,8 @@ const App = () => (
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/roster" element={<Roster />} />
+                  <Route path="/staff" element={<Staff />} />
+                  <Route path="/staff/:id" element={<StaffProfile />} />
                   <Route path="/transportation" element={<Transportation />} />
                   <Route path="/notes" element={<DailyNotes />} />
                   <Route path="/awards" element={<Awards />} />
