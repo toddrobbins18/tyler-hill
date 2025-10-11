@@ -1,48 +1,60 @@
-import { Plus, MapPin, Clock, Users } from "lucide-react";
+import { Plus, MapPin, Clock, Users, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-const routes = [
+const trips = [
   { 
     id: 1, 
-    name: "Route A - North District", 
-    driver: "John Smith", 
+    name: "Science Museum Field Trip", 
+    type: "Field Trip",
+    destination: "City Science Museum",
+    chaperone: "Mrs. Anderson & Mr. Wilson",
     vehicle: "Bus #101",
-    stops: 8,
-    children: 24,
-    departureTime: "7:30 AM",
-    status: "on-time"
+    children: 28,
+    departureTime: "9:00 AM",
+    returnTime: "2:30 PM",
+    date: "Nov 15, 2024",
+    status: "scheduled"
   },
   { 
     id: 2, 
-    name: "Route B - East District", 
-    driver: "Maria Garcia", 
-    vehicle: "Bus #102",
-    stops: 6,
-    children: 18,
-    departureTime: "7:45 AM",
-    status: "on-time"
+    name: "Soccer Championship", 
+    type: "Sporting Event",
+    destination: "Riverside Sports Complex",
+    chaperone: "Coach Martinez",
+    vehicle: "Van #201",
+    children: 15,
+    departureTime: "8:30 AM",
+    returnTime: "12:00 PM",
+    date: "Nov 12, 2024",
+    status: "confirmed"
   },
   { 
     id: 3, 
-    name: "Route C - South District", 
-    driver: "David Lee", 
-    vehicle: "Van #201",
-    stops: 5,
-    children: 12,
-    departureTime: "8:00 AM",
-    status: "delayed"
+    name: "Art Gallery Tour", 
+    type: "Field Trip",
+    destination: "Downtown Art Gallery",
+    chaperone: "Ms. Thompson",
+    vehicle: "Bus #102",
+    children: 22,
+    departureTime: "10:00 AM",
+    returnTime: "1:30 PM",
+    date: "Nov 18, 2024",
+    status: "scheduled"
   },
   { 
     id: 4, 
-    name: "Route D - West District", 
-    driver: "Sarah Johnson", 
-    vehicle: "Bus #103",
-    stops: 7,
-    children: 21,
-    departureTime: "7:30 AM",
-    status: "on-time"
+    name: "Basketball Tournament", 
+    type: "Sporting Event",
+    destination: "Lincoln High School",
+    chaperone: "Coach Davis & Mrs. Lee",
+    vehicle: "Van #202",
+    children: 12,
+    departureTime: "1:00 PM",
+    returnTime: "5:00 PM",
+    date: "Nov 20, 2024",
+    status: "confirmed"
   },
 ];
 
@@ -52,46 +64,52 @@ export default function Transportation() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground mb-2">Transportation</h1>
-          <p className="text-muted-foreground">Manage routes, schedules, and transportation logistics</p>
+          <p className="text-muted-foreground">Manage field trips and sporting event transportation</p>
         </div>
         <Button className="shadow-sm">
           <Plus className="h-4 w-4 mr-2" />
-          Add Route
+          Add Trip
         </Button>
       </div>
 
       <div className="grid gap-6">
-        {routes.map((route) => (
-          <Card key={route.id} className="shadow-card hover:shadow-md transition-all">
+        {trips.map((trip) => (
+          <Card key={trip.id} className="shadow-card hover:shadow-md transition-all">
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div>
-                  <CardTitle className="text-xl mb-1">{route.name}</CardTitle>
+                  <div className="flex items-center gap-2 mb-2">
+                    <CardTitle className="text-xl">{trip.name}</CardTitle>
+                    <Badge variant="secondary">{trip.type}</Badge>
+                  </div>
                   <CardDescription>
-                    Driver: {route.driver} | Vehicle: {route.vehicle}
+                    Destination: {trip.destination}
+                  </CardDescription>
+                  <CardDescription className="mt-1">
+                    Chaperone: {trip.chaperone} | Vehicle: {trip.vehicle}
                   </CardDescription>
                 </div>
                 <Badge 
                   variant="outline"
                   className={
-                    route.status === "on-time" 
+                    trip.status === "confirmed" 
                       ? "bg-success/10 text-success border-success/20"
                       : "bg-warning/10 text-warning border-warning/20"
                   }
                 >
-                  {route.status === "on-time" ? "On Time" : "Delayed"}
+                  {trip.status === "confirmed" ? "Confirmed" : "Scheduled"}
                 </Badge>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-3 gap-6">
+              <div className="grid grid-cols-4 gap-6">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-primary/10">
-                    <MapPin className="h-5 w-5 text-primary" />
+                    <Calendar className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Stops</p>
-                    <p className="text-lg font-semibold">{route.stops}</p>
+                    <p className="text-sm text-muted-foreground">Date</p>
+                    <p className="text-sm font-semibold">{trip.date}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -100,7 +118,7 @@ export default function Transportation() {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Children</p>
-                    <p className="text-lg font-semibold">{route.children}</p>
+                    <p className="text-lg font-semibold">{trip.children}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -109,7 +127,16 @@ export default function Transportation() {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Departure</p>
-                    <p className="text-lg font-semibold">{route.departureTime}</p>
+                    <p className="text-sm font-semibold">{trip.departureTime}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-muted">
+                    <Clock className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Return</p>
+                    <p className="text-sm font-semibold">{trip.returnTime}</p>
                   </div>
                 </div>
               </div>

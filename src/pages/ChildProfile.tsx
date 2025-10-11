@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Award, Trophy, Star, Calendar } from "lucide-react";
+import { ArrowLeft, Award, Trophy, Star, Calendar, AlertTriangle, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +30,24 @@ export default function ChildProfile() {
       { id: 1, name: "Soccer Team", role: "Forward", season: "Fall 2024" },
       { id: 2, name: "Art Club", role: "Member", season: "Year-round" },
       { id: 3, name: "Choir", role: "Alto", season: "Year-round" },
+    ],
+    incidentReports: [
+      { 
+        id: 1, 
+        date: "Nov 5, 2024", 
+        type: "Minor Injury", 
+        description: "Scraped knee on playground during recess. First aid applied, guardian notified.",
+        reportedBy: "Mrs. Anderson",
+        severity: "low"
+      },
+      { 
+        id: 2, 
+        date: "Oct 20, 2024", 
+        type: "Behavioral", 
+        description: "Disagreement with classmate during group activity. Resolved through mediation.",
+        reportedBy: "Mr. Wilson",
+        severity: "low"
+      },
     ]
   };
 
@@ -53,6 +71,7 @@ export default function ChildProfile() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="achievements">Achievements</TabsTrigger>
           <TabsTrigger value="activities">Activities</TabsTrigger>
+          <TabsTrigger value="incidents">Incident Reports</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -147,6 +166,60 @@ export default function ChildProfile() {
                 </CardHeader>
                 <CardContent>
                   <Badge variant="secondary">{activity.role}</Badge>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="incidents" className="space-y-4">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-muted-foreground">
+              {child.incidentReports.length} total incident reports
+            </p>
+            <Button size="sm">
+              <FileText className="h-4 w-4 mr-2" />
+              Add Report
+            </Button>
+          </div>
+
+          <div className="grid gap-4">
+            {child.incidentReports.map((report) => (
+              <Card key={report.id} className="shadow-card">
+                <CardContent className="p-6">
+                  <div className="flex items-start gap-4">
+                    <div className={`p-3 rounded-xl ${
+                      report.severity === "high" ? "bg-destructive/10" :
+                      report.severity === "medium" ? "bg-warning/10" :
+                      "bg-muted"
+                    }`}>
+                      <AlertTriangle className={`h-6 w-6 ${
+                        report.severity === "high" ? "text-destructive" :
+                        report.severity === "medium" ? "text-warning" :
+                        "text-muted-foreground"
+                      }`} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <h3 className="font-semibold text-lg mb-1">{report.type}</h3>
+                          <p className="text-sm text-muted-foreground">Reported by {report.reportedBy}</p>
+                        </div>
+                        <Badge variant="outline" className={
+                          report.severity === "high" ? "bg-destructive/10 text-destructive border-destructive/20" :
+                          report.severity === "medium" ? "bg-warning/10 text-warning border-warning/20" :
+                          "bg-muted"
+                        }>
+                          {report.severity}
+                        </Badge>
+                      </div>
+                      <p className="text-sm mb-3">{report.description}</p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Calendar className="h-3 w-3" />
+                        <span>{report.date}</span>
+                      </div>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             ))}
