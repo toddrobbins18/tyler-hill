@@ -14,7 +14,444 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      awards: {
+        Row: {
+          category: string | null
+          child_id: string | null
+          created_at: string | null
+          date: string
+          description: string | null
+          id: string
+          title: string
+        }
+        Insert: {
+          category?: string | null
+          child_id?: string | null
+          created_at?: string | null
+          date: string
+          description?: string | null
+          id?: string
+          title: string
+        }
+        Update: {
+          category?: string | null
+          child_id?: string | null
+          created_at?: string | null
+          date?: string
+          description?: string | null
+          id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "awards_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      children: {
+        Row: {
+          age: number | null
+          allergies: string | null
+          created_at: string | null
+          emergency_contact: string | null
+          grade: string | null
+          group_name: string | null
+          guardian_email: string | null
+          guardian_phone: string | null
+          id: string
+          medical_notes: string | null
+          name: string
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          age?: number | null
+          allergies?: string | null
+          created_at?: string | null
+          emergency_contact?: string | null
+          grade?: string | null
+          group_name?: string | null
+          guardian_email?: string | null
+          guardian_phone?: string | null
+          id?: string
+          medical_notes?: string | null
+          name: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          age?: number | null
+          allergies?: string | null
+          created_at?: string | null
+          emergency_contact?: string | null
+          grade?: string | null
+          group_name?: string | null
+          guardian_email?: string | null
+          guardian_phone?: string | null
+          id?: string
+          medical_notes?: string | null
+          name?: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      daily_notes: {
+        Row: {
+          activities: string | null
+          child_id: string | null
+          created_at: string | null
+          created_by: string | null
+          date: string
+          id: string
+          meals: string | null
+          mood: string | null
+          nap: string | null
+          notes: string | null
+        }
+        Insert: {
+          activities?: string | null
+          child_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          date: string
+          id?: string
+          meals?: string | null
+          mood?: string | null
+          nap?: string | null
+          notes?: string | null
+        }
+        Update: {
+          activities?: string | null
+          child_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          date?: string
+          id?: string
+          meals?: string | null
+          mood?: string | null
+          nap?: string | null
+          notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_notes_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_notes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      events: {
+        Row: {
+          created_at: string | null
+          date: string
+          description: string | null
+          id: string
+          location: string | null
+          time: string | null
+          title: string
+          type: string
+        }
+        Insert: {
+          created_at?: string | null
+          date: string
+          description?: string | null
+          id?: string
+          location?: string | null
+          time?: string | null
+          title: string
+          type: string
+        }
+        Update: {
+          created_at?: string | null
+          date?: string
+          description?: string | null
+          id?: string
+          location?: string | null
+          time?: string | null
+          title?: string
+          type?: string
+        }
+        Relationships: []
+      }
+      incident_reports: {
+        Row: {
+          child_id: string | null
+          created_at: string | null
+          date: string
+          description: string
+          id: string
+          reported_by: string | null
+          severity: string | null
+          status: string | null
+          type: string
+        }
+        Insert: {
+          child_id?: string | null
+          created_at?: string | null
+          date: string
+          description: string
+          id?: string
+          reported_by?: string | null
+          severity?: string | null
+          status?: string | null
+          type: string
+        }
+        Update: {
+          child_id?: string | null
+          created_at?: string | null
+          date?: string
+          description?: string
+          id?: string
+          reported_by?: string | null
+          severity?: string | null
+          status?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "incident_reports_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      menu_items: {
+        Row: {
+          allergens: string | null
+          created_at: string | null
+          date: string
+          id: string
+          items: string
+          meal_type: string
+        }
+        Insert: {
+          allergens?: string | null
+          created_at?: string | null
+          date: string
+          id?: string
+          items: string
+          meal_type: string
+        }
+        Update: {
+          allergens?: string | null
+          created_at?: string | null
+          date?: string
+          id?: string
+          items?: string
+          meal_type?: string
+        }
+        Relationships: []
+      }
+      messages: {
+        Row: {
+          content: string
+          created_at: string | null
+          id: string
+          read: boolean | null
+          recipient_id: string | null
+          sender_id: string | null
+          subject: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          id?: string
+          read?: boolean | null
+          recipient_id?: string | null
+          sender_id?: string | null
+          subject: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          read?: boolean | null
+          recipient_id?: string | null
+          sender_id?: string | null
+          subject?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string | null
+          email: string | null
+          full_name: string | null
+          id: string
+          role: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id: string
+          role?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          role?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      staff: {
+        Row: {
+          created_at: string | null
+          department: string | null
+          email: string | null
+          hire_date: string | null
+          id: string
+          name: string
+          phone: string | null
+          role: string
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          department?: string | null
+          email?: string | null
+          hire_date?: string | null
+          id?: string
+          name: string
+          phone?: string | null
+          role: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          department?: string | null
+          email?: string | null
+          hire_date?: string | null
+          id?: string
+          name?: string
+          phone?: string | null
+          role?: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      staff_evaluations: {
+        Row: {
+          category: string | null
+          comments: string | null
+          created_at: string | null
+          date: string
+          evaluator: string | null
+          id: string
+          rating: number | null
+          staff_id: string | null
+        }
+        Insert: {
+          category?: string | null
+          comments?: string | null
+          created_at?: string | null
+          date: string
+          evaluator?: string | null
+          id?: string
+          rating?: number | null
+          staff_id?: string | null
+        }
+        Update: {
+          category?: string | null
+          comments?: string | null
+          created_at?: string | null
+          date?: string
+          evaluator?: string | null
+          id?: string
+          rating?: number | null
+          staff_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_evaluations_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trips: {
+        Row: {
+          capacity: number | null
+          chaperone: string | null
+          created_at: string | null
+          date: string
+          departure_time: string | null
+          destination: string | null
+          id: string
+          name: string
+          return_time: string | null
+          status: string | null
+          type: string
+        }
+        Insert: {
+          capacity?: number | null
+          chaperone?: string | null
+          created_at?: string | null
+          date: string
+          departure_time?: string | null
+          destination?: string | null
+          id?: string
+          name: string
+          return_time?: string | null
+          status?: string | null
+          type: string
+        }
+        Update: {
+          capacity?: number | null
+          chaperone?: string | null
+          created_at?: string | null
+          date?: string
+          departure_time?: string | null
+          destination?: string | null
+          id?: string
+          name?: string
+          return_time?: string | null
+          status?: string | null
+          type?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
