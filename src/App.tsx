@@ -15,6 +15,8 @@ import Awards from "./pages/Awards";
 import ChildProfile from "./pages/ChildProfile";
 import Messages from "./pages/Messages";
 import NotFound from "./pages/NotFound";
+import Auth from "./pages/Auth";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -24,30 +26,40 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <SidebarProvider>
-          <div className="flex min-h-screen w-full">
-            <AppSidebar />
-            <div className="flex-1 flex flex-col">
-              <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur px-6">
-                <SidebarTrigger />
-              </header>
-              <main className="flex-1 p-6 md:p-8 bg-background">
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/roster" element={<Roster />} />
-                  <Route path="/staff" element={<Staff />} />
-                  <Route path="/staff/:id" element={<StaffProfile />} />
-                  <Route path="/transportation" element={<Transportation />} />
-                  <Route path="/notes" element={<DailyNotes />} />
-                  <Route path="/awards" element={<Awards />} />
-                  <Route path="/messages" element={<Messages />} />
-                  <Route path="/child/:id" element={<ChildProfile />} />
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </main>
-            </div>
-          </div>
-        </SidebarProvider>
+        <Routes>
+          <Route path="/auth" element={<Auth />} />
+          <Route
+            path="*"
+            element={
+              <ProtectedRoute>
+                <SidebarProvider>
+                  <div className="flex min-h-screen w-full">
+                    <AppSidebar />
+                    <div className="flex-1 flex flex-col">
+                      <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur px-6">
+                        <SidebarTrigger />
+                      </header>
+                      <main className="flex-1 p-6 md:p-8 bg-background">
+                        <Routes>
+                          <Route path="/" element={<Dashboard />} />
+                          <Route path="/roster" element={<Roster />} />
+                          <Route path="/staff" element={<Staff />} />
+                          <Route path="/staff/:id" element={<StaffProfile />} />
+                          <Route path="/transportation" element={<Transportation />} />
+                          <Route path="/notes" element={<DailyNotes />} />
+                          <Route path="/awards" element={<Awards />} />
+                          <Route path="/messages" element={<Messages />} />
+                          <Route path="/child/:id" element={<ChildProfile />} />
+                          <Route path="*" element={<NotFound />} />
+                        </Routes>
+                      </main>
+                    </div>
+                  </div>
+                </SidebarProvider>
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

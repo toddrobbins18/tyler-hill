@@ -1,29 +1,40 @@
-import { useState } from "react";
-import { Search, Plus, Filter } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, Filter } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
-
-const mockChildren = [
-  { id: 1, name: "Emma Thompson", age: 8, grade: "3rd Grade", group: "A", status: "active" },
-  { id: 2, name: "Liam Rodriguez", age: 9, grade: "4th Grade", group: "B", status: "active" },
-  { id: 3, name: "Olivia Chen", age: 7, grade: "2nd Grade", group: "A", status: "active" },
-  { id: 4, name: "Noah Patel", age: 10, grade: "5th Grade", group: "C", status: "active" },
-  { id: 5, name: "Ava Johnson", age: 8, grade: "3rd Grade", group: "B", status: "active" },
-  { id: 6, name: "Ethan Williams", age: 9, grade: "4th Grade", group: "A", status: "active" },
-  { id: 7, name: "Sophia Martinez", age: 7, grade: "2nd Grade", group: "C", status: "active" },
-  { id: 8, name: "Mason Brown", age: 10, grade: "5th Grade", group: "B", status: "active" },
-];
+import { supabase } from "@/integrations/supabase/client";
+import AddChildDialog from "@/components/dialogs/AddChildDialog";
+import CSVUploader from "@/components/CSVUploader";
 
 export default function Roster() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [children, setChildren] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  const filteredChildren = mockChildren.filter((child) =>
+  const fetchChildren = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("children")
+      .select("*")
+      .order("name");
+    
+    if (!error && data) {
+      setChildren(data);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchChildren();
+  }, []);
+
+  const filteredChildren = children.filter((child) =>
     child.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    child.grade.toLowerCase().includes(searchTerm.toLowerCase())
+    (child.grade?.toLowerCase() || "").includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -33,10 +44,10 @@ export default function Roster() {
           <h1 className="text-3xl font-bold text-foreground mb-2">Roster</h1>
           <p className="text-muted-foreground">Manage and view all children in your program</p>
         </div>
-        <Button className="shadow-sm">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Child
-        </Button>
+        <div className="flex gap-2">
+          <CSVUploader tableName="children" onUploadComplete={fetchChildren} />
+          <AddChildDialog onSuccess={fetchChildren} />
+        </div>
       </div>
 
       <div className="flex gap-4">
@@ -55,34 +66,52 @@ export default function Roster() {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {filteredChildren.map((child) => (
-          <Card 
-            key={child.id} 
-            className="shadow-card hover:shadow-md transition-all cursor-pointer"
-            onClick={() => navigate(`/child/${child.id}`)}
-          >
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div className="space-y-1">
-                  <h3 className="font-semibold text-lg">{child.name}</h3>
-                  <p className="text-sm text-muted-foreground">{child.grade}</p>
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {filteredChildren.map((child) => (
+            <Card 
+              key={child.id} 
+              className="shadow-card hover:shadow-md transition-all cursor-pointer"
+              onClick={() => navigate(`/child/${child.id}`)}
+            >
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="space-y-1">
+                    <h3 className="font-semibold text-lg">{child.name}</h3>
+                    <p className="text-sm text-muted-foreground">{child.grade || "N/A"}</p>
+                  </div>
+                  {child.group_name && (
+                    <Badge variant="secondary">Group {child.group_name}</Badge>
+                  )}
                 </div>
-                <Badge variant="secondary">Group {child.group}</Badge>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Age: {child.age}</span>
-                <Badge 
-                  variant="outline" 
-                  className="bg-success/10 text-success border-success/20"
-                >
-                  Active
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Age: {child.age || "N/A"}</span>
+                  <Badge 
+                    variant="outline" 
+                    className={
+                      child.status === "active"
+                        ? "bg-success/10 text-success border-success/20"
+                        : "bg-muted text-muted-foreground"
+                    }
+                  >
+                    {child.status || "Active"}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {!loading && filteredChildren.length === 0 && (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">No children found</p>
+        </div>
+      )}
     </div>
   );
 }
