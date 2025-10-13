@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Search, Star, TrendingUp } from "lucide-react";
+import { Search, Star, TrendingUp, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,12 +8,26 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import AddStaffDialog from "@/components/dialogs/AddStaffDialog";
+import EditStaffDialog from "@/components/dialogs/EditStaffDialog";
 import CSVUploader from "@/components/CSVUploader";
+import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function Staff() {
   const [searchTerm, setSearchTerm] = useState("");
   const [staff, setStaff] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingStaff, setEditingStaff] = useState<string | null>(null);
+  const [deletingStaff, setDeletingStaff] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const fetchStaff = async () => {
@@ -65,6 +79,22 @@ export default function Staff() {
     return name.split(" ").map(n => n[0]).join("");
   };
 
+  const handleDelete = async (id: string) => {
+    const { error } = await supabase
+      .from("staff")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      toast.error("Failed to delete staff member");
+      console.error(error);
+    } else {
+      toast.success("Staff member deleted successfully");
+      fetchStaff();
+    }
+    setDeletingStaff(null);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -102,12 +132,14 @@ export default function Staff() {
           {filteredStaff.map((staffMember) => (
             <Card
               key={staffMember.id}
-              className="shadow-card hover:shadow-md transition-all cursor-pointer"
-              onClick={() => navigate(`/staff/${staffMember.id}`)}
+              className="shadow-card hover:shadow-md transition-all group"
             >
               <CardHeader>
                 <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
+                  <div 
+                    className="flex items-center gap-3 flex-1 cursor-pointer"
+                    onClick={() => navigate(`/staff/${staffMember.id}`)}
+                  >
                     <Avatar className="h-12 w-12">
                       <AvatarFallback className="bg-primary/10 text-primary font-semibold">
                         {getInitials(staffMember.name)}
@@ -117,6 +149,30 @@ export default function Staff() {
                       <CardTitle className="text-lg mb-1">{staffMember.name}</CardTitle>
                       <p className="text-sm text-muted-foreground">{staffMember.role}</p>
                     </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingStaff(staffMember.id);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeletingStaff(staffMember.id);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
               </CardHeader>
@@ -174,6 +230,32 @@ export default function Staff() {
           <p className="text-muted-foreground">No staff members found matching your search.</p>
         </div>
       )}
+
+      {editingStaff && (
+        <EditStaffDialog
+          staffId={editingStaff}
+          open={!!editingStaff}
+          onOpenChange={(open) => !open && setEditingStaff(null)}
+          onSuccess={fetchStaff}
+        />
+      )}
+
+      <AlertDialog open={!!deletingStaff} onOpenChange={(open) => !open && setDeletingStaff(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the staff member record.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deletingStaff && handleDelete(deletingStaff)}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

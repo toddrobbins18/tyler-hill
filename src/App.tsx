@@ -14,6 +14,7 @@ import DailyNotes from "./pages/DailyNotes";
 import Awards from "./pages/Awards";
 import ChildProfile from "./pages/ChildProfile";
 import Messages from "./pages/Messages";
+import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -50,6 +51,7 @@ const App = () => (
                           <Route path="/awards" element={<Awards />} />
                           <Route path="/messages" element={<Messages />} />
                           <Route path="/child/:id" element={<ChildProfile />} />
+                          <Route path="/admin" element={<Admin />} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                       </main>
