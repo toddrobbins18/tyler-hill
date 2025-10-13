@@ -4,6 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { childSchema, staffSchema, parseChildRow, parseStaffRow } from "@/lib/validationSchemas";
+import { z } from "zod";
 
 interface CSVUploaderProps {
   tableName: string;
@@ -30,11 +32,19 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
       
       if (lines.length === 0) {
         toast.error("CSV file is empty");
+        setUploading(false);
+        return;
+      }
+
+      // Limit CSV to 1000 rows to prevent DoS
+      if (lines.length > 1001) {
+        toast.error("CSV file too large. Maximum 1000 rows allowed.");
+        setUploading(false);
         return;
       }
 
       const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-      const rows = lines.slice(1).map(line => {
+      const rawRows = lines.slice(1).map(line => {
         const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
         const obj: Record<string, any> = {};
         headers.forEach((header, index) => {
@@ -43,15 +53,49 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
         return obj;
       });
 
-      const { error } = await supabase.from(tableName as any).insert(rows as any);
+      // Select appropriate schema and parser based on table
+      const schema = tableName === 'children' ? childSchema : tableName === 'staff' ? staffSchema : null;
+      const parser = tableName === 'children' ? parseChildRow : tableName === 'staff' ? parseStaffRow : null;
+
+      if (!schema || !parser) {
+        toast.error(`Validation not implemented for table: ${tableName}`);
+        setUploading(false);
+        return;
+      }
+
+      // Validate and parse each row
+      const validatedRows: any[] = [];
+      const errors: string[] = [];
+
+      for (let i = 0; i < rawRows.length; i++) {
+        try {
+          const parsed = parser(rawRows[i]);
+          const validated = schema.parse(parsed);
+          validatedRows.push(validated);
+        } catch (error) {
+          if (error instanceof z.ZodError) {
+            errors.push(`Row ${i + 2}: ${error.errors.map(e => e.message).join(", ")}`);
+          } else {
+            errors.push(`Row ${i + 2}: Invalid data format`);
+          }
+        }
+      }
+
+      if (errors.length > 0) {
+        toast.error(`Validation failed:\n${errors.slice(0, 5).join("\n")}${errors.length > 5 ? `\n...and ${errors.length - 5} more errors` : ""}`);
+        setUploading(false);
+        return;
+      }
+
+      const { error } = await supabase.from(tableName as any).insert(validatedRows as any);
 
       if (error) throw error;
 
-      toast.success(`Successfully uploaded ${rows.length} records`);
+      toast.success(`Successfully uploaded ${validatedRows.length} records`);
       onUploadComplete?.();
     } catch (error) {
       console.error('Upload error:', error);
-      toast.error("Failed to upload CSV. Please check the format matches the database schema.");
+      toast.error("Failed to upload CSV. Please check the format and try again.");
     } finally {
       setUploading(false);
       event.target.value = '';

@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { staffSchema } from "@/lib/validationSchemas";
+import { z } from "zod";
 
 export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }) {
   const [open, setOpen] = useState(false);
@@ -15,28 +17,47 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
     e.preventDefault();
     setLoading(true);
 
-    const formData = new FormData(e.currentTarget);
-    const data = {
-      name: formData.get("name") as string,
-      role: formData.get("role") as string,
-      department: formData.get("department") as string,
-      email: formData.get("email") as string,
-      phone: formData.get("phone") as string,
-      hire_date: formData.get("hire_date") as string || null,
-    };
+    try {
+      const formData = new FormData(e.currentTarget);
+      const data = {
+        name: formData.get("name") as string,
+        role: formData.get("role") as string,
+        department: formData.get("department") as string || null,
+        email: formData.get("email") as string || null,
+        phone: formData.get("phone") as string || null,
+        hire_date: formData.get("hire_date") as string || null,
+      };
 
-    const { error } = await supabase.from("staff").insert([data]);
+      // Validate input data
+      const validatedData = staffSchema.parse(data) as {
+        name: string;
+        role: string;
+        department?: string | null;
+        email?: string | null;
+        phone?: string | null;
+        hire_date?: string | null;
+      };
 
-    if (error) {
-      toast.error("Failed to add staff member");
-      console.error(error);
-    } else {
-      toast.success("Staff member added successfully");
-      setOpen(false);
-      onSuccess?.();
+      const { error } = await supabase.from("staff").insert([validatedData]);
+
+      if (error) {
+        toast.error("Failed to add staff member");
+        console.error(error);
+      } else {
+        toast.success("Staff member added successfully");
+        setOpen(false);
+        onSuccess?.();
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast.error(error.errors[0].message);
+      } else {
+        toast.error("Failed to add staff member");
+        console.error(error);
+      }
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (

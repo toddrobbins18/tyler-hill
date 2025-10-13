@@ -7,6 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { childSchema } from "@/lib/validationSchemas";
+import { z } from "zod";
 
 export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }) {
   const [open, setOpen] = useState(false);
@@ -16,31 +18,53 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
     e.preventDefault();
     setLoading(true);
 
-    const formData = new FormData(e.currentTarget);
-    const data = {
-      name: formData.get("name") as string,
-      age: parseInt(formData.get("age") as string) || null,
-      grade: formData.get("grade") as string,
-      group_name: formData.get("group_name") as string,
-      guardian_email: formData.get("guardian_email") as string,
-      guardian_phone: formData.get("guardian_phone") as string,
-      allergies: formData.get("allergies") as string,
-      medical_notes: formData.get("medical_notes") as string,
-      emergency_contact: formData.get("emergency_contact") as string,
-    };
+    try {
+      const formData = new FormData(e.currentTarget);
+      const data = {
+        name: formData.get("name") as string,
+        age: formData.get("age") ? parseInt(formData.get("age") as string) : null,
+        grade: formData.get("grade") as string || null,
+        group_name: formData.get("group_name") as string || null,
+        guardian_email: formData.get("guardian_email") as string || null,
+        guardian_phone: formData.get("guardian_phone") as string || null,
+        emergency_contact: formData.get("emergency_contact") as string || null,
+        allergies: formData.get("allergies") as string || null,
+        medical_notes: formData.get("medical_notes") as string || null,
+      };
 
-    const { error } = await supabase.from("children").insert([data]);
+      // Validate input data
+      const validatedData = childSchema.parse(data) as {
+        name: string;
+        age?: number | null;
+        grade?: string | null;
+        group_name?: string | null;
+        guardian_email?: string | null;
+        guardian_phone?: string | null;
+        emergency_contact?: string | null;
+        allergies?: string | null;
+        medical_notes?: string | null;
+      };
 
-    if (error) {
-      toast.error("Failed to add child");
-      console.error(error);
-    } else {
-      toast.success("Child added successfully");
-      setOpen(false);
-      onSuccess?.();
+      const { error } = await supabase.from("children").insert([validatedData]);
+
+      if (error) {
+        toast.error("Failed to add child");
+        console.error(error);
+      } else {
+        toast.success("Child added successfully");
+        setOpen(false);
+        onSuccess?.();
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast.error(error.errors[0].message);
+      } else {
+        toast.error("Failed to add child");
+        console.error(error);
+      }
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (
