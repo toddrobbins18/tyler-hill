@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { staffSchema } from "@/lib/validationSchemas";
@@ -18,10 +19,13 @@ interface EditStaffDialogProps {
 export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess }: EditStaffDialogProps) {
   const [loading, setLoading] = useState(false);
   const [staff, setStaff] = useState<any>(null);
+  const [supervisors, setSupervisors] = useState<any[]>([]);
+  const [leaderId, setLeaderId] = useState("");
 
   useEffect(() => {
     if (open && staffId) {
       fetchStaff();
+      fetchSupervisors();
     }
   }, [open, staffId]);
 
@@ -34,7 +38,19 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
 
     if (!error && data) {
       setStaff(data);
+      setLeaderId(data.leader_id || "");
     }
+  };
+
+  const fetchSupervisors = async () => {
+    const { data } = await supabase
+      .from("staff")
+      .select("id, name, role")
+      .eq("status", "active")
+      .in("role", ["Director", "Supervisor", "Manager"])
+      .neq("id", staffId)
+      .order("name");
+    setSupervisors(data || []);
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -50,6 +66,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
         email: formData.get("email") as string || null,
         phone: formData.get("phone") as string || null,
         hire_date: formData.get("hire_date") as string || null,
+        leader_id: leaderId || null,
       };
 
       const validatedData = staffSchema.parse(data);
@@ -111,6 +128,21 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
           <div>
             <Label htmlFor="hire_date">Hire Date</Label>
             <Input id="hire_date" name="hire_date" type="date" defaultValue={staff.hire_date || ""} />
+          </div>
+          <div>
+            <Label>Reports To (Supervisor)</Label>
+            <Select value={leaderId} onValueChange={setLeaderId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select supervisor" />
+              </SelectTrigger>
+              <SelectContent>
+                {supervisors.map((member) => (
+                  <SelectItem key={member.id} value={member.id}>
+                    {member.name} - {member.role}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

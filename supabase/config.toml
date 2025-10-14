@@ -1,1 +1,4 @@
 project_id = "gdcxtefbarvnrtvacqln"
+
+[functions.check-medication-alerts]
+verify_jwt = false

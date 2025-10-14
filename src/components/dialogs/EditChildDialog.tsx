@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,10 +20,14 @@ interface EditChildDialogProps {
 export default function EditChildDialog({ childId, open, onOpenChange, onSuccess }: EditChildDialogProps) {
   const [loading, setLoading] = useState(false);
   const [child, setChild] = useState<any>(null);
+  const [staff, setStaff] = useState<any[]>([]);
+  const [leaderId, setLeaderId] = useState("");
+  const [gender, setGender] = useState("");
 
   useEffect(() => {
     if (open && childId) {
       fetchChild();
+      fetchStaff();
     }
   }, [open, childId]);
 
@@ -35,7 +40,18 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
 
     if (!error && data) {
       setChild(data);
+      setGender(data.gender || "");
+      setLeaderId(data.leader_id || "");
     }
+  };
+
+  const fetchStaff = async () => {
+    const { data } = await supabase
+      .from("staff")
+      .select("id, name, role")
+      .eq("status", "active")
+      .order("name");
+    setStaff(data || []);
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -47,8 +63,11 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
       const data = {
         name: formData.get("name") as string,
         age: formData.get("age") ? parseInt(formData.get("age") as string) : null,
+        gender: gender || null,
+        category: formData.get("category") as string || null,
         grade: formData.get("grade") as string || null,
         group_name: formData.get("group_name") as string || null,
+        leader_id: leaderId || null,
         guardian_email: formData.get("guardian_email") as string || null,
         guardian_phone: formData.get("guardian_phone") as string || null,
         emergency_contact: formData.get("emergency_contact") as string || null,
@@ -102,12 +121,43 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
               <Input id="age" name="age" type="number" defaultValue={child.age || ""} />
             </div>
             <div>
+              <Label>Gender</Label>
+              <Select value={gender} onValueChange={setGender}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select gender" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="male">Male</SelectItem>
+                  <SelectItem value="female">Female</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="category">Category</Label>
+              <Input id="category" name="category" defaultValue={child.category || ""} placeholder="e.g., Freshman Boys" />
+            </div>
+            <div>
               <Label htmlFor="grade">Grade</Label>
               <Input id="grade" name="grade" defaultValue={child.grade || ""} />
             </div>
             <div>
               <Label htmlFor="group_name">Group</Label>
               <Input id="group_name" name="group_name" defaultValue={child.group_name || ""} />
+            </div>
+            <div className="col-span-2">
+              <Label>Assigned Leader</Label>
+              <Select value={leaderId} onValueChange={setLeaderId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a leader" />
+                </SelectTrigger>
+                <SelectContent>
+                  {staff.map((member) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      {member.name} - {member.role}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label htmlFor="guardian_email">Guardian Email</Label>

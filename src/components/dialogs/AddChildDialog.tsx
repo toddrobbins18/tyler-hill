@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -13,6 +14,24 @@ import { z } from "zod";
 export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [staff, setStaff] = useState<any[]>([]);
+  const [leaderId, setLeaderId] = useState("");
+  const [gender, setGender] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      fetchStaff();
+    }
+  }, [open]);
+
+  const fetchStaff = async () => {
+    const { data } = await supabase
+      .from("staff")
+      .select("id, name, role")
+      .eq("status", "active")
+      .order("name");
+    setStaff(data || []);
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -23,8 +42,11 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
       const data = {
         name: formData.get("name") as string,
         age: formData.get("age") ? parseInt(formData.get("age") as string) : null,
+        gender: gender || null,
+        category: formData.get("category") as string || null,
         grade: formData.get("grade") as string || null,
         group_name: formData.get("group_name") as string || null,
+        leader_id: leaderId || null,
         guardian_email: formData.get("guardian_email") as string || null,
         guardian_phone: formData.get("guardian_phone") as string || null,
         emergency_contact: formData.get("emergency_contact") as string || null,
@@ -32,12 +54,14 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
         medical_notes: formData.get("medical_notes") as string || null,
       };
 
-      // Validate input data
       const validatedData = childSchema.parse(data) as {
         name: string;
         age?: number | null;
+        gender?: string | null;
+        category?: string | null;
         grade?: string | null;
         group_name?: string | null;
+        leader_id?: string | null;
         guardian_email?: string | null;
         guardian_phone?: string | null;
         emergency_contact?: string | null;
@@ -53,6 +77,8 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
       } else {
         toast.success("Child added successfully");
         setOpen(false);
+        setGender("");
+        setLeaderId("");
         onSuccess?.();
       }
     } catch (error) {
@@ -90,12 +116,43 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
               <Input id="age" name="age" type="number" />
             </div>
             <div>
+              <Label>Gender</Label>
+              <Select value={gender} onValueChange={setGender}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select gender" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="male">Male</SelectItem>
+                  <SelectItem value="female">Female</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="category">Category</Label>
+              <Input id="category" name="category" placeholder="e.g., Freshman Boys" />
+            </div>
+            <div>
               <Label htmlFor="grade">Grade</Label>
               <Input id="grade" name="grade" />
             </div>
             <div>
               <Label htmlFor="group_name">Group</Label>
               <Input id="group_name" name="group_name" />
+            </div>
+            <div className="col-span-2">
+              <Label>Assigned Leader</Label>
+              <Select value={leaderId} onValueChange={setLeaderId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a leader" />
+                </SelectTrigger>
+                <SelectContent>
+                  {staff.map((member) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      {member.name} - {member.role}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label htmlFor="guardian_email">Guardian Email</Label>

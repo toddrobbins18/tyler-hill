@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,6 +13,24 @@ import { z } from "zod";
 export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [supervisors, setSupervisors] = useState<any[]>([]);
+  const [leaderId, setLeaderId] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      fetchSupervisors();
+    }
+  }, [open]);
+
+  const fetchSupervisors = async () => {
+    const { data } = await supabase
+      .from("staff")
+      .select("id, name, role")
+      .eq("status", "active")
+      .in("role", ["Director", "Supervisor", "Manager"])
+      .order("name");
+    setSupervisors(data || []);
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -26,9 +45,9 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
         email: formData.get("email") as string || null,
         phone: formData.get("phone") as string || null,
         hire_date: formData.get("hire_date") as string || null,
+        leader_id: leaderId || null,
       };
 
-      // Validate input data
       const validatedData = staffSchema.parse(data) as {
         name: string;
         role: string;
@@ -36,6 +55,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
         email?: string | null;
         phone?: string | null;
         hire_date?: string | null;
+        leader_id?: string | null;
       };
 
       const { error } = await supabase.from("staff").insert([validatedData]);
@@ -46,6 +66,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
       } else {
         toast.success("Staff member added successfully");
         setOpen(false);
+        setLeaderId("");
         onSuccess?.();
       }
     } catch (error) {
@@ -96,6 +117,21 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
           <div>
             <Label htmlFor="hire_date">Hire Date</Label>
             <Input id="hire_date" name="hire_date" type="date" />
+          </div>
+          <div>
+            <Label>Reports To (Supervisor)</Label>
+            <Select value={leaderId} onValueChange={setLeaderId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select supervisor" />
+              </SelectTrigger>
+              <SelectContent>
+                {supervisors.map((member) => (
+                  <SelectItem key={member.id} value={member.id}>
+                    {member.name} - {member.role}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

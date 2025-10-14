@@ -56,13 +56,16 @@ export type Database = {
         Row: {
           age: number | null
           allergies: string | null
+          category: string | null
           created_at: string | null
           emergency_contact: string | null
+          gender: string | null
           grade: string | null
           group_name: string | null
           guardian_email: string | null
           guardian_phone: string | null
           id: string
+          leader_id: string | null
           medical_notes: string | null
           name: string
           status: string | null
@@ -71,13 +74,16 @@ export type Database = {
         Insert: {
           age?: number | null
           allergies?: string | null
+          category?: string | null
           created_at?: string | null
           emergency_contact?: string | null
+          gender?: string | null
           grade?: string | null
           group_name?: string | null
           guardian_email?: string | null
           guardian_phone?: string | null
           id?: string
+          leader_id?: string | null
           medical_notes?: string | null
           name: string
           status?: string | null
@@ -86,19 +92,30 @@ export type Database = {
         Update: {
           age?: number | null
           allergies?: string | null
+          category?: string | null
           created_at?: string | null
           emergency_contact?: string | null
+          gender?: string | null
           grade?: string | null
           group_name?: string | null
           guardian_email?: string | null
           guardian_phone?: string | null
           id?: string
+          leader_id?: string | null
           medical_notes?: string | null
           name?: string
           status?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "children_leader_id_fkey"
+            columns: ["leader_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       daily_notes: {
         Row: {
@@ -468,6 +485,30 @@ export type Database = {
         }
         Relationships: []
       }
+      role_permissions: {
+        Row: {
+          can_access: boolean | null
+          created_at: string | null
+          id: string
+          menu_item: string
+          role: Database["public"]["Enums"]["app_role"]
+        }
+        Insert: {
+          can_access?: boolean | null
+          created_at?: string | null
+          id?: string
+          menu_item: string
+          role: Database["public"]["Enums"]["app_role"]
+        }
+        Update: {
+          can_access?: boolean | null
+          created_at?: string | null
+          id?: string
+          menu_item?: string
+          role?: Database["public"]["Enums"]["app_role"]
+        }
+        Relationships: []
+      }
       staff: {
         Row: {
           created_at: string | null
@@ -475,6 +516,7 @@ export type Database = {
           email: string | null
           hire_date: string | null
           id: string
+          leader_id: string | null
           name: string
           phone: string | null
           role: string
@@ -487,6 +529,7 @@ export type Database = {
           email?: string | null
           hire_date?: string | null
           id?: string
+          leader_id?: string | null
           name: string
           phone?: string | null
           role: string
@@ -499,13 +542,22 @@ export type Database = {
           email?: string | null
           hire_date?: string | null
           id?: string
+          leader_id?: string | null
           name?: string
           phone?: string | null
           role?: string
           status?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "staff_leader_id_fkey"
+            columns: ["leader_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       staff_evaluations: {
         Row: {
