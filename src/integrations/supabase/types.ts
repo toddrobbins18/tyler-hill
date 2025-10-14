@@ -154,6 +154,81 @@ export type Database = {
           },
         ]
       }
+      evaluation_questions: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          options: string[] | null
+          question_text: string
+          question_type: string
+          updated_at: string | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          options?: string[] | null
+          question_text: string
+          question_type: string
+          updated_at?: string | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          options?: string[] | null
+          question_text?: string
+          question_type?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      evaluation_responses: {
+        Row: {
+          created_at: string | null
+          evaluation_id: string | null
+          id: string
+          question_id: string | null
+          response_text: string | null
+          response_value: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          evaluation_id?: string | null
+          id?: string
+          question_id?: string | null
+          response_text?: string | null
+          response_value?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          evaluation_id?: string | null
+          id?: string
+          question_id?: string | null
+          response_text?: string | null
+          response_value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "evaluation_responses_evaluation_id_fkey"
+            columns: ["evaluation_id"]
+            isOneToOne: false
+            referencedRelation: "staff_evaluations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "evaluation_responses_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "evaluation_questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           created_at: string | null
@@ -224,6 +299,69 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "incident_reports_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      medication_logs: {
+        Row: {
+          administered: boolean | null
+          administered_at: string | null
+          administered_by: string | null
+          alert_sent: boolean | null
+          child_id: string | null
+          created_at: string | null
+          date: string
+          dosage: string | null
+          id: string
+          medication_name: string
+          notes: string | null
+          scheduled_time: string
+          updated_at: string | null
+        }
+        Insert: {
+          administered?: boolean | null
+          administered_at?: string | null
+          administered_by?: string | null
+          alert_sent?: boolean | null
+          child_id?: string | null
+          created_at?: string | null
+          date: string
+          dosage?: string | null
+          id?: string
+          medication_name: string
+          notes?: string | null
+          scheduled_time: string
+          updated_at?: string | null
+        }
+        Update: {
+          administered?: boolean | null
+          administered_at?: string | null
+          administered_by?: string | null
+          alert_sent?: boolean | null
+          child_id?: string | null
+          created_at?: string | null
+          date?: string
+          dosage?: string | null
+          id?: string
+          medication_name?: string
+          notes?: string | null
+          scheduled_time?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medication_logs_administered_by_fkey"
+            columns: ["administered_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medication_logs_child_id_fkey"
             columns: ["child_id"]
             isOneToOne: false
             referencedRelation: "children"
@@ -379,6 +517,7 @@ export type Database = {
           id: string
           rating: number | null
           staff_id: string | null
+          supervisor_id: string | null
         }
         Insert: {
           category?: string | null
@@ -389,6 +528,7 @@ export type Database = {
           id?: string
           rating?: number | null
           staff_id?: string | null
+          supervisor_id?: string | null
         }
         Update: {
           category?: string | null
@@ -399,11 +539,19 @@ export type Database = {
           id?: string
           rating?: number | null
           staff_id?: string | null
+          supervisor_id?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "staff_evaluations_staff_id_fkey"
             columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_evaluations_supervisor_id_fkey"
+            columns: ["supervisor_id"]
             isOneToOne: false
             referencedRelation: "staff"
             referencedColumns: ["id"]

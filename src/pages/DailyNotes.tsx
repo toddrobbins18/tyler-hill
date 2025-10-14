@@ -1,4 +1,4 @@
-import { Plus, Calendar, User, Pencil, Trash2 } from "lucide-react";
+import { Plus, Calendar, User, Pencil, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import AddNoteDialog from "@/components/dialogs/AddNoteDialog";
 import EditNoteDialog from "@/components/dialogs/EditNoteDialog";
+import { CSVUploader } from "@/components/CSVUploader";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +27,19 @@ export default function DailyNotes() {
 
   useEffect(() => {
     fetchNotes();
+
+    const channel = supabase
+      .channel('notes-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'daily_notes' },
+        () => fetchNotes()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchNotes = async () => {
@@ -72,7 +86,10 @@ export default function DailyNotes() {
           <h1 className="text-3xl font-bold text-foreground mb-2">Daily Notes</h1>
           <p className="text-muted-foreground">Share updates and important information with your team</p>
         </div>
-        <AddNoteDialog onSuccess={fetchNotes} />
+        <div className="flex gap-2">
+          <CSVUploader tableName="daily_notes" onUploadComplete={fetchNotes} />
+          <AddNoteDialog onSuccess={fetchNotes} />
+        </div>
       </div>
 
 {loading ? (

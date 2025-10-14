@@ -4,7 +4,10 @@ import { Input } from "@/components/ui/input";
 import { Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { childSchema, staffSchema, parseChildRow, parseStaffRow } from "@/lib/validationSchemas";
+import { 
+  childSchema, staffSchema, awardSchema, dailyNoteSchema, tripSchema,
+  parseChildRow, parseStaffRow, parseAwardRow, parseDailyNoteRow, parseTripRow
+} from "@/lib/validationSchemas";
 import { z } from "zod";
 
 interface CSVUploaderProps {
@@ -54,11 +57,26 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
       });
 
       // Select appropriate schema and parser based on table
-      const schema = tableName === 'children' ? childSchema : tableName === 'staff' ? staffSchema : null;
-      const parser = tableName === 'children' ? parseChildRow : tableName === 'staff' ? parseStaffRow : null;
-
-      if (!schema || !parser) {
-        toast.error(`Validation not implemented for table: ${tableName}`);
+      let schema;
+      let parser;
+      
+      if (tableName === 'children') {
+        schema = childSchema;
+        parser = parseChildRow;
+      } else if (tableName === 'staff') {
+        schema = staffSchema;
+        parser = parseStaffRow;
+      } else if (tableName === 'awards') {
+        schema = awardSchema;
+        parser = parseAwardRow;
+      } else if (tableName === 'daily_notes') {
+        schema = dailyNoteSchema;
+        parser = parseDailyNoteRow;
+      } else if (tableName === 'trips') {
+        schema = tripSchema;
+        parser = parseTripRow;
+      } else {
+        toast.error(`Unsupported table: ${tableName}`);
         setUploading(false);
         return;
       }
@@ -123,3 +141,5 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
     </div>
   );
 }
+
+export { CSVUploader };

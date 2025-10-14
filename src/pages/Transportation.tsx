@@ -1,4 +1,4 @@
-import { Plus, MapPin, Clock, Users, Calendar, Pencil, Trash2 } from "lucide-react";
+import { Plus, MapPin, Clock, Users, Calendar, Pencil, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import AddTripDialog from "@/components/dialogs/AddTripDialog";
 import EditTripDialog from "@/components/dialogs/EditTripDialog";
+import { CSVUploader } from "@/components/CSVUploader";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +27,19 @@ export default function Transportation() {
 
   useEffect(() => {
     fetchTrips();
+
+    const channel = supabase
+      .channel('trips-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'trips' },
+        () => fetchTrips()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchTrips = async () => {
@@ -63,7 +77,10 @@ export default function Transportation() {
           <h1 className="text-3xl font-bold text-foreground mb-2">Transportation</h1>
           <p className="text-muted-foreground">Manage field trips and sporting event transportation</p>
         </div>
-        <AddTripDialog onSuccess={fetchTrips} />
+        <div className="flex gap-2">
+          <CSVUploader tableName="trips" onUploadComplete={fetchTrips} />
+          <AddTripDialog onSuccess={fetchTrips} />
+        </div>
       </div>
 
 {loading ? (

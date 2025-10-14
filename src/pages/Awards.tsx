@@ -1,4 +1,4 @@
-import { Award, Trophy, Star, Calendar, User, Pencil, Trash2 } from "lucide-react";
+import { Award, Trophy, Star, Calendar, User, Pencil, Trash2, Upload, Plus } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import AddAwardDialog from "@/components/dialogs/AddAwardDialog";
 import EditAwardDialog from "@/components/dialogs/EditAwardDialog";
+import { CSVUploader } from "@/components/CSVUploader";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,9 +26,23 @@ export default function Awards() {
   const [loading, setLoading] = useState(true);
   const [editingAward, setEditingAward] = useState<string | null>(null);
   const [deletingAward, setDeletingAward] = useState<string | null>(null);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
 
   useEffect(() => {
     fetchAwards();
+
+    const channel = supabase
+      .channel('awards-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'awards' },
+        () => fetchAwards()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchAwards = async () => {
@@ -91,7 +106,13 @@ export default function Awards() {
           <h1 className="text-3xl font-bold text-foreground mb-2">Awards & Achievements</h1>
           <p className="text-muted-foreground">Celebrating success across all children</p>
         </div>
-        <AddAwardDialog onSuccess={fetchAwards} />
+        <div className="flex gap-2">
+          <CSVUploader tableName="awards" onUploadComplete={fetchAwards} />
+          <Button onClick={() => setAddDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Award
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -191,6 +212,10 @@ export default function Awards() {
         <div className="text-center py-12">
           <p className="text-muted-foreground">No awards found. Add your first achievement!</p>
         </div>
+      )}
+
+      {addDialogOpen && (
+        <AddAwardDialog onSuccess={fetchAwards} />
       )}
 
       {editingAward && (

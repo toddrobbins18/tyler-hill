@@ -23,6 +23,39 @@ export const staffSchema = z.object({
   hire_date: z.string().nullable().optional(),
 });
 
+// Award validation schema
+export const awardSchema = z.object({
+  title: z.string().min(1, "Title is required"),
+  child_id: z.string().uuid("Invalid child ID"),
+  date: z.string(),
+  category: z.string().optional(),
+  description: z.string().optional(),
+});
+
+// Daily note validation schema
+export const dailyNoteSchema = z.object({
+  child_id: z.string().uuid("Invalid child ID"),
+  date: z.string(),
+  mood: z.string().optional(),
+  activities: z.string().optional(),
+  meals: z.string().optional(),
+  nap: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+// Trip validation schema
+export const tripSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  type: z.string().min(1, "Type is required"),
+  date: z.string(),
+  destination: z.string().optional(),
+  departure_time: z.string().optional(),
+  return_time: z.string().optional(),
+  chaperone: z.string().optional(),
+  capacity: z.number().optional(),
+  status: z.string().optional(),
+});
+
 // Convert CSV row to typed object for children
 export function parseChildRow(row: Record<string, any>) {
   return {
@@ -47,5 +80,41 @@ export function parseStaffRow(row: Record<string, any>) {
     email: row.email || null,
     phone: row.phone || null,
     hire_date: row.hire_date || null,
+  };
+}
+
+export function parseAwardRow(row: Record<string, any>) {
+  return {
+    title: String(row.title || row.Title || ''),
+    child_id: String(row.child_id || row['Child ID'] || ''),
+    date: String(row.date || row.Date || ''),
+    category: String(row.category || row.Category || ''),
+    description: String(row.description || row.Description || ''),
+  };
+}
+
+export function parseDailyNoteRow(row: Record<string, any>) {
+  return {
+    child_id: String(row.child_id || row['Child ID'] || ''),
+    date: String(row.date || row.Date || ''),
+    mood: String(row.mood || row.Mood || ''),
+    activities: String(row.activities || row.Activities || ''),
+    meals: String(row.meals || row.Meals || ''),
+    nap: String(row.nap || row.Nap || ''),
+    notes: String(row.notes || row.Notes || ''),
+  };
+}
+
+export function parseTripRow(row: Record<string, any>) {
+  return {
+    name: String(row.name || row.Name || ''),
+    type: String(row.type || row.Type || ''),
+    date: String(row.date || row.Date || ''),
+    destination: String(row.destination || row.Destination || ''),
+    departure_time: String(row.departure_time || row['Departure Time'] || ''),
+    return_time: String(row.return_time || row['Return Time'] || ''),
+    chaperone: String(row.chaperone || row.Chaperone || ''),
+    capacity: row.capacity || row.Capacity ? Number(row.capacity || row.Capacity) : undefined,
+    status: String(row.status || row.Status || 'upcoming'),
   };
 }

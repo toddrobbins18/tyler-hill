@@ -15,6 +15,8 @@ import Awards from "./pages/Awards";
 import ChildProfile from "./pages/ChildProfile";
 import Messages from "./pages/Messages";
 import Admin from "./pages/Admin";
+import Nurse from "./pages/Nurse";
+import Menu from "./pages/Menu";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -46,6 +48,8 @@ const App = () => (
                           <Route path="/roster" element={<Roster />} />
                           <Route path="/staff" element={<Staff />} />
                           <Route path="/staff/:id" element={<StaffProfile />} />
+                          <Route path="/nurse" element={<Nurse />} />
+                          <Route path="/menu" element={<Menu />} />
                           <Route path="/transportation" element={<Transportation />} />
                           <Route path="/notes" element={<DailyNotes />} />
                           <Route path="/awards" element={<Awards />} />
