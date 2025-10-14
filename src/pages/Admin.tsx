@@ -26,7 +26,7 @@ export default function Admin() {
       .select("role")
       .eq("user_id", user.id)
       .eq("role", "admin")
-      .single();
+      .maybeSingle();
 
     setIsAdmin(!!roles);
     setLoading(false);
