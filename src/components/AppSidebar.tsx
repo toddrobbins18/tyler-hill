@@ -31,18 +31,27 @@ export function AppSidebar() {
 
   useEffect(() => {
     checkAdminStatus();
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+      checkAdminStatus();
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const checkAdminStatus = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      setIsAdmin(false);
+      return;
+    }
 
     const { data: roles } = await supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", user.id)
       .eq("role", "admin")
-      .single();
+      .maybeSingle();
 
     setIsAdmin(!!roles);
   };
