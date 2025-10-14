@@ -1,42 +1,88 @@
-import { Award, Trophy, Star, Calendar, User } from "lucide-react";
+import { Award, Trophy, Star, Calendar, User, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import AddAwardDialog from "@/components/dialogs/AddAwardDialog";
+import EditAwardDialog from "@/components/dialogs/EditAwardDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function Awards() {
   const navigate = useNavigate();
+  const [awards, setAwards] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingAward, setEditingAward] = useState<string | null>(null);
+  const [deletingAward, setDeletingAward] = useState<string | null>(null);
 
-  // Mock data - would come from database with children and their achievements
-  const allAchievements = [
-    {
-      childId: 1,
-      childName: "Emma Thompson",
-      achievements: [
-        { id: 1, title: "Perfect Attendance", description: "September 2024", date: "Sep 30, 2024", icon: Award },
-        { id: 2, title: "Science Fair Winner", description: "1st Place - Volcano Project", date: "Oct 15, 2024", icon: Trophy },
-        { id: 3, title: "Reading Challenge", description: "Read 20 books this month", date: "Oct 31, 2024", icon: Star },
-      ]
-    },
-    {
-      childId: 2,
-      childName: "Noah Martinez",
-      achievements: [
-        { id: 4, title: "Math Excellence", description: "Top scorer in class", date: "Oct 20, 2024", icon: Trophy },
-        { id: 5, title: "Team Player", description: "Outstanding collaboration", date: "Oct 25, 2024", icon: Award },
-      ]
-    },
-    {
-      childId: 3,
-      childName: "Olivia Chen",
-      achievements: [
-        { id: 6, title: "Art Contest Winner", description: "First place in school art show", date: "Nov 1, 2024", icon: Star },
-        { id: 7, title: "Leadership Award", description: "Class representative", date: "Nov 5, 2024", icon: Trophy },
-      ]
+  useEffect(() => {
+    fetchAwards();
+  }, []);
+
+  const fetchAwards = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("awards")
+      .select(`
+        *,
+        children:child_id (
+          id,
+          name
+        )
+      `)
+      .order("date", { ascending: false });
+
+    if (!error && data) {
+      setAwards(data);
     }
-  ];
+    setLoading(false);
+  };
 
-  const totalAchievements = allAchievements.reduce((sum, child) => sum + child.achievements.length, 0);
+  const handleDelete = async (id: string) => {
+    const { error } = await supabase
+      .from("awards")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      toast.error("Failed to delete award");
+      console.error(error);
+    } else {
+      toast.success("Award deleted successfully");
+      fetchAwards();
+    }
+    setDeletingAward(null);
+  };
+
+  const groupedAwards = awards.reduce((acc, award) => {
+    const childId = award.children?.id;
+    const childName = award.children?.name || "Unknown Child";
+    
+    if (!acc[childId]) {
+      acc[childId] = {
+        childId,
+        childName,
+        achievements: [] as any[],
+      };
+    }
+    
+    acc[childId].achievements.push(award);
+    return acc;
+  }, {} as Record<string, { childId: string; childName: string; achievements: any[] }>);
+
+  const allAchievements = Object.values(groupedAwards) as Array<{ childId: string; childName: string; achievements: any[] }>;
+  const totalAchievements = awards.length;
 
   return (
     <div className="space-y-6">
@@ -45,10 +91,7 @@ export default function Awards() {
           <h1 className="text-3xl font-bold text-foreground mb-2">Awards & Achievements</h1>
           <p className="text-muted-foreground">Celebrating success across all children</p>
         </div>
-        <Button>
-          <Award className="h-4 w-4 mr-2" />
-          Add Achievement
-        </Button>
+        <AddAwardDialog onSuccess={fetchAwards} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -72,52 +115,109 @@ export default function Awards() {
         </Card>
       </div>
 
-      <div className="space-y-6">
-        {allAchievements.map((child) => (
-          <Card key={child.childId} className="shadow-card">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <User className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-xl">{child.childName}</CardTitle>
-                    <CardDescription>{child.achievements.length} achievements</CardDescription>
-                  </div>
-                </div>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => navigate(`/child/${child.childId}`)}
-                >
-                  View Profile
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {child.achievements.map((achievement) => (
-                <div key={achievement.id} className="flex items-start gap-4 p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <achievement.icon className="h-5 w-5 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-semibold mb-1">{achievement.title}</h4>
-                    <p className="text-sm text-muted-foreground mb-2">{achievement.description}</p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Calendar className="h-3 w-3" />
-                      <span>{achievement.date}</span>
+{loading ? (
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      ) : allAchievements.length > 0 ? (
+        <div className="space-y-6">
+          {allAchievements.map((child) => (
+            <Card key={child.childId} className="shadow-card">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <User className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-xl">{child.childName}</CardTitle>
+                      <CardDescription>{child.achievements.length} achievements</CardDescription>
                     </div>
                   </div>
-                  <Badge variant="secondary" className="shrink-0">
-                    Achievement
-                  </Badge>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => navigate(`/child/${child.childId}`)}
+                  >
+                    View Profile
+                  </Button>
                 </div>
-              ))}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {child.achievements.map((achievement: any) => (
+                  <div key={achievement.id} className="flex items-start gap-4 p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors group">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Award className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-semibold mb-1">{achievement.title}</h4>
+                      <p className="text-sm text-muted-foreground mb-2">{achievement.description}</p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Calendar className="h-3 w-3" />
+                        <span>{new Date(achievement.date).toLocaleDateString()}</span>
+                        {achievement.category && (
+                          <>
+                            <span>•</span>
+                            <span>{achievement.category}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => setEditingAward(achievement.id)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
+                        onClick={() => setDeletingAward(achievement.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">No awards found. Add your first achievement!</p>
+        </div>
+      )}
+
+      {editingAward && (
+        <EditAwardDialog
+          awardId={editingAward}
+          open={!!editingAward}
+          onOpenChange={(open) => !open && setEditingAward(null)}
+          onSuccess={fetchAwards}
+        />
+      )}
+
+      <AlertDialog open={!!deletingAward} onOpenChange={(open) => !open && setDeletingAward(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the award.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deletingAward && handleDelete(deletingAward)}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
