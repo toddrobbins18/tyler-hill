@@ -1,29 +1,31 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Calendar as CalendarIcon, Plus, List, Pencil, Trash2, Utensils } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Utensils, Plus, Pencil, Trash2, ArrowUpAZ } from "lucide-react";
 import { CSVUploader } from "@/components/CSVUploader";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar';
+import { format, parse, startOfWeek, getDay } from 'date-fns';
+import 'react-big-calendar/lib/css/react-big-calendar.css';
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+
+const locales = { 'en-US': require('date-fns/locale/en-US') };
+const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
 
 export default function Menu() {
   const [menuItems, setMenuItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
-  const [sortAlphabetically, setSortAlphabetically] = useState(true);
+  const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
+  const [calendarView, setCalendarView] = useState<View>('month');
+  const [currentDate, setCurrentDate] = useState(new Date());
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -38,16 +40,10 @@ export default function Menu() {
 
     const channel = supabase
       .channel('menu-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'menu_items' },
-        () => fetchMenuItems()
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => fetchMenuItems())
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   const fetchMenuItems = async () => {
@@ -117,17 +113,21 @@ export default function Menu() {
     fetchMenuItems();
   };
 
+  const calendarEvents = menuItems.map(item => ({
+    id: item.id,
+    title: `${item.meal_type.charAt(0).toUpperCase() + item.meal_type.slice(1)}: ${item.items.substring(0, 30)}...`,
+    start: new Date(item.date + 'T00:00:00'),
+    end: new Date(item.date + 'T23:59:59'),
+    resource: item,
+  }));
+
   const groupedByDate = menuItems.reduce((acc, item) => {
     if (!acc[item.date]) acc[item.date] = [];
     acc[item.date].push(item);
     return acc;
   }, {} as Record<string, any[]>);
 
-  const sortedDates = Object.keys(groupedByDate).sort((a, b) => 
-    sortAlphabetically 
-      ? a.localeCompare(b) 
-      : new Date(b).getTime() - new Date(a).getTime()
-  );
+  const sortedDates = Object.keys(groupedByDate).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
 
   return (
     <div className="space-y-8">
@@ -137,13 +137,14 @@ export default function Menu() {
           <p className="text-muted-foreground">Manage daily meal menus</p>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setSortAlphabetically(!sortAlphabetically)}
-          >
-            <ArrowUpAZ className="h-4 w-4 mr-2" />
-            {sortAlphabetically ? "Sort Newest First" : "Sort A-Z"}
-          </Button>
+          <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
+            <ToggleGroupItem value="calendar" aria-label="Calendar view">
+              <CalendarIcon className="h-4 w-4" />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="list" aria-label="List view">
+              <List className="h-4 w-4" />
+            </ToggleGroupItem>
+          </ToggleGroup>
           <CSVUploader tableName="menu_items" onUploadComplete={fetchMenuItems} />
           <Dialog open={dialogOpen} onOpenChange={(open) => {
             setDialogOpen(open);
@@ -153,69 +154,42 @@ export default function Menu() {
             }
           }}>
             <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Menu Item
-              </Button>
+              <Button><Plus className="h-4 w-4 mr-2" />Add Menu Item</Button>
             </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{editingItem ? "Edit Menu Item" : "Add Menu Item"}</DialogTitle>
-              <DialogDescription>
-                {editingItem ? "Update the menu item details" : "Add a new item to the menu"}
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label>Date</Label>
-                <Input
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Meal Type</Label>
-                <Select value={formData.meal_type} onValueChange={(value) => setFormData({ ...formData, meal_type: value })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="breakfast">Breakfast</SelectItem>
-                    <SelectItem value="lunch">Lunch</SelectItem>
-                    <SelectItem value="snack">Snack</SelectItem>
-                    <SelectItem value="dinner">Dinner</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Menu Items</Label>
-                <Textarea
-                  value={formData.items}
-                  onChange={(e) => setFormData({ ...formData, items: e.target.value })}
-                  placeholder="e.g., Pancakes, Fresh Fruit, Milk"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Allergens (optional)</Label>
-                <Input
-                  value={formData.allergens}
-                  onChange={(e) => setFormData({ ...formData, allergens: e.target.value })}
-                  placeholder="e.g., Contains dairy, nuts"
-                />
-              </div>
-
-              <Button type="submit" className="w-full">
-                {editingItem ? "Update Menu Item" : "Add Menu Item"}
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{editingItem ? "Edit Menu Item" : "Add Menu Item"}</DialogTitle>
+                <DialogDescription>{editingItem ? "Update the menu item details" : "Add a new item to the menu"}</DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Date</Label>
+                  <Input type="date" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} required />
+                </div>
+                <div className="space-y-2">
+                  <Label>Meal Type</Label>
+                  <Select value={formData.meal_type} onValueChange={(value) => setFormData({ ...formData, meal_type: value })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="breakfast">Breakfast</SelectItem>
+                      <SelectItem value="lunch">Lunch</SelectItem>
+                      <SelectItem value="snack">Snack</SelectItem>
+                      <SelectItem value="dinner">Dinner</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Menu Items</Label>
+                  <Textarea value={formData.items} onChange={(e) => setFormData({ ...formData, items: e.target.value })} placeholder="e.g., Pancakes, Fresh Fruit, Milk" required />
+                </div>
+                <div className="space-y-2">
+                  <Label>Allergens (optional)</Label>
+                  <Input value={formData.allergens} onChange={(e) => setFormData({ ...formData, allergens: e.target.value })} placeholder="e.g., Contains dairy, nuts" />
+                </div>
+                <Button type="submit" className="w-full">{editingItem ? "Update Menu Item" : "Add Menu Item"}</Button>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -223,8 +197,28 @@ export default function Menu() {
         <p className="text-muted-foreground">Loading...</p>
       ) : menuItems.length === 0 ? (
         <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            No menu items found. Add your first menu item!
+          <CardContent className="py-8 text-center text-muted-foreground">No menu items found. Add your first menu item!</CardContent>
+        </Card>
+      ) : viewMode === "calendar" ? (
+        <Card>
+          <CardContent className="p-6">
+            <Calendar
+              localizer={localizer}
+              events={calendarEvents}
+              startAccessor="start"
+              endAccessor="end"
+              style={{ height: 600 }}
+              view={calendarView}
+              onView={setCalendarView}
+              date={currentDate}
+              onNavigate={setCurrentDate}
+              onSelectEvent={(event) => handleEdit(event.resource)}
+              onSelectSlot={(slotInfo) => {
+                setFormData({ ...formData, date: format(slotInfo.start, 'yyyy-MM-dd') });
+                setDialogOpen(true);
+              }}
+              selectable
+            />
           </CardContent>
         </Card>
       ) : (
@@ -232,58 +226,38 @@ export default function Menu() {
           {sortedDates.map((date) => {
             const items = groupedByDate[date];
             return (
-            <Card key={date}>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Utensils className="h-5 w-5" />
-                  {new Date(date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {items
-                  .sort((a, b) => {
-                    // Sort by meal type order
-                    const mealOrder = { breakfast: 1, lunch: 2, snack: 3, dinner: 4 };
-                    return (mealOrder[a.meal_type as keyof typeof mealOrder] || 5) - 
-                           (mealOrder[b.meal_type as keyof typeof mealOrder] || 5);
-                  })
-                  .map((item) => (
-                  <div
-                    key={item.id}
-                    className="p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors group relative"
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <p className="font-medium capitalize mb-1">{item.meal_type}</p>
-                        <p className="text-sm">{item.items}</p>
-                        {item.allergens && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Allergens: {item.allergens}
-                          </p>
-                        )}
+              <Card key={date}>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Utensils className="h-5 w-5" />
+                    {new Date(date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {items
+                    .sort((a, b) => {
+                      const mealOrder = { breakfast: 1, lunch: 2, snack: 3, dinner: 4 };
+                      return (mealOrder[a.meal_type as keyof typeof mealOrder] || 5) - (mealOrder[b.meal_type as keyof typeof mealOrder] || 5);
+                    })
+                    .map((item) => (
+                      <div key={item.id} className="p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors group relative">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <p className="font-medium capitalize mb-1">{item.meal_type}</p>
+                            <p className="text-sm">{item.items}</p>
+                            {item.allergens && (<p className="text-xs text-muted-foreground mt-1">Allergens: {item.allergens}</p>)}
+                          </div>
+                          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button size="sm" variant="outline" onClick={() => handleEdit(item)}><Pencil className="h-4 w-4" /></Button>
+                            <Button size="sm" variant="outline" onClick={() => handleDelete(item.id)}><Trash2 className="h-4 w-4" /></Button>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleEdit(item)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleDelete(item.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )})}
+                    ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

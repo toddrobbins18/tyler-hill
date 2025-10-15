@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Trophy, Plus, Pencil, Trash2, ArrowUpDown } from "lucide-react";
+import { Trophy, Plus, List, Pencil, Trash2, Calendar as CalendarIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,6 +12,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CSVUploader } from "@/components/CSVUploader";
+import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar';
+import { format, parse, startOfWeek, getDay } from 'date-fns';
+import 'react-big-calendar/lib/css/react-big-calendar.css';
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+
+const locales = { 'en-US': require('date-fns/locale/en-US') };
+const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
 
 export default function SportsCalendar() {
   const [events, setEvents] = useState<any[]>([]);
@@ -22,6 +29,9 @@ export default function SportsCalendar() {
   const [showDialog, setShowDialog] = useState(false);
   const [editingEvent, setEditingEvent] = useState<any>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
+  const [calendarView, setCalendarView] = useState<View>('month');
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [formData, setFormData] = useState({
     event_date: new Date().toISOString().split('T')[0],
     title: "",
