@@ -812,6 +812,56 @@ export type Database = {
         }
         Relationships: []
       }
+      sports_academy: {
+        Row: {
+          child_id: string
+          created_at: string | null
+          end_date: string | null
+          id: string
+          instructor: string | null
+          notes: string | null
+          schedule_days: string[] | null
+          skill_level: string | null
+          sport_name: string
+          start_date: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          child_id: string
+          created_at?: string | null
+          end_date?: string | null
+          id?: string
+          instructor?: string | null
+          notes?: string | null
+          schedule_days?: string[] | null
+          skill_level?: string | null
+          sport_name: string
+          start_date?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          child_id?: string
+          created_at?: string | null
+          end_date?: string | null
+          id?: string
+          instructor?: string | null
+          notes?: string | null
+          schedule_days?: string[] | null
+          skill_level?: string | null
+          sport_name?: string
+          start_date?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sports_academy_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sports_calendar: {
         Row: {
           created_at: string | null

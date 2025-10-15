@@ -28,6 +28,7 @@ const items = [
   { title: "Nurse Dashboard", url: "/nurse", icon: Pill },
   { title: "Rainy Day Schedule", url: "/rainy-day", icon: CloudRain },
   { title: "Special Meals", url: "/special-meals", icon: Utensils },
+  { title: "Sports Academy", url: "/sports-academy", icon: Trophy },
   { title: "Sports Calendar", url: "/sports-calendar", icon: Trophy },
   { title: "Staff", url: "/staff", icon: UserCog },
   { title: "Transportation", url: "/transportation", icon: Truck },
