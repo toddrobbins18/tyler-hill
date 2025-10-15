@@ -25,6 +25,8 @@ import {
 export default function Staff() {
   const [searchTerm, setSearchTerm] = useState("");
   const [staff, setStaff] = useState<any[]>([]);
+  const [selectedSeason, setSelectedSeason] = useState("all");
+  const [seasons, setSeasons] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingStaff, setEditingStaff] = useState<string | null>(null);
   const [deletingStaff, setDeletingStaff] = useState<string | null>(null);
@@ -61,6 +63,9 @@ export default function Staff() {
       );
 
       setStaff(staffWithEvals);
+      // Extract unique seasons
+      const uniqueSeasons = [...new Set(staffData?.map(member => member.season).filter(Boolean))].sort().reverse();
+      setSeasons(uniqueSeasons as string[]);
     }
     setLoading(false);
   };
@@ -69,11 +74,17 @@ export default function Staff() {
     fetchStaff();
   }, []);
 
-  const filteredStaff = staff.filter((member) =>
-    member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (member.role?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
-    (member.department?.toLowerCase() || "").includes(searchTerm.toLowerCase())
-  );
+  const filteredStaff = staff.filter((member) => {
+    const matchesSearch = 
+      member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (member.role?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
+      (member.department?.toLowerCase() || "").includes(searchTerm.toLowerCase());
+    
+    const matchesSeason = 
+      selectedSeason === "all" || member.season === selectedSeason;
+    
+    return matchesSearch && matchesSeason;
+  });
 
   const getInitials = (name: string) => {
     return name.split(" ").map(n => n[0]).join("");
@@ -118,9 +129,18 @@ export default function Staff() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <Button variant="outline">
-          Filters
-        </Button>
+        <select
+          value={selectedSeason}
+          onChange={(e) => setSelectedSeason(e.target.value)}
+          className="px-4 py-2 border rounded-md bg-background"
+        >
+          <option value="all">All Seasons</option>
+          {seasons.map((season) => (
+            <option key={season} value={season}>
+              {season}
+            </option>
+          ))}
+        </select>
       </div>
 
       {loading ? (

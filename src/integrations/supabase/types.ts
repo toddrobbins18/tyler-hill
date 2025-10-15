@@ -69,6 +69,7 @@ export type Database = {
           leader_id: string | null
           medical_notes: string | null
           name: string
+          season: string | null
           status: string | null
           updated_at: string | null
         }
@@ -88,6 +89,7 @@ export type Database = {
           leader_id?: string | null
           medical_notes?: string | null
           name: string
+          season?: string | null
           status?: string | null
           updated_at?: string | null
         }
@@ -107,6 +109,7 @@ export type Database = {
           leader_id?: string | null
           medical_notes?: string | null
           name?: string
+          season?: string | null
           status?: string | null
           updated_at?: string | null
         }
@@ -773,6 +776,7 @@ export type Database = {
           name: string
           phone: string | null
           role: string
+          season: string | null
           status: string | null
           updated_at: string | null
         }
@@ -786,6 +790,7 @@ export type Database = {
           name: string
           phone?: string | null
           role: string
+          season?: string | null
           status?: string | null
           updated_at?: string | null
         }
@@ -799,6 +804,7 @@ export type Database = {
           name?: string
           phone?: string | null
           role?: string
+          season?: string | null
           status?: string | null
           updated_at?: string | null
         }

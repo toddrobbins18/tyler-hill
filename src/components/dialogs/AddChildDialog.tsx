@@ -57,6 +57,7 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
         category: formData.get("category") as string || null,
         grade: formData.get("grade") as string || null,
         group_name: formData.get("group_name") as string || null,
+        season: formData.get("season") as string || null,
         division_id: divisionId || null,
         leader_id: leaderId || null,
         guardian_email: formData.get("guardian_email") as string || null,
@@ -162,6 +163,10 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
             <div>
               <Label htmlFor="group_name">Group</Label>
               <Input id="group_name" name="group_name" />
+            </div>
+            <div>
+              <Label htmlFor="season">Season (Year)</Label>
+              <Input id="season" name="season" placeholder="e.g., 2024" maxLength={4} />
             </div>
             <div className="col-span-2">
               <Label>Assigned Leader</Label>

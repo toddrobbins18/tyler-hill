@@ -45,6 +45,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
         email: formData.get("email") as string || null,
         phone: formData.get("phone") as string || null,
         hire_date: formData.get("hire_date") as string || null,
+        season: formData.get("season") as string || null,
         leader_id: leaderId || null,
       };
 
@@ -117,6 +118,10 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
           <div>
             <Label htmlFor="hire_date">Hire Date</Label>
             <Input id="hire_date" name="hire_date" type="date" />
+          </div>
+          <div>
+            <Label htmlFor="season">Season (Year)</Label>
+            <Input id="season" name="season" placeholder="e.g., 2024" maxLength={4} />
           </div>
           <div>
             <Label>Reports To (Supervisor)</Label>

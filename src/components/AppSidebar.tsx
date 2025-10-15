@@ -68,7 +68,7 @@ export function AppSidebar() {
       <SidebarContent>
         <div className="px-4 py-6">
           <h1 className={`font-bold transition-opacity ${isCollapsed ? 'opacity-0 text-xs' : 'opacity-100 text-xl'}`}>
-            OpConnect
+            Camp
           </h1>
         </div>
         
