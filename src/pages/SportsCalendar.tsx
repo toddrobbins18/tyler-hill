@@ -393,12 +393,12 @@ export default function SportsCalendar() {
 
             <div className="space-y-2">
               <Label>Division (optional)</Label>
-              <Select value={formData.division_id} onValueChange={(value) => setFormData({ ...formData, division_id: value })}>
+              <Select value={formData.division_id || "none"} onValueChange={(value) => setFormData({ ...formData, division_id: value === "none" ? "" : value })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select division (optional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {divisions.map((division) => (
                     <SelectItem key={division.id} value={division.id}>
                       {division.name}
