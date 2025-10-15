@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Shield, UserCog, Eye } from "lucide-react";
+import AddUserDialog from "./AddUserDialog";
 
 type UserRole = "admin" | "staff" | "viewer";
 
@@ -105,8 +106,13 @@ export default function UserRoleManagement() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>User Roles</CardTitle>
-        <CardDescription>Manage user permissions and access levels</CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>User Roles</CardTitle>
+            <CardDescription>Manage user permissions and access levels</CardDescription>
+          </div>
+          <AddUserDialog onUserAdded={fetchUsers} />
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
