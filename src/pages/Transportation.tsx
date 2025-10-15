@@ -1,4 +1,4 @@
-import { Plus, MapPin, Clock, Users, Calendar, Pencil, Trash2, Upload } from "lucide-react";
+import { Plus, MapPin, Clock, Users, Calendar, Pencil, Trash2, Upload, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import AddTripDialog from "@/components/dialogs/AddTripDialog";
 import EditTripDialog from "@/components/dialogs/EditTripDialog";
+import ManageTripAttendanceDialog from "@/components/dialogs/ManageTripAttendanceDialog";
 import { CSVUploader } from "@/components/CSVUploader";
 import {
   AlertDialog,
@@ -24,6 +25,7 @@ export default function Transportation() {
   const [loading, setLoading] = useState(true);
   const [editingTrip, setEditingTrip] = useState<string | null>(null);
   const [deletingTrip, setDeletingTrip] = useState<string | null>(null);
+  const [managingRoster, setManagingRoster] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     fetchTrips();
@@ -116,6 +118,15 @@ export default function Transportation() {
                     >
                       {trip.status || "Upcoming"}
                     </Badge>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => setManagingRoster({ id: trip.id, name: trip.name })}
+                      title="Manage Roster"
+                    >
+                      <UserCheck className="h-4 w-4" />
+                    </Button>
                     <Button
                       size="icon"
                       variant="ghost"
@@ -224,6 +235,15 @@ export default function Transportation() {
           open={!!editingTrip}
           onOpenChange={(open) => !open && setEditingTrip(null)}
           onSuccess={fetchTrips}
+        />
+      )}
+
+      {managingRoster && (
+        <ManageTripAttendanceDialog
+          tripId={managingRoster.id}
+          tripName={managingRoster.name}
+          open={!!managingRoster}
+          onOpenChange={(open) => !open && setManagingRoster(null)}
         />
       )}
 

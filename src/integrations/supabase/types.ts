@@ -1019,6 +1019,45 @@ export type Database = {
           },
         ]
       }
+      trip_attendees: {
+        Row: {
+          child_id: string
+          confirmed: boolean | null
+          created_at: string | null
+          id: string
+          trip_id: string
+        }
+        Insert: {
+          child_id: string
+          confirmed?: boolean | null
+          created_at?: string | null
+          id?: string
+          trip_id: string
+        }
+        Update: {
+          child_id?: string
+          confirmed?: boolean | null
+          created_at?: string | null
+          id?: string
+          trip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_attendees_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_attendees_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trips: {
         Row: {
           capacity: number | null
