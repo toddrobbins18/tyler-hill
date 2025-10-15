@@ -15,17 +15,17 @@ import {
 } from "@/components/ui/sidebar";
 
 const items = [
-  { title: "Dashboard", url: "/", icon: Home },
-  { title: "Camper", url: "/roster", icon: Users },
-  { title: "Staff", url: "/staff", icon: UserCog },
-  { title: "Nurse Dashboard", url: "/nurse", icon: Pill },
-  { title: "Menu", url: "/menu", icon: Utensils },
-  { title: "Special Meals", url: "/special-meals", icon: Utensils },
-  { title: "Transportation", url: "/transportation", icon: Truck },
-  { title: "Rainy Day Schedule", url: "/rainy-day", icon: CloudRain },
-  { title: "Daily Notes", url: "/notes", icon: FileText },
   { title: "Awards", url: "/awards", icon: Award },
+  { title: "Camper", url: "/roster", icon: Users },
+  { title: "Daily Notes", url: "/notes", icon: FileText },
+  { title: "Dashboard", url: "/", icon: Home },
+  { title: "Menu", url: "/menu", icon: Utensils },
   { title: "Messages", url: "/messages", icon: Mail },
+  { title: "Nurse Dashboard", url: "/nurse", icon: Pill },
+  { title: "Rainy Day Schedule", url: "/rainy-day", icon: CloudRain },
+  { title: "Special Meals", url: "/special-meals", icon: Utensils },
+  { title: "Staff", url: "/staff", icon: UserCog },
+  { title: "Transportation", url: "/transportation", icon: Truck },
 ];
 
 export function AppSidebar() {
@@ -103,6 +103,21 @@ export function AppSidebar() {
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild>
                     <NavLink
+                      to="/admin"
+                      className={({ isActive }) =>
+                        isActive
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                          : "hover:bg-sidebar-accent/50"
+                      }
+                    >
+                      <Shield className="h-4 w-4" />
+                      <span>Admin Panel</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <NavLink
                       to="/evaluation-questions"
                       className={({ isActive }) =>
                         isActive
@@ -127,21 +142,6 @@ export function AppSidebar() {
                     >
                       <Settings className="h-4 w-4" />
                       <span>Role Permissions</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <NavLink
-                      to="/admin"
-                      className={({ isActive }) =>
-                        isActive
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                          : "hover:bg-sidebar-accent/50"
-                      }
-                    >
-                      <Shield className="h-4 w-4" />
-                      <span>Admin Panel</span>
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
