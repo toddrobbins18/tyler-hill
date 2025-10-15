@@ -21,13 +21,16 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
   const [loading, setLoading] = useState(false);
   const [child, setChild] = useState<any>(null);
   const [staff, setStaff] = useState<any[]>([]);
+  const [divisions, setDivisions] = useState<any[]>([]);
   const [leaderId, setLeaderId] = useState("");
+  const [divisionId, setDivisionId] = useState("");
   const [gender, setGender] = useState("");
 
   useEffect(() => {
     if (open && childId) {
       fetchChild();
       fetchStaff();
+      fetchDivisions();
     }
   }, [open, childId]);
 
@@ -42,6 +45,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
       setChild(data);
       setGender(data.gender || "");
       setLeaderId(data.leader_id || "");
+      setDivisionId(data.division_id || "");
     }
   };
 
@@ -52,6 +56,14 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
       .eq("status", "active")
       .order("name");
     setStaff(data || []);
+  };
+
+  const fetchDivisions = async () => {
+    const { data } = await supabase
+      .from("divisions")
+      .select("*")
+      .order("sort_order");
+    setDivisions(data || []);
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -67,6 +79,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
         category: formData.get("category") as string || null,
         grade: formData.get("grade") as string || null,
         group_name: formData.get("group_name") as string || null,
+        division_id: divisionId || null,
         leader_id: leaderId || null,
         guardian_email: formData.get("guardian_email") as string || null,
         guardian_phone: formData.get("guardian_phone") as string || null,
@@ -133,8 +146,19 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
               </Select>
             </div>
             <div>
-              <Label htmlFor="category">Division</Label>
-              <Input id="category" name="category" defaultValue={child.category || ""} placeholder="e.g., Freshman Boys" />
+              <Label>Division</Label>
+              <Select value={divisionId} onValueChange={setDivisionId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select division" />
+                </SelectTrigger>
+                <SelectContent>
+                  {divisions.map((division) => (
+                    <SelectItem key={division.id} value={division.id}>
+                      {division.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label htmlFor="grade">Grade</Label>

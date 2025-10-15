@@ -58,6 +58,7 @@ export type Database = {
           allergies: string | null
           category: string | null
           created_at: string | null
+          division_id: string | null
           emergency_contact: string | null
           gender: string | null
           grade: string | null
@@ -76,6 +77,7 @@ export type Database = {
           allergies?: string | null
           category?: string | null
           created_at?: string | null
+          division_id?: string | null
           emergency_contact?: string | null
           gender?: string | null
           grade?: string | null
@@ -94,6 +96,7 @@ export type Database = {
           allergies?: string | null
           category?: string | null
           created_at?: string | null
+          division_id?: string | null
           emergency_contact?: string | null
           gender?: string | null
           grade?: string | null
@@ -108,6 +111,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "children_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "children_leader_id_fkey"
             columns: ["leader_id"]
@@ -170,6 +180,62 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      division_permissions: {
+        Row: {
+          can_access: boolean | null
+          created_at: string | null
+          division_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          can_access?: boolean | null
+          created_at?: string | null
+          division_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          can_access?: boolean | null
+          created_at?: string | null
+          division_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "division_permissions_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      divisions: {
+        Row: {
+          created_at: string | null
+          gender: string
+          id: string
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string | null
+          gender: string
+          id?: string
+          name: string
+          sort_order: number
+        }
+        Update: {
+          created_at?: string | null
+          gender?: string
+          id?: string
+          name?: string
+          sort_order?: number
+        }
+        Relationships: []
       }
       evaluation_questions: {
         Row: {
@@ -328,6 +394,7 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           description: string | null
+          division_id: string | null
           event_date: string
           id: string
           location: string | null
@@ -339,6 +406,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           description?: string | null
+          division_id?: string | null
           event_date: string
           id?: string
           location?: string | null
@@ -350,6 +418,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           description?: string | null
+          division_id?: string | null
           event_date?: string
           id?: string
           location?: string | null
@@ -357,7 +426,15 @@ export type Database = {
           title?: string
           type?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "master_calendar_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       medication_logs: {
         Row: {
@@ -637,6 +714,7 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           description: string | null
+          division_id: string | null
           event_date: string
           id: string
           location: string | null
@@ -650,6 +728,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           description?: string | null
+          division_id?: string | null
           event_date: string
           id?: string
           location?: string | null
@@ -663,6 +742,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           description?: string | null
+          division_id?: string | null
           event_date?: string
           id?: string
           location?: string | null
@@ -672,7 +752,15 @@ export type Database = {
           time?: string | null
           title?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "sports_calendar_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       staff: {
         Row: {

@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar as CalendarIcon, Plus, Pencil, Trash2 } from "lucide-react";
+import { Calendar as CalendarIcon, Plus, Pencil, Trash2, ArrowUpDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -15,6 +15,9 @@ import { CSVUploader } from "@/components/CSVUploader";
 
 export default function MasterCalendar() {
   const [events, setEvents] = useState<any[]>([]);
+  const [divisions, setDivisions] = useState<any[]>([]);
+  const [selectedDivision, setSelectedDivision] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<"date" | "division">("date");
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [editingEvent, setEditingEvent] = useState<any>(null);
@@ -26,11 +29,13 @@ export default function MasterCalendar() {
     type: "",
     time: "",
     location: "",
+    division_id: "",
   });
   const { toast } = useToast();
 
   useEffect(() => {
     fetchEvents();
+    fetchDivisions();
 
     const channel = supabase
       .channel('calendar-changes')
@@ -49,7 +54,10 @@ export default function MasterCalendar() {
   const fetchEvents = async () => {
     const { data, error } = await supabase
       .from("master_calendar")
-      .select("*")
+      .select(`
+        *,
+        division:divisions(id, name, gender, sort_order)
+      `)
       .order("event_date", { ascending: true });
 
     if (error) {
@@ -61,13 +69,29 @@ export default function MasterCalendar() {
     setLoading(false);
   };
 
+  const fetchDivisions = async () => {
+    const { data } = await supabase
+      .from("divisions")
+      .select("*")
+      .order("sort_order");
+    
+    if (data) {
+      setDivisions(data);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const submitData = {
+      ...formData,
+      division_id: formData.division_id || null
+    };
 
     if (editingEvent) {
       const { error } = await supabase
         .from("master_calendar")
-        .update(formData)
+        .update(submitData)
         .eq("id", editingEvent.id);
 
       if (error) {
@@ -78,7 +102,7 @@ export default function MasterCalendar() {
     } else {
       const { error } = await supabase
         .from("master_calendar")
-        .insert(formData);
+        .insert(submitData);
 
       if (error) {
         toast({ title: "Error adding event", variant: "destructive" });
@@ -98,6 +122,7 @@ export default function MasterCalendar() {
       type: "",
       time: "",
       location: "",
+      division_id: "",
     });
     setEditingEvent(null);
     setShowDialog(false);
@@ -113,6 +138,7 @@ export default function MasterCalendar() {
       type: event.type,
       time: event.time || "",
       location: event.location || "",
+      division_id: event.division_id || "",
     });
     setShowDialog(true);
   };
@@ -135,7 +161,18 @@ export default function MasterCalendar() {
     fetchEvents();
   };
 
-  const groupedEvents: Record<string, any[]> = events.reduce((acc, event) => {
+  const filteredAndSortedEvents = events
+    .filter(event => selectedDivision === "all" || event.division_id === selectedDivision)
+    .sort((a, b) => {
+      if (sortBy === "division") {
+        const divA = a.division?.sort_order || 999;
+        const divB = b.division?.sort_order || 999;
+        if (divA !== divB) return divA - divB;
+      }
+      return new Date(a.event_date).getTime() - new Date(b.event_date).getTime();
+    });
+
+  const groupedEvents: Record<string, any[]> = filteredAndSortedEvents.reduce((acc, event) => {
     const date = new Date(event.event_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
     if (!acc[date]) acc[date] = [];
     acc[date].push(event);
@@ -158,9 +195,31 @@ export default function MasterCalendar() {
         </div>
       </div>
 
+      <div className="flex gap-4">
+        <select
+          value={selectedDivision}
+          onChange={(e) => setSelectedDivision(e.target.value)}
+          className="px-4 py-2 border rounded-md bg-background"
+        >
+          <option value="all">All Divisions</option>
+          {divisions.map((div) => (
+            <option key={div.id} value={div.id}>
+              {div.name}
+            </option>
+          ))}
+        </select>
+        <Button 
+          variant="outline"
+          onClick={() => setSortBy(sortBy === "date" ? "division" : "date")}
+        >
+          <ArrowUpDown className="h-4 w-4 mr-2" />
+          Sort by {sortBy === "date" ? "Division" : "Date"}
+        </Button>
+      </div>
+
       {loading ? (
         <p className="text-muted-foreground">Loading...</p>
-      ) : events.length === 0 ? (
+      ) : filteredAndSortedEvents.length === 0 ? (
         <Card>
           <CardContent className="p-6">
             <p className="text-muted-foreground text-center">No events scheduled</p>
@@ -201,7 +260,12 @@ export default function MasterCalendar() {
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-2">
-                      <Badge>{event.type}</Badge>
+                      <div className="flex gap-2 flex-wrap">
+                        <Badge>{event.type}</Badge>
+                        {event.division && (
+                          <Badge variant="secondary">{event.division.name}</Badge>
+                        )}
+                      </div>
                       {event.time && (
                         <p className="text-sm text-muted-foreground flex items-center gap-1">
                           <CalendarIcon className="h-3 w-3" />
@@ -229,7 +293,7 @@ export default function MasterCalendar() {
         setShowDialog(open);
         if (!open) resetForm();
       }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingEvent ? 'Edit Event' : 'Add Event'}</DialogTitle>
           </DialogHeader>
@@ -265,6 +329,23 @@ export default function MasterCalendar() {
                   <SelectItem value="trip">Trip</SelectItem>
                   <SelectItem value="meeting">Meeting</SelectItem>
                   <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Division (optional)</Label>
+              <Select value={formData.division_id} onValueChange={(value) => setFormData({ ...formData, division_id: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select division (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None</SelectItem>
+                  {divisions.map((division) => (
+                    <SelectItem key={division.id} value={division.id}>
+                      {division.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

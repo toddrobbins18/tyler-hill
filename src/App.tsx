@@ -21,6 +21,7 @@ import SpecialMeals from "./pages/SpecialMeals";
 import RainyDaySchedule from "./pages/RainyDaySchedule";
 import EvaluationQuestions from "./pages/EvaluationQuestions";
 import RolePermissions from "./pages/RolePermissions";
+import DivisionPermissions from "./pages/DivisionPermissions";
 import IncidentReports from "./pages/IncidentReports";
 import MasterCalendar from "./pages/MasterCalendar";
 import SportsCalendar from "./pages/SportsCalendar";
@@ -62,6 +63,7 @@ const App = () => (
                           <Route path="/rainy-day" element={<RainyDaySchedule />} />
                           <Route path="/evaluation-questions" element={<EvaluationQuestions />} />
                           <Route path="/role-permissions" element={<RolePermissions />} />
+                          <Route path="/division-permissions" element={<DivisionPermissions />} />
                           <Route path="/transportation" element={<Transportation />} />
                           <Route path="/notes" element={<DailyNotes />} />
                           <Route path="/awards" element={<Awards />} />

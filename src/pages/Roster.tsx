@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Filter, Pencil, Trash2 } from "lucide-react";
+import { Search, Filter, Pencil, Trash2, ArrowUpDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,6 +24,9 @@ import {
 export default function Roster() {
   const [searchTerm, setSearchTerm] = useState("");
   const [children, setChildren] = useState<any[]>([]);
+  const [divisions, setDivisions] = useState<any[]>([]);
+  const [selectedDivision, setSelectedDivision] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<"name" | "division">("name");
   const [loading, setLoading] = useState(true);
   const [editingChild, setEditingChild] = useState<string | null>(null);
   const [deletingChild, setDeletingChild] = useState<string | null>(null);
@@ -33,7 +36,10 @@ export default function Roster() {
     setLoading(true);
     const { data, error } = await supabase
       .from("children")
-      .select("*")
+      .select(`
+        *,
+        division:divisions(id, name, gender, sort_order)
+      `)
       .order("name");
     
     if (!error && data) {
@@ -42,14 +48,42 @@ export default function Roster() {
     setLoading(false);
   };
 
+  const fetchDivisions = async () => {
+    const { data } = await supabase
+      .from("divisions")
+      .select("*")
+      .order("sort_order");
+    
+    if (data) {
+      setDivisions(data);
+    }
+  };
+
   useEffect(() => {
     fetchChildren();
+    fetchDivisions();
   }, []);
 
-  const filteredChildren = children.filter((child) =>
-    child.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (child.grade?.toLowerCase() || "").includes(searchTerm.toLowerCase())
-  );
+  const filteredChildren = children
+    .filter((child) => {
+      const matchesSearch = 
+        child.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (child.grade?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
+        (child.division?.name?.toLowerCase() || "").includes(searchTerm.toLowerCase());
+      
+      const matchesDivision = 
+        selectedDivision === "all" || child.division_id === selectedDivision;
+      
+      return matchesSearch && matchesDivision;
+    })
+    .sort((a, b) => {
+      if (sortBy === "division") {
+        const divA = a.division?.sort_order || 999;
+        const divB = b.division?.sort_order || 999;
+        return divA - divB;
+      }
+      return a.name.localeCompare(b.name);
+    });
 
   const handleDelete = async (id: string) => {
     const { error } = await supabase
@@ -84,15 +118,30 @@ export default function Roster() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search by name or grade..."
+            placeholder="Search by name, grade, or division..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
           />
         </div>
-        <Button variant="outline">
-          <Filter className="h-4 w-4 mr-2" />
-          Filters
+        <select
+          value={selectedDivision}
+          onChange={(e) => setSelectedDivision(e.target.value)}
+          className="px-4 py-2 border rounded-md bg-background"
+        >
+          <option value="all">All Divisions</option>
+          {divisions.map((div) => (
+            <option key={div.id} value={div.id}>
+              {div.name}
+            </option>
+          ))}
+        </select>
+        <Button 
+          variant="outline"
+          onClick={() => setSortBy(sortBy === "name" ? "division" : "name")}
+        >
+          <ArrowUpDown className="h-4 w-4 mr-2" />
+          Sort by {sortBy === "name" ? "Division" : "Name"}
         </Button>
       </div>
 
@@ -114,11 +163,13 @@ export default function Roster() {
                     onClick={() => navigate(`/child/${child.id}`)}
                   >
                     <h3 className="font-semibold text-lg">{child.name}</h3>
-                    <p className="text-sm text-muted-foreground">{child.grade || "N/A"}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {child.division?.name || child.grade || "N/A"}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    {child.group_name && (
-                      <Badge variant="secondary">Group {child.group_name}</Badge>
+                    {child.division && (
+                      <Badge variant="secondary">{child.division.name}</Badge>
                     )}
                     <Button
                       size="icon"
