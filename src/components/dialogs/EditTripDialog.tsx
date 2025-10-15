@@ -27,6 +27,11 @@ export default function EditTripDialog({ tripId, open, onOpenChange, onSuccess }
     chaperone: "",
     capacity: "",
     status: "upcoming",
+    meal: "",
+    event_type: "",
+    event_length: "",
+    transportation_type: "",
+    driver: "",
   });
 
   useEffect(() => {
@@ -53,6 +58,11 @@ export default function EditTripDialog({ tripId, open, onOpenChange, onSuccess }
         chaperone: data.chaperone || "",
         capacity: data.capacity?.toString() || "",
         status: data.status || "upcoming",
+        meal: data.meal || "",
+        event_type: data.event_type || "",
+        event_length: data.event_length || "",
+        transportation_type: data.transportation_type || "",
+        driver: data.driver || "",
       });
     }
   };
@@ -186,6 +196,69 @@ export default function EditTripDialog({ tripId, open, onOpenChange, onSuccess }
                 <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="meal">Meal</Label>
+            <Select value={formData.meal || "none"} onValueChange={(value) => setFormData({ ...formData, meal: value === "none" ? "" : value })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select meal option" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="breakfast">Breakfast</SelectItem>
+                <SelectItem value="lunch">Lunch</SelectItem>
+                <SelectItem value="dinner">Dinner</SelectItem>
+                <SelectItem value="snack">Snack</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="event_type">Event Type</Label>
+            <Input
+              id="event_type"
+              value={formData.event_type}
+              onChange={(e) => setFormData({ ...formData, event_type: e.target.value })}
+              placeholder="e.g., Educational, Recreational"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="event_length">Event Length</Label>
+            <Input
+              id="event_length"
+              value={formData.event_length}
+              onChange={(e) => setFormData({ ...formData, event_length: e.target.value })}
+              placeholder="e.g., 2 hours, Half day, Full day"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="transportation_type">Transportation Type</Label>
+            <Select value={formData.transportation_type || "none"} onValueChange={(value) => setFormData({ ...formData, transportation_type: value === "none" ? "" : value })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select transportation type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="bus">Bus</SelectItem>
+                <SelectItem value="van">Van</SelectItem>
+                <SelectItem value="car">Car</SelectItem>
+                <SelectItem value="walk">Walking</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="driver">Driver</Label>
+            <Input
+              id="driver"
+              value={formData.driver}
+              onChange={(e) => setFormData({ ...formData, driver: e.target.value })}
+              placeholder="Driver name"
+            />
           </div>
 
           <div className="flex justify-end gap-2">

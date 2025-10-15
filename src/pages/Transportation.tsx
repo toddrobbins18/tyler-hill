@@ -174,6 +174,40 @@ export default function Transportation() {
                     </div>
                   </div>
                 </div>
+                {(trip.meal || trip.event_type || trip.event_length || trip.transportation_type || trip.driver) && (
+                  <div className="mt-4 pt-4 border-t grid grid-cols-2 gap-4 text-sm">
+                    {trip.meal && (
+                      <div>
+                        <span className="text-muted-foreground">Meal: </span>
+                        <span className="font-medium">{trip.meal}</span>
+                      </div>
+                    )}
+                    {trip.event_type && (
+                      <div>
+                        <span className="text-muted-foreground">Event Type: </span>
+                        <span className="font-medium">{trip.event_type}</span>
+                      </div>
+                    )}
+                    {trip.event_length && (
+                      <div>
+                        <span className="text-muted-foreground">Duration: </span>
+                        <span className="font-medium">{trip.event_length}</span>
+                      </div>
+                    )}
+                    {trip.transportation_type && (
+                      <div>
+                        <span className="text-muted-foreground">Transport: </span>
+                        <span className="font-medium">{trip.transportation_type}</span>
+                      </div>
+                    )}
+                    {trip.driver && (
+                      <div>
+                        <span className="text-muted-foreground">Driver: </span>
+                        <span className="font-medium">{trip.driver}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}

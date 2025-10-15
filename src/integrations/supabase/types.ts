@@ -930,10 +930,15 @@ export type Database = {
           date: string
           departure_time: string | null
           destination: string | null
+          driver: string | null
+          event_length: string | null
+          event_type: string | null
           id: string
+          meal: string | null
           name: string
           return_time: string | null
           status: string | null
+          transportation_type: string | null
           type: string
         }
         Insert: {
@@ -943,10 +948,15 @@ export type Database = {
           date: string
           departure_time?: string | null
           destination?: string | null
+          driver?: string | null
+          event_length?: string | null
+          event_type?: string | null
           id?: string
+          meal?: string | null
           name: string
           return_time?: string | null
           status?: string | null
+          transportation_type?: string | null
           type: string
         }
         Update: {
@@ -956,10 +966,15 @@ export type Database = {
           date?: string
           departure_time?: string | null
           destination?: string | null
+          driver?: string | null
+          event_length?: string | null
+          event_type?: string | null
           id?: string
+          meal?: string | null
           name?: string
           return_time?: string | null
           status?: string | null
+          transportation_type?: string | null
           type?: string
         }
         Relationships: []

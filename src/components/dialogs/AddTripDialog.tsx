@@ -25,6 +25,11 @@ export default function AddTripDialog({ onSuccess }: AddTripDialogProps) {
     chaperone: "",
     capacity: "",
     status: "upcoming",
+    meal: "",
+    event_type: "",
+    event_length: "",
+    transportation_type: "",
+    driver: "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -55,6 +60,11 @@ export default function AddTripDialog({ onSuccess }: AddTripDialogProps) {
         chaperone: "",
         capacity: "",
         status: "upcoming",
+        meal: "",
+        event_type: "",
+        event_length: "",
+        transportation_type: "",
+        driver: "",
       });
     }
     setLoading(false);
@@ -159,6 +169,68 @@ export default function AddTripDialog({ onSuccess }: AddTripDialogProps) {
               value={formData.capacity}
               onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
               placeholder="Maximum number of children"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="meal">Meal</Label>
+            <Select value={formData.meal} onValueChange={(value) => setFormData({ ...formData, meal: value })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select meal option" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="breakfast">Breakfast</SelectItem>
+                <SelectItem value="lunch">Lunch</SelectItem>
+                <SelectItem value="dinner">Dinner</SelectItem>
+                <SelectItem value="snack">Snack</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="event_type">Event Type</Label>
+            <Input
+              id="event_type"
+              value={formData.event_type}
+              onChange={(e) => setFormData({ ...formData, event_type: e.target.value })}
+              placeholder="e.g., Educational, Recreational"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="event_length">Event Length</Label>
+            <Input
+              id="event_length"
+              value={formData.event_length}
+              onChange={(e) => setFormData({ ...formData, event_length: e.target.value })}
+              placeholder="e.g., 2 hours, Half day, Full day"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="transportation_type">Transportation Type</Label>
+            <Select value={formData.transportation_type} onValueChange={(value) => setFormData({ ...formData, transportation_type: value })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select transportation type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="bus">Bus</SelectItem>
+                <SelectItem value="van">Van</SelectItem>
+                <SelectItem value="car">Car</SelectItem>
+                <SelectItem value="walk">Walking</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="driver">Driver</Label>
+            <Input
+              id="driver"
+              value={formData.driver}
+              onChange={(e) => setFormData({ ...formData, driver: e.target.value })}
+              placeholder="Driver name"
             />
           </div>
 
