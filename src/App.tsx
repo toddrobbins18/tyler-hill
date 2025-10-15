@@ -21,6 +21,10 @@ import SpecialMeals from "./pages/SpecialMeals";
 import RainyDaySchedule from "./pages/RainyDaySchedule";
 import EvaluationQuestions from "./pages/EvaluationQuestions";
 import RolePermissions from "./pages/RolePermissions";
+import IncidentReports from "./pages/IncidentReports";
+import MasterCalendar from "./pages/MasterCalendar";
+import SportsCalendar from "./pages/SportsCalendar";
+import UserApprovals from "./pages/UserApprovals";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -61,9 +65,13 @@ const App = () => (
                           <Route path="/transportation" element={<Transportation />} />
                           <Route path="/notes" element={<DailyNotes />} />
                           <Route path="/awards" element={<Awards />} />
+                          <Route path="/incidents" element={<IncidentReports />} />
+                          <Route path="/calendar" element={<MasterCalendar />} />
+                          <Route path="/sports-calendar" element={<SportsCalendar />} />
                           <Route path="/messages" element={<Messages />} />
                           <Route path="/child/:id" element={<ChildProfile />} />
                           <Route path="/admin" element={<Admin />} />
+                          <Route path="/user-approvals" element={<UserApprovals />} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                       </main>

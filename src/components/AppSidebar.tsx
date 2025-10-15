@@ -1,4 +1,4 @@
-import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, Settings, CloudRain } from "lucide-react";
+import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, Settings, CloudRain, AlertTriangle, Calendar, Trophy } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,11 +19,14 @@ const items = [
   { title: "Camper", url: "/roster", icon: Users },
   { title: "Daily Notes", url: "/notes", icon: FileText },
   { title: "Dashboard", url: "/", icon: Home },
+  { title: "Incident Reports", url: "/incidents", icon: AlertTriangle },
+  { title: "Master Calendar", url: "/calendar", icon: Calendar },
   { title: "Menu", url: "/menu", icon: Utensils },
   { title: "Messages", url: "/messages", icon: Mail },
   { title: "Nurse Dashboard", url: "/nurse", icon: Pill },
   { title: "Rainy Day Schedule", url: "/rainy-day", icon: CloudRain },
   { title: "Special Meals", url: "/special-meals", icon: Utensils },
+  { title: "Sports Calendar", url: "/sports-calendar", icon: Trophy },
   { title: "Staff", url: "/staff", icon: UserCog },
   { title: "Transportation", url: "/transportation", icon: Truck },
 ];
@@ -142,6 +145,21 @@ export function AppSidebar() {
                     >
                       <Settings className="h-4 w-4" />
                       <span>Role Permissions</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to="/user-approvals"
+                      className={({ isActive }) =>
+                        isActive
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                          : "hover:bg-sidebar-accent/50"
+                      }
+                    >
+                      <ClipboardList className="h-4 w-4" />
+                      <span>User Approvals</span>
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

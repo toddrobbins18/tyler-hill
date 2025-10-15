@@ -67,6 +67,53 @@ export const menuItemSchema = z.object({
   allergens: z.string().nullable().optional(),
 });
 
+// Incident report validation schema
+export const incidentReportSchema = z.object({
+  child_id: z.string().uuid("Invalid child ID"),
+  date: z.string().min(1, "Date is required"),
+  type: z.string().min(1, "Type is required"),
+  description: z.string().min(1, "Description is required"),
+  severity: z.string().optional(),
+  reported_by: z.string().optional(),
+  status: z.string().optional(),
+});
+
+// Medication validation schema
+export const medicationSchema = z.object({
+  child_id: z.string().uuid("Invalid child ID"),
+  date: z.string().min(1, "Date is required"),
+  medication_name: z.string().min(1, "Medication name is required"),
+  dosage: z.string().optional(),
+  scheduled_time: z.string().min(1, "Scheduled time is required"),
+  notes: z.string().optional(),
+  is_recurring: z.boolean().optional(),
+  frequency: z.string().optional(),
+  days_of_week: z.array(z.string()).optional(),
+  end_date: z.string().nullable().optional(),
+});
+
+// Calendar event validation schema
+export const calendarEventSchema = z.object({
+  event_date: z.string().min(1, "Date is required"),
+  title: z.string().min(1, "Title is required"),
+  description: z.string().optional(),
+  type: z.string().min(1, "Type is required"),
+  time: z.string().optional(),
+  location: z.string().optional(),
+});
+
+// Sports calendar validation schema
+export const sportsCalendarSchema = z.object({
+  event_date: z.string().min(1, "Date is required"),
+  title: z.string().min(1, "Title is required"),
+  description: z.string().optional(),
+  sport_type: z.string().min(1, "Sport type is required"),
+  time: z.string().optional(),
+  location: z.string().optional(),
+  team: z.string().optional(),
+  opponent: z.string().optional(),
+});
+
 // Convert CSV row to typed object for children
 export function parseChildRow(row: Record<string, any>) {
   return {
@@ -136,5 +183,56 @@ export function parseMenuItemRow(row: Record<string, any>) {
     meal_type: String(row.meal_type || row['Meal Type'] || row.meal || '').toLowerCase(),
     items: String(row.items || row.Items || row['Menu Items'] || ''),
     allergens: String(row.allergens || row.Allergens || '') || null,
+  };
+}
+
+export function parseIncidentReportRow(row: Record<string, any>) {
+  return {
+    child_id: String(row.child_id || row['Child ID'] || ''),
+    date: String(row.date || row.Date || ''),
+    type: String(row.type || row.Type || ''),
+    description: String(row.description || row.Description || ''),
+    severity: String(row.severity || row.Severity || ''),
+    reported_by: String(row.reported_by || row['Reported By'] || ''),
+    status: String(row.status || row.Status || 'open'),
+  };
+}
+
+export function parseMedicationRow(row: Record<string, any>) {
+  return {
+    child_id: String(row.child_id || row['Child ID'] || ''),
+    date: String(row.date || row.Date || ''),
+    medication_name: String(row.medication_name || row['Medication Name'] || ''),
+    dosage: String(row.dosage || row.Dosage || ''),
+    scheduled_time: String(row.scheduled_time || row['Scheduled Time'] || ''),
+    notes: String(row.notes || row.Notes || ''),
+    is_recurring: Boolean(row.is_recurring || row['Is Recurring'] || false),
+    frequency: String(row.frequency || row.Frequency || 'daily'),
+    days_of_week: row.days_of_week ? String(row.days_of_week).split(',') : [],
+    end_date: String(row.end_date || row['End Date'] || '') || null,
+  };
+}
+
+export function parseCalendarEventRow(row: Record<string, any>) {
+  return {
+    event_date: String(row.event_date || row['Event Date'] || row.date || ''),
+    title: String(row.title || row.Title || ''),
+    description: String(row.description || row.Description || ''),
+    type: String(row.type || row.Type || ''),
+    time: String(row.time || row.Time || ''),
+    location: String(row.location || row.Location || ''),
+  };
+}
+
+export function parseSportsCalendarRow(row: Record<string, any>) {
+  return {
+    event_date: String(row.event_date || row['Event Date'] || row.date || ''),
+    title: String(row.title || row.Title || ''),
+    description: String(row.description || row.Description || ''),
+    sport_type: String(row.sport_type || row['Sport Type'] || row.sport || ''),
+    time: String(row.time || row.Time || ''),
+    location: String(row.location || row.Location || ''),
+    team: String(row.team || row.Team || ''),
+    opponent: String(row.opponent || row.Opponent || ''),
   };
 }

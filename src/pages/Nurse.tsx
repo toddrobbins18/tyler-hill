@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Pill, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { CSVUploader } from "@/components/CSVUploader";
 
 export default function Nurse() {
   const [children, setChildren] = useState<any[]>([]);
@@ -143,6 +144,10 @@ export default function Nurse() {
       <div>
         <h1 className="text-3xl font-bold mb-2">Nurse Dashboard</h1>
         <p className="text-muted-foreground">Manage children's daily medications</p>
+      </div>
+
+      <div className="flex justify-end mb-4">
+        <CSVUploader tableName="medication_logs" onUploadComplete={fetchMedications} />
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">

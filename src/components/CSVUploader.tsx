@@ -6,7 +6,9 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   childSchema, staffSchema, awardSchema, dailyNoteSchema, tripSchema, menuItemSchema,
-  parseChildRow, parseStaffRow, parseAwardRow, parseDailyNoteRow, parseTripRow, parseMenuItemRow
+  incidentReportSchema, medicationSchema, calendarEventSchema, sportsCalendarSchema,
+  parseChildRow, parseStaffRow, parseAwardRow, parseDailyNoteRow, parseTripRow, parseMenuItemRow,
+  parseIncidentReportRow, parseMedicationRow, parseCalendarEventRow, parseSportsCalendarRow
 } from "@/lib/validationSchemas";
 import { z } from "zod";
 
@@ -78,6 +80,18 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
       } else if (tableName === 'menu_items') {
         schema = menuItemSchema;
         parser = parseMenuItemRow;
+      } else if (tableName === 'incident_reports') {
+        schema = incidentReportSchema;
+        parser = parseIncidentReportRow;
+      } else if (tableName === 'medication_logs') {
+        schema = medicationSchema;
+        parser = parseMedicationRow;
+      } else if (tableName === 'master_calendar') {
+        schema = calendarEventSchema;
+        parser = parseCalendarEventRow;
+      } else if (tableName === 'sports_calendar') {
+        schema = sportsCalendarSchema;
+        parser = parseSportsCalendarRow;
       } else {
         toast.error(`Unsupported table: ${tableName}`);
         setUploading(false);
