@@ -554,9 +554,10 @@ export type Database = {
           frequency: string | null
           id: string
           is_recurring: boolean | null
+          meal_time: string | null
           medication_name: string
           notes: string | null
-          scheduled_time: string
+          scheduled_time: string | null
           updated_at: string | null
         }
         Insert: {
@@ -573,9 +574,10 @@ export type Database = {
           frequency?: string | null
           id?: string
           is_recurring?: boolean | null
+          meal_time?: string | null
           medication_name: string
           notes?: string | null
-          scheduled_time: string
+          scheduled_time?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -592,9 +594,10 @@ export type Database = {
           frequency?: string | null
           id?: string
           is_recurring?: boolean | null
+          meal_time?: string | null
           medication_name?: string
           notes?: string | null
-          scheduled_time?: string
+          scheduled_time?: string | null
           updated_at?: string | null
         }
         Relationships: [

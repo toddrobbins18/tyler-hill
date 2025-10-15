@@ -96,6 +96,11 @@ export default function SportsCalendar() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!formData.sport_type) {
+      toast({ title: "Please select a sport type", variant: "destructive" });
+      return;
+    }
+
     const submitData = {
       ...formData,
       division_id: formData.division_id || null
@@ -375,8 +380,12 @@ export default function SportsCalendar() {
             </div>
 
             <div className="space-y-2">
-              <Label>Sport Type</Label>
-              <Select value={formData.sport_type} onValueChange={(value) => setFormData({ ...formData, sport_type: value })}>
+              <Label>Sport Type *</Label>
+              <Select 
+                value={formData.sport_type} 
+                onValueChange={(value) => setFormData({ ...formData, sport_type: value })}
+                required
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select sport type" />
                 </SelectTrigger>

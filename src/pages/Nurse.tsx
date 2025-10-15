@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Pill, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CSVUploader } from "@/components/CSVUploader";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 export default function Nurse() {
   const [children, setChildren] = useState<any[]>([]);
@@ -22,13 +23,23 @@ export default function Nurse() {
   const [formData, setFormData] = useState({
     medication_name: "",
     dosage: "",
-    scheduled_time: "",
+    meal_time: "Before Breakfast",
     notes: "",
     is_recurring: false,
     frequency: "daily",
     days_of_week: [] as string[],
     end_date: "",
   });
+
+  const mealTimes = [
+    "Before Breakfast",
+    "After Breakfast",
+    "Before Lunch",
+    "After Lunch",
+    "Before Dinner",
+    "After Dinner",
+    "Bedtime"
+  ];
 
   useEffect(() => {
     fetchChildren();
@@ -70,7 +81,7 @@ export default function Nurse() {
       .from("medication_logs")
       .select("*, children(name), staff(name)")
       .eq("date", today)
-      .order("scheduled_time");
+      .order("meal_time");
 
     if (error) {
       toast({ title: "Error fetching medications", variant: "destructive" });
@@ -102,7 +113,7 @@ export default function Nurse() {
     setFormData({ 
       medication_name: "", 
       dosage: "", 
-      scheduled_time: "", 
+      meal_time: "Before Breakfast", 
       notes: "",
       is_recurring: false,
       frequency: "daily",
@@ -195,14 +206,21 @@ export default function Nurse() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label>Scheduled Time</Label>
-                <Input
-                  type="time"
-                  value={formData.scheduled_time}
-                  onChange={(e) => setFormData({ ...formData, scheduled_time: e.target.value })}
-                  required
-                />
+              <div className="space-y-3">
+                <Label>Medication Time</Label>
+                <RadioGroup 
+                  value={formData.meal_time} 
+                  onValueChange={(value) => setFormData({ ...formData, meal_time: value })}
+                >
+                  {mealTimes.map((time) => (
+                    <div key={time} className="flex items-center space-x-2">
+                      <RadioGroupItem value={time} id={time} />
+                      <Label htmlFor={time} className="font-normal cursor-pointer">
+                        {time}
+                      </Label>
+                    </div>
+                  ))}
+                </RadioGroup>
               </div>
 
               <div className="space-y-2">
@@ -309,7 +327,7 @@ export default function Nurse() {
                           {med.medication_name} - {med.dosage}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          Scheduled: {med.scheduled_time}
+                          {med.meal_time || med.scheduled_time}
                         </p>
                       </div>
                       {med.administered ? (
