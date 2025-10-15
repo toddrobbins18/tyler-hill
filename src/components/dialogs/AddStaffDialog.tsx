@@ -125,11 +125,12 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
           </div>
           <div>
             <Label>Reports To (Supervisor)</Label>
-            <Select value={leaderId} onValueChange={setLeaderId}>
+            <Select value={leaderId || "none"} onValueChange={(val) => setLeaderId(val === "none" ? "" : val)}>
               <SelectTrigger>
                 <SelectValue placeholder="Select supervisor" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="none">No Supervisor</SelectItem>
                 {supervisors.map((member) => (
                   <SelectItem key={member.id} value={member.id}>
                     {member.name} - {member.role}
