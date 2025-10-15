@@ -23,7 +23,7 @@ export default function Menu() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
-  const [sortAlphabetically, setSortAlphabetically] = useState(false);
+  const [sortAlphabetically, setSortAlphabetically] = useState(true);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -142,7 +142,7 @@ export default function Menu() {
             onClick={() => setSortAlphabetically(!sortAlphabetically)}
           >
             <ArrowUpAZ className="h-4 w-4 mr-2" />
-            {sortAlphabetically ? "Sort by Date" : "Sort A-Z"}
+            {sortAlphabetically ? "Sort Newest First" : "Sort A-Z"}
           </Button>
           <CSVUploader tableName="menu_items" onUploadComplete={fetchMenuItems} />
           <Dialog open={dialogOpen} onOpenChange={(open) => {
