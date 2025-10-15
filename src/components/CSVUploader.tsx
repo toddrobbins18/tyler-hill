@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Upload } from "lucide-react";
+import { Upload, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import CSVFormatGuide from "./dialogs/CSVFormatGuide";
 import { 
   childSchema, staffSchema, awardSchema, dailyNoteSchema, tripSchema, menuItemSchema,
   incidentReportSchema, medicationSchema, calendarEventSchema, sportsCalendarSchema,
@@ -19,6 +20,7 @@ interface CSVUploaderProps {
 
 export default function CSVUploader({ tableName, onUploadComplete }: CSVUploaderProps) {
   const [uploading, setUploading] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -138,24 +140,35 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
   };
 
   return (
-    <div className="flex items-center gap-2">
-      <Input
-        type="file"
-        accept=".csv"
-        onChange={handleFileUpload}
-        disabled={uploading}
-        className="hidden"
-        id={`csv-upload-${tableName}`}
-      />
-      <Button
-        variant="outline"
-        onClick={() => document.getElementById(`csv-upload-${tableName}`)?.click()}
-        disabled={uploading}
-      >
-        <Upload className="h-4 w-4 mr-2" />
-        {uploading ? "Uploading..." : "Upload CSV"}
-      </Button>
-    </div>
+    <>
+      <div className="flex items-center gap-2">
+        <Input
+          type="file"
+          accept=".csv"
+          onChange={handleFileUpload}
+          disabled={uploading}
+          className="hidden"
+          id={`csv-upload-${tableName}`}
+        />
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setShowGuide(true)}
+          title="View CSV Format Guide"
+        >
+          <HelpCircle className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => document.getElementById(`csv-upload-${tableName}`)?.click()}
+          disabled={uploading}
+        >
+          <Upload className="h-4 w-4 mr-2" />
+          {uploading ? "Uploading..." : "Upload CSV"}
+        </Button>
+      </div>
+      <CSVFormatGuide open={showGuide} onOpenChange={setShowGuide} />
+    </>
   );
 }
 

@@ -11,7 +11,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Pill, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CSVUploader } from "@/components/CSVUploader";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 export default function Nurse() {
   const [children, setChildren] = useState<any[]>([]);
@@ -30,16 +29,6 @@ export default function Nurse() {
     days_of_week: [] as string[],
     end_date: "",
   });
-
-  const mealTimes = [
-    "Before Breakfast",
-    "After Breakfast",
-    "Before Lunch",
-    "After Lunch",
-    "Before Dinner",
-    "After Dinner",
-    "Bedtime"
-  ];
 
   useEffect(() => {
     fetchChildren();
@@ -206,21 +195,33 @@ export default function Nurse() {
                 />
               </div>
 
-              <div className="space-y-3">
-                <Label>Medication Time</Label>
-                <RadioGroup 
-                  value={formData.meal_time} 
-                  onValueChange={(value) => setFormData({ ...formData, meal_time: value })}
-                >
-                  {mealTimes.map((time) => (
-                    <div key={time} className="flex items-center space-x-2">
-                      <RadioGroupItem value={time} id={time} />
-                      <Label htmlFor={time} className="font-normal cursor-pointer">
-                        {time}
+              <div className="space-y-2">
+                <Label>Meal Time</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    "Before Breakfast",
+                    "After Breakfast", 
+                    "Before Lunch",
+                    "After Lunch",
+                    "Before Dinner",
+                    "After Dinner",
+                    "Bedtime"
+                  ].map((mealTime) => (
+                    <div key={mealTime} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={mealTime}
+                        checked={formData.meal_time === mealTime}
+                        onCheckedChange={() => setFormData({ ...formData, meal_time: mealTime })}
+                      />
+                      <Label 
+                        htmlFor={mealTime} 
+                        className="font-normal cursor-pointer text-sm"
+                      >
+                        {mealTime}
                       </Label>
                     </div>
                   ))}
-                </RadioGroup>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -327,7 +328,7 @@ export default function Nurse() {
                           {med.medication_name} - {med.dosage}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {med.meal_time || med.scheduled_time}
+                          {med.meal_time}
                         </p>
                       </div>
                       {med.administered ? (
