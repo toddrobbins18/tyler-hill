@@ -207,6 +207,14 @@ export default function SportsCalendar() {
           <p className="text-muted-foreground">Track sports events and games</p>
         </div>
         <div className="flex gap-2">
+          <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
+            <ToggleGroupItem value="calendar" aria-label="Calendar view">
+              <CalendarIcon className="h-4 w-4" />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="list" aria-label="List view">
+              <List className="h-4 w-4" />
+            </ToggleGroupItem>
+          </ToggleGroup>
           <CSVUploader tableName="sports_calendar" onUploadComplete={fetchEvents} />
           <Button onClick={() => setShowDialog(true)}>
             <Plus className="h-4 w-4 mr-2" />
