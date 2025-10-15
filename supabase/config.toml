@@ -8,3 +8,6 @@ verify_jwt = true
 
 [functions.send-user-invitation]
 verify_jwt = true
+
+[functions.notify-transportation-events]
+verify_jwt = false
