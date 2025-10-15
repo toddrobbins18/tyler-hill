@@ -323,6 +323,42 @@ export type Database = {
           },
         ]
       }
+      master_calendar: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          event_date: string
+          id: string
+          location: string | null
+          time: string | null
+          title: string
+          type: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          event_date: string
+          id?: string
+          location?: string | null
+          time?: string | null
+          title: string
+          type: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          event_date?: string
+          id?: string
+          location?: string | null
+          time?: string | null
+          title?: string
+          type?: string
+        }
+        Relationships: []
+      }
       medication_logs: {
         Row: {
           administered: boolean | null
@@ -472,6 +508,8 @@ export type Database = {
       }
       profiles: {
         Row: {
+          approval_requested_at: string | null
+          approved: boolean | null
           created_at: string | null
           email: string | null
           full_name: string | null
@@ -480,6 +518,8 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          approval_requested_at?: string | null
+          approved?: boolean | null
           created_at?: string | null
           email?: string | null
           full_name?: string | null
@@ -488,6 +528,8 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          approval_requested_at?: string | null
+          approved?: boolean | null
           created_at?: string | null
           email?: string | null
           full_name?: string | null
@@ -587,6 +629,48 @@ export type Database = {
           id?: string
           items?: string
           meal_type?: string
+        }
+        Relationships: []
+      }
+      sports_calendar: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          event_date: string
+          id: string
+          location: string | null
+          opponent: string | null
+          sport_type: string
+          team: string | null
+          time: string | null
+          title: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          event_date: string
+          id?: string
+          location?: string | null
+          opponent?: string | null
+          sport_type: string
+          team?: string | null
+          time?: string | null
+          title: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          event_date?: string
+          id?: string
+          location?: string | null
+          opponent?: string | null
+          sport_type?: string
+          team?: string | null
+          time?: string | null
+          title?: string
         }
         Relationships: []
       }
