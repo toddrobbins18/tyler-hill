@@ -237,6 +237,34 @@ export default function MasterCalendar() {
             <p className="text-muted-foreground text-center">No events scheduled</p>
           </CardContent>
         </Card>
+      ) : viewMode === "calendar" ? (
+        <Card>
+          <CardContent className="p-6">
+            <Calendar
+              localizer={localizer}
+              events={filteredAndSortedEvents.map(event => ({
+                id: event.id,
+                title: event.title,
+                start: new Date(event.event_date + 'T00:00:00'),
+                end: new Date(event.event_date + 'T23:59:59'),
+                resource: event,
+              }))}
+              startAccessor="start"
+              endAccessor="end"
+              style={{ height: 600 }}
+              view={calendarView}
+              onView={setCalendarView}
+              date={currentDate}
+              onNavigate={setCurrentDate}
+              onSelectEvent={(event: any) => handleEdit(event.resource)}
+              onSelectSlot={(slotInfo: any) => {
+                setFormData({ ...formData, event_date: format(slotInfo.start, 'yyyy-MM-dd') });
+                setShowDialog(true);
+              }}
+              selectable
+            />
+          </CardContent>
+        </Card>
       ) : (
         <div className="space-y-6">
           {Object.entries(groupedEvents).map(([month, monthEvents]) => (
