@@ -56,6 +56,17 @@ export const tripSchema = z.object({
   status: z.string().optional(),
 });
 
+// Menu items validation schema
+export const menuItemSchema = z.object({
+  date: z.string().min(1, "Date is required"),
+  meal_type: z.enum(["breakfast", "lunch", "snack", "dinner"], { 
+    required_error: "Meal type is required",
+    invalid_type_error: "Meal type must be breakfast, lunch, snack, or dinner"
+  }),
+  items: z.string().min(1, "Menu items are required"),
+  allergens: z.string().nullable().optional(),
+});
+
 // Convert CSV row to typed object for children
 export function parseChildRow(row: Record<string, any>) {
   return {
@@ -116,5 +127,14 @@ export function parseTripRow(row: Record<string, any>) {
     chaperone: String(row.chaperone || row.Chaperone || ''),
     capacity: row.capacity || row.Capacity ? Number(row.capacity || row.Capacity) : undefined,
     status: String(row.status || row.Status || 'upcoming'),
+  };
+}
+
+export function parseMenuItemRow(row: Record<string, any>) {
+  return {
+    date: String(row.date || row.Date || ''),
+    meal_type: String(row.meal_type || row['Meal Type'] || row.meal || '').toLowerCase(),
+    items: String(row.items || row.Items || row['Menu Items'] || ''),
+    allergens: String(row.allergens || row.Allergens || '') || null,
   };
 }

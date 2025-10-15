@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Utensils, Plus, Pencil, Trash2 } from "lucide-react";
+import { Utensils, Plus, Pencil, Trash2, ArrowUpAZ } from "lucide-react";
+import { CSVUploader } from "@/components/CSVUploader";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +23,7 @@ export default function Menu() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
+  const [sortAlphabetically, setSortAlphabetically] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -121,6 +123,12 @@ export default function Menu() {
     return acc;
   }, {} as Record<string, any[]>);
 
+  const sortedDates = Object.keys(groupedByDate).sort((a, b) => 
+    sortAlphabetically 
+      ? a.localeCompare(b) 
+      : new Date(b).getTime() - new Date(a).getTime()
+  );
+
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-start">
@@ -128,19 +136,28 @@ export default function Menu() {
           <h1 className="text-3xl font-bold mb-2">Menu Management</h1>
           <p className="text-muted-foreground">Manage daily meal menus</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={(open) => {
-          setDialogOpen(open);
-          if (!open) {
-            setEditingItem(null);
-            setFormData({ date: new Date().toISOString().split('T')[0], meal_type: "breakfast", items: "", allergens: "" });
-          }
-        }}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Menu Item
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setSortAlphabetically(!sortAlphabetically)}
+          >
+            <ArrowUpAZ className="h-4 w-4 mr-2" />
+            {sortAlphabetically ? "Sort by Date" : "Sort A-Z"}
+          </Button>
+          <CSVUploader tableName="menu_items" onUploadComplete={fetchMenuItems} />
+          <Dialog open={dialogOpen} onOpenChange={(open) => {
+            setDialogOpen(open);
+            if (!open) {
+              setEditingItem(null);
+              setFormData({ date: new Date().toISOString().split('T')[0], meal_type: "breakfast", items: "", allergens: "" });
+            }
+          }}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Menu Item
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{editingItem ? "Edit Menu Item" : "Add Menu Item"}</DialogTitle>
@@ -199,6 +216,7 @@ export default function Menu() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {loading ? (
@@ -211,7 +229,9 @@ export default function Menu() {
         </Card>
       ) : (
         <div className="space-y-6">
-          {Object.entries(groupedByDate).map(([date, items]: [string, any[]]) => (
+          {sortedDates.map((date) => {
+            const items = groupedByDate[date];
+            return (
             <Card key={date}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -256,7 +276,7 @@ export default function Menu() {
                 ))}
               </CardContent>
             </Card>
-          ))}
+          )})}
         </div>
       )}
     </div>

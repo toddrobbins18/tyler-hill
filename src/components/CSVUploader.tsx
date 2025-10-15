@@ -5,8 +5,8 @@ import { Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { 
-  childSchema, staffSchema, awardSchema, dailyNoteSchema, tripSchema,
-  parseChildRow, parseStaffRow, parseAwardRow, parseDailyNoteRow, parseTripRow
+  childSchema, staffSchema, awardSchema, dailyNoteSchema, tripSchema, menuItemSchema,
+  parseChildRow, parseStaffRow, parseAwardRow, parseDailyNoteRow, parseTripRow, parseMenuItemRow
 } from "@/lib/validationSchemas";
 import { z } from "zod";
 
@@ -75,6 +75,9 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
       } else if (tableName === 'trips') {
         schema = tripSchema;
         parser = parseTripRow;
+      } else if (tableName === 'menu_items') {
+        schema = menuItemSchema;
+        parser = parseMenuItemRow;
       } else {
         toast.error(`Unsupported table: ${tableName}`);
         setUploading(false);

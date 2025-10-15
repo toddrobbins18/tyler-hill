@@ -160,7 +160,7 @@ export default function Dashboard() {
           variant="default"
         />
         <StatCard
-          title="Active Routes"
+          title="Today's Transportation"
           value={stats.activeRoutes}
           icon={Truck}
           trend="All on schedule"

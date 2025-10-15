@@ -4,52 +4,76 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 export default function ChildProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [child, setChild] = useState<any>(null);
+  const [awards, setAwards] = useState<any[]>([]);
+  const [incidents, setIncidents] = useState<any[]>([]);
 
-  // Mock data - would come from database
-  const child = {
-    id: parseInt(id || "1"),
-    name: "Emma Thompson",
-    age: 8,
-    grade: "3rd Grade",
-    group: "A",
-    status: "active",
-    guardians: [
-      { name: "Jennifer Thompson", relation: "Mother", phone: "(555) 123-4567" },
-      { name: "Robert Thompson", relation: "Father", phone: "(555) 123-4568" }
-    ],
-    achievements: [
-      { id: 1, title: "Perfect Attendance", description: "September 2024", date: "Sep 30, 2024", icon: Award },
-      { id: 2, title: "Science Fair Winner", description: "1st Place - Volcano Project", date: "Oct 15, 2024", icon: Trophy },
-      { id: 3, title: "Reading Challenge", description: "Read 20 books this month", date: "Oct 31, 2024", icon: Star },
-    ],
-    activities: [
-      { id: 1, name: "Soccer Team", role: "Forward", season: "Fall 2024" },
-      { id: 2, name: "Art Club", role: "Member", season: "Year-round" },
-      { id: 3, name: "Choir", role: "Alto", season: "Year-round" },
-    ],
-    incidentReports: [
-      { 
-        id: 1, 
-        date: "Nov 5, 2024", 
-        type: "Minor Injury", 
-        description: "Scraped knee on playground during recess. First aid applied, guardian notified.",
-        reportedBy: "Mrs. Anderson",
-        severity: "low"
-      },
-      { 
-        id: 2, 
-        date: "Oct 20, 2024", 
-        type: "Behavioral", 
-        description: "Disagreement with classmate during group activity. Resolved through mediation.",
-        reportedBy: "Mr. Wilson",
-        severity: "low"
-      },
-    ]
+  useEffect(() => {
+    if (id) {
+      fetchChildData();
+    }
+  }, [id]);
+
+  const fetchChildData = async () => {
+    try {
+      // Fetch child details
+      const { data: childData, error: childError } = await supabase
+        .from("children")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (childError) throw childError;
+      setChild(childData);
+
+      // Fetch awards for this child
+      const { data: awardsData } = await supabase
+        .from("awards")
+        .select("*")
+        .eq("child_id", id)
+        .order("date", { ascending: false });
+
+      setAwards(awardsData || []);
+
+      // Fetch incident reports for this child
+      const { data: incidentsData } = await supabase
+        .from("incident_reports")
+        .select("*")
+        .eq("child_id", id)
+        .order("date", { ascending: false });
+
+      setIncidents(incidentsData || []);
+    } catch (error) {
+      console.error("Error fetching child data:", error);
+      toast({ title: "Error loading child profile", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
+
+  if (loading) {
+    return <div className="text-center py-8">Loading...</div>;
+  }
+
+  if (!child) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-muted-foreground">Child not found</p>
+        <Button onClick={() => navigate("/roster")} className="mt-4">
+          Back to Campers
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -59,10 +83,14 @@ export default function ChildProfile() {
         </Button>
         <div className="flex-1">
           <h1 className="text-3xl font-bold text-foreground mb-1">{child.name}</h1>
-          <p className="text-muted-foreground">{child.grade} • Group {child.group}</p>
+          <p className="text-muted-foreground">
+            {child.grade && `${child.grade} • `}
+            {child.category && `${child.category} • `}
+            {child.group_name && `Group ${child.group_name}`}
+          </p>
         </div>
-        <Badge variant="outline" className="bg-success/10 text-success border-success/20">
-          Active
+        <Badge variant="outline" className={child.status === "active" ? "bg-success/10 text-success border-success/20" : ""}>
+          {child.status || "Active"}
         </Badge>
       </div>
 
@@ -83,30 +111,77 @@ export default function ChildProfile() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Age</p>
-                    <p className="font-medium">{child.age} years old</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Grade</p>
-                    <p className="font-medium">{child.grade}</p>
-                  </div>
+                  {child.age && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Age</p>
+                      <p className="font-medium">{child.age} years old</p>
+                    </div>
+                  )}
+                  {child.grade && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Grade</p>
+                      <p className="font-medium">{child.grade}</p>
+                    </div>
+                  )}
+                  {child.gender && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Gender</p>
+                      <p className="font-medium capitalize">{child.gender}</p>
+                    </div>
+                  )}
+                  {child.category && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Division</p>
+                      <p className="font-medium">{child.category}</p>
+                    </div>
+                  )}
                 </div>
+                {(child.allergies || child.medical_notes) && (
+                  <div className="pt-3 border-t">
+                    {child.allergies && (
+                      <div className="mb-2">
+                        <p className="text-sm text-muted-foreground">Allergies</p>
+                        <p className="font-medium text-destructive">{child.allergies}</p>
+                      </div>
+                    )}
+                    {child.medical_notes && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Medical Notes</p>
+                        <p className="font-medium">{child.medical_notes}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
             <Card className="shadow-card">
               <CardHeader>
-                <CardTitle>Guardians</CardTitle>
-                <CardDescription>Emergency contacts and family information</CardDescription>
+                <CardTitle>Contact Information</CardTitle>
+                <CardDescription>Emergency contacts and guardian information</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {child.guardians.map((guardian, index) => (
-                  <div key={index} className="p-3 rounded-lg bg-muted/50">
-                    <p className="font-medium">{guardian.name}</p>
-                    <p className="text-sm text-muted-foreground">{guardian.relation} • {guardian.phone}</p>
+                {child.guardian_email && (
+                  <div className="p-3 rounded-lg bg-muted/50">
+                    <p className="text-sm text-muted-foreground">Guardian Email</p>
+                    <p className="font-medium">{child.guardian_email}</p>
                   </div>
-                ))}
+                )}
+                {child.guardian_phone && (
+                  <div className="p-3 rounded-lg bg-muted/50">
+                    <p className="text-sm text-muted-foreground">Guardian Phone</p>
+                    <p className="font-medium">{child.guardian_phone}</p>
+                  </div>
+                )}
+                {child.emergency_contact && (
+                  <div className="p-3 rounded-lg bg-muted/50">
+                    <p className="text-sm text-muted-foreground">Emergency Contact</p>
+                    <p className="font-medium">{child.emergency_contact}</p>
+                  </div>
+                )}
+                {!child.guardian_email && !child.guardian_phone && !child.emergency_contact && (
+                  <p className="text-sm text-muted-foreground">No contact information available</p>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -115,115 +190,112 @@ export default function ChildProfile() {
         <TabsContent value="achievements" className="space-y-4">
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-muted-foreground">
-              {child.achievements.length} total achievements
+              {awards.length} total achievements
             </p>
-            <Button size="sm">
-              <Award className="h-4 w-4 mr-2" />
-              Add Achievement
-            </Button>
           </div>
           
-          <div className="grid gap-4">
-            {child.achievements.map((achievement) => (
-              <Card key={achievement.id} className="shadow-card">
-                <CardContent className="p-6">
-                  <div className="flex items-start gap-4">
-                    <div className="p-3 rounded-xl bg-primary/10">
-                      <achievement.icon className="h-6 w-6 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-lg mb-1">{achievement.title}</h3>
-                      <p className="text-sm text-muted-foreground mb-2">{achievement.description}</p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Calendar className="h-3 w-3" />
-                        <span>{achievement.date}</span>
+          {awards.length === 0 ? (
+            <Card className="shadow-card">
+              <CardContent className="py-8 text-center text-muted-foreground">
+                No awards recorded yet
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4">
+              {awards.map((award) => (
+                <Card key={award.id} className="shadow-card">
+                  <CardContent className="p-6">
+                    <div className="flex items-start gap-4">
+                      <div className="p-3 rounded-xl bg-primary/10">
+                        <Trophy className="h-6 w-6 text-primary" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-lg mb-1">{award.title}</h3>
+                        {award.description && (
+                          <p className="text-sm text-muted-foreground mb-2">{award.description}</p>
+                        )}
+                        {award.category && (
+                          <Badge variant="secondary" className="mb-2">{award.category}</Badge>
+                        )}
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Calendar className="h-3 w-3" />
+                          <span>{new Date(award.date).toLocaleDateString()}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="activities" className="space-y-4">
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm text-muted-foreground">
-              Currently enrolled in {child.activities.length} activities
-            </p>
-            <Button size="sm">
-              <Star className="h-4 w-4 mr-2" />
-              Add Activity
-            </Button>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            {child.activities.map((activity) => (
-              <Card key={activity.id} className="shadow-card">
-                <CardHeader>
-                  <CardTitle>{activity.name}</CardTitle>
-                  <CardDescription>{activity.season}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Badge variant="secondary">{activity.role}</Badge>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <Card className="shadow-card">
+            <CardContent className="py-8 text-center text-muted-foreground">
+              Activity tracking coming soon
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="incidents" className="space-y-4">
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-muted-foreground">
-              {child.incidentReports.length} total incident reports
+              {incidents.length} total incident reports
             </p>
-            <Button size="sm">
-              <FileText className="h-4 w-4 mr-2" />
-              Add Report
-            </Button>
           </div>
 
-          <div className="grid gap-4">
-            {child.incidentReports.map((report) => (
-              <Card key={report.id} className="shadow-card">
-                <CardContent className="p-6">
-                  <div className="flex items-start gap-4">
-                    <div className={`p-3 rounded-xl ${
-                      report.severity === "high" ? "bg-destructive/10" :
-                      report.severity === "medium" ? "bg-warning/10" :
-                      "bg-muted"
-                    }`}>
-                      <AlertTriangle className={`h-6 w-6 ${
-                        report.severity === "high" ? "text-destructive" :
-                        report.severity === "medium" ? "text-warning" :
-                        "text-muted-foreground"
-                      }`} />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <h3 className="font-semibold text-lg mb-1">{report.type}</h3>
-                          <p className="text-sm text-muted-foreground">Reported by {report.reportedBy}</p>
+          {incidents.length === 0 ? (
+            <Card className="shadow-card">
+              <CardContent className="py-8 text-center text-muted-foreground">
+                No incident reports recorded
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4">
+              {incidents.map((report) => (
+                <Card key={report.id} className="shadow-card">
+                  <CardContent className="p-6">
+                    <div className="flex items-start gap-4">
+                      <div className={`p-3 rounded-xl ${
+                        report.severity === "high" ? "bg-destructive/10" :
+                        report.severity === "medium" ? "bg-warning/10" :
+                        "bg-muted"
+                      }`}>
+                        <AlertTriangle className={`h-6 w-6 ${
+                          report.severity === "high" ? "text-destructive" :
+                          report.severity === "medium" ? "text-warning" :
+                          "text-muted-foreground"
+                        }`} />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <h3 className="font-semibold text-lg mb-1">{report.type}</h3>
+                            {report.reported_by && (
+                              <p className="text-sm text-muted-foreground">Reported by {report.reported_by}</p>
+                            )}
+                          </div>
+                          <Badge variant="outline" className={
+                            report.severity === "high" ? "bg-destructive/10 text-destructive border-destructive/20" :
+                            report.severity === "medium" ? "bg-warning/10 text-warning border-warning/20" :
+                            "bg-muted"
+                          }>
+                            {report.severity || "low"}
+                          </Badge>
                         </div>
-                        <Badge variant="outline" className={
-                          report.severity === "high" ? "bg-destructive/10 text-destructive border-destructive/20" :
-                          report.severity === "medium" ? "bg-warning/10 text-warning border-warning/20" :
-                          "bg-muted"
-                        }>
-                          {report.severity}
-                        </Badge>
-                      </div>
-                      <p className="text-sm mb-3">{report.description}</p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Calendar className="h-3 w-3" />
-                        <span>{report.date}</span>
+                        <p className="text-sm mb-3">{report.description}</p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Calendar className="h-3 w-3" />
+                          <span>{new Date(report.date).toLocaleDateString()}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>
