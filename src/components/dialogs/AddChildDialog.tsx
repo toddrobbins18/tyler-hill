@@ -128,7 +128,7 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
               </Select>
             </div>
             <div>
-              <Label htmlFor="category">Category</Label>
+              <Label htmlFor="category">Division</Label>
               <Input id="category" name="category" placeholder="e.g., Freshman Boys" />
             </div>
             <div>

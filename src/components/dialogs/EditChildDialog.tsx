@@ -133,7 +133,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
               </Select>
             </div>
             <div>
-              <Label htmlFor="category">Category</Label>
+              <Label htmlFor="category">Division</Label>
               <Input id="category" name="category" defaultValue={child.category || ""} placeholder="e.g., Freshman Boys" />
             </div>
             <div>

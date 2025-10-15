@@ -71,8 +71,8 @@ export default function Roster() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">Roster</h1>
-          <p className="text-muted-foreground">Manage and view all children in your program</p>
+          <h1 className="text-3xl font-bold text-foreground mb-2">Camper</h1>
+          <p className="text-muted-foreground">Manage and view all campers in your program</p>
         </div>
         <div className="flex gap-2">
           <CSVUploader tableName="children" onUploadComplete={fetchChildren} />
@@ -168,7 +168,7 @@ export default function Roster() {
 
       {!loading && filteredChildren.length === 0 && (
         <div className="text-center py-12">
-          <p className="text-muted-foreground">No children found</p>
+          <p className="text-muted-foreground">No campers found</p>
         </div>
       )}
 
@@ -186,7 +186,7 @@ export default function Roster() {
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the child record.
+              This action cannot be undone. This will permanently delete the camper record.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

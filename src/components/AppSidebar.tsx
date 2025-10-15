@@ -1,4 +1,4 @@
-import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, Settings } from "lucide-react";
+import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, Settings, CloudRain } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,11 +16,13 @@ import {
 
 const items = [
   { title: "Dashboard", url: "/", icon: Home },
-  { title: "Roster", url: "/roster", icon: Users },
+  { title: "Camper", url: "/roster", icon: Users },
   { title: "Staff", url: "/staff", icon: UserCog },
   { title: "Nurse Dashboard", url: "/nurse", icon: Pill },
   { title: "Menu", url: "/menu", icon: Utensils },
+  { title: "Special Meals", url: "/special-meals", icon: Utensils },
   { title: "Transportation", url: "/transportation", icon: Truck },
+  { title: "Rainy Day Schedule", url: "/rainy-day", icon: CloudRain },
   { title: "Daily Notes", url: "/notes", icon: FileText },
   { title: "Awards", url: "/awards", icon: Award },
   { title: "Messages", url: "/messages", icon: Mail },

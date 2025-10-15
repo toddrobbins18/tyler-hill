@@ -332,8 +332,12 @@ export type Database = {
           child_id: string | null
           created_at: string | null
           date: string
+          days_of_week: string[] | null
           dosage: string | null
+          end_date: string | null
+          frequency: string | null
           id: string
+          is_recurring: boolean | null
           medication_name: string
           notes: string | null
           scheduled_time: string
@@ -347,8 +351,12 @@ export type Database = {
           child_id?: string | null
           created_at?: string | null
           date: string
+          days_of_week?: string[] | null
           dosage?: string | null
+          end_date?: string | null
+          frequency?: string | null
           id?: string
+          is_recurring?: boolean | null
           medication_name: string
           notes?: string | null
           scheduled_time: string
@@ -362,8 +370,12 @@ export type Database = {
           child_id?: string | null
           created_at?: string | null
           date?: string
+          days_of_week?: string[] | null
           dosage?: string | null
+          end_date?: string | null
+          frequency?: string | null
           id?: string
+          is_recurring?: boolean | null
           medication_name?: string
           notes?: string | null
           scheduled_time?: string
@@ -485,6 +497,48 @@ export type Database = {
         }
         Relationships: []
       }
+      rainy_day_schedule: {
+        Row: {
+          activity_type: string
+          capacity: number | null
+          created_at: string | null
+          date: string
+          id: string
+          location: string | null
+          name: string
+          notes: string | null
+          status: string | null
+          supervisor: string | null
+          time: string | null
+        }
+        Insert: {
+          activity_type: string
+          capacity?: number | null
+          created_at?: string | null
+          date: string
+          id?: string
+          location?: string | null
+          name: string
+          notes?: string | null
+          status?: string | null
+          supervisor?: string | null
+          time?: string | null
+        }
+        Update: {
+          activity_type?: string
+          capacity?: number | null
+          created_at?: string | null
+          date?: string
+          id?: string
+          location?: string | null
+          name?: string
+          notes?: string | null
+          status?: string | null
+          supervisor?: string | null
+          time?: string | null
+        }
+        Relationships: []
+      }
       role_permissions: {
         Row: {
           can_access: boolean | null
@@ -506,6 +560,33 @@ export type Database = {
           id?: string
           menu_item?: string
           role?: Database["public"]["Enums"]["app_role"]
+        }
+        Relationships: []
+      }
+      special_meals: {
+        Row: {
+          allergens: string | null
+          created_at: string | null
+          date: string
+          id: string
+          items: string
+          meal_type: string
+        }
+        Insert: {
+          allergens?: string | null
+          created_at?: string | null
+          date: string
+          id?: string
+          items: string
+          meal_type: string
+        }
+        Update: {
+          allergens?: string | null
+          created_at?: string | null
+          date?: string
+          id?: string
+          items?: string
+          meal_type?: string
         }
         Relationships: []
       }

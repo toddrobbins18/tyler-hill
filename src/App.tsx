@@ -17,6 +17,8 @@ import Messages from "./pages/Messages";
 import Admin from "./pages/Admin";
 import Nurse from "./pages/Nurse";
 import Menu from "./pages/Menu";
+import SpecialMeals from "./pages/SpecialMeals";
+import RainyDaySchedule from "./pages/RainyDaySchedule";
 import EvaluationQuestions from "./pages/EvaluationQuestions";
 import RolePermissions from "./pages/RolePermissions";
 import NotFound from "./pages/NotFound";
@@ -52,6 +54,8 @@ const App = () => (
                           <Route path="/staff/:id" element={<StaffProfile />} />
                           <Route path="/nurse" element={<Nurse />} />
                           <Route path="/menu" element={<Menu />} />
+                          <Route path="/special-meals" element={<SpecialMeals />} />
+                          <Route path="/rainy-day" element={<RainyDaySchedule />} />
                           <Route path="/evaluation-questions" element={<EvaluationQuestions />} />
                           <Route path="/role-permissions" element={<RolePermissions />} />
                           <Route path="/transportation" element={<Transportation />} />

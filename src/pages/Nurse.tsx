@@ -23,6 +23,10 @@ export default function Nurse() {
     dosage: "",
     scheduled_time: "",
     notes: "",
+    is_recurring: false,
+    frequency: "daily",
+    days_of_week: [] as string[],
+    end_date: "",
   });
 
   useEffect(() => {
@@ -94,7 +98,16 @@ export default function Nurse() {
     }
 
     toast({ title: "Medication added successfully" });
-    setFormData({ medication_name: "", dosage: "", scheduled_time: "", notes: "" });
+    setFormData({ 
+      medication_name: "", 
+      dosage: "", 
+      scheduled_time: "", 
+      notes: "",
+      is_recurring: false,
+      frequency: "daily",
+      days_of_week: [],
+      end_date: "",
+    });
     setSelectedChild("");
     fetchMedications();
   };
@@ -195,6 +208,72 @@ export default function Nurse() {
                   placeholder="Additional notes..."
                 />
               </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="is_recurring"
+                  checked={formData.is_recurring}
+                  onCheckedChange={(checked) => setFormData({ ...formData, is_recurring: checked as boolean })}
+                />
+                <Label htmlFor="is_recurring" className="font-normal cursor-pointer">
+                  Recurring medication
+                </Label>
+              </div>
+
+              {formData.is_recurring && (
+                <>
+                  <div className="space-y-2">
+                    <Label>Frequency</Label>
+                    <Select
+                      value={formData.frequency}
+                      onValueChange={(value) => setFormData({ ...formData, frequency: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="daily">Daily</SelectItem>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="custom">Custom Days</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {formData.frequency === "custom" && (
+                    <div className="space-y-2">
+                      <Label>Days of Week</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day) => (
+                          <Button
+                            key={day}
+                            type="button"
+                            size="sm"
+                            variant={formData.days_of_week.includes(day) ? "default" : "outline"}
+                            onClick={() => {
+                              const days = formData.days_of_week.includes(day)
+                                ? formData.days_of_week.filter(d => d !== day)
+                                : [...formData.days_of_week, day];
+                              setFormData({ ...formData, days_of_week: days });
+                            }}
+                          >
+                            {day.slice(0, 3)}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="end_date">End Date (optional)</Label>
+                    <Input
+                      id="end_date"
+                      type="date"
+                      value={formData.end_date}
+                      onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                    />
+                  </div>
+                </>
+              )}
 
               <Button type="submit" className="w-full">Add Medication</Button>
             </form>
