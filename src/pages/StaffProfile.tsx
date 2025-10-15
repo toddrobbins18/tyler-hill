@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Star, Calendar, TrendingUp, Award } from "lucide-react";
+import { ArrowLeft, Star, Calendar, TrendingUp, Award, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import EditStaffDialog from "@/components/dialogs/EditStaffDialog";
 
 export default function StaffProfile() {
   const { id } = useParams();
@@ -15,52 +16,53 @@ export default function StaffProfile() {
   const [staff, setStaff] = useState<any>(null);
   const [evaluations, setEvaluations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   useEffect(() => {
-    const fetchStaffData = async () => {
-      setLoading(true);
-      
-      // Fetch staff member
-      const { data: staffData, error: staffError } = await supabase
-        .from("staff")
-        .select("*")
-        .eq("id", id)
-        .single();
-
-      if (staffError) {
-        toast.error("Failed to load staff member");
-        navigate("/staff");
-        return;
-      }
-
-      // Fetch evaluations
-      const { data: evalsData, error: evalsError } = await supabase
-        .from("staff_evaluations")
-        .select("*")
-        .eq("staff_id", id)
-        .order("date", { ascending: false });
-
-      if (!evalsError && evalsData) {
-        const averageRating = evalsData.length
-          ? evalsData.reduce((sum, e) => sum + (Number(e.rating) || 0), 0) / evalsData.length
-          : 0;
-
-        setStaff({
-          ...staffData,
-          averageRating: averageRating.toFixed(1),
-        });
-        setEvaluations(evalsData);
-      } else {
-        setStaff(staffData);
-      }
-
-      setLoading(false);
-    };
-
     if (id) {
       fetchStaffData();
     }
   }, [id, navigate]);
+
+  const fetchStaffData = async () => {
+    setLoading(true);
+    
+    // Fetch staff member
+    const { data: staffData, error: staffError } = await supabase
+      .from("staff")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (staffError) {
+      toast.error("Failed to load staff member");
+      navigate("/staff");
+      return;
+    }
+
+    // Fetch evaluations
+    const { data: evalsData, error: evalsError } = await supabase
+      .from("staff_evaluations")
+      .select("*")
+      .eq("staff_id", id)
+      .order("date", { ascending: false });
+
+    if (!evalsError && evalsData) {
+      const averageRating = evalsData.length
+        ? evalsData.reduce((sum, e) => sum + (Number(e.rating) || 0), 0) / evalsData.length
+        : 0;
+
+      setStaff({
+        ...staffData,
+        averageRating: averageRating.toFixed(1),
+      });
+      setEvaluations(evalsData);
+    } else {
+      setStaff(staffData);
+    }
+
+    setLoading(false);
+  };
 
   const getInitials = (name: string) => {
     return name.split(" ").map(n => n[0]).join("");
@@ -98,6 +100,10 @@ export default function StaffProfile() {
           <p className="text-muted-foreground">{staff.role} • {staff.department}</p>
         </div>
         <div className="flex items-center gap-3">
+          <Button onClick={() => setEditDialogOpen(true)}>
+            <Pencil className="h-4 w-4 mr-2" />
+            Edit Profile
+          </Button>
           <div className="text-right">
             <div className="flex items-center gap-1">
               <Star className="h-5 w-5 text-warning fill-warning" />
@@ -237,6 +243,13 @@ export default function StaffProfile() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <EditStaffDialog
+        staffId={id || ""}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onSuccess={fetchStaffData}
+      />
     </div>
   );
 }

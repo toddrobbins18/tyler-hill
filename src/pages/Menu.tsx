@@ -240,7 +240,14 @@ export default function Menu() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {items.map((item) => (
+                {items
+                  .sort((a, b) => {
+                    // Sort by meal type order
+                    const mealOrder = { breakfast: 1, lunch: 2, snack: 3, dinner: 4 };
+                    return (mealOrder[a.meal_type as keyof typeof mealOrder] || 5) - 
+                           (mealOrder[b.meal_type as keyof typeof mealOrder] || 5);
+                  })
+                  .map((item) => (
                   <div
                     key={item.id}
                     className="p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors group relative"

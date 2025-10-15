@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Award, Trophy, Star, Calendar, AlertTriangle, FileText } from "lucide-react";
+import { ArrowLeft, Award, Trophy, Star, Calendar, AlertTriangle, FileText, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import EditChildDialog from "@/components/dialogs/EditChildDialog";
 
 export default function ChildProfile() {
   const { id } = useParams();
@@ -16,6 +17,7 @@ export default function ChildProfile() {
   const [child, setChild] = useState<any>(null);
   const [awards, setAwards] = useState<any[]>([]);
   const [incidents, setIncidents] = useState<any[]>([]);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -89,9 +91,15 @@ export default function ChildProfile() {
             {child.group_name && `Group ${child.group_name}`}
           </p>
         </div>
-        <Badge variant="outline" className={child.status === "active" ? "bg-success/10 text-success border-success/20" : ""}>
-          {child.status || "Active"}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => setEditDialogOpen(true)}>
+            <Pencil className="h-4 w-4 mr-2" />
+            Edit Profile
+          </Button>
+          <Badge variant="outline" className={child.status === "active" ? "bg-success/10 text-success border-success/20" : ""}>
+            {child.status || "Active"}
+          </Badge>
+        </div>
       </div>
 
       <Tabs defaultValue="overview" className="space-y-6">
@@ -298,6 +306,13 @@ export default function ChildProfile() {
           )}
         </TabsContent>
       </Tabs>
+
+      <EditChildDialog
+        childId={id || ""}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onSuccess={fetchChildData}
+      />
     </div>
   );
 }
