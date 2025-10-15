@@ -151,6 +151,21 @@ export function AppSidebar() {
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild>
                     <NavLink
+                      to="/division-permissions"
+                      className={({ isActive }) =>
+                        isActive
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                          : "hover:bg-sidebar-accent/50"
+                      }
+                    >
+                      <Settings className="h-4 w-4" />
+                      <span>Division Permissions</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <NavLink
                       to="/user-approvals"
                       className={({ isActive }) =>
                         isActive
