@@ -14,10 +14,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CSVUploader } from "@/components/CSVUploader";
 import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
+import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
-const locales = { 'en-US': require('date-fns/locale/en-US') };
+const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
 
 export default function SportsCalendar() {
@@ -227,13 +228,14 @@ export default function SportsCalendar() {
             </option>
           ))}
         </select>
-        <Button 
-          variant="outline"
-          onClick={() => setSortBy(sortBy === "date" ? "division" : "date")}
-        >
-          <ArrowUpDown className="h-4 w-4 mr-2" />
-          Sort by {sortBy === "date" ? "Division" : "Date"}
-        </Button>
+        {viewMode === "list" && (
+          <Button 
+            variant="outline"
+            onClick={() => setSortBy(sortBy === "date" ? "division" : "date")}
+          >
+            Sort by {sortBy === "date" ? "Division" : "Date"}
+          </Button>
+        )}
       </div>
 
       {loading ? (
