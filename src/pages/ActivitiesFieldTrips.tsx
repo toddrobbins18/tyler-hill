@@ -122,7 +122,29 @@ export default function ActivitiesFieldTrips() {
         toast({ title: "Error adding field trip", variant: "destructive" });
         return;
       }
-      toast({ title: "Field trip added successfully" });
+
+      // Create pending trip in transportation module
+      const tripData = {
+        name: formData.title,
+        date: formData.event_date,
+        type: "field_trip",
+        event_type: formData.activity_type,
+        destination: formData.location || null,
+        departure_time: formData.time || null,
+        capacity: formData.capacity ? parseInt(formData.capacity) : null,
+        chaperone: formData.chaperone || null,
+        status: "pending"
+      };
+
+      const { error: tripError } = await supabase
+        .from("trips")
+        .insert(tripData);
+
+      if (tripError) {
+        console.error("Error creating pending trip:", tripError);
+      }
+
+      toast({ title: "Activity added and pending trip created" });
     }
 
     resetForm();

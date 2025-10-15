@@ -126,7 +126,27 @@ export default function SportsCalendar() {
         toast({ title: "Error adding event", variant: "destructive" });
         return;
       }
-      toast({ title: "Event added successfully" });
+
+      // Create pending trip in transportation module
+      const tripData = {
+        name: formData.title,
+        date: formData.event_date,
+        type: "sporting_event",
+        event_type: formData.sport_type,
+        destination: formData.location || null,
+        departure_time: formData.time || null,
+        status: "pending"
+      };
+
+      const { error: tripError } = await supabase
+        .from("trips")
+        .insert(tripData);
+
+      if (tripError) {
+        console.error("Error creating pending trip:", tripError);
+      }
+
+      toast({ title: "Sports event added and pending trip created" });
     }
 
     resetForm();
