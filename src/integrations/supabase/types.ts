@@ -14,6 +14,59 @@ export type Database = {
   }
   public: {
     Tables: {
+      activities_field_trips: {
+        Row: {
+          activity_type: string
+          capacity: number | null
+          chaperone: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          division_id: string | null
+          event_date: string
+          id: string
+          location: string | null
+          time: string | null
+          title: string
+        }
+        Insert: {
+          activity_type: string
+          capacity?: number | null
+          chaperone?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          division_id?: string | null
+          event_date: string
+          id?: string
+          location?: string | null
+          time?: string | null
+          title: string
+        }
+        Update: {
+          activity_type?: string
+          capacity?: number | null
+          chaperone?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          division_id?: string | null
+          event_date?: string
+          id?: string
+          location?: string | null
+          time?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activities_field_trips_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       awards: {
         Row: {
           category: string | null

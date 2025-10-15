@@ -1,4 +1,4 @@
-import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, Settings, CloudRain, AlertTriangle, Calendar, Trophy } from "lucide-react";
+import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/sidebar";
 
 const items = [
+  { title: "Activities & Field Trips", url: "/activities", icon: Palmtree },
   { title: "Awards", url: "/awards", icon: Award },
   { title: "Camper", url: "/roster", icon: Users },
   { title: "Daily Notes", url: "/notes", icon: FileText },
