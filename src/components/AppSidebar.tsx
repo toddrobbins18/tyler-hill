@@ -19,6 +19,7 @@ const items = [
   { title: "Awards", url: "/awards", icon: Award },
   { title: "Camper", url: "/roster", icon: Users },
   { title: "Daily Notes", url: "/notes", icon: FileText },
+  { title: "Daily Schedule", url: "/daily-schedule", icon: Calendar },
   { title: "Dashboard", url: "/", icon: Home },
   { title: "Incident Reports", url: "/incidents", icon: AlertTriangle },
   { title: "Master Calendar", url: "/calendar", icon: Calendar },

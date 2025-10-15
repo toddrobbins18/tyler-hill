@@ -237,6 +237,53 @@ export type Database = {
           },
         ]
       }
+      daily_schedule: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          division_id: string | null
+          event_date: string
+          event_type: string
+          id: string
+          location: string | null
+          time_slot: string
+          title: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          division_id?: string | null
+          event_date: string
+          event_type: string
+          id?: string
+          location?: string | null
+          time_slot: string
+          title: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          division_id?: string | null
+          event_date?: string
+          event_type?: string
+          id?: string
+          location?: string | null
+          time_slot?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_schedule_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       division_permissions: {
         Row: {
           can_access: boolean | null
