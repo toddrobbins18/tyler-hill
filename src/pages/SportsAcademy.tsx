@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Trophy, Plus, Pencil, Trash2, User } from "lucide-react";
+import { Trophy, Plus, Pencil, Trash2, User, Calendar as CalendarIcon, LayoutList } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CSVUploader } from "@/components/CSVUploader";
+import { Calendar } from "@/components/ui/calendar";
+import { format, isSameDay, parseISO } from "date-fns";
 
 export default function SportsAcademy() {
   const [enrollments, setEnrollments] = useState<any[]>([]);
@@ -21,6 +23,8 @@ export default function SportsAcademy() {
   const [showDialog, setShowDialog] = useState(false);
   const [editingEnrollment, setEditingEnrollment] = useState<any>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [formData, setFormData] = useState({
     child_id: "",
     sport_name: "",
@@ -35,6 +39,23 @@ export default function SportsAcademy() {
 
   const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   const skillLevels = ["Beginner", "Intermediate", "Advanced"];
+  const sportsList = ["Baseball", "Basketball", "Dance", "Football", "Golf", "Gymnastics", "Hockey", "Lacrosse", "Soccer", "Softball", "Tennis", "Volleyball", "Waterfront"];
+  
+  const sportColors: Record<string, string> = {
+    Baseball: "bg-blue-500/20 text-blue-700 border-blue-500/30",
+    Basketball: "bg-orange-500/20 text-orange-700 border-orange-500/30",
+    Dance: "bg-pink-500/20 text-pink-700 border-pink-500/30",
+    Football: "bg-green-500/20 text-green-700 border-green-500/30",
+    Golf: "bg-emerald-500/20 text-emerald-700 border-emerald-500/30",
+    Gymnastics: "bg-purple-500/20 text-purple-700 border-purple-500/30",
+    Hockey: "bg-cyan-500/20 text-cyan-700 border-cyan-500/30",
+    Lacrosse: "bg-indigo-500/20 text-indigo-700 border-indigo-500/30",
+    Soccer: "bg-lime-500/20 text-lime-700 border-lime-500/30",
+    Softball: "bg-yellow-500/20 text-yellow-700 border-yellow-500/30",
+    Tennis: "bg-teal-500/20 text-teal-700 border-teal-500/30",
+    Volleyball: "bg-rose-500/20 text-rose-700 border-rose-500/30",
+    Waterfront: "bg-sky-500/20 text-sky-700 border-sky-500/30",
+  };
 
   useEffect(() => {
     fetchEnrollments();
@@ -189,6 +210,29 @@ export default function SportsAcademy() {
     return acc;
   }, {} as Record<string, any[]>);
 
+  const getDaysWithActivities = () => {
+    const dates: Date[] = [];
+    enrollments.forEach(enrollment => {
+      if (enrollment.start_date) {
+        const start = parseISO(enrollment.start_date);
+        const end = enrollment.end_date ? parseISO(enrollment.end_date) : new Date();
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          dates.push(new Date(d));
+        }
+      }
+    });
+    return dates;
+  };
+
+  const getActivitiesForDate = (date: Date) => {
+    return enrollments.filter(enrollment => {
+      if (!enrollment.start_date) return false;
+      const start = parseISO(enrollment.start_date);
+      const end = enrollment.end_date ? parseISO(enrollment.end_date) : new Date();
+      return date >= start && date <= end;
+    });
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center">
@@ -200,6 +244,24 @@ export default function SportsAcademy() {
           <p className="text-muted-foreground">Manage camper sports academy enrollments</p>
         </div>
         <div className="flex gap-2">
+          <div className="flex gap-1 border rounded-md p-1 bg-muted/50">
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('list')}
+            >
+              <LayoutList className="h-4 w-4 mr-2" />
+              List
+            </Button>
+            <Button
+              variant={viewMode === 'calendar' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('calendar')}
+            >
+              <CalendarIcon className="h-4 w-4 mr-2" />
+              Calendar
+            </Button>
+          </div>
           <CSVUploader tableName="sports_academy" onUploadComplete={fetchEnrollments} />
           <Button onClick={() => setShowDialog(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -228,6 +290,80 @@ export default function SportsAcademy() {
 
       {loading ? (
         <p className="text-muted-foreground">Loading...</p>
+      ) : viewMode === 'calendar' ? (
+        <div className="grid lg:grid-cols-[400px_1fr] gap-6">
+          <Card className="p-4">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={setSelectedDate}
+              modifiers={{
+                hasActivity: getDaysWithActivities()
+              }}
+              modifiersClassNames={{
+                hasActivity: "bg-primary/20 font-bold"
+              }}
+              className="rounded-md border"
+            />
+          </Card>
+          <div>
+            <h2 className="text-xl font-semibold mb-4">
+              {selectedDate ? format(selectedDate, 'MMMM d, yyyy') : 'Select a date'}
+            </h2>
+            {selectedDate && getActivitiesForDate(selectedDate).length > 0 ? (
+              <div className="space-y-4">
+                {getActivitiesForDate(selectedDate).map((enrollment) => (
+                  <Card key={enrollment.id} className="hover:shadow-lg transition-shadow">
+                    <CardHeader>
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <CardTitle className="text-lg flex items-center gap-2">
+                            <User className="h-4 w-4" />
+                            {enrollment.child?.name || "Unknown"}
+                          </CardTitle>
+                          <Badge className={sportColors[enrollment.sport_name] || "bg-muted"}>
+                            {enrollment.sport_name}
+                          </Badge>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEdit(enrollment)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setDeletingId(enrollment.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {enrollment.skill_level && (
+                        <Badge variant="outline">{enrollment.skill_level}</Badge>
+                      )}
+                      {enrollment.instructor && (
+                        <p className="text-sm text-muted-foreground">👤 Instructor: {enrollment.instructor}</p>
+                      )}
+                      {enrollment.schedule_days && enrollment.schedule_days.length > 0 && (
+                        <p className="text-sm text-muted-foreground">📅 {enrollment.schedule_days.join(", ")}</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">No activities scheduled for this date</p>
+              </div>
+            )}
+          </div>
+        </div>
       ) : Object.keys(groupedBySport).length === 0 ? (
         <Card>
           <CardContent className="p-6">
@@ -334,12 +470,18 @@ export default function SportsAcademy() {
 
             <div className="space-y-2">
               <Label>Sport Name</Label>
-              <Input
-                value={formData.sport_name}
-                onChange={(e) => setFormData({ ...formData, sport_name: e.target.value })}
-                placeholder="e.g., Basketball, Soccer, Swimming"
-                required
-              />
+              <Select value={formData.sport_name} onValueChange={(value) => setFormData({ ...formData, sport_name: value })} required>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select sport" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sportsList.map((sport) => (
+                    <SelectItem key={sport} value={sport}>
+                      {sport}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">

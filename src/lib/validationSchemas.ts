@@ -1,8 +1,9 @@
 import { z } from "zod";
 
-// Child validation schema
+// Child validation schema - Only First Name, Last Name, and Person ID are required
 export const childSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(100, "Name must be less than 100 characters"),
+  name: z.string().trim().min(1, "First and Last Name are required").max(100, "Name must be less than 100 characters"),
+  person_id: z.string().trim().min(1, "Person ID is required").max(50, "Person ID must be less than 50 characters"),
   age: z.number().int().min(0, "Age must be positive").max(18, "Age must be 18 or less").nullable().optional(),
   grade: z.string().trim().max(50, "Grade must be less than 50 characters").nullable().optional(),
   group_name: z.string().trim().max(100, "Group name must be less than 100 characters").nullable().optional(),
@@ -116,8 +117,14 @@ export const sportsCalendarSchema = z.object({
 
 // Convert CSV row to typed object for children
 export function parseChildRow(row: Record<string, any>) {
+  // Construct full name from first and last name
+  const firstName = row.first_name || row['First Name'] || '';
+  const lastName = row.last_name || row['Last Name'] || '';
+  const fullName = `${firstName} ${lastName}`.trim() || row.name || '';
+  
   return {
-    name: row.name,
+    name: fullName,
+    person_id: row.person_id || row['Person ID'] || '',
     age: row.age ? parseInt(row.age, 10) : null,
     grade: row.grade || null,
     group_name: row.group_name || null,

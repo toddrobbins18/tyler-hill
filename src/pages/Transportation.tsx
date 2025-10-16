@@ -1,4 +1,4 @@
-import { Plus, MapPin, Clock, Users, Calendar, Pencil, Trash2, Upload, UserCheck } from "lucide-react";
+import { Plus, MapPin, Clock, Users, Calendar as CalendarIcon, Pencil, Trash2, Upload, UserCheck, LayoutList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Calendar } from "@/components/ui/calendar";
+import { format, isSameDay } from "date-fns";
 
 export default function Transportation() {
   const [trips, setTrips] = useState<any[]>([]);
@@ -26,6 +28,8 @@ export default function Transportation() {
   const [editingTrip, setEditingTrip] = useState<string | null>(null);
   const [deletingTrip, setDeletingTrip] = useState<string | null>(null);
   const [managingRoster, setManagingRoster] = useState<{ id: string; name: string } | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
 
   useEffect(() => {
     fetchTrips();
@@ -72,6 +76,15 @@ export default function Transportation() {
     }
     setDeletingTrip(null);
   };
+
+  const getDaysWithTrips = () => {
+    return trips.map(trip => new Date(trip.date));
+  };
+
+  const getTripsForDate = (date: Date) => {
+    return trips.filter(trip => isSameDay(new Date(trip.date), date));
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -80,6 +93,24 @@ export default function Transportation() {
           <p className="text-muted-foreground">Manage field trips and sporting event transportation</p>
         </div>
         <div className="flex gap-2">
+          <div className="flex gap-1 border rounded-md p-1 bg-muted/50">
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('list')}
+            >
+              <LayoutList className="h-4 w-4 mr-2" />
+              List
+            </Button>
+            <Button
+              variant={viewMode === 'calendar' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('calendar')}
+            >
+              <CalendarIcon className="h-4 w-4 mr-2" />
+              Calendar
+            </Button>
+          </div>
           <CSVUploader tableName="trips" onUploadComplete={fetchTrips} />
           <AddTripDialog onSuccess={fetchTrips} />
         </div>
@@ -88,6 +119,99 @@ export default function Transportation() {
 {loading ? (
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      ) : viewMode === 'calendar' ? (
+        <div className="grid lg:grid-cols-[400px_1fr] gap-6">
+          <Card className="p-4">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={setSelectedDate}
+              modifiers={{
+                hasTrip: getDaysWithTrips()
+              }}
+              modifiersClassNames={{
+                hasTrip: "bg-primary/20 font-bold"
+              }}
+              className="rounded-md border"
+            />
+          </Card>
+          <div>
+            <h2 className="text-xl font-semibold mb-4">
+              {selectedDate ? format(selectedDate, 'MMMM d, yyyy') : 'Select a date'}
+            </h2>
+            {selectedDate && getTripsForDate(selectedDate).length > 0 ? (
+              <div className="space-y-4">
+                {getTripsForDate(selectedDate).map((trip) => (
+                  <Card key={trip.id} className="shadow-card hover:shadow-md transition-all group">
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <CardTitle className="text-xl">{trip.name}</CardTitle>
+                            <Badge variant="secondary">{trip.type}</Badge>
+                          </div>
+                          <CardDescription>
+                            Destination: {trip.destination || "N/A"}
+                          </CardDescription>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => setManagingRoster({ id: trip.id, name: trip.name })}
+                          >
+                            <UserCheck className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => setEditingTrip(trip.id)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-destructive"
+                            onClick={() => setDeletingTrip(trip.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="text-muted-foreground">Departure: </span>
+                          <span className="font-medium">{trip.departure_time || "N/A"}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Return: </span>
+                          <span className="font-medium">{trip.return_time || "N/A"}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Capacity: </span>
+                          <span className="font-medium">{trip.capacity || "N/A"}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Chaperone: </span>
+                          <span className="font-medium">{trip.chaperone || "N/A"}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">No trips scheduled for this date</p>
+              </div>
+            )}
+          </div>
         </div>
       ) : trips.length > 0 ? (
         <div className="grid gap-6">
@@ -150,7 +274,7 @@ export default function Transportation() {
                 <div className="grid grid-cols-4 gap-6">
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-lg bg-primary/10">
-                      <Calendar className="h-5 w-5 text-primary" />
+                      <CalendarIcon className="h-5 w-5 text-primary" />
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Date</p>
