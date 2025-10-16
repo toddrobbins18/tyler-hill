@@ -921,6 +921,45 @@ export type Database = {
           },
         ]
       }
+      sports_event_roster: {
+        Row: {
+          child_id: string
+          confirmed: boolean | null
+          created_at: string | null
+          event_id: string
+          id: string
+        }
+        Insert: {
+          child_id: string
+          confirmed?: boolean | null
+          created_at?: string | null
+          event_id: string
+          id?: string
+        }
+        Update: {
+          child_id?: string
+          confirmed?: boolean | null
+          created_at?: string | null
+          event_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sports_event_roster_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sports_event_roster_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "sports_calendar"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       staff: {
         Row: {
           created_at: string | null

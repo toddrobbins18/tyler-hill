@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Trophy, Plus, List, Pencil, Trash2, Calendar as CalendarIcon } from "lucide-react";
+import { Trophy, Plus, List, Pencil, Trash2, Calendar as CalendarIcon, UserCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -17,6 +17,7 @@ import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import ManageSportsRosterDialog from "@/components/dialogs/ManageSportsRosterDialog";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -30,6 +31,7 @@ export default function SportsCalendar() {
   const [showDialog, setShowDialog] = useState(false);
   const [editingEvent, setEditingEvent] = useState<any>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [managingRoster, setManagingRoster] = useState<{ id: string; title: string } | null>(null);
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [calendarView, setCalendarView] = useState<View>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -327,6 +329,14 @@ export default function SportsCalendar() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            onClick={() => setManagingRoster({ id: event.id, title: event.title })}
+                            title="Manage Roster"
+                          >
+                            <UserCheck className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={() => handleEdit(event)}
                           >
                             <Pencil className="h-4 w-4" />
@@ -515,6 +525,15 @@ export default function SportsCalendar() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {managingRoster && (
+        <ManageSportsRosterDialog
+          eventId={managingRoster.id}
+          eventTitle={managingRoster.title}
+          open={!!managingRoster}
+          onOpenChange={(open) => !open && setManagingRoster(null)}
+        />
+      )}
     </div>
   );
 }
