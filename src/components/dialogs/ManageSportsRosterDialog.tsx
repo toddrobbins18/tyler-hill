@@ -97,7 +97,7 @@ export default function ManageSportsRosterDialog({
       const rosterEntries = Array.from(roster).map(childId => ({
         event_id: eventId,
         child_id: childId,
-        confirmed: false,
+        confirmed: true,
       }));
 
       const { error: insertError } = await supabase
