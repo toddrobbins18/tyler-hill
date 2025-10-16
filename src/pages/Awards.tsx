@@ -214,9 +214,11 @@ export default function Awards() {
         </div>
       )}
 
-      {addDialogOpen && (
-        <AddAwardDialog onSuccess={fetchAwards} />
-      )}
+      <AddAwardDialog 
+        open={addDialogOpen}
+        onOpenChange={setAddDialogOpen}
+        onSuccess={fetchAwards} 
+      />
 
       {editingAward && (
         <EditAwardDialog

@@ -11,10 +11,11 @@ import { toast } from "sonner";
 
 interface AddAwardDialogProps {
   onSuccess: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
-export default function AddAwardDialog({ onSuccess }: AddAwardDialogProps) {
-  const [open, setOpen] = useState(false);
+export default function AddAwardDialog({ onSuccess, open, onOpenChange }: AddAwardDialogProps) {
   const [loading, setLoading] = useState(false);
   const [children, setChildren] = useState<any[]>([]);
   const [formData, setFormData] = useState({
@@ -55,7 +56,7 @@ export default function AddAwardDialog({ onSuccess }: AddAwardDialogProps) {
     } else {
       toast.success("Award added successfully");
       onSuccess();
-      setOpen(false);
+      onOpenChange(false);
       setFormData({
         title: "",
         description: "",
@@ -68,13 +69,7 @@ export default function AddAwardDialog({ onSuccess }: AddAwardDialogProps) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>
-          <Award className="h-4 w-4 mr-2" />
-          Add Achievement
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add New Award</DialogTitle>
@@ -138,7 +133,7 @@ export default function AddAwardDialog({ onSuccess }: AddAwardDialogProps) {
           </div>
 
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>
