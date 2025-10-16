@@ -122,6 +122,7 @@ export type Database = {
           leader_id: string | null
           medical_notes: string | null
           name: string
+          person_id: string | null
           season: string | null
           status: string | null
           updated_at: string | null
@@ -142,6 +143,7 @@ export type Database = {
           leader_id?: string | null
           medical_notes?: string | null
           name: string
+          person_id?: string | null
           season?: string | null
           status?: string | null
           updated_at?: string | null
@@ -162,6 +164,7 @@ export type Database = {
           leader_id?: string | null
           medical_notes?: string | null
           name?: string
+          person_id?: string | null
           season?: string | null
           status?: string | null
           updated_at?: string | null
