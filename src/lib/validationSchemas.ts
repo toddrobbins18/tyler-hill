@@ -118,21 +118,21 @@ export const sportsCalendarSchema = z.object({
 // Convert CSV row to typed object for children
 export function parseChildRow(row: Record<string, any>) {
   // Construct full name from first and last name
-  const firstName = row.first_name || row['First Name'] || '';
-  const lastName = row.last_name || row['Last Name'] || '';
+  const firstName = row.first_name || row['First Name'] || row.firstname || '';
+  const lastName = row.last_name || row['Last Name'] || row.lastname || '';
   const fullName = `${firstName} ${lastName}`.trim() || row.name || '';
   
   return {
     name: fullName,
-    person_id: row.person_id || row['Person ID'] || '',
-    age: row.age ? parseInt(row.age, 10) : null,
-    grade: row.grade || null,
-    group_name: row.group_name || null,
-    guardian_email: row.guardian_email || null,
-    guardian_phone: row.guardian_phone || null,
-    emergency_contact: row.emergency_contact || null,
-    allergies: row.allergies || null,
-    medical_notes: row.medical_notes || null,
+    person_id: row.person_id || row['Person ID'] || row.PersonID || row.personid || '',
+    age: row.age || row.Age ? parseInt(row.age || row.Age, 10) : null,
+    grade: row.grade || row.Grade || null,
+    group_name: row.group_name || row['Group Name'] || null,
+    guardian_email: row.guardian_email || row['Guardian Email'] || null,
+    guardian_phone: row.guardian_phone || row['Guardian Phone'] || null,
+    emergency_contact: row.emergency_contact || row['Emergency Contact'] || null,
+    allergies: row.allergies || row.Allergies || null,
+    medical_notes: row.medical_notes || row['Medical Notes'] || null,
   };
 }
 
