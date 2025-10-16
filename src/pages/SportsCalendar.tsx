@@ -410,12 +410,19 @@ export default function SportsCalendar() {
                   <SelectValue placeholder="Select sport type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="basketball">Basketball</SelectItem>
-                  <SelectItem value="soccer">Soccer</SelectItem>
-                  <SelectItem value="baseball">Baseball</SelectItem>
-                  <SelectItem value="swimming">Swimming</SelectItem>
-                  <SelectItem value="track">Track & Field</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
+                  <SelectItem value="Baseball">Baseball</SelectItem>
+                  <SelectItem value="Basketball">Basketball</SelectItem>
+                  <SelectItem value="Dance">Dance</SelectItem>
+                  <SelectItem value="Football">Football</SelectItem>
+                  <SelectItem value="Golf">Golf</SelectItem>
+                  <SelectItem value="Gymnastics">Gymnastics</SelectItem>
+                  <SelectItem value="Hockey">Hockey</SelectItem>
+                  <SelectItem value="Lacrosse">Lacrosse</SelectItem>
+                  <SelectItem value="Soccer">Soccer</SelectItem>
+                  <SelectItem value="Softball">Softball</SelectItem>
+                  <SelectItem value="Tennis">Tennis</SelectItem>
+                  <SelectItem value="Volleyball">Volleyball</SelectItem>
+                  <SelectItem value="Waterfront">Waterfront</SelectItem>
                 </SelectContent>
               </Select>
             </div>

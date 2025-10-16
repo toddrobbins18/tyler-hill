@@ -12,9 +12,9 @@ export default function CSVFormatGuide({ open, onOpenChange }: CSVFormatGuidePro
   const formats = {
     children: {
       title: "Children Roster",
-      columns: "name, age, grade, gender, guardian_phone, guardian_email, medical_notes, allergies, division_id, leader_id, emergency_contact, status, season",
-      example: "John Doe, 10, 5, Male, 555-1234, parent@email.com, None, Peanuts, <division_id>, <leader_id>, Jane Doe 555-5678, active, Summer 2024",
-      notes: "division_id and leader_id must be valid UUIDs from divisions and staff tables"
+      columns: "first_name, last_name, person_id, age, grade, gender, guardian_phone, guardian_email, medical_notes, allergies, division_id, leader_id, emergency_contact, status, season",
+      example: "John, Doe, P12345, 10, 5, Male, 555-1234, parent@email.com, None, Peanuts, <division_id>, <leader_id>, Jane Doe 555-5678, active, Summer 2024",
+      notes: "REQUIRED: first_name, last_name, and person_id. All other fields are optional. division_id and leader_id must be valid UUIDs from divisions and staff tables if provided"
     },
     staff: {
       title: "Staff Directory",
@@ -68,7 +68,7 @@ export default function CSVFormatGuide({ open, onOpenChange }: CSVFormatGuidePro
       title: "Sports Calendar",
       columns: "event_date, title, sport_type, description, time, location, team, opponent, division_id, created_by",
       example: "2024-06-25, Championship Game, Basketball, Final game of season, 14:00, Main Court, Eagles, Hawks, <division_id>, <staff_id>",
-      notes: "event_date format: YYYY-MM-DD. sport_type options: basketball, soccer, baseball, swimming, track, other. division_id and created_by can be empty"
+      notes: "event_date format: YYYY-MM-DD. sport_type options: Baseball, Basketball, Dance, Football, Golf, Gymnastics, Hockey, Lacrosse, Soccer, Softball, Tennis, Volleyball, Waterfront. division_id and created_by can be empty"
     }
   };
 
