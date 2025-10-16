@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Award, Trophy, Star, Calendar, AlertTriangle, FileText, Pencil } from "lucide-react";
+import { ArrowLeft, Award, Trophy, Star, Calendar, AlertTriangle, FileText, Pencil, Users, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,8 @@ export default function ChildProfile() {
   const [child, setChild] = useState<any>(null);
   const [awards, setAwards] = useState<any[]>([]);
   const [incidents, setIncidents] = useState<any[]>([]);
+  const [sportsRoster, setSportsRoster] = useState<any[]>([]);
+  const [tripAttendance, setTripAttendance] = useState<any[]>([]);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -54,6 +56,45 @@ export default function ChildProfile() {
         .order("date", { ascending: false });
 
       setIncidents(incidentsData || []);
+
+      // Fetch sports roster assignments
+      const { data: sportsData } = await supabase
+        .from("sports_event_roster")
+        .select(`
+          *,
+          sports_calendar (
+            id,
+            title,
+            sport_type,
+            event_date,
+            time,
+            location,
+            team,
+            opponent
+          )
+        `)
+        .eq("child_id", id);
+
+      setSportsRoster(sportsData || []);
+
+      // Fetch trip attendance
+      const { data: tripData } = await supabase
+        .from("trip_attendees")
+        .select(`
+          *,
+          trips (
+            id,
+            name,
+            destination,
+            date,
+            type,
+            departure_time,
+            return_time
+          )
+        `)
+        .eq("child_id", id);
+
+      setTripAttendance(tripData || []);
     } catch (error) {
       console.error("Error fetching child data:", error);
       toast({ title: "Error loading child profile", variant: "destructive" });
@@ -239,11 +280,127 @@ export default function ChildProfile() {
         </TabsContent>
 
         <TabsContent value="activities" className="space-y-4">
-          <Card className="shadow-card">
-            <CardContent className="py-8 text-center text-muted-foreground">
-              Activity tracking coming soon
-            </CardContent>
-          </Card>
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Trophy className="h-5 w-5" />
+                Sports Events
+              </h3>
+              {sportsRoster.length === 0 ? (
+                <Card className="shadow-card">
+                  <CardContent className="py-8 text-center text-muted-foreground">
+                    Not assigned to any sports events
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid gap-4">
+                  {sportsRoster.map((roster: any) => (
+                    <Card key={roster.id} className="shadow-card">
+                      <CardContent className="p-6">
+                        <div className="flex items-start gap-4">
+                          <div className="p-3 rounded-xl bg-primary/10">
+                            <Trophy className="h-6 w-6 text-primary" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-start justify-between mb-2">
+                              <div>
+                                <h4 className="font-semibold text-lg mb-1">
+                                  {roster.sports_calendar?.title}
+                                </h4>
+                                <p className="text-sm text-muted-foreground">
+                                  {roster.sports_calendar?.sport_type}
+                                  {roster.sports_calendar?.team && ` • ${roster.sports_calendar.team}`}
+                                  {roster.sports_calendar?.opponent && ` vs ${roster.sports_calendar.opponent}`}
+                                </p>
+                              </div>
+                              <Badge variant={roster.confirmed ? "default" : "outline"}>
+                                {roster.confirmed ? "Confirmed" : "Pending"}
+                              </Badge>
+                            </div>
+                            <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                              {roster.sports_calendar?.event_date && (
+                                <div className="flex items-center gap-1">
+                                  <Calendar className="h-4 w-4" />
+                                  <span>{new Date(roster.sports_calendar.event_date).toLocaleDateString()}</span>
+                                </div>
+                              )}
+                              {roster.sports_calendar?.time && (
+                                <span>• {roster.sports_calendar.time}</span>
+                              )}
+                              {roster.sports_calendar?.location && (
+                                <div className="flex items-center gap-1">
+                                  <MapPin className="h-4 w-4" />
+                                  <span>{roster.sports_calendar.location}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Field Trips
+              </h3>
+              {tripAttendance.length === 0 ? (
+                <Card className="shadow-card">
+                  <CardContent className="py-8 text-center text-muted-foreground">
+                    Not assigned to any field trips
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid gap-4">
+                  {tripAttendance.map((attendance: any) => (
+                    <Card key={attendance.id} className="shadow-card">
+                      <CardContent className="p-6">
+                        <div className="flex items-start gap-4">
+                          <div className="p-3 rounded-xl bg-secondary/10">
+                            <Users className="h-6 w-6 text-secondary" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-start justify-between mb-2">
+                              <div>
+                                <h4 className="font-semibold text-lg mb-1">
+                                  {attendance.trips?.name}
+                                </h4>
+                                <p className="text-sm text-muted-foreground">
+                                  {attendance.trips?.type}
+                                  {attendance.trips?.destination && ` • ${attendance.trips.destination}`}
+                                </p>
+                              </div>
+                              <Badge variant={attendance.confirmed ? "default" : "outline"}>
+                                {attendance.confirmed ? "Confirmed" : "Pending"}
+                              </Badge>
+                            </div>
+                            <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                              {attendance.trips?.date && (
+                                <div className="flex items-center gap-1">
+                                  <Calendar className="h-4 w-4" />
+                                  <span>{new Date(attendance.trips.date).toLocaleDateString()}</span>
+                                </div>
+                              )}
+                              {attendance.trips?.departure_time && (
+                                <span>Depart: {attendance.trips.departure_time}</span>
+                              )}
+                              {attendance.trips?.return_time && (
+                                <span>• Return: {attendance.trips.return_time}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </TabsContent>
 
         <TabsContent value="incidents" className="space-y-4">
