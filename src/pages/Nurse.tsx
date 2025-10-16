@@ -90,10 +90,18 @@ export default function Nurse() {
     const { error } = await supabase.from("medication_logs").insert({
       child_id: selectedChild,
       date: today,
-      ...formData,
+      medication_name: formData.medication_name,
+      dosage: formData.dosage,
+      meal_time: formData.meal_time,
+      notes: formData.notes,
+      is_recurring: formData.is_recurring,
+      frequency: formData.frequency,
+      days_of_week: formData.days_of_week,
+      end_date: formData.end_date || null,
     });
 
     if (error) {
+      console.error("Medication insert error:", error);
       toast({ title: "Error adding medication", variant: "destructive" });
       return;
     }
@@ -149,6 +157,66 @@ export default function Nurse() {
       <div className="flex justify-end mb-4">
         <CSVUploader tableName="medication_logs" onUploadComplete={fetchMedications} />
       </div>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Daily Medication Log</CardTitle>
+          <CardDescription>Mark off medications administered today</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <p className="text-muted-foreground">Loading...</p>
+          ) : medications.length === 0 ? (
+            <p className="text-muted-foreground">No medications scheduled for today</p>
+          ) : (
+            <div className="space-y-4">
+              {children
+                .filter(child => medications.some(med => med.child_id === child.id))
+                .map((child) => {
+                  const childMeds = medications.filter(med => med.child_id === child.id);
+                  return (
+                    <div key={child.id} className="border rounded-lg p-4">
+                      <h3 className="font-semibold mb-3">{child.name}</h3>
+                      <div className="space-y-2">
+                        {childMeds.map((med) => (
+                          <div key={med.id} className="flex items-start gap-3 p-3 bg-muted/50 rounded">
+                            <Checkbox
+                              checked={med.administered}
+                              onCheckedChange={() => !med.administered && handleAdminister(med.id)}
+                              disabled={med.administered}
+                            />
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{med.medication_name}</span>
+                                {med.administered && (
+                                  <Badge variant="outline" className="flex items-center gap-1">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Given
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {med.dosage} - {med.meal_time}
+                              </p>
+                              {med.notes && (
+                                <p className="text-xs text-muted-foreground mt-1">{med.notes}</p>
+                              )}
+                              {med.administered && med.staff?.name && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  By {med.staff.name}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
