@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Pill, AlertCircle, CheckCircle2 } from "lucide-react";
@@ -158,280 +159,292 @@ export default function Nurse() {
         <CSVUploader tableName="medication_logs" onUploadComplete={fetchMedications} />
       </div>
 
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Daily Medication Log</CardTitle>
-          <CardDescription>Mark off medications administered today</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <p className="text-muted-foreground">Loading...</p>
-          ) : medications.length === 0 ? (
-            <p className="text-muted-foreground">No medications scheduled for today</p>
-          ) : (
-            <div className="space-y-4">
-              {children
-                .filter(child => medications.some(med => med.child_id === child.id))
-                .map((child) => {
-                  const childMeds = medications.filter(med => med.child_id === child.id);
-                  return (
-                    <div key={child.id} className="border rounded-lg p-4">
-                      <h3 className="font-semibold mb-3">{child.name}</h3>
-                      <div className="space-y-2">
-                        {childMeds.map((med) => (
-                          <div key={med.id} className="flex items-start gap-3 p-3 bg-muted/50 rounded">
-                            <Checkbox
-                              checked={med.administered}
-                              onCheckedChange={() => !med.administered && handleAdminister(med.id)}
-                              disabled={med.administered}
-                            />
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">{med.medication_name}</span>
-                                {med.administered && (
-                                  <Badge variant="outline" className="flex items-center gap-1">
-                                    <CheckCircle2 className="h-3 w-3" />
-                                    Given
-                                  </Badge>
-                                )}
+      <Tabs defaultValue="log" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="log">Daily Log</TabsTrigger>
+          <TabsTrigger value="today">Today's Medications</TabsTrigger>
+          <TabsTrigger value="add">Add Medication</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="log">
+          <Card>
+            <CardHeader>
+              <CardTitle>Daily Medication Log</CardTitle>
+              <CardDescription>Mark off medications administered today</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <p className="text-muted-foreground">Loading...</p>
+              ) : medications.length === 0 ? (
+                <p className="text-muted-foreground">No medications scheduled for today</p>
+              ) : (
+                <div className="space-y-4">
+                  {children
+                    .filter(child => medications.some(med => med.child_id === child.id))
+                    .map((child) => {
+                      const childMeds = medications.filter(med => med.child_id === child.id);
+                      return (
+                        <div key={child.id} className="border rounded-lg p-4">
+                          <h3 className="font-semibold mb-3">{child.name}</h3>
+                          <div className="space-y-2">
+                            {childMeds.map((med) => (
+                              <div key={med.id} className="flex items-start gap-3 p-3 bg-muted/50 rounded">
+                                <Checkbox
+                                  checked={med.administered}
+                                  onCheckedChange={() => !med.administered && handleAdminister(med.id)}
+                                  disabled={med.administered}
+                                />
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium">{med.medication_name}</span>
+                                    {med.administered && (
+                                      <Badge variant="outline" className="flex items-center gap-1">
+                                        <CheckCircle2 className="h-3 w-3" />
+                                        Given
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-muted-foreground">
+                                    {med.dosage} - {med.meal_time}
+                                  </p>
+                                  {med.notes && (
+                                    <p className="text-xs text-muted-foreground mt-1">{med.notes}</p>
+                                  )}
+                                  {med.administered && med.staff?.name && (
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      By {med.staff.name}
+                                    </p>
+                                  )}
+                                </div>
                               </div>
-                              <p className="text-sm text-muted-foreground">
-                                {med.dosage} - {med.meal_time}
-                              </p>
-                              {med.notes && (
-                                <p className="text-xs text-muted-foreground mt-1">{med.notes}</p>
-                              )}
-                              {med.administered && med.staff?.name && (
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  By {med.staff.name}
-                                </p>
-                              )}
-                            </div>
+                            ))}
                           </div>
-                        ))}
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="today">
+          <Card>
+            <CardHeader>
+              <CardTitle>Today's Medications</CardTitle>
+              <CardDescription>Track medication administration</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <p className="text-muted-foreground">Loading...</p>
+              ) : medications.length === 0 ? (
+                <p className="text-muted-foreground">No medications scheduled for today</p>
+              ) : (
+                <div className="space-y-3">
+                  {medications.map((med) => (
+                    <div
+                      key={med.id}
+                      className="p-4 rounded-lg border bg-card"
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <p className="font-medium">{med.children?.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {med.medication_name} - {med.dosage}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {med.meal_time}
+                          </p>
+                        </div>
+                        {med.administered ? (
+                          <Badge variant="outline" className="flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Given
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3 text-warning" />
+                            Pending
+                          </Badge>
+                        )}
                       </div>
-                    </div>
-                  );
-                })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Pill className="h-5 w-5 text-primary" />
-              <CardTitle>Add Medication</CardTitle>
-            </div>
-            <CardDescription>Schedule medication for a child</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label>Child</Label>
-                <Select value={selectedChild} onValueChange={setSelectedChild}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a child" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {children.map((child) => (
-                      <SelectItem key={child.id} value={child.id}>
-                        {child.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Medication Name</Label>
-                <Input
-                  value={formData.medication_name}
-                  onChange={(e) => setFormData({ ...formData, medication_name: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Dosage</Label>
-                <Input
-                  value={formData.dosage}
-                  onChange={(e) => setFormData({ ...formData, dosage: e.target.value })}
-                  placeholder="e.g., 5ml, 1 tablet"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Meal Time</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    "Before Breakfast",
-                    "After Breakfast", 
-                    "Before Lunch",
-                    "After Lunch",
-                    "Before Dinner",
-                    "After Dinner",
-                    "Bedtime"
-                  ].map((mealTime) => (
-                    <div key={mealTime} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={mealTime}
-                        checked={formData.meal_time === mealTime}
-                        onCheckedChange={() => setFormData({ ...formData, meal_time: mealTime })}
-                      />
-                      <Label 
-                        htmlFor={mealTime} 
-                        className="font-normal cursor-pointer text-sm"
-                      >
-                        {mealTime}
-                      </Label>
+                      {!med.administered && (
+                        <Button
+                          size="sm"
+                          onClick={() => handleAdminister(med.id)}
+                          className="w-full mt-2"
+                        >
+                          Mark as Administered
+                        </Button>
+                      )}
+                      {med.administered && med.staff?.name && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Administered by {med.staff.name}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Notes</Label>
-                <Textarea
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  placeholder="Additional notes..."
-                />
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="is_recurring"
-                  checked={formData.is_recurring}
-                  onCheckedChange={(checked) => setFormData({ ...formData, is_recurring: checked as boolean })}
-                />
-                <Label htmlFor="is_recurring" className="font-normal cursor-pointer">
-                  Recurring medication
-                </Label>
-              </div>
-
-              {formData.is_recurring && (
-                <>
-                  <div className="space-y-2">
-                    <Label>Frequency</Label>
-                    <Select
-                      value={formData.frequency}
-                      onValueChange={(value) => setFormData({ ...formData, frequency: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="daily">Daily</SelectItem>
-                        <SelectItem value="weekly">Weekly</SelectItem>
-                        <SelectItem value="custom">Custom Days</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {formData.frequency === "custom" && (
-                    <div className="space-y-2">
-                      <Label>Days of Week</Label>
-                      <div className="flex flex-wrap gap-2">
-                        {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day) => (
-                          <Button
-                            key={day}
-                            type="button"
-                            size="sm"
-                            variant={formData.days_of_week.includes(day) ? "default" : "outline"}
-                            onClick={() => {
-                              const days = formData.days_of_week.includes(day)
-                                ? formData.days_of_week.filter(d => d !== day)
-                                : [...formData.days_of_week, day];
-                              setFormData({ ...formData, days_of_week: days });
-                            }}
-                          >
-                            {day.slice(0, 3)}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <Label htmlFor="end_date">End Date (optional)</Label>
-                    <Input
-                      id="end_date"
-                      type="date"
-                      value={formData.end_date}
-                      onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                    />
-                  </div>
-                </>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-              <Button type="submit" className="w-full">Add Medication</Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Today's Medications</CardTitle>
-            <CardDescription>Track medication administration</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <p className="text-muted-foreground">Loading...</p>
-            ) : medications.length === 0 ? (
-              <p className="text-muted-foreground">No medications scheduled for today</p>
-            ) : (
-              <div className="space-y-3">
-                {medications.map((med) => (
-                  <div
-                    key={med.id}
-                    className="p-4 rounded-lg border bg-card"
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <p className="font-medium">{med.children?.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {med.medication_name} - {med.dosage}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {med.meal_time}
-                        </p>
-                      </div>
-                      {med.administered ? (
-                        <Badge variant="outline" className="flex items-center gap-1">
-                          <CheckCircle2 className="h-3 w-3" />
-                          Given
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3 text-warning" />
-                          Pending
-                        </Badge>
-                      )}
-                    </div>
-                    {!med.administered && (
-                      <Button
-                        size="sm"
-                        onClick={() => handleAdminister(med.id)}
-                        className="w-full mt-2"
-                      >
-                        Mark as Administered
-                      </Button>
-                    )}
-                    {med.administered && med.staff?.name && (
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Administered by {med.staff.name}
-                      </p>
-                    )}
-                  </div>
-                ))}
+        <TabsContent value="add">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Pill className="h-5 w-5 text-primary" />
+                <CardTitle>Add Medication</CardTitle>
               </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              <CardDescription>Schedule medication for a child</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Child</Label>
+                  <Select value={selectedChild} onValueChange={setSelectedChild}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a child" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {children.map((child) => (
+                        <SelectItem key={child.id} value={child.id}>
+                          {child.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Medication Name</Label>
+                  <Input
+                    value={formData.medication_name}
+                    onChange={(e) => setFormData({ ...formData, medication_name: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Dosage</Label>
+                  <Input
+                    value={formData.dosage}
+                    onChange={(e) => setFormData({ ...formData, dosage: e.target.value })}
+                    placeholder="e.g., 5ml, 1 tablet"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Meal Time</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      "Before Breakfast",
+                      "After Breakfast", 
+                      "Before Lunch",
+                      "After Lunch",
+                      "Before Dinner",
+                      "After Dinner",
+                      "Bedtime"
+                    ].map((mealTime) => (
+                      <div key={mealTime} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={mealTime}
+                          checked={formData.meal_time === mealTime}
+                          onCheckedChange={() => setFormData({ ...formData, meal_time: mealTime })}
+                        />
+                        <Label 
+                          htmlFor={mealTime} 
+                          className="font-normal cursor-pointer text-sm"
+                        >
+                          {mealTime}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Notes</Label>
+                  <Textarea
+                    value={formData.notes}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    placeholder="Additional notes..."
+                  />
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="is_recurring"
+                    checked={formData.is_recurring}
+                    onCheckedChange={(checked) => setFormData({ ...formData, is_recurring: checked as boolean })}
+                  />
+                  <Label htmlFor="is_recurring" className="font-normal cursor-pointer">
+                    Recurring medication
+                  </Label>
+                </div>
+
+                {formData.is_recurring && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Frequency</Label>
+                      <Select
+                        value={formData.frequency}
+                        onValueChange={(value) => setFormData({ ...formData, frequency: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="daily">Daily</SelectItem>
+                          <SelectItem value="weekly">Weekly</SelectItem>
+                          <SelectItem value="custom">Custom Days</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {formData.frequency === "custom" && (
+                      <div className="space-y-2">
+                        <Label>Days of Week</Label>
+                        <div className="flex flex-wrap gap-2">
+                          {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day) => (
+                            <Button
+                              key={day}
+                              type="button"
+                              size="sm"
+                              variant={formData.days_of_week.includes(day) ? "default" : "outline"}
+                              onClick={() => {
+                                const days = formData.days_of_week.includes(day)
+                                  ? formData.days_of_week.filter(d => d !== day)
+                                  : [...formData.days_of_week, day];
+                                setFormData({ ...formData, days_of_week: days });
+                              }}
+                            >
+                              {day.slice(0, 3)}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <Label htmlFor="end_date">End Date (optional)</Label>
+                      <Input
+                        id="end_date"
+                        type="date"
+                        value={formData.end_date}
+                        onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                      />
+                    </div>
+                  </>
+                )}
+
+                <Button type="submit" className="w-full">Add Medication</Button>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
