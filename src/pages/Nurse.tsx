@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Pill, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Pill, AlertCircle, CheckCircle2, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CSVUploader } from "@/components/CSVUploader";
 
@@ -148,6 +148,21 @@ export default function Nurse() {
     fetchMedications();
   };
 
+  const handleDelete = async (medId: string) => {
+    const { error } = await supabase
+      .from("medication_logs")
+      .delete()
+      .eq("id", medId);
+
+    if (error) {
+      toast({ title: "Error deleting medication", variant: "destructive" });
+      return;
+    }
+
+    toast({ title: "Medication deleted successfully" });
+    fetchMedications();
+  };
+
   return (
     <div className="space-y-8">
       <div>
@@ -216,6 +231,14 @@ export default function Nurse() {
                                     </p>
                                   )}
                                 </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDelete(med.id)}
+                                  className="text-destructive hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
                               </div>
                             ))}
                           </div>
