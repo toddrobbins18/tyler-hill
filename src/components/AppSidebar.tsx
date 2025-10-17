@@ -18,7 +18,7 @@ const items = [
   { title: "Activities & Field Trips", url: "/activities", icon: Palmtree },
   { title: "Awards", url: "/awards", icon: Award },
   { title: "Camper", url: "/roster", icon: Users },
-  { title: "Daily Notes", url: "/notes", icon: FileText },
+  { title: "Franko Sheet", url: "/notes", icon: Truck },
   { title: "Special Events & Evening Activities", url: "/special-events", icon: Calendar },
   { title: "Dashboard", url: "/", icon: Home },
   { title: "Incident Reports", url: "/incidents", icon: AlertTriangle },

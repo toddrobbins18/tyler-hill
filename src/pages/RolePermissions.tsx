@@ -10,7 +10,7 @@ const menuItems = [
   { id: "dashboard", label: "Dashboard", icon: "📊" },
   { id: "roster", label: "Roster", icon: "👥" },
   { id: "staff", label: "Staff", icon: "👤" },
-  { id: "notes", label: "Daily Notes", icon: "📝" },
+  { id: "notes", label: "Franko Sheet", icon: "🚌" },
   { id: "awards", label: "Awards", icon: "🏆" },
   { id: "transportation", label: "Transportation", icon: "🚌" },
   { id: "menu", label: "Menu", icon: "🍽️" },
