@@ -74,6 +74,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
       const formData = new FormData(e.currentTarget);
       const data = {
         name: formData.get("name") as string,
+        person_id: formData.get("person_id") as string,
         age: formData.get("age") ? parseInt(formData.get("age") as string) : null,
         gender: gender || null,
         category: formData.get("category") as string || null,
@@ -133,6 +134,10 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
             <div>
               <Label htmlFor="age">Age</Label>
               <Input id="age" name="age" type="number" defaultValue={child.age || ""} />
+            </div>
+            <div>
+              <Label htmlFor="person_id">Person ID *</Label>
+              <Input id="person_id" name="person_id" defaultValue={child.person_id || ""} required />
             </div>
             <div>
               <Label>Gender</Label>
