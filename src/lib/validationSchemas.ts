@@ -12,6 +12,13 @@ export const childSchema = z.object({
   emergency_contact: z.string().trim().max(255, "Emergency contact must be less than 255 characters").nullable().optional(),
   allergies: z.string().trim().max(1000, "Allergies must be less than 1000 characters").nullable().optional(),
   medical_notes: z.string().trim().max(1000, "Medical notes must be less than 1000 characters").nullable().optional(),
+  // Additional fields that are set by the form but not explicitly validated
+  category: z.string().nullable().optional(),
+  gender: z.string().nullable().optional(),
+  division_id: z.string().uuid().nullable().optional(),
+  leader_id: z.string().uuid().nullable().optional(),
+  season: z.string().nullable().optional(),
+  status: z.string().nullable().optional(),
 });
 
 // Staff validation schema
