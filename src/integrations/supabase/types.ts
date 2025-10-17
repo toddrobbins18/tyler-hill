@@ -791,6 +791,69 @@ export type Database = {
         }
         Relationships: []
       }
+      roster_template_children: {
+        Row: {
+          child_id: string | null
+          created_at: string | null
+          id: string
+          template_id: string | null
+        }
+        Insert: {
+          child_id?: string | null
+          created_at?: string | null
+          id?: string
+          template_id?: string | null
+        }
+        Update: {
+          child_id?: string | null
+          created_at?: string | null
+          id?: string
+          template_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roster_template_children_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "roster_template_children_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "roster_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      roster_templates: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          id: string
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       special_meals: {
         Row: {
           allergens: string | null
@@ -875,6 +938,8 @@ export type Database = {
           custom_sport_type: string | null
           description: string | null
           division_id: string | null
+          division_provides_coach: boolean | null
+          division_provides_ref: boolean | null
           event_date: string
           event_type: string | null
           id: string
@@ -891,6 +956,8 @@ export type Database = {
           custom_sport_type?: string | null
           description?: string | null
           division_id?: string | null
+          division_provides_coach?: boolean | null
+          division_provides_ref?: boolean | null
           event_date: string
           event_type?: string | null
           id?: string
@@ -907,6 +974,8 @@ export type Database = {
           custom_sport_type?: string | null
           description?: string | null
           division_id?: string | null
+          division_provides_coach?: boolean | null
+          division_provides_ref?: boolean | null
           event_date?: string
           event_type?: string | null
           id?: string
@@ -998,6 +1067,45 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "sports_calendar"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sports_event_staff: {
+        Row: {
+          created_at: string | null
+          event_id: string | null
+          id: string
+          role: string
+          staff_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          event_id?: string | null
+          id?: string
+          role: string
+          staff_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          event_id?: string | null
+          id?: string
+          role?: string
+          staff_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sports_event_staff_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "sports_calendar"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sports_event_staff_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
             referencedColumns: ["id"]
           },
         ]
@@ -1160,6 +1268,7 @@ export type Database = {
           meal: string | null
           name: string
           return_time: string | null
+          sports_event_id: string | null
           status: string | null
           transportation_type: string | null
           type: string
@@ -1178,6 +1287,7 @@ export type Database = {
           meal?: string | null
           name: string
           return_time?: string | null
+          sports_event_id?: string | null
           status?: string | null
           transportation_type?: string | null
           type: string
@@ -1196,11 +1306,20 @@ export type Database = {
           meal?: string | null
           name?: string
           return_time?: string | null
+          sports_event_id?: string | null
           status?: string | null
           transportation_type?: string | null
           type?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "trips_sports_event_id_fkey"
+            columns: ["sports_event_id"]
+            isOneToOne: false
+            referencedRelation: "sports_calendar"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
