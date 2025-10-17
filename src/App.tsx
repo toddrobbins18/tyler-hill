@@ -26,7 +26,7 @@ import IncidentReports from "./pages/IncidentReports";
 import MasterCalendar from "./pages/MasterCalendar";
 import SportsCalendar from "./pages/SportsCalendar";
 import ActivitiesFieldTrips from "./pages/ActivitiesFieldTrips";
-import DailySchedule from "./pages/DailySchedule";
+import SpecialEventsActivities from "./pages/SpecialEventsActivities";
 import SportsAcademy from "./pages/SportsAcademy";
 import UserApprovals from "./pages/UserApprovals";
 import NotFound from "./pages/NotFound";
@@ -74,7 +74,8 @@ const App = () => (
                           <Route path="/calendar" element={<MasterCalendar />} />
                           <Route path="/sports-calendar" element={<SportsCalendar />} />
                           <Route path="/activities" element={<ActivitiesFieldTrips />} />
-                          <Route path="/daily-schedule" element={<DailySchedule />} />
+                          <Route path="/special-events" element={<SpecialEventsActivities />} />
+                          <Route path="/daily-schedule" element={<SpecialEventsActivities />} />
                           <Route path="/sports-academy" element={<SportsAcademy />} />
                           <Route path="/messages" element={<Messages />} />
                           <Route path="/child/:id" element={<ChildProfile />} />

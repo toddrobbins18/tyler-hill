@@ -24,6 +24,7 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { format, isSameDay } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { formatTime12Hour } from "@/lib/utils";
 
 export default function Transportation() {
   const [trips, setTrips] = useState<any[]>([]);
@@ -75,28 +76,46 @@ export default function Transportation() {
       .order("date", { ascending: false });
 
     if (!error && data) {
-      // Fetch roster counts for sports events
+      // Fetch roster counts and staff for sports events
       const sportsEventIds = data.filter(t => t.sports_event_id).map(t => t.sports_event_id);
-      if (sportsEventIds.length > 0) {
-        const { data: rosterCounts } = await supabase
-          .from("sports_event_roster")
-          .select("event_id")
-          .in("event_id", sportsEventIds);
-
-        const counts: Record<string, number> = {};
-        rosterCounts?.forEach((item) => {
-          counts[item.event_id] = (counts[item.event_id] || 0) + 1;
-        });
-
-        // Attach roster counts to trips
-        const tripsWithRoster = data.map(trip => ({
+      
+      const tripsWithAttending = await Promise.all(data.map(async (trip) => {
+        let attendingCount = 0;
+        
+        // Count campers from sports event roster
+        if (trip.sports_event_id) {
+          const { data: rosterData } = await supabase
+            .from("sports_event_roster")
+            .select("id")
+            .eq("event_id", trip.sports_event_id);
+          attendingCount += rosterData?.length || 0;
+          
+          // Count coaches and refs from sports_event_staff
+          const { data: staffData } = await supabase
+            .from("sports_event_staff")
+            .select("id")
+            .eq("event_id", trip.sports_event_id);
+          attendingCount += staffData?.length || 0;
+        }
+        
+        // Count manual trip attendees
+        const { data: tripAttendees } = await supabase
+          .from("trip_attendees")
+          .select("id")
+          .eq("trip_id", trip.id);
+        attendingCount += tripAttendees?.length || 0;
+        
+        // Count additional staff (driver, chaperone)
+        if (trip.driver) attendingCount += trip.driver.split(',').length;
+        if (trip.chaperone) attendingCount += trip.chaperone.split(',').length;
+        
+        return {
           ...trip,
-          rosterCount: trip.sports_event_id ? (counts[trip.sports_event_id] || 0) : null
-        }));
-        setTrips(tripsWithRoster);
-      } else {
-        setTrips(data);
-      }
+          attendingCount
+        };
+      }));
+      
+      setTrips(tripsWithAttending);
     }
     setLoading(false);
   };
@@ -408,15 +427,15 @@ export default function Transportation() {
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
                           <span className="text-muted-foreground">Departure: </span>
-                          <span className="font-medium">{trip.departure_time || "N/A"}</span>
+                          <span className="font-medium">{trip.departure_time ? formatTime12Hour(trip.departure_time) : "N/A"}</span>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Return: </span>
-                          <span className="font-medium">{trip.return_time || "N/A"}</span>
+                          <span className="font-medium">{trip.return_time ? formatTime12Hour(trip.return_time) : "N/A"}</span>
                         </div>
                         <div>
-                          <span className="text-muted-foreground">Capacity: </span>
-                          <span className="font-medium">{trip.capacity || "N/A"}</span>
+                          <span className="text-muted-foreground">Attending: </span>
+                          <span className="font-medium">{trip.attendingCount || 0} people</span>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Chaperone: </span>
@@ -507,8 +526,8 @@ export default function Transportation() {
                       <Users className="h-5 w-5 text-secondary" />
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Capacity</p>
-                      <p className="text-lg font-semibold">{trip.capacity || "N/A"}</p>
+                      <p className="text-sm text-muted-foreground">Attending</p>
+                      <p className="text-lg font-semibold">{trip.attendingCount || 0}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
@@ -517,7 +536,7 @@ export default function Transportation() {
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Departure</p>
-                      <p className="text-sm font-semibold">{trip.departure_time || "N/A"}</p>
+                      <p className="text-sm font-semibold">{trip.departure_time ? formatTime12Hour(trip.departure_time) : "N/A"}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
@@ -526,21 +545,21 @@ export default function Transportation() {
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Return</p>
-                      <p className="text-sm font-semibold">{trip.return_time || "N/A"}</p>
+                      <p className="text-sm font-semibold">{trip.return_time ? formatTime12Hour(trip.return_time) : "N/A"}</p>
                     </div>
                   </div>
                 </div>
 
-                {trip.sports_event_id && trip.rosterCount !== null && (
+                {trip.sports_event_id && trip.attendingCount !== null && (
                   <div className="mt-4 pt-4 border-t">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${trip.rosterCount === 0 ? 'bg-red-100 dark:bg-red-950' : 'bg-green-100 dark:bg-green-950'}`}>
-                          <Users className={`h-5 w-5 ${trip.rosterCount === 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`} />
+                        <div className={`p-2 rounded-lg ${trip.attendingCount === 0 ? 'bg-red-100 dark:bg-red-950' : 'bg-green-100 dark:bg-green-950'}`}>
+                          <Users className={`h-5 w-5 ${trip.attendingCount === 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`} />
                         </div>
                         <div>
                           <p className="text-sm text-muted-foreground">Sports Event Roster</p>
-                          <p className="text-lg font-semibold">{trip.rosterCount} {trip.rosterCount === 1 ? 'camper' : 'campers'}</p>
+                          <p className="text-lg font-semibold">{trip.attendingCount} people total</p>
                         </div>
                       </div>
                       <Button 

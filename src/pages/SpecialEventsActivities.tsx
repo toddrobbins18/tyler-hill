@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CSVUploader } from "@/components/CSVUploader";
 
-export default function DailySchedule() {
+export default function SpecialEventsActivities() {
   const [events, setEvents] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
   const [selectedDivision, setSelectedDivision] = useState<string>("all");
@@ -38,10 +38,10 @@ export default function DailySchedule() {
     fetchDivisions();
 
     const channel = supabase
-      .channel('daily-schedule-changes')
+      .channel('special-events-changes')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'daily_schedule' },
+        { event: '*', schema: 'public', table: 'special_events_activities' },
         () => fetchEvents()
       )
       .subscribe();
@@ -53,7 +53,7 @@ export default function DailySchedule() {
 
   const fetchEvents = async () => {
     const { data, error } = await supabase
-      .from("daily_schedule")
+      .from("special_events_activities")
       .select(`
         *,
         division:divisions(id, name, gender, sort_order)
@@ -92,7 +92,7 @@ export default function DailySchedule() {
 
     if (editingEvent) {
       const { error } = await supabase
-        .from("daily_schedule")
+        .from("special_events_activities")
         .update(submitData)
         .eq("id", editingEvent.id);
 
@@ -103,7 +103,7 @@ export default function DailySchedule() {
       toast({ title: "Event updated successfully" });
     } else {
       const { error } = await supabase
-        .from("daily_schedule")
+        .from("special_events_activities")
         .insert(submitData);
 
       if (error) {
@@ -149,7 +149,7 @@ export default function DailySchedule() {
     if (!deletingId) return;
 
     const { error } = await supabase
-      .from("daily_schedule")
+      .from("special_events_activities")
       .delete()
       .eq("id", deletingId);
 
@@ -187,12 +187,12 @@ export default function DailySchedule() {
         <div>
           <h1 className="text-3xl font-bold mb-2 flex items-center gap-2">
             <CalendarIcon className="h-8 w-8" />
-            Daily Schedule
+            Special Events & Evening Activities
           </h1>
           <p className="text-muted-foreground">Special events and evening activities</p>
         </div>
         <div className="flex gap-2">
-          <CSVUploader tableName="daily_schedule" onUploadComplete={fetchEvents} />
+          <CSVUploader tableName="special_events_activities" onUploadComplete={fetchEvents} />
           <Button onClick={() => setShowDialog(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Add Event

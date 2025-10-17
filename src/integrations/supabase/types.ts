@@ -240,53 +240,6 @@ export type Database = {
           },
         ]
       }
-      daily_schedule: {
-        Row: {
-          created_at: string | null
-          created_by: string | null
-          description: string | null
-          division_id: string | null
-          event_date: string
-          event_type: string
-          id: string
-          location: string | null
-          time_slot: string
-          title: string
-        }
-        Insert: {
-          created_at?: string | null
-          created_by?: string | null
-          description?: string | null
-          division_id?: string | null
-          event_date: string
-          event_type: string
-          id?: string
-          location?: string | null
-          time_slot: string
-          title: string
-        }
-        Update: {
-          created_at?: string | null
-          created_by?: string | null
-          description?: string | null
-          division_id?: string | null
-          event_date?: string
-          event_type?: string
-          id?: string
-          location?: string | null
-          time_slot?: string
-          title?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "daily_schedule_division_id_fkey"
-            columns: ["division_id"]
-            isOneToOne: false
-            referencedRelation: "divisions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       division_permissions: {
         Row: {
           can_access: boolean | null
@@ -854,6 +807,53 @@ export type Database = {
         }
         Relationships: []
       }
+      special_events_activities: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          division_id: string | null
+          event_date: string
+          event_type: string
+          id: string
+          location: string | null
+          time_slot: string
+          title: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          division_id?: string | null
+          event_date: string
+          event_type: string
+          id?: string
+          location?: string | null
+          time_slot: string
+          title: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          division_id?: string | null
+          event_date?: string
+          event_type?: string
+          id?: string
+          location?: string | null
+          time_slot?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_schedule_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       special_meals: {
         Row: {
           allergens: string | null
@@ -889,8 +889,7 @@ export type Database = {
           id: string
           instructor: string | null
           notes: string | null
-          schedule_days: string[] | null
-          skill_level: string | null
+          schedule_periods: string[] | null
           sport_name: string
           start_date: string | null
           updated_at: string | null
@@ -902,8 +901,7 @@ export type Database = {
           id?: string
           instructor?: string | null
           notes?: string | null
-          schedule_days?: string[] | null
-          skill_level?: string | null
+          schedule_periods?: string[] | null
           sport_name: string
           start_date?: string | null
           updated_at?: string | null
@@ -915,8 +913,7 @@ export type Database = {
           id?: string
           instructor?: string | null
           notes?: string | null
-          schedule_days?: string[] | null
-          skill_level?: string | null
+          schedule_periods?: string[] | null
           sport_name?: string
           start_date?: string | null
           updated_at?: string | null
@@ -942,6 +939,7 @@ export type Database = {
           division_provides_ref: boolean | null
           event_date: string
           event_type: string | null
+          home_away: string | null
           id: string
           location: string | null
           opponent: string | null
@@ -960,6 +958,7 @@ export type Database = {
           division_provides_ref?: boolean | null
           event_date: string
           event_type?: string | null
+          home_away?: string | null
           id?: string
           location?: string | null
           opponent?: string | null
@@ -978,6 +977,7 @@ export type Database = {
           division_provides_ref?: boolean | null
           event_date?: string
           event_type?: string | null
+          home_away?: string | null
           id?: string
           location?: string | null
           opponent?: string | null
