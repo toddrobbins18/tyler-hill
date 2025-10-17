@@ -5,10 +5,10 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Shield, UserCog, Eye } from "lucide-react";
+import { Shield, UserCog, Eye, Trophy, Users } from "lucide-react";
 import AddUserDialog from "./AddUserDialog";
 
-type UserRole = "admin" | "staff" | "viewer";
+type UserRole = "admin" | "staff" | "viewer" | "division_leader" | "specialist";
 
 interface UserWithRole {
   id: string;
@@ -78,7 +78,11 @@ export default function UserRoleManagement() {
       case "admin":
         return <Shield className="h-4 w-4" />;
       case "staff":
+        return <Users className="h-4 w-4" />;
+      case "division_leader":
         return <UserCog className="h-4 w-4" />;
+      case "specialist":
+        return <Trophy className="h-4 w-4" />;
       case "viewer":
         return <Eye className="h-4 w-4" />;
     }
@@ -90,6 +94,10 @@ export default function UserRoleManagement() {
         return "destructive";
       case "staff":
         return "default";
+      case "division_leader":
+        return "secondary";
+      case "specialist":
+        return "outline";
       case "viewer":
         return "secondary";
     }
@@ -128,18 +136,21 @@ export default function UserRoleManagement() {
               <div className="flex items-center gap-3">
                 <Badge variant={getRoleBadgeVariant(user.role)} className="gap-1">
                   {getRoleIcon(user.role)}
-                  {user.role}
+                  {user.role === 'division_leader' ? 'Division Leader' : 
+                   user.role === 'specialist' ? 'Specialist' : user.role}
                 </Badge>
                 <Select
                   value={user.role}
                   onValueChange={(value) => updateUserRole(user.id, value as UserRole)}
                 >
-                  <SelectTrigger className="w-[140px]">
+                  <SelectTrigger className="w-[160px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="viewer">Viewer</SelectItem>
                     <SelectItem value="staff">Staff</SelectItem>
+                    <SelectItem value="division_leader">Division Leader</SelectItem>
+                    <SelectItem value="specialist">Specialist</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
                   </SelectContent>
                 </Select>

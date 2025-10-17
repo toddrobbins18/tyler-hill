@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Shield, Users, Eye, Settings } from "lucide-react";
+import { Shield, Users, Eye, UserCog, Trophy } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
@@ -20,8 +20,10 @@ const menuItems = [
 ];
 
 const roles = [
-  { id: "admin", label: "Admin", icon: Shield, description: "Full access to all features" },
-  { id: "staff", label: "Staff", icon: Users, description: "Access to day-to-day operations" },
+  { id: "admin", label: "Administrator", icon: Shield, description: "Full system access" },
+  { id: "staff", label: "Staff", icon: Users, description: "Standard staff access" },
+  { id: "division_leader", label: "Division Leader", icon: UserCog, description: "Full access to assigned division(s)" },
+  { id: "specialist", label: "Specialist", icon: Trophy, description: "Cross-division access to specialized features (e.g., sports)" },
   { id: "viewer", label: "Viewer", icon: Eye, description: "Read-only access" },
 ];
 
@@ -66,7 +68,12 @@ export default function RolePermissions() {
   };
 
   const togglePermission = async (role: string, menuItem: string, currentValue: boolean) => {
-    const { error } = await supabase
+    const { error } = await supabase.rpc('can_access_page', {
+      _user_id: (await supabase.auth.getUser()).data.user?.id,
+      _page_name: 'role-permissions'
+    });
+
+    const { error: updateError } = await supabase
       .from("role_permissions")
       .upsert({
         role: role as any,
@@ -76,7 +83,7 @@ export default function RolePermissions() {
         onConflict: 'role,menu_item'
       });
 
-    if (error) {
+    if (updateError) {
       toast({ title: "Error updating permission", variant: "destructive" });
       return;
     }

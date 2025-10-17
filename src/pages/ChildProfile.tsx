@@ -4,10 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import EditChildDialog from "@/components/dialogs/EditChildDialog";
+import { toast as sonnerToast } from "sonner";
 
 export default function ChildProfile() {
   const { id } = useParams();
@@ -21,6 +23,8 @@ export default function ChildProfile() {
   const [tripAttendance, setTripAttendance] = useState<any[]>([]);
   const [sportsAcademy, setSportsAcademy] = useState<any[]>([]);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [allergyText, setAllergyText] = useState("");
+  const [savingAllergies, setSavingAllergies] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -39,6 +43,7 @@ export default function ChildProfile() {
 
       if (childError) throw childError;
       setChild(childData);
+      setAllergyText(childData?.allergies || "");
 
       // Fetch awards for this child
       const { data: awardsData } = await supabase
@@ -113,6 +118,28 @@ export default function ChildProfile() {
     }
   };
 
+  const handleSaveAllergies = async () => {
+    if (!id) return;
+    
+    setSavingAllergies(true);
+    try {
+      const { error } = await supabase
+        .from("children")
+        .update({ allergies: allergyText })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      sonnerToast.success("Allergies updated successfully");
+      setChild((prev: any) => ({ ...prev, allergies: allergyText }));
+    } catch (error: any) {
+      console.error("Error updating allergies:", error);
+      sonnerToast.error("Failed to update allergies");
+    } finally {
+      setSavingAllergies(false);
+    }
+  };
+
   if (loading) {
     return <div className="text-center py-8">Loading...</div>;
   }
@@ -156,6 +183,7 @@ export default function ChildProfile() {
       <Tabs defaultValue="overview" className="space-y-6">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="allergies">Allergies</TabsTrigger>
           <TabsTrigger value="achievements">Achievements</TabsTrigger>
           <TabsTrigger value="activities">Activities</TabsTrigger>
           <TabsTrigger value="sports-academy">Sports Academy</TabsTrigger>
@@ -245,6 +273,30 @@ export default function ChildProfile() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="allergies" className="space-y-4">
+          <Card className="shadow-card">
+            <CardHeader>
+              <CardTitle>Allergy Information</CardTitle>
+              <CardDescription>Manage allergy information for this child</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Textarea
+                value={allergyText}
+                onChange={(e) => setAllergyText(e.target.value)}
+                placeholder="Enter allergy information (e.g., peanuts, dairy, shellfish...)"
+                rows={8}
+                className="resize-none"
+              />
+              <Button 
+                onClick={handleSaveAllergies} 
+                disabled={savingAllergies}
+              >
+                {savingAllergies ? "Saving..." : "Save Allergies"}
+              </Button>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="achievements" className="space-y-4">

@@ -1,4 +1,4 @@
-import { Plus, MapPin, Clock, Users, Calendar as CalendarIcon, Pencil, Trash2, Upload, UserCheck, LayoutList, Search, X } from "lucide-react";
+import { Plus, MapPin, Clock, Users, Calendar as CalendarIcon, Pencil, Trash2, Upload, UserCheck, LayoutList, Search, X, Utensils } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -25,8 +25,10 @@ import { Calendar } from "@/components/ui/calendar";
 import { format, isSameDay } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatTime12Hour } from "@/lib/utils";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 
 export default function Transportation() {
+  const { currentSeason } = useSeasonContext();
   const [trips, setTrips] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingTrip, setEditingTrip] = useState<string | null>(null);
@@ -85,9 +87,12 @@ export default function Transportation() {
           id,
           title,
           sport_type,
-          custom_sport_type
+          custom_sport_type,
+          meal_options,
+          meal_notes
         )
       `)
+      .eq("season", currentSeason)
       .order("date", { ascending: false });
 
     if (!error && data) {
@@ -176,6 +181,38 @@ export default function Transportation() {
       fetchTrips();
     }
     setDeletingTrip(null);
+  };
+
+  const getStatusColor = (trip: any) => {
+    const isPending = !trip.transportation_type || !trip.driver;
+    return isPending 
+      ? "border-l-4 border-l-red-500 bg-red-50 dark:bg-red-950/20" 
+      : "border-l-4 border-l-green-500 bg-green-50 dark:bg-green-950/20";
+  };
+
+  const getStatusBadge = (trip: any) => {
+    const isPending = !trip.transportation_type || !trip.driver;
+    return isPending ? (
+      <Badge variant="destructive">Pending</Badge>
+    ) : (
+      <Badge className="bg-green-600 text-white hover:bg-green-700">Upcoming</Badge>
+    );
+  };
+
+  const getMealBadges = (trip: any) => {
+    const mealOptions = trip.sports_event?.meal_options || [];
+    if (mealOptions.length === 0) return null;
+    
+    return (
+      <div className="flex flex-wrap gap-1 mt-2">
+        {mealOptions.map((meal: string) => (
+          <Badge key={meal} variant="outline" className="text-xs">
+            <Utensils className="h-3 w-3 mr-1" />
+            {meal}
+          </Badge>
+        ))}
+      </div>
+    );
   };
 
   const getDaysWithTrips = () => {
@@ -398,17 +435,19 @@ export default function Transportation() {
             {selectedDate && getTripsForDate(selectedDate).length > 0 ? (
               <div className="space-y-4">
                 {getTripsForDate(selectedDate).map((trip) => (
-                  <Card key={trip.id} className="shadow-card hover:shadow-md transition-all group">
+                  <Card key={trip.id} className={`shadow-card hover:shadow-md transition-all group ${getStatusColor(trip)}`}>
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
                             <CardTitle className="text-xl">{trip.name}</CardTitle>
                             <Badge variant="secondary">{trip.type}</Badge>
+                            {getStatusBadge(trip)}
                           </div>
                           <CardDescription>
                             Destination: {trip.destination || "N/A"}
                           </CardDescription>
+                          {getMealBadges(trip)}
                         </div>
                         <div className="flex items-center gap-2">
                           <Button
@@ -471,13 +510,14 @@ export default function Transportation() {
       ) : filteredAndSortedTrips.length > 0 ? (
         <div className="grid gap-6">
           {filteredAndSortedTrips.map((trip) => (
-            <Card key={trip.id} className="shadow-card hover:shadow-md transition-all group">
+            <Card key={trip.id} className={`shadow-card hover:shadow-md transition-all group ${getStatusColor(trip)}`}>
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
                       <CardTitle className="text-xl">{trip.name}</CardTitle>
                       <Badge variant="secondary">{trip.type}</Badge>
+                      {getStatusBadge(trip)}
                     </div>
                     <CardDescription>
                       Destination: {trip.destination || "N/A"}
@@ -485,6 +525,7 @@ export default function Transportation() {
                     <CardDescription className="mt-1">
                       Chaperone: {trip.chaperone || "N/A"}
                     </CardDescription>
+                    {getMealBadges(trip)}
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge 

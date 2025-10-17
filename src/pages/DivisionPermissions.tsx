@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Users, Shield } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 
 export default function DivisionPermissions() {
   const [divisions, setDivisions] = useState<any[]>([]);
@@ -19,6 +20,7 @@ export default function DivisionPermissions() {
     const channel = supabase
       .channel('division-permissions-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'division_permissions' }, fetchData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_roles' }, fetchData)
       .subscribe();
 
     return () => {
@@ -33,10 +35,15 @@ export default function DivisionPermissions() {
       .select("*")
       .order("sort_order");
 
-    // Fetch users (profiles)
+    // Fetch users (profiles) with their roles
     const { data: usersData } = await supabase
       .from("profiles")
-      .select("id, full_name, email")
+      .select(`
+        id, 
+        full_name, 
+        email,
+        user_roles!inner(role)
+      `)
       .eq("approved", true)
       .order("full_name");
 
@@ -60,8 +67,14 @@ export default function DivisionPermissions() {
       permissionMap[perm.user_id][perm.division_id] = perm.can_access;
     });
 
+    // Transform users data to include role
+    const usersWithRoles = usersData?.map(user => ({
+      ...user,
+      role: (user.user_roles as any)?.role || 'viewer'
+    })) || [];
+
     setDivisions(divisionsData || []);
-    setUsers(usersData || []);
+    setUsers(usersWithRoles);
     setPermissions(permissionMap);
     setLoading(false);
   };
@@ -101,14 +114,29 @@ export default function DivisionPermissions() {
         </Card>
       ) : (
         <div className="grid gap-6">
-          {users.map((user) => (
+          {users.map((user: any) => (
             <Card key={user.id}>
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <Shield className="h-5 w-5 text-primary" />
-                  <div>
-                    <CardTitle>{user.full_name || user.email}</CardTitle>
-                    <CardDescription>{user.email}</CardDescription>
+                  <div className="flex items-center gap-2 flex-1">
+                    <div>
+                      <CardTitle>{user.full_name || user.email}</CardTitle>
+                      <CardDescription>{user.email}</CardDescription>
+                    </div>
+                    <Badge 
+                      variant={
+                        user.role === 'admin' ? 'default' : 
+                        user.role === 'division_leader' ? 'secondary' :
+                        user.role === 'specialist' ? 'outline' : 
+                        'secondary'
+                      }
+                      className="ml-2"
+                    >
+                      {user.role === 'division_leader' ? 'Division Leader' : 
+                       user.role === 'specialist' ? 'Specialist' :
+                       user.role}
+                    </Badge>
                   </div>
                 </div>
               </CardHeader>
