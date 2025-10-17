@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Mail, Send } from "lucide-react";
+import { Mail, Send, Eye, Clock, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,6 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { format } from "date-fns";
 
 interface RecipientGroup {
   id: string;
@@ -15,16 +18,78 @@ interface RecipientGroup {
   role: string;
 }
 
+interface Message {
+  id: string;
+  subject: string;
+  content: string;
+  created_at: string;
+  read: boolean;
+  sender_id: string | null;
+}
+
 export default function Messages() {
   const [recipientGroups, setRecipientGroups] = useState<RecipientGroup[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'compose' | 'inbox'>('inbox');
+  const [receivedMessages, setReceivedMessages] = useState<Message[]>([]);
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     fetchRecipientGroups();
+    fetchMessages();
+
+    // Subscribe to real-time message updates
+    const channel = supabase
+      .channel('messages-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'messages' },
+        () => fetchMessages()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
+
+  const fetchMessages = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("recipient_id", user.id)
+      .order("created_at", { ascending: false });
+
+    if (!error && data) {
+      setReceivedMessages(data);
+      setUnreadCount(data.filter(m => !m.read).length);
+    }
+  };
+
+  const markAsRead = async (messageId: string) => {
+    const { error } = await supabase
+      .from("messages")
+      .update({ read: true })
+      .eq("id", messageId);
+
+    if (!error) {
+      fetchMessages();
+    }
+  };
+
+  const handleMessageClick = (msg: Message) => {
+    setSelectedMessage(msg);
+    if (!msg.read) {
+      markAsRead(msg.id);
+    }
+  };
 
   const fetchRecipientGroups = async () => {
     setLoading(true);
@@ -92,12 +157,118 @@ export default function Messages() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground mb-2">Messages</h1>
-        <p className="text-muted-foreground">Send emails to users with accounts</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground mb-2 flex items-center gap-2">
+            <Mail className="h-8 w-8" />
+            Messages
+          </h1>
+          <p className="text-muted-foreground">View notifications and compose messages</p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant={viewMode === 'inbox' ? 'default' : 'outline'}
+            onClick={() => setViewMode('inbox')}
+          >
+            <Bell className="h-4 w-4 mr-2" />
+            Inbox {unreadCount > 0 && `(${unreadCount})`}
+          </Button>
+          <Button
+            variant={viewMode === 'compose' ? 'default' : 'outline'}
+            onClick={() => setViewMode('compose')}
+          >
+            <Send className="h-4 w-4 mr-2" />
+            Compose
+          </Button>
+        </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
+      {viewMode === 'inbox' ? (
+        <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
+          {/* Message List */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Notifications & Messages</CardTitle>
+              <CardDescription>{receivedMessages.length} total messages</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[600px]">
+                {receivedMessages.length === 0 ? (
+                  <div className="p-4 text-center text-muted-foreground">
+                    No messages yet
+                  </div>
+                ) : (
+                  receivedMessages.map((msg) => (
+                    <div key={msg.id}>
+                      <button
+                        onClick={() => handleMessageClick(msg)}
+                        className={`w-full p-4 text-left hover:bg-muted/50 transition-colors ${
+                          selectedMessage?.id === msg.id ? 'bg-muted' : ''
+                        } ${!msg.read ? 'bg-primary/5 border-l-4 border-primary' : ''}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className={`font-medium truncate ${!msg.read ? 'font-bold' : ''}`}>
+                                {msg.subject}
+                              </p>
+                              {!msg.read && (
+                                <Badge variant="default" className="h-5 px-1 text-xs">NEW</Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground truncate">
+                              {msg.content.substring(0, 100)}...
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {format(new Date(msg.created_at), 'MMM d, yyyy h:mm a')}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                      <Separator />
+                    </div>
+                  ))
+                )}
+              </ScrollArea>
+            </CardContent>
+          </Card>
+
+          {/* Message Detail */}
+          <Card>
+            <CardHeader>
+              {selectedMessage ? (
+                <>
+                  <CardTitle className="flex items-center gap-2">
+                    {selectedMessage.subject}
+                    {selectedMessage.sender_id === null && (
+                      <Badge variant="secondary">System</Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription>
+                    {format(new Date(selectedMessage.created_at), 'MMMM d, yyyy h:mm a')}
+                  </CardDescription>
+                </>
+              ) : (
+                <CardTitle>Select a message</CardTitle>
+              )}
+            </CardHeader>
+            <CardContent>
+              {selectedMessage ? (
+                <ScrollArea className="h-[500px]">
+                  <div className="whitespace-pre-wrap text-sm">{selectedMessage.content}</div>
+                </ScrollArea>
+              ) : (
+                <div className="h-[500px] flex items-center justify-center text-muted-foreground">
+                  Select a message to view its contents
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        // Compose Mode - Keep existing compose UI
+        <div className="grid gap-6 md:grid-cols-3">
         <div className="md:col-span-2">
           <Card className="shadow-card">
             <CardHeader>
@@ -201,6 +372,7 @@ export default function Messages() {
           </Card>
         </div>
       </div>
+      )}
     </div>
   );
 }

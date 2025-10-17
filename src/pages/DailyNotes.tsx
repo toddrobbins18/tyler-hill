@@ -1,4 +1,4 @@
-import { Calendar, MapPin, Users, Pencil, Trash2, Truck, Utensils } from "lucide-react";
+import { Calendar, MapPin, Users, Pencil, Trash2, Truck, Utensils, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,7 @@ export default function DailyNotes() {
   const [loading, setLoading] = useState(true);
   const [canEdit, setCanEdit] = useState(false);
   const [deletingNote, setDeletingNote] = useState<string | null>(null);
+  const [notificationLogs, setNotificationLogs] = useState<Record<string, any>>({});
 
   useEffect(() => {
     fetchNotes();
@@ -65,6 +66,26 @@ export default function DailyNotes() {
 
     if (!error && data) {
       setNotes(data);
+      
+      // Fetch notification logs for these events
+      const eventIds = data.map(event => event.id);
+      if (eventIds.length > 0) {
+        const { data: logs } = await supabase
+          .from("notification_logs")
+          .select("event_id, recipient_count, sent_at, notification_version")
+          .in("event_id", eventIds)
+          .order("sent_at", { ascending: false });
+
+        if (logs) {
+          const logsMap: Record<string, any> = {};
+          logs.forEach(log => {
+            if (!logsMap[log.event_id]) {
+              logsMap[log.event_id] = log;
+            }
+          });
+          setNotificationLogs(logsMap);
+        }
+      }
     }
     setLoading(false);
   };
@@ -126,6 +147,17 @@ export default function DailyNotes() {
                               : 'bg-pink-500/10 text-pink-700 dark:text-pink-300 border-pink-500/20'}
                           >
                             {note.home_away.toUpperCase()}
+                          </Badge>
+                        )}
+                        {tripInfo?.status === 'approved' && (
+                          <Badge className="bg-green-600 text-white">
+                            <Bell className="h-3 w-3 mr-1" />
+                            Approved
+                          </Badge>
+                        )}
+                        {notificationLogs[note.id] && (
+                          <Badge variant="outline" className="bg-primary/10">
+                            Notified {notificationLogs[note.id].recipient_count} staff
                           </Badge>
                         )}
                         {divisions.length > 0 && divisions.map((div: any, idx: number) => (

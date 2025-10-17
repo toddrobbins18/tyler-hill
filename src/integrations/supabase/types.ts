@@ -714,6 +714,54 @@ export type Database = {
           },
         ]
       }
+      notification_logs: {
+        Row: {
+          created_at: string | null
+          event_id: string | null
+          event_type: string
+          id: string
+          notification_version: number | null
+          recipient_count: number
+          sent_at: string | null
+          trip_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          event_id?: string | null
+          event_type: string
+          id?: string
+          notification_version?: number | null
+          recipient_count: number
+          sent_at?: string | null
+          trip_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          event_id?: string | null
+          event_type?: string
+          id?: string
+          notification_version?: number | null
+          recipient_count?: number
+          sent_at?: string | null
+          trip_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_logs_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "sports_calendar"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_logs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           approval_requested_at: string | null

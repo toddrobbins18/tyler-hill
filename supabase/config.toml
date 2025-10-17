@@ -11,3 +11,6 @@ verify_jwt = true
 
 [functions.notify-transportation-events]
 verify_jwt = false
+
+[functions.send-event-notifications]
+verify_jwt = false
