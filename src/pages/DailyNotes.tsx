@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import AddNoteDialog from "@/components/dialogs/AddNoteDialog";
 import EditNoteDialog from "@/components/dialogs/EditNoteDialog";
 import { CSVUploader } from "@/components/CSVUploader";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,6 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export default function DailyNotes() {
+  const { currentSeason } = useSeasonContext();
   const [notes, setNotes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingNote, setEditingNote] = useState<string | null>(null);
@@ -40,7 +42,7 @@ export default function DailyNotes() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [currentSeason]);
 
   const fetchNotes = async () => {
     setLoading(true);
@@ -55,6 +57,7 @@ export default function DailyNotes() {
           full_name
         )
       `)
+      .eq("season", currentSeason)
       .order("date", { ascending: false });
 
     if (!error && data) {

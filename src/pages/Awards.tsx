@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import AddAwardDialog from "@/components/dialogs/AddAwardDialog";
 import EditAwardDialog from "@/components/dialogs/EditAwardDialog";
 import { CSVUploader } from "@/components/CSVUploader";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +23,7 @@ import {
 
 export default function Awards() {
   const navigate = useNavigate();
+  const { currentSeason } = useSeasonContext();
   const [awards, setAwards] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingAward, setEditingAward] = useState<string | null>(null);
@@ -43,7 +45,7 @@ export default function Awards() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [currentSeason]);
 
   const fetchAwards = async () => {
     setLoading(true);
@@ -56,6 +58,7 @@ export default function Awards() {
           name
         )
       `)
+      .eq("season", currentSeason)
       .order("date", { ascending: false });
 
     if (!error && data) {

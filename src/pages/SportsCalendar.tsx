@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Trophy, Plus, List, Pencil, Trash2, Calendar as CalendarIcon, UserCheck, Search, X, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -25,6 +26,7 @@ const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
 
 export default function SportsCalendar() {
+  const { currentSeason } = useSeasonContext();
   const [events, setEvents] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
   const [selectedDivisions, setSelectedDivisions] = useState<string[]>([]);
@@ -59,6 +61,8 @@ export default function SportsCalendar() {
     division_ids: [] as string[],
     division_provides_coach: false,
     division_provides_ref: false,
+    meal_options: [] as string[],
+    meal_notes: "",
   });
   const { toast } = useToast();
 
@@ -78,7 +82,7 @@ export default function SportsCalendar() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [currentSeason]);
 
   const fetchEvents = async () => {
     const { data, error } = await supabase
@@ -88,6 +92,7 @@ export default function SportsCalendar() {
         division:divisions(id, name, gender, sort_order),
         sports_calendar_divisions(division_id, division:divisions(id, name, gender, sort_order))
       `)
+      .eq("season", currentSeason)
       .order("event_date", { ascending: true });
 
     if (error) {
@@ -145,6 +150,8 @@ export default function SportsCalendar() {
       division_id: formData.division_ids.length === 1 ? formData.division_ids[0] : null,
       division_provides_coach: formData.division_provides_coach,
       division_provides_ref: formData.division_provides_ref,
+      meal_options: formData.meal_options,
+      meal_notes: formData.meal_notes || null,
     };
 
     if (editingEvent) {
@@ -226,6 +233,8 @@ export default function SportsCalendar() {
       division_ids: [],
       division_provides_coach: false,
       division_provides_ref: false,
+      meal_options: [],
+      meal_notes: "",
     });
     setEditingEvent(null);
     setShowDialog(false);
@@ -251,6 +260,8 @@ export default function SportsCalendar() {
       division_ids: divisionIds,
       division_provides_coach: event.division_provides_coach || false,
       division_provides_ref: event.division_provides_ref || false,
+      meal_options: event.meal_options || [],
+      meal_notes: event.meal_notes || "",
     });
     setShowDialog(true);
   };
@@ -890,6 +901,40 @@ export default function SportsCalendar() {
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 rows={3}
               />
+            </div>
+
+            <div className="space-y-3 border-t pt-4">
+              <Label className="text-base font-semibold">Meal Options</Label>
+              <div className="space-y-2">
+                {['Breakfast', 'Snack', 'Lunch', 'Dinner', 'Other'].map((meal) => (
+                  <div key={meal} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`meal-${meal}`}
+                      checked={formData.meal_options.includes(meal)}
+                      onCheckedChange={(checked) => {
+                        const updated = checked
+                          ? [...formData.meal_options, meal]
+                          : formData.meal_options.filter(m => m !== meal);
+                        setFormData({ ...formData, meal_options: updated });
+                      }}
+                    />
+                    <label htmlFor={`meal-${meal}`} className="text-sm cursor-pointer">
+                      {meal}
+                    </label>
+                  </div>
+                ))}
+              </div>
+              {formData.meal_options.includes('Other') && (
+                <div className="space-y-2 mt-3">
+                  <Label>Meal Notes</Label>
+                  <Textarea
+                    placeholder="e.g., Other camp serves lunch"
+                    value={formData.meal_notes}
+                    onChange={(e) => setFormData({ ...formData, meal_notes: e.target.value })}
+                    rows={2}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="space-y-3 border-t pt-4">

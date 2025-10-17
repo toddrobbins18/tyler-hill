@@ -9,15 +9,21 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Pill, AlertCircle, CheckCircle2, Trash2 } from "lucide-react";
+import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CSVUploader } from "@/components/CSVUploader";
+import { Calendar } from "@/components/ui/calendar";
+import { format, isBefore, startOfDay, isToday } from "date-fns";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 
 export default function Nurse() {
+  const { currentSeason } = useSeasonContext();
   const [children, setChildren] = useState<any[]>([]);
   const [medications, setMedications] = useState<any[]>([]);
   const [selectedChild, setSelectedChild] = useState("");
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -33,7 +39,7 @@ export default function Nurse() {
 
   useEffect(() => {
     fetchChildren();
-    fetchMedications();
+    fetchMedications(selectedDate);
 
     // Realtime subscription for medication logs
     const channel = supabase
@@ -41,14 +47,14 @@ export default function Nurse() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'medication_logs' },
-        () => fetchMedications()
+        () => fetchMedications(selectedDate)
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [selectedDate, currentSeason]);
 
   const fetchChildren = async () => {
     const { data, error } = await supabase
@@ -65,12 +71,13 @@ export default function Nurse() {
     setLoading(false);
   };
 
-  const fetchMedications = async () => {
-    const today = new Date().toISOString().split('T')[0];
+  const fetchMedications = async (date?: Date) => {
+    const dateStr = date ? format(date, 'yyyy-MM-dd') : new Date().toISOString().split('T')[0];
     const { data, error } = await supabase
       .from("medication_logs")
       .select("*, children(name), staff(name)")
-      .eq("date", today)
+      .eq("date", dateStr)
+      .eq("season", currentSeason)
       .order("meal_time");
 
     if (error) {
@@ -119,7 +126,25 @@ export default function Nurse() {
       end_date: "",
     });
     setSelectedChild("");
-    fetchMedications();
+    fetchMedications(selectedDate);
+  };
+
+  const handleSaveLateNotes = async (medId: string, notes: string) => {
+    const { error } = await supabase
+      .from("medication_logs")
+      .update({
+        late_notes: notes,
+        late_notes_timestamp: new Date().toISOString(),
+      })
+      .eq("id", medId);
+
+    if (error) {
+      toast({ title: "Error saving notes", variant: "destructive" });
+      return;
+    }
+
+    toast({ title: "Notes saved successfully" });
+    fetchMedications(selectedDate);
   };
 
   const handleAdminister = async (medId: string) => {
@@ -145,7 +170,7 @@ export default function Nurse() {
     }
 
     toast({ title: "Medication marked as administered" });
-    fetchMedications();
+    fetchMedications(selectedDate);
   };
 
   const handleDelete = async (medId: string) => {
@@ -165,16 +190,140 @@ export default function Nurse() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold mb-2">Nurse Dashboard</h1>
-        <p className="text-muted-foreground">Manage children's daily medications</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Nurse Dashboard</h1>
+          <p className="text-muted-foreground">Manage children's daily medications</p>
+        </div>
+        <div className="flex gap-2">
+          <div className="flex gap-1 border rounded-md p-1 bg-muted/50">
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('list')}
+            >
+              <LayoutList className="h-4 w-4 mr-2" />
+              List
+            </Button>
+            <Button
+              variant={viewMode === 'calendar' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('calendar')}
+            >
+              <CalendarIcon className="h-4 w-4 mr-2" />
+              Calendar
+            </Button>
+          </div>
+          <CSVUploader tableName="medication_logs" onUploadComplete={() => fetchMedications(selectedDate)} />
+        </div>
       </div>
 
-      <div className="flex justify-end mb-4">
-        <CSVUploader tableName="medication_logs" onUploadComplete={fetchMedications} />
-      </div>
+      {viewMode === 'calendar' && (
+        <div className="grid lg:grid-cols-[350px_1fr] gap-6">
+          <Card>
+            <CardContent className="p-4">
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={(date) => date && setSelectedDate(date)}
+                className="rounded-md border"
+              />
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader>
+              <CardTitle>Medications for {format(selectedDate, 'MMMM d, yyyy')}</CardTitle>
+              <CardDescription>
+                {isBefore(startOfDay(selectedDate), startOfDay(new Date())) 
+                  ? 'Past date - View only with notes option' 
+                  : isToday(selectedDate)
+                  ? 'Today - Mark medications as administered'
+                  : 'Future date - Pre-schedule medications'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <p className="text-muted-foreground">Loading...</p>
+              ) : medications.length === 0 ? (
+                <p className="text-muted-foreground">No medications scheduled for this date</p>
+              ) : (
+                <div className="space-y-4">
+                  {children
+                    .filter(child => medications.some(med => med.child_id === child.id))
+                    .map((child) => {
+                      const childMeds = medications.filter(med => med.child_id === child.id);
+                      return (
+                        <div key={child.id} className="border rounded-lg p-4 space-y-3">
+                          <h3 className="font-semibold">{child.name}</h3>
+                          {childMeds.map((med) => {
+                            const isPastDate = isBefore(startOfDay(selectedDate), startOfDay(new Date()));
+                            return (
+                              <div key={med.id} className="p-3 bg-muted/50 rounded space-y-2">
+                                <div className="flex items-start gap-3">
+                                  {!isPastDate && (
+                                    <Checkbox
+                                      checked={med.administered}
+                                      onCheckedChange={() => !med.administered && handleAdminister(med.id)}
+                                      disabled={med.administered}
+                                    />
+                                  )}
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-medium">{med.medication_name}</span>
+                                      {med.administered && (
+                                        <Badge variant="outline" className="flex items-center gap-1">
+                                          <CheckCircle2 className="h-3 w-3" />
+                                          Given
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">
+                                      {med.dosage} - {med.meal_time}
+                                    </p>
+                                    {med.notes && (
+                                      <p className="text-sm text-muted-foreground mt-1">{med.notes}</p>
+                                    )}
+                                  </div>
+                                </div>
+                                
+                                {isPastDate && (
+                                  <div className="space-y-2 mt-2">
+                                    <Label className="text-xs">Late Notes (optional)</Label>
+                                    <Textarea
+                                      placeholder="Add notes here..."
+                                      defaultValue={med.late_notes || ""}
+                                      onBlur={(e) => {
+                                        if (e.target.value !== (med.late_notes || "")) {
+                                          handleSaveLateNotes(med.id, e.target.value);
+                                        }
+                                      }}
+                                      rows={2}
+                                      className="text-sm"
+                                    />
+                                    {med.late_notes_timestamp && (
+                                      <p className="text-xs text-muted-foreground">
+                                        Last updated: {format(new Date(med.late_notes_timestamp), 'MMM d, yyyy h:mm a')}
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
-      <Tabs defaultValue="log" className="w-full">
+      {viewMode === 'list' && (
+        <>
+          <Tabs defaultValue="log" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="log">Daily Log</TabsTrigger>
           <TabsTrigger value="today">Today's Medications</TabsTrigger>
@@ -468,6 +617,8 @@ export default function Nurse() {
           </Card>
         </TabsContent>
       </Tabs>
+        </>
+      )}
     </div>
   );
 }

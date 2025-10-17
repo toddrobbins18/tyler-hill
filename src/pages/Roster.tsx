@@ -10,6 +10,7 @@ import AddChildDialog from "@/components/dialogs/AddChildDialog";
 import EditChildDialog from "@/components/dialogs/EditChildDialog";
 import CSVUploader from "@/components/CSVUploader";
 import { toast } from "sonner";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export default function Roster() {
+  const { currentSeason } = useSeasonContext();
   const [searchTerm, setSearchTerm] = useState("");
   const [children, setChildren] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
@@ -42,6 +44,7 @@ export default function Roster() {
         *,
         division:divisions(id, name, gender, sort_order)
       `)
+      .eq("season", currentSeason)
       .order("name");
     
     if (!error && data) {
@@ -67,7 +70,7 @@ export default function Roster() {
   useEffect(() => {
     fetchChildren();
     fetchDivisions();
-  }, []);
+  }, [currentSeason]);
 
   const filteredChildren = children
     .filter((child) => {
