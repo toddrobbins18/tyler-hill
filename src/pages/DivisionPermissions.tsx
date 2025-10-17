@@ -35,17 +35,23 @@ export default function DivisionPermissions() {
       .select("*")
       .order("sort_order");
 
-    // Fetch users (profiles) with their roles
+    // Fetch approved users
     const { data: usersData } = await supabase
       .from("profiles")
-      .select(`
-        id, 
-        full_name, 
-        email,
-        user_roles!inner(role)
-      `)
+      .select("id, full_name, email")
       .eq("approved", true)
       .order("full_name");
+
+    if (!usersData) {
+      setLoading(false);
+      return;
+    }
+
+    // Fetch roles for all users
+    const { data: rolesData } = await supabase
+      .from("user_roles")
+      .select("user_id, role")
+      .in("user_id", usersData.map(u => u.id));
 
     // Fetch division permissions
     const { data: permsData, error } = await supabase
@@ -67,13 +73,17 @@ export default function DivisionPermissions() {
       permissionMap[perm.user_id][perm.division_id] = perm.can_access;
     });
 
+    // Build roles map
+    const rolesMap: Record<string, string> = {};
+    rolesData?.forEach((roleEntry) => {
+      rolesMap[roleEntry.user_id] = roleEntry.role;
+    });
+
     // Transform users data to include role
-    const usersWithRoles = usersData?.map(user => ({
+    const usersWithRoles = usersData.map(user => ({
       ...user,
-      role: Array.isArray(user.user_roles) 
-        ? (user.user_roles[0] as any)?.role 
-        : (user.user_roles as any)?.role || 'viewer'
-    })) || [];
+      role: rolesMap[user.id] || 'viewer'
+    }));
 
     setDivisions(divisionsData || []);
     setUsers(usersWithRoles);
