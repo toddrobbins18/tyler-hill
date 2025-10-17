@@ -1,4 +1,4 @@
-import { Plus, MapPin, Clock, Users, Calendar as CalendarIcon, Pencil, Trash2, Upload, UserCheck, LayoutList } from "lucide-react";
+import { Plus, MapPin, Clock, Users, Calendar as CalendarIcon, Pencil, Trash2, Upload, UserCheck, LayoutList, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,8 @@ import AddTripDialog from "@/components/dialogs/AddTripDialog";
 import EditTripDialog from "@/components/dialogs/EditTripDialog";
 import ManageTripAttendanceDialog from "@/components/dialogs/ManageTripAttendanceDialog";
 import { CSVUploader } from "@/components/CSVUploader";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,6 +32,12 @@ export default function Transportation() {
   const [managingRoster, setManagingRoster] = useState<{ id: string; name: string } | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [filterType, setFilterType] = useState<string>("all");
+  const [filterEventType, setFilterEventType] = useState<string>("all");
+  const [filterTransportType, setFilterTransportType] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<"date" | "type" | "destination" | "status">("date");
 
   useEffect(() => {
     fetchTrips();
@@ -82,7 +90,77 @@ export default function Transportation() {
   };
 
   const getTripsForDate = (date: Date) => {
-    return trips.filter(trip => isSameDay(new Date(trip.date), date));
+    return filteredAndSortedTrips.filter(trip => isSameDay(new Date(trip.date), date));
+  };
+
+  const uniqueTypes = Array.from(new Set(trips.map(t => t.type))).filter(Boolean).sort();
+  const uniqueEventTypes = Array.from(new Set(trips.map(t => t.event_type))).filter(Boolean).sort();
+  const uniqueTransportTypes = Array.from(new Set(trips.map(t => t.transportation_type))).filter(Boolean).sort();
+  const uniqueStatuses = Array.from(new Set(trips.map(t => t.status))).filter(Boolean).sort();
+
+  const filteredAndSortedTrips = trips
+    .filter(trip => {
+      // Search filter
+      if (searchTerm) {
+        const search = searchTerm.toLowerCase();
+        const searchableFields = [
+          trip.name,
+          trip.destination,
+          trip.driver,
+          trip.chaperone,
+          trip.type,
+          trip.event_type
+        ].filter(Boolean).join(" ").toLowerCase();
+        
+        if (!searchableFields.includes(search)) return false;
+      }
+
+      // Type filter
+      if (filterType !== "all" && trip.type !== filterType) return false;
+
+      // Event type filter
+      if (filterEventType !== "all" && trip.event_type !== filterEventType) return false;
+
+      // Transport type filter
+      if (filterTransportType !== "all" && trip.transportation_type !== filterTransportType) return false;
+
+      // Status filter
+      if (filterStatus !== "all" && trip.status !== filterStatus) return false;
+
+      return true;
+    })
+    .sort((a, b) => {
+      if (sortBy === "type") {
+        return (a.type || "").localeCompare(b.type || "");
+      } else if (sortBy === "destination") {
+        return (a.destination || "").localeCompare(b.destination || "");
+      } else if (sortBy === "status") {
+        return (a.status || "").localeCompare(b.status || "");
+      }
+      
+      // Default: sort by date
+      const dateCompare = new Date(b.date).getTime() - new Date(a.date).getTime();
+      if (dateCompare !== 0) return dateCompare;
+      
+      // If same date, sort by departure time
+      if (a.departure_time && b.departure_time) {
+        return a.departure_time.localeCompare(b.departure_time);
+      }
+      return a.departure_time ? -1 : b.departure_time ? 1 : 0;
+    });
+
+  const activeFilterCount = (searchTerm ? 1 : 0) + 
+    (filterType !== "all" ? 1 : 0) + 
+    (filterEventType !== "all" ? 1 : 0) + 
+    (filterTransportType !== "all" ? 1 : 0) + 
+    (filterStatus !== "all" ? 1 : 0);
+
+  const clearAllFilters = () => {
+    setSearchTerm("");
+    setFilterType("all");
+    setFilterEventType("all");
+    setFilterTransportType("all");
+    setFilterStatus("all");
   };
 
   return (
@@ -116,7 +194,91 @@ export default function Transportation() {
         </div>
       </div>
 
-{loading ? (
+      {/* Filter Bar */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-wrap gap-3">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input 
+                placeholder="Search trips..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                {uniqueTypes.map(type => (
+                  <SelectItem key={type} value={type}>{type}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={filterEventType} onValueChange={setFilterEventType}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Event Types</SelectItem>
+                {uniqueEventTypes.map(type => (
+                  <SelectItem key={type} value={type}>{type}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={filterTransportType} onValueChange={setFilterTransportType}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Transport Types</SelectItem>
+                {uniqueTransportTypes.map(type => (
+                  <SelectItem key={type} value={type}>{type}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                {uniqueStatuses.map(status => (
+                  <SelectItem key={status} value={status}>{status}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date">Sort by Date</SelectItem>
+                <SelectItem value="type">Sort by Type</SelectItem>
+                <SelectItem value="destination">Sort by Destination</SelectItem>
+                <SelectItem value="status">Sort by Status</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {activeFilterCount > 0 && (
+              <Button variant="ghost" onClick={clearAllFilters}>
+                <X className="h-4 w-4 mr-2" />
+                Clear ({activeFilterCount})
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {loading ? (
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
@@ -213,9 +375,9 @@ export default function Transportation() {
             )}
           </div>
         </div>
-      ) : trips.length > 0 ? (
+      ) : filteredAndSortedTrips.length > 0 ? (
         <div className="grid gap-6">
-          {trips.map((trip) => (
+          {filteredAndSortedTrips.map((trip) => (
             <Card key={trip.id} className="shadow-card hover:shadow-md transition-all group">
               <CardHeader>
                 <div className="flex items-start justify-between">
@@ -349,7 +511,7 @@ export default function Transportation() {
         </div>
       ) : (
         <div className="text-center py-12">
-          <p className="text-muted-foreground">No trips found. Add your first trip!</p>
+          <p className="text-muted-foreground">No trips match your filters</p>
         </div>
       )}
 

@@ -872,9 +872,11 @@ export type Database = {
         Row: {
           created_at: string | null
           created_by: string | null
+          custom_sport_type: string | null
           description: string | null
           division_id: string | null
           event_date: string
+          event_type: string | null
           id: string
           location: string | null
           opponent: string | null
@@ -886,9 +888,11 @@ export type Database = {
         Insert: {
           created_at?: string | null
           created_by?: string | null
+          custom_sport_type?: string | null
           description?: string | null
           division_id?: string | null
           event_date: string
+          event_type?: string | null
           id?: string
           location?: string | null
           opponent?: string | null
@@ -900,9 +904,11 @@ export type Database = {
         Update: {
           created_at?: string | null
           created_by?: string | null
+          custom_sport_type?: string | null
           description?: string | null
           division_id?: string | null
           event_date?: string
+          event_type?: string | null
           id?: string
           location?: string | null
           opponent?: string | null
@@ -917,6 +923,42 @@ export type Database = {
             columns: ["division_id"]
             isOneToOne: false
             referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sports_calendar_divisions: {
+        Row: {
+          created_at: string | null
+          division_id: string
+          id: string
+          sports_event_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          division_id: string
+          id?: string
+          sports_event_id: string
+        }
+        Update: {
+          created_at?: string | null
+          division_id?: string
+          id?: string
+          sports_event_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sports_calendar_divisions_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sports_calendar_divisions_sports_event_id_fkey"
+            columns: ["sports_event_id"]
+            isOneToOne: false
+            referencedRelation: "sports_calendar"
             referencedColumns: ["id"]
           },
         ]

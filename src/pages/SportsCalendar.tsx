@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Trophy, Plus, List, Pencil, Trash2, Calendar as CalendarIcon, UserCheck } from "lucide-react";
+import { Trophy, Plus, List, Pencil, Trash2, Calendar as CalendarIcon, UserCheck, Search, X, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -18,6 +18,8 @@ import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import ManageSportsRosterDialog from "@/components/dialogs/ManageSportsRosterDialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -25,8 +27,13 @@ const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales
 export default function SportsCalendar() {
   const [events, setEvents] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
-  const [selectedDivision, setSelectedDivision] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<"date" | "division">("date");
+  const [selectedDivisions, setSelectedDivisions] = useState<string[]>([]);
+  const [selectedGender, setSelectedGender] = useState<string>("all");
+  const [selectedSport, setSelectedSport] = useState<string>("all");
+  const [selectedEventType, setSelectedEventType] = useState<string>("all");
+  const [selectedLocation, setSelectedLocation] = useState<string>("all");
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [sortBy, setSortBy] = useState<"date" | "division" | "sport" | "location" | "eventType">("date");
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [editingEvent, setEditingEvent] = useState<any>(null);
@@ -35,16 +42,20 @@ export default function SportsCalendar() {
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [calendarView, setCalendarView] = useState<View>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [showRosterPopup, setShowRosterPopup] = useState<any>(null);
+  const [rosterCounts, setRosterCounts] = useState<Record<string, number>>({});
   const [formData, setFormData] = useState({
     event_date: new Date().toISOString().split('T')[0],
     title: "",
     description: "",
     sport_type: "",
+    custom_sport_type: "",
+    event_type: "",
     time: "",
     location: "",
     team: "",
     opponent: "",
-    division_id: "",
+    division_ids: [] as string[],
   });
   const { toast } = useToast();
 
@@ -71,7 +82,8 @@ export default function SportsCalendar() {
       .from("sports_calendar")
       .select(`
         *,
-        division:divisions(id, name, gender, sort_order)
+        division:divisions(id, name, gender, sort_order),
+        sports_calendar_divisions(division_id, division:divisions(id, name, gender, sort_order))
       `)
       .order("event_date", { ascending: true });
 
@@ -80,6 +92,18 @@ export default function SportsCalendar() {
       setLoading(false);
       return;
     }
+
+    // Fetch roster counts
+    const { data: rosterData } = await supabase
+      .from("sports_event_roster")
+      .select("event_id");
+
+    const counts: Record<string, number> = {};
+    rosterData?.forEach((item) => {
+      counts[item.event_id] = (counts[item.event_id] || 0) + 1;
+    });
+    setRosterCounts(counts);
+
     setEvents(data || []);
     setLoading(false);
   };
@@ -98,14 +122,23 @@ export default function SportsCalendar() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.sport_type) {
-      toast({ title: "Please select a sport type", variant: "destructive" });
+    if (!formData.sport_type && !formData.custom_sport_type) {
+      toast({ title: "Please select or enter a sport type", variant: "destructive" });
       return;
     }
 
     const submitData = {
-      ...formData,
-      division_id: formData.division_id || null
+      event_date: formData.event_date,
+      title: formData.title,
+      description: formData.description,
+      sport_type: formData.sport_type === "Other" ? "Other" : formData.sport_type,
+      custom_sport_type: formData.sport_type === "Other" ? formData.custom_sport_type : null,
+      event_type: formData.event_type || null,
+      time: formData.time,
+      location: formData.location,
+      team: formData.team,
+      opponent: formData.opponent,
+      division_id: formData.division_ids.length === 1 ? formData.division_ids[0] : null,
     };
 
     if (editingEvent) {
@@ -118,15 +151,37 @@ export default function SportsCalendar() {
         toast({ title: "Error updating event", variant: "destructive" });
         return;
       }
+
+      // Update junction table
+      await supabase.from("sports_calendar_divisions").delete().eq("sports_event_id", editingEvent.id);
+      if (formData.division_ids.length > 0) {
+        const junctionData = formData.division_ids.map(divId => ({
+          sports_event_id: editingEvent.id,
+          division_id: divId
+        }));
+        await supabase.from("sports_calendar_divisions").insert(junctionData);
+      }
+
       toast({ title: "Event updated successfully" });
     } else {
-      const { error } = await supabase
+      const { data: newEvent, error } = await supabase
         .from("sports_calendar")
-        .insert(submitData);
+        .insert(submitData)
+        .select()
+        .single();
 
-      if (error) {
+      if (error || !newEvent) {
         toast({ title: "Error adding event", variant: "destructive" });
         return;
+      }
+
+      // Insert into junction table
+      if (formData.division_ids.length > 0) {
+        const junctionData = formData.division_ids.map(divId => ({
+          sports_event_id: newEvent.id,
+          division_id: divId
+        }));
+        await supabase.from("sports_calendar_divisions").insert(junctionData);
       }
 
       // Create pending trip in transportation module
@@ -134,19 +189,13 @@ export default function SportsCalendar() {
         name: formData.title,
         date: formData.event_date,
         type: "sporting_event",
-        event_type: formData.sport_type,
+        event_type: formData.sport_type === "Other" ? formData.custom_sport_type : formData.sport_type,
         destination: formData.location || null,
         departure_time: formData.time || null,
         status: "pending"
       };
 
-      const { error: tripError } = await supabase
-        .from("trips")
-        .insert(tripData);
-
-      if (tripError) {
-        console.error("Error creating pending trip:", tripError);
-      }
+      await supabase.from("trips").insert(tripData);
 
       toast({ title: "Sports event added and pending trip created" });
     }
@@ -160,11 +209,13 @@ export default function SportsCalendar() {
       title: "",
       description: "",
       sport_type: "",
+      custom_sport_type: "",
+      event_type: "",
       time: "",
       location: "",
       team: "",
       opponent: "",
-      division_id: "",
+      division_ids: [],
     });
     setEditingEvent(null);
     setShowDialog(false);
@@ -173,16 +224,20 @@ export default function SportsCalendar() {
 
   const handleEdit = (event: any) => {
     setEditingEvent(event);
+    const divisionIds = event.sports_calendar_divisions?.map((d: any) => d.division_id) || 
+                        (event.division_id ? [event.division_id] : []);
     setFormData({
       event_date: event.event_date,
       title: event.title,
       description: event.description || "",
       sport_type: event.sport_type,
+      custom_sport_type: event.custom_sport_type || "",
+      event_type: event.event_type || "",
       time: event.time || "",
       location: event.location || "",
       team: event.team || "",
       opponent: event.opponent || "",
-      division_id: event.division_id || "",
+      division_ids: divisionIds,
     });
     setShowDialog(true);
   };
@@ -205,15 +260,105 @@ export default function SportsCalendar() {
     fetchEvents();
   };
 
+  const getEventDivisions = (event: any) => {
+    if (event.sports_calendar_divisions && event.sports_calendar_divisions.length > 0) {
+      return event.sports_calendar_divisions.map((d: any) => d.division);
+    }
+    return event.division ? [event.division] : [];
+  };
+
+  const getDisplaySport = (event: any) => {
+    return event.custom_sport_type || event.sport_type;
+  };
+
+  const getRosterCount = (eventId: string) => {
+    return rosterCounts[eventId] || 0;
+  };
+
+  const getRosterIndicatorClass = (eventId: string) => {
+    const count = getRosterCount(eventId);
+    if (count === 0) {
+      return "border-2 border-red-500 bg-red-50 dark:bg-red-950/20";
+    }
+    return "border-2 border-green-500 bg-green-50 dark:bg-green-950/20";
+  };
+
+  const uniqueSports = Array.from(new Set(events.map(e => getDisplaySport(e)))).filter(Boolean).sort();
+  const uniqueEventTypes = Array.from(new Set(events.map(e => e.event_type))).filter(Boolean).sort();
+  const uniqueLocations = Array.from(new Set(events.map(e => e.location))).filter(Boolean).sort();
+
   const filteredAndSortedEvents = events
-    .filter(event => selectedDivision === "all" || event.division_id === selectedDivision)
+    .filter(event => {
+      // Division filter
+      if (selectedDivisions.length > 0) {
+        const eventDivisions = getEventDivisions(event);
+        const hasMatchingDivision = eventDivisions.some((d: any) => 
+          selectedDivisions.includes(d.id)
+        );
+        if (!hasMatchingDivision) return false;
+      }
+
+      // Gender filter
+      if (selectedGender !== "all") {
+        const eventDivisions = getEventDivisions(event);
+        const hasMatchingGender = eventDivisions.some((d: any) => 
+          d.gender.toLowerCase() === selectedGender.toLowerCase()
+        );
+        if (!hasMatchingGender) return false;
+      }
+
+      // Sport filter
+      if (selectedSport !== "all") {
+        const displaySport = getDisplaySport(event);
+        if (displaySport !== selectedSport) return false;
+      }
+
+      // Event type filter
+      if (selectedEventType !== "all" && event.event_type !== selectedEventType) return false;
+
+      // Location filter
+      if (selectedLocation !== "all" && event.location !== selectedLocation) return false;
+
+      // Search filter
+      if (searchTerm) {
+        const search = searchTerm.toLowerCase();
+        const searchableFields = [
+          event.title,
+          event.description,
+          event.location,
+          event.team,
+          event.opponent,
+          getDisplaySport(event),
+          event.event_type
+        ].filter(Boolean).join(" ").toLowerCase();
+        
+        if (!searchableFields.includes(search)) return false;
+      }
+
+      return true;
+    })
     .sort((a, b) => {
       if (sortBy === "division") {
-        const divA = a.division?.sort_order || 999;
-        const divB = b.division?.sort_order || 999;
+        const divA = getEventDivisions(a)[0]?.sort_order || 999;
+        const divB = getEventDivisions(b)[0]?.sort_order || 999;
         if (divA !== divB) return divA - divB;
+      } else if (sortBy === "sport") {
+        return getDisplaySport(a).localeCompare(getDisplaySport(b));
+      } else if (sortBy === "location") {
+        return (a.location || "").localeCompare(b.location || "");
+      } else if (sortBy === "eventType") {
+        return (a.event_type || "").localeCompare(b.event_type || "");
       }
-      return new Date(a.event_date).getTime() - new Date(b.event_date).getTime();
+      
+      // Default or date sort
+      const dateCompare = new Date(a.event_date).getTime() - new Date(b.event_date).getTime();
+      if (dateCompare !== 0) return dateCompare;
+      
+      // If same date, sort by time
+      if (a.time && b.time) {
+        return a.time.localeCompare(b.time);
+      }
+      return a.time ? -1 : b.time ? 1 : 0;
     });
 
   const groupedEvents: Record<string, any[]> = filteredAndSortedEvents.reduce((acc, event) => {
@@ -222,6 +367,22 @@ export default function SportsCalendar() {
     acc[date].push(event);
     return acc;
   }, {} as Record<string, any[]>);
+
+  const activeFilterCount = (selectedDivisions.length > 0 ? 1 : 0) + 
+    (selectedGender !== "all" ? 1 : 0) + 
+    (selectedSport !== "all" ? 1 : 0) + 
+    (selectedEventType !== "all" ? 1 : 0) + 
+    (selectedLocation !== "all" ? 1 : 0) + 
+    (searchTerm ? 1 : 0);
+
+  const clearAllFilters = () => {
+    setSelectedDivisions([]);
+    setSelectedGender("all");
+    setSelectedSport("all");
+    setSelectedEventType("all");
+    setSelectedLocation("all");
+    setSearchTerm("");
+  };
 
   return (
     <div className="space-y-8">
@@ -250,35 +411,127 @@ export default function SportsCalendar() {
         </div>
       </div>
 
-      <div className="flex gap-4">
-        <select
-          value={selectedDivision}
-          onChange={(e) => setSelectedDivision(e.target.value)}
-          className="px-4 py-2 border rounded-md bg-background"
-        >
-          <option value="all">All Divisions</option>
-          {divisions.map((div) => (
-            <option key={div.id} value={div.id}>
-              {div.name}
-            </option>
-          ))}
-        </select>
-        {viewMode === "list" && (
-          <Button 
-            variant="outline"
-            onClick={() => setSortBy(sortBy === "date" ? "division" : "date")}
-          >
-            Sort by {sortBy === "date" ? "Division" : "Date"}
-          </Button>
-        )}
-      </div>
+      {/* Filter Bar */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-wrap gap-3">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input 
+                placeholder="Search events..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline">
+                  Divisions {selectedDivisions.length > 0 && `(${selectedDivisions.length})`}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[250px]">
+                <div className="space-y-2">
+                  <p className="font-semibold text-sm">Select Divisions</p>
+                  {divisions.map((div) => (
+                    <div key={div.id} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`div-${div.id}`}
+                        checked={selectedDivisions.includes(div.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedDivisions([...selectedDivisions, div.id]);
+                          } else {
+                            setSelectedDivisions(selectedDivisions.filter(id => id !== div.id));
+                          }
+                        }}
+                      />
+                      <label htmlFor={`div-${div.id}`} className="text-sm cursor-pointer">
+                        {div.name}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <Select value={selectedGender} onValueChange={setSelectedGender}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Genders</SelectItem>
+                <SelectItem value="boys">Boys</SelectItem>
+                <SelectItem value="girls">Girls</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={selectedSport} onValueChange={setSelectedSport}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sports</SelectItem>
+                {uniqueSports.map(sport => (
+                  <SelectItem key={sport} value={sport}>{sport}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={selectedEventType} onValueChange={setSelectedEventType}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Event Types</SelectItem>
+                {uniqueEventTypes.map(type => (
+                  <SelectItem key={type} value={type}>{type}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={selectedLocation} onValueChange={setSelectedLocation}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Locations</SelectItem>
+                {uniqueLocations.map(loc => (
+                  <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date">Sort by Date</SelectItem>
+                <SelectItem value="division">Sort by Division</SelectItem>
+                <SelectItem value="sport">Sort by Sport</SelectItem>
+                <SelectItem value="location">Sort by Location</SelectItem>
+                <SelectItem value="eventType">Sort by Event Type</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {activeFilterCount > 0 && (
+              <Button variant="ghost" onClick={clearAllFilters}>
+                <X className="h-4 w-4 mr-2" />
+                Clear ({activeFilterCount})
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {loading ? (
         <p className="text-muted-foreground">Loading...</p>
       ) : filteredAndSortedEvents.length === 0 ? (
         <Card>
           <CardContent className="p-6">
-            <p className="text-muted-foreground text-center">No sports events scheduled</p>
+            <p className="text-muted-foreground text-center">No sports events match your filters</p>
           </CardContent>
         </Card>
       ) : viewMode === "calendar" ? (
@@ -288,7 +541,7 @@ export default function SportsCalendar() {
               localizer={localizer}
               events={filteredAndSortedEvents.map(event => ({
                 id: event.id,
-                title: `${event.sport_type}: ${event.title}`,
+                title: `${getDisplaySport(event)}: ${event.title}`,
                 start: new Date(event.event_date + 'T00:00:00'),
                 end: new Date(event.event_date + 'T23:59:59'),
                 resource: event,
@@ -300,7 +553,7 @@ export default function SportsCalendar() {
               onView={setCalendarView}
               date={currentDate}
               onNavigate={setCurrentDate}
-              onSelectEvent={(event: any) => handleEdit(event.resource)}
+              onSelectEvent={(event: any) => setShowRosterPopup(event.resource)}
               onSelectSlot={(slotInfo: any) => {
                 setFormData({ ...formData, event_date: format(slotInfo.start, 'yyyy-MM-dd') });
                 setShowDialog(true);
@@ -316,7 +569,7 @@ export default function SportsCalendar() {
               <h2 className="text-xl font-semibold mb-3">{month}</h2>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {monthEvents.map((event) => (
-                  <Card key={event.id} className="hover:shadow-lg transition-shadow">
+                  <Card key={event.id} className={`hover:shadow-lg transition-shadow ${getRosterIndicatorClass(event.id)}`}>
                     <CardHeader>
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
@@ -326,6 +579,14 @@ export default function SportsCalendar() {
                           </p>
                         </div>
                         <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setShowRosterPopup(event)}
+                            title="View Roster"
+                          >
+                            <Users className="h-4 w-4" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -353,10 +614,16 @@ export default function SportsCalendar() {
                     </CardHeader>
                     <CardContent className="space-y-2">
                       <div className="flex gap-2 flex-wrap">
-                        <Badge>{event.sport_type}</Badge>
-                        {event.division && (
-                          <Badge variant="secondary">{event.division.name}</Badge>
+                        <Badge>{getDisplaySport(event)}</Badge>
+                        {event.event_type && (
+                          <Badge variant="outline">{event.event_type}</Badge>
                         )}
+                        {getEventDivisions(event).map((div: any, idx: number) => (
+                          <Badge key={idx} variant="secondary">{div.name}</Badge>
+                        ))}
+                        <Badge variant={getRosterCount(event.id) === 0 ? "destructive" : "default"}>
+                          {getRosterCount(event.id)} roster
+                        </Badge>
                       </div>
                       {event.time && (
                         <p className="text-sm text-muted-foreground">⏰ {event.time}</p>
@@ -379,6 +646,44 @@ export default function SportsCalendar() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Roster Quick View Dialog */}
+      {showRosterPopup && (
+        <Dialog open={!!showRosterPopup} onOpenChange={() => setShowRosterPopup(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{showRosterPopup.title}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-lg ${getRosterCount(showRosterPopup.id) === 0 ? 'bg-red-100 dark:bg-red-950' : 'bg-green-100 dark:bg-green-950'}`}>
+                  <Users className="h-6 w-6" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Roster Count</p>
+                  <p className="text-2xl font-bold">{getRosterCount(showRosterPopup.id)}</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  onClick={() => {
+                    setManagingRoster({ id: showRosterPopup.id, title: showRosterPopup.title });
+                    setShowRosterPopup(null);
+                  }}
+                  className="flex-1"
+                >
+                  <UserCheck className="h-4 w-4 mr-2" />
+                  Manage Roster
+                </Button>
+                <Button variant="outline" onClick={() => handleEdit(showRosterPopup)}>
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit Event
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       <Dialog open={showDialog} onOpenChange={(open) => {
@@ -433,25 +738,61 @@ export default function SportsCalendar() {
                   <SelectItem value="Tennis">Tennis</SelectItem>
                   <SelectItem value="Volleyball">Volleyball</SelectItem>
                   <SelectItem value="Waterfront">Waterfront</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {formData.sport_type === "Other" && (
+              <div className="space-y-2">
+                <Label>Custom Sport Type *</Label>
+                <Input
+                  value={formData.custom_sport_type}
+                  onChange={(e) => setFormData({ ...formData, custom_sport_type: e.target.value })}
+                  placeholder="Enter sport name"
+                  required
+                />
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>Event Type (optional)</Label>
+              <Select value={formData.event_type} onValueChange={(value) => setFormData({ ...formData, event_type: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select event type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Game">Game</SelectItem>
+                  <SelectItem value="Practice">Practice</SelectItem>
+                  <SelectItem value="Tournament">Tournament</SelectItem>
+                  <SelectItem value="Scrimmage">Scrimmage</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label>Division (optional)</Label>
-              <Select value={formData.division_id || "none"} onValueChange={(value) => setFormData({ ...formData, division_id: value === "none" ? "" : value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select division (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {divisions.map((division) => (
-                    <SelectItem key={division.id} value={division.id}>
-                      {division.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Divisions (optional)</Label>
+              <div className="border rounded-md p-3 space-y-2 max-h-[200px] overflow-y-auto">
+                {divisions.map((div) => (
+                  <div key={div.id} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`form-div-${div.id}`}
+                      checked={formData.division_ids.includes(div.id)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setFormData({ ...formData, division_ids: [...formData.division_ids, div.id] });
+                        } else {
+                          setFormData({ ...formData, division_ids: formData.division_ids.filter(id => id !== div.id) });
+                        }
+                      }}
+                    />
+                    <label htmlFor={`form-div-${div.id}`} className="text-sm cursor-pointer">
+                      {div.name}
+                    </label>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -476,7 +817,6 @@ export default function SportsCalendar() {
               <Input
                 value={formData.team}
                 onChange={(e) => setFormData({ ...formData, team: e.target.value })}
-                placeholder="Your team name"
               />
             </div>
 
@@ -485,7 +825,6 @@ export default function SportsCalendar() {
               <Input
                 value={formData.opponent}
                 onChange={(e) => setFormData({ ...formData, opponent: e.target.value })}
-                placeholder="Opponent team name"
               />
             </div>
 
@@ -498,25 +837,24 @@ export default function SportsCalendar() {
               />
             </div>
 
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => {
-                setShowDialog(false);
-                resetForm();
-              }}>
+            <div className="flex gap-2 justify-end">
+              <Button type="button" variant="outline" onClick={() => { setShowDialog(false); resetForm(); }}>
                 Cancel
               </Button>
-              <Button type="submit">{editingEvent ? 'Update' : 'Add'} Event</Button>
+              <Button type="submit">
+                {editingEvent ? 'Update Event' : 'Add Event'}
+              </Button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>
+      <AlertDialog open={!!deletingId} onOpenChange={(open) => !open && setDeletingId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Sports Event</AlertDialogTitle>
+            <AlertDialogTitle>Delete Event?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this event? This action cannot be undone.
+              This action cannot be undone. This will permanently delete the sports event.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
