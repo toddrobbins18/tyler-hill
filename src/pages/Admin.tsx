@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { Shield, Users, Database, Settings } from "lucide-react";
+import { Shield, Users, Database, FileText } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import UserRoleManagement from "@/components/admin/UserRoleManagement";
 import DataManagement from "@/components/admin/DataManagement";
+import AuditLog from "@/components/admin/AuditLog";
 
 export default function Admin() {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -58,7 +59,7 @@ export default function Admin() {
       </div>
 
       <Tabs defaultValue="users" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 lg:w-auto">
+        <TabsList className="grid w-full grid-cols-3 lg:w-auto">
           <TabsTrigger value="users" className="gap-2">
             <Users className="h-4 w-4" />
             User Management
@@ -66,6 +67,10 @@ export default function Admin() {
           <TabsTrigger value="data" className="gap-2">
             <Database className="h-4 w-4" />
             Data Management
+          </TabsTrigger>
+          <TabsTrigger value="history" className="gap-2">
+            <FileText className="h-4 w-4" />
+            Edit History
           </TabsTrigger>
         </TabsList>
 
@@ -75,6 +80,10 @@ export default function Admin() {
 
         <TabsContent value="data" className="space-y-6">
           <DataManagement />
+        </TabsContent>
+
+        <TabsContent value="history" className="space-y-6">
+          <AuditLog />
         </TabsContent>
       </Tabs>
     </div>
