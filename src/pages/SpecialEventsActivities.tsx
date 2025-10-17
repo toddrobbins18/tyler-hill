@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CSVUploader } from "@/components/CSVUploader";
+import { formatTime12Hour } from "@/lib/utils";
 
 export default function SpecialEventsActivities() {
   const [events, setEvents] = useState<any[]>([]);
