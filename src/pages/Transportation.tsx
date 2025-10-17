@@ -53,6 +53,21 @@ export default function Transportation() {
         { event: '*', schema: 'public', table: 'trips' },
         () => fetchTrips()
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sports_event_roster' },
+        () => fetchTrips()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'trip_attendees' },
+        () => fetchTrips()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sports_event_staff' },
+        () => fetchTrips()
+      )
       .subscribe();
 
     return () => {

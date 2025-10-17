@@ -19,6 +19,7 @@ export default function ChildProfile() {
   const [incidents, setIncidents] = useState<any[]>([]);
   const [sportsRoster, setSportsRoster] = useState<any[]>([]);
   const [tripAttendance, setTripAttendance] = useState<any[]>([]);
+  const [sportsAcademy, setSportsAcademy] = useState<any[]>([]);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -95,6 +96,15 @@ export default function ChildProfile() {
         .eq("child_id", id);
 
       setTripAttendance(tripData || []);
+
+      // Fetch sports academy enrollments
+      const { data: academyData } = await supabase
+        .from("sports_academy")
+        .select("*")
+        .eq("child_id", id)
+        .order("sport_name", { ascending: true });
+
+      setSportsAcademy(academyData || []);
     } catch (error) {
       console.error("Error fetching child data:", error);
       toast({ title: "Error loading child profile", variant: "destructive" });
@@ -148,6 +158,7 @@ export default function ChildProfile() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="achievements">Achievements</TabsTrigger>
           <TabsTrigger value="activities">Activities</TabsTrigger>
+          <TabsTrigger value="sports-academy">Sports Academy</TabsTrigger>
           <TabsTrigger value="incidents">Incident Reports</TabsTrigger>
         </TabsList>
 
@@ -401,6 +412,61 @@ export default function ChildProfile() {
               )}
             </div>
           </div>
+        </TabsContent>
+
+        <TabsContent value="sports-academy" className="space-y-4">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-muted-foreground">
+              {sportsAcademy.length} total enrollments
+            </p>
+          </div>
+          
+          {sportsAcademy.length === 0 ? (
+            <Card className="shadow-card">
+              <CardContent className="py-8 text-center text-muted-foreground">
+                No sports academy enrollments recorded
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4">
+              {sportsAcademy.map((enrollment) => (
+                <Card key={enrollment.id} className="shadow-card">
+                  <CardContent className="p-6">
+                    <div className="flex items-start gap-4">
+                      <div className="p-3 rounded-xl bg-primary/10">
+                        <Trophy className="h-6 w-6 text-primary" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-lg mb-1">{enrollment.sport_name}</h3>
+                        {enrollment.instructor && (
+                          <p className="text-sm text-muted-foreground mb-2">Instructor: {enrollment.instructor}</p>
+                        )}
+                        {enrollment.schedule_periods && enrollment.schedule_periods.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mb-2">
+                            {enrollment.schedule_periods.map((period: string, idx: number) => (
+                              <Badge key={idx} variant="secondary">{period}</Badge>
+                            ))}
+                          </div>
+                        )}
+                        {(enrollment.start_date || enrollment.end_date) && (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Calendar className="h-3 w-3" />
+                            <span>
+                              {enrollment.start_date && new Date(enrollment.start_date).toLocaleDateString()}
+                              {enrollment.end_date && ` - ${new Date(enrollment.end_date).toLocaleDateString()}`}
+                            </span>
+                          </div>
+                        )}
+                        {enrollment.notes && (
+                          <p className="text-sm text-muted-foreground mt-2">{enrollment.notes}</p>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="incidents" className="space-y-4">

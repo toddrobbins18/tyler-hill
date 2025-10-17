@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Trophy, Plus, Pencil, Trash2, User, Calendar as CalendarIcon, LayoutList } from "lucide-react";
+import { Trophy, Plus, Pencil, Trash2, User, Calendar as CalendarIcon, LayoutList, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -14,11 +14,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CSVUploader } from "@/components/CSVUploader";
 import { Calendar } from "@/components/ui/calendar";
 import { format, isSameDay, parseISO } from "date-fns";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function SportsAcademy() {
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [children, setChildren] = useState<any[]>([]);
+  const [divisions, setDivisions] = useState<any[]>([]);
   const [selectedSport, setSelectedSport] = useState<string>("all");
+  const [selectedDivision, setSelectedDivision] = useState<string>("all");
+  const [selectedGender, setSelectedGender] = useState<string>("all");
+  const [searchTerm, setSearchTerm] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [editingEnrollment, setEditingEnrollment] = useState<any>(null);
@@ -28,17 +33,17 @@ export default function SportsAcademy() {
   const [formData, setFormData] = useState({
     child_id: "",
     sport_name: "",
-    skill_level: "",
     instructor: "",
-    schedule_days: [] as string[],
+    schedule_periods: [] as string[],
+    period_number: "",
+    other_period: "",
     start_date: "",
     end_date: "",
     notes: "",
   });
   const { toast } = useToast();
 
-  const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-  const skillLevels = ["Beginner", "Intermediate", "Advanced"];
+  const periodOptions = ["Rest Hour", "Shower Hour", "Free Play", "Period #", "Other"];
   const sportsList = ["Baseball", "Basketball", "Dance", "Football", "Golf", "Gymnastics", "Hockey", "Lacrosse", "Soccer", "Softball", "Tennis", "Volleyball", "Waterfront"];
   
   const sportColors: Record<string, string> = {
@@ -60,6 +65,7 @@ export default function SportsAcademy() {
   useEffect(() => {
     fetchEnrollments();
     fetchChildren();
+    fetchDivisions();
 
     const channel = supabase
       .channel('sports-academy-changes')
@@ -80,7 +86,7 @@ export default function SportsAcademy() {
       .from("sports_academy")
       .select(`
         *,
-        child:children(id, name, age, division_id)
+        child:children(id, name, age, gender, division_id, division:divisions(id, name, gender))
       `)
       .order("sport_name", { ascending: true });
 
@@ -96,7 +102,7 @@ export default function SportsAcademy() {
   const fetchChildren = async () => {
     const { data } = await supabase
       .from("children")
-      .select("id, name, age")
+      .select("id, name, age, gender, division_id")
       .eq("status", "active")
       .order("name");
     
@@ -105,12 +111,40 @@ export default function SportsAcademy() {
     }
   };
 
+  const fetchDivisions = async () => {
+    const { data } = await supabase
+      .from("divisions")
+      .select("*")
+      .order("sort_order");
+    
+    if (data) {
+      setDivisions(data);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Build schedule_periods array
+    const periods: string[] = [];
+    formData.schedule_periods.forEach(period => {
+      if (period === "Period #" && formData.period_number) {
+        periods.push(`Period ${formData.period_number}`);
+      } else if (period === "Other" && formData.other_period) {
+        periods.push(formData.other_period);
+      } else if (period !== "Period #" && period !== "Other") {
+        periods.push(period);
+      }
+    });
+
     const submitData = {
-      ...formData,
-      schedule_days: formData.schedule_days.length > 0 ? formData.schedule_days : null,
+      child_id: formData.child_id,
+      sport_name: formData.sport_name,
+      instructor: formData.instructor,
+      schedule_periods: periods.length > 0 ? periods : null,
+      start_date: formData.start_date || null,
+      end_date: formData.end_date || null,
+      notes: formData.notes || null,
     };
 
     if (editingEnrollment) {
@@ -143,9 +177,10 @@ export default function SportsAcademy() {
     setFormData({
       child_id: "",
       sport_name: "",
-      skill_level: "",
       instructor: "",
-      schedule_days: [],
+      schedule_periods: [],
+      period_number: "",
+      other_period: "",
       start_date: "",
       end_date: "",
       notes: "",
@@ -157,12 +192,32 @@ export default function SportsAcademy() {
 
   const handleEdit = (enrollment: any) => {
     setEditingEnrollment(enrollment);
+    
+    // Parse schedule_periods back into form state
+    const periods = enrollment.schedule_periods || [];
+    const basePeriods: string[] = [];
+    let periodNum = "";
+    let otherText = "";
+    
+    periods.forEach((period: string) => {
+      if (period.startsWith("Period ")) {
+        basePeriods.push("Period #");
+        periodNum = period.replace("Period ", "");
+      } else if (!["Rest Hour", "Shower Hour", "Free Play"].includes(period)) {
+        basePeriods.push("Other");
+        otherText = period;
+      } else {
+        basePeriods.push(period);
+      }
+    });
+
     setFormData({
       child_id: enrollment.child_id,
       sport_name: enrollment.sport_name,
-      skill_level: enrollment.skill_level || "",
       instructor: enrollment.instructor || "",
-      schedule_days: enrollment.schedule_days || [],
+      schedule_periods: basePeriods,
+      period_number: periodNum,
+      other_period: otherText,
       start_date: enrollment.start_date || "",
       end_date: enrollment.end_date || "",
       notes: enrollment.notes || "",
@@ -188,18 +243,39 @@ export default function SportsAcademy() {
     fetchEnrollments();
   };
 
-  const toggleScheduleDay = (day: string) => {
+  const toggleSchedulePeriod = (period: string) => {
     setFormData(prev => ({
       ...prev,
-      schedule_days: prev.schedule_days.includes(day)
-        ? prev.schedule_days.filter(d => d !== day)
-        : [...prev.schedule_days, day]
+      schedule_periods: prev.schedule_periods.includes(period)
+        ? prev.schedule_periods.filter(p => p !== period)
+        : [...prev.schedule_periods, period]
     }));
   };
 
-  const filteredEnrollments = enrollments.filter(
-    enrollment => selectedSport === "all" || enrollment.sport_name === selectedSport
-  );
+  const filteredEnrollments = enrollments.filter(enrollment => {
+    // Sport filter
+    if (selectedSport !== "all" && enrollment.sport_name !== selectedSport) return false;
+    
+    // Division filter
+    if (selectedDivision !== "all" && enrollment.child?.division_id !== selectedDivision) return false;
+    
+    // Gender filter
+    if (selectedGender !== "all" && enrollment.child?.gender?.toLowerCase() !== selectedGender.toLowerCase()) return false;
+    
+    // Search filter
+    if (searchTerm) {
+      const search = searchTerm.toLowerCase();
+      const searchableFields = [
+        enrollment.child?.name,
+        enrollment.sport_name,
+        enrollment.instructor
+      ].filter(Boolean).join(" ").toLowerCase();
+      
+      if (!searchableFields.includes(search)) return false;
+    }
+    
+    return true;
+  });
 
   const uniqueSports = [...new Set(enrollments.map(e => e.sport_name))].sort();
 
@@ -225,12 +301,24 @@ export default function SportsAcademy() {
   };
 
   const getActivitiesForDate = (date: Date) => {
-    return enrollments.filter(enrollment => {
+    return filteredEnrollments.filter(enrollment => {
       if (!enrollment.start_date) return false;
       const start = parseISO(enrollment.start_date);
       const end = enrollment.end_date ? parseISO(enrollment.end_date) : new Date();
       return date >= start && date <= end;
     });
+  };
+
+  const activeFilterCount = (selectedSport !== "all" ? 1 : 0) + 
+    (selectedDivision !== "all" ? 1 : 0) + 
+    (selectedGender !== "all" ? 1 : 0) + 
+    (searchTerm ? 1 : 0);
+
+  const clearAllFilters = () => {
+    setSelectedSport("all");
+    setSelectedDivision("all");
+    setSelectedGender("all");
+    setSearchTerm("");
   };
 
   return (
@@ -270,23 +358,68 @@ export default function SportsAcademy() {
         </div>
       </div>
 
-      <div className="flex gap-4">
-        <div>
-          <Label>Sport Filter</Label>
-          <select
-            value={selectedSport}
-            onChange={(e) => setSelectedSport(e.target.value)}
-            className="px-4 py-2 border rounded-md bg-background"
-          >
-            <option value="all">All Sports</option>
-            {uniqueSports.map((sport) => (
-              <option key={sport} value={sport}>
-                {sport}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      {/* Filter Bar */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-wrap gap-3">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input 
+                placeholder="Search by camper, sport, instructor..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+
+            <Select value={selectedDivision} onValueChange={setSelectedDivision}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Divisions</SelectItem>
+                {divisions.map((div) => (
+                  <SelectItem key={div.id} value={div.id}>
+                    {div.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={selectedGender} onValueChange={setSelectedGender}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Genders</SelectItem>
+                <SelectItem value="boys">Boys</SelectItem>
+                <SelectItem value="girls">Girls</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={selectedSport} onValueChange={setSelectedSport}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sports</SelectItem>
+                {uniqueSports.map((sport) => (
+                  <SelectItem key={sport} value={sport}>
+                    {sport}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {activeFilterCount > 0 && (
+              <Button variant="ghost" onClick={clearAllFilters}>
+                <X className="h-4 w-4 mr-2" />
+                Clear ({activeFilterCount})
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {loading ? (
         <p className="text-muted-foreground">Loading...</p>
@@ -344,14 +477,11 @@ export default function SportsAcademy() {
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-2">
-                      {enrollment.skill_level && (
-                        <Badge variant="outline">{enrollment.skill_level}</Badge>
-                      )}
                       {enrollment.instructor && (
                         <p className="text-sm text-muted-foreground">👤 Instructor: {enrollment.instructor}</p>
                       )}
-                      {enrollment.schedule_days && enrollment.schedule_days.length > 0 && (
-                        <p className="text-sm text-muted-foreground">📅 {enrollment.schedule_days.join(", ")}</p>
+                      {enrollment.schedule_periods && enrollment.schedule_periods.length > 0 && (
+                        <p className="text-sm text-muted-foreground">📅 {enrollment.schedule_periods.join(", ")}</p>
                       )}
                     </CardContent>
                   </Card>
@@ -414,14 +544,11 @@ export default function SportsAcademy() {
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-2">
-                      {enrollment.skill_level && (
-                        <Badge>{enrollment.skill_level}</Badge>
-                      )}
                       {enrollment.instructor && (
                         <p className="text-sm text-muted-foreground">👤 Instructor: {enrollment.instructor}</p>
                       )}
-                      {enrollment.schedule_days && enrollment.schedule_days.length > 0 && (
-                        <p className="text-sm text-muted-foreground">📅 {enrollment.schedule_days.join(", ")}</p>
+                      {enrollment.schedule_periods && enrollment.schedule_periods.length > 0 && (
+                        <p className="text-sm text-muted-foreground">📅 {enrollment.schedule_periods.join(", ")}</p>
                       )}
                       {enrollment.start_date && (
                         <p className="text-sm text-muted-foreground">
@@ -453,7 +580,7 @@ export default function SportsAcademy() {
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label>Camper</Label>
+              <Label>Camper *</Label>
               <Select value={formData.child_id} onValueChange={(value) => setFormData({ ...formData, child_id: value })} required>
                 <SelectTrigger>
                   <SelectValue placeholder="Select camper" />
@@ -469,7 +596,7 @@ export default function SportsAcademy() {
             </div>
 
             <div className="space-y-2">
-              <Label>Sport Name</Label>
+              <Label>Sport Name *</Label>
               <Select value={formData.sport_name} onValueChange={(value) => setFormData({ ...formData, sport_name: value })} required>
                 <SelectTrigger>
                   <SelectValue placeholder="Select sport" />
@@ -478,22 +605,6 @@ export default function SportsAcademy() {
                   {sportsList.map((sport) => (
                     <SelectItem key={sport} value={sport}>
                       {sport}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Skill Level</Label>
-              <Select value={formData.skill_level} onValueChange={(value) => setFormData({ ...formData, skill_level: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select skill level" />
-                </SelectTrigger>
-                <SelectContent>
-                  {skillLevels.map((level) => (
-                    <SelectItem key={level} value={level}>
-                      {level}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -510,18 +621,38 @@ export default function SportsAcademy() {
             </div>
 
             <div className="space-y-2">
-              <Label>Schedule Days</Label>
-              <div className="grid grid-cols-4 gap-2">
-                {daysOfWeek.map((day) => (
-                  <Button
-                    key={day}
-                    type="button"
-                    variant={formData.schedule_days.includes(day) ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => toggleScheduleDay(day)}
-                  >
-                    {day.substring(0, 3)}
-                  </Button>
+              <Label>Schedule Periods</Label>
+              <div className="space-y-2 border rounded-md p-3">
+                {periodOptions.map((period) => (
+                  <div key={period} className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id={`period-${period}`}
+                        checked={formData.schedule_periods.includes(period)}
+                        onCheckedChange={() => toggleSchedulePeriod(period)}
+                      />
+                      <label htmlFor={`period-${period}`} className="text-sm cursor-pointer">
+                        {period}
+                      </label>
+                    </div>
+                    {period === "Period #" && formData.schedule_periods.includes(period) && (
+                      <Input
+                        type="number"
+                        value={formData.period_number}
+                        onChange={(e) => setFormData({ ...formData, period_number: e.target.value })}
+                        placeholder="Enter period number"
+                        className="ml-6"
+                      />
+                    )}
+                    {period === "Other" && formData.schedule_periods.includes(period) && (
+                      <Input
+                        value={formData.other_period}
+                        onChange={(e) => setFormData({ ...formData, other_period: e.target.value })}
+                        placeholder="Specify other period"
+                        className="ml-6"
+                      />
+                    )}
+                  </div>
                 ))}
               </div>
             </div>

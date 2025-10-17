@@ -55,6 +55,7 @@ export default function SportsCalendar() {
     location: "",
     team: "",
     opponent: "",
+    home_away: "",
     division_ids: [] as string[],
     division_provides_coach: false,
     division_provides_ref: false,
@@ -140,6 +141,7 @@ export default function SportsCalendar() {
       location: formData.location,
       team: formData.team,
       opponent: formData.opponent,
+      home_away: formData.home_away || null,
       division_id: formData.division_ids.length === 1 ? formData.division_ids[0] : null,
       division_provides_coach: formData.division_provides_coach,
       division_provides_ref: formData.division_provides_ref,
@@ -220,6 +222,7 @@ export default function SportsCalendar() {
       location: "",
       team: "",
       opponent: "",
+      home_away: "",
       division_ids: [],
       division_provides_coach: false,
       division_provides_ref: false,
@@ -244,6 +247,7 @@ export default function SportsCalendar() {
       location: event.location || "",
       team: event.team || "",
       opponent: event.opponent || "",
+      home_away: event.home_away || "",
       division_ids: divisionIds,
       division_provides_coach: event.division_provides_coach || false,
       division_provides_ref: event.division_provides_ref || false,
@@ -290,6 +294,24 @@ export default function SportsCalendar() {
       return "border-l-4 border-red-500 bg-red-50 dark:bg-red-950/20";
     }
     return "border-l-4 border-green-500 bg-green-50 dark:bg-green-950/20";
+  };
+
+  const eventPropGetter = (event: any) => {
+    const rosterCount = getRosterCount(event.resource.id);
+    const homeAway = event.resource.home_away;
+    
+    let backgroundColor = rosterCount === 0 ? '#ef4444' : '#22c55e';
+    let borderColor = homeAway === 'home' ? '#3b82f6' : homeAway === 'away' ? '#ec4899' : 'transparent';
+    
+    return {
+      style: {
+        backgroundColor,
+        borderLeft: `4px solid ${borderColor}`,
+        color: 'white',
+        borderRadius: '4px',
+        padding: '2px 5px',
+      }
+    };
   };
 
   const uniqueSports = Array.from(new Set(events.map(e => getDisplaySport(e)))).filter(Boolean).sort();
@@ -567,6 +589,7 @@ export default function SportsCalendar() {
                 setFormData({ ...formData, event_date: format(slotInfo.start, 'yyyy-MM-dd') });
                 setShowDialog(true);
               }}
+              eventPropGetter={eventPropGetter}
               selectable
             />
           </CardContent>
@@ -844,6 +867,20 @@ export default function SportsCalendar() {
                 value={formData.opponent}
                 onChange={(e) => setFormData({ ...formData, opponent: e.target.value })}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Home or Away</Label>
+              <Select value={formData.home_away} onValueChange={(value) => setFormData({ ...formData, home_away: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select location" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="home">Home</SelectItem>
+                  <SelectItem value="away">Away</SelectItem>
+                  <SelectItem value="neutral">Neutral</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
