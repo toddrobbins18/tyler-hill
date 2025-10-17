@@ -26,6 +26,9 @@ export type Database = {
           event_date: string
           id: string
           location: string | null
+          meal_notes: string | null
+          meal_options: string[] | null
+          season: string | null
           time: string | null
           title: string
         }
@@ -40,6 +43,9 @@ export type Database = {
           event_date: string
           id?: string
           location?: string | null
+          meal_notes?: string | null
+          meal_options?: string[] | null
+          season?: string | null
           time?: string | null
           title: string
         }
@@ -54,6 +60,9 @@ export type Database = {
           event_date?: string
           id?: string
           location?: string | null
+          meal_notes?: string | null
+          meal_options?: string[] | null
+          season?: string | null
           time?: string | null
           title?: string
         }
@@ -75,6 +84,7 @@ export type Database = {
           date: string
           description: string | null
           id: string
+          season: string | null
           title: string
         }
         Insert: {
@@ -84,6 +94,7 @@ export type Database = {
           date: string
           description?: string | null
           id?: string
+          season?: string | null
           title: string
         }
         Update: {
@@ -93,6 +104,7 @@ export type Database = {
           date?: string
           description?: string | null
           id?: string
+          season?: string | null
           title?: string
         }
         Relationships: [
@@ -198,6 +210,7 @@ export type Database = {
           mood: string | null
           nap: string | null
           notes: string | null
+          season: string | null
         }
         Insert: {
           activities?: string | null
@@ -210,6 +223,7 @@ export type Database = {
           mood?: string | null
           nap?: string | null
           notes?: string | null
+          season?: string | null
         }
         Update: {
           activities?: string | null
@@ -222,6 +236,7 @@ export type Database = {
           mood?: string | null
           nap?: string | null
           notes?: string | null
+          season?: string | null
         }
         Relationships: [
           {
@@ -412,6 +427,7 @@ export type Database = {
           description: string
           id: string
           reported_by: string | null
+          season: string | null
           severity: string | null
           status: string | null
           type: string
@@ -423,6 +439,7 @@ export type Database = {
           description: string
           id?: string
           reported_by?: string | null
+          season?: string | null
           severity?: string | null
           status?: string | null
           type: string
@@ -434,6 +451,7 @@ export type Database = {
           description?: string
           id?: string
           reported_by?: string | null
+          season?: string | null
           severity?: string | null
           status?: string | null
           type?: string
@@ -457,6 +475,7 @@ export type Database = {
           event_date: string
           id: string
           location: string | null
+          season: string | null
           time: string | null
           title: string
           type: string
@@ -469,6 +488,7 @@ export type Database = {
           event_date: string
           id?: string
           location?: string | null
+          season?: string | null
           time?: string | null
           title: string
           type: string
@@ -481,6 +501,7 @@ export type Database = {
           event_date?: string
           id?: string
           location?: string | null
+          season?: string | null
           time?: string | null
           title?: string
           type?: string
@@ -510,10 +531,13 @@ export type Database = {
           frequency: string | null
           id: string
           is_recurring: boolean | null
+          late_notes: string | null
+          late_notes_timestamp: string | null
           meal_time: string | null
           medication_name: string
           notes: string | null
           scheduled_time: string | null
+          season: string | null
           updated_at: string | null
         }
         Insert: {
@@ -530,10 +554,13 @@ export type Database = {
           frequency?: string | null
           id?: string
           is_recurring?: boolean | null
+          late_notes?: string | null
+          late_notes_timestamp?: string | null
           meal_time?: string | null
           medication_name: string
           notes?: string | null
           scheduled_time?: string | null
+          season?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -550,10 +577,13 @@ export type Database = {
           frequency?: string | null
           id?: string
           is_recurring?: boolean | null
+          late_notes?: string | null
+          late_notes_timestamp?: string | null
           meal_time?: string | null
           medication_name?: string
           notes?: string | null
           scheduled_time?: string | null
+          season?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -581,6 +611,7 @@ export type Database = {
           id: string
           items: string
           meal_type: string
+          season: string | null
         }
         Insert: {
           allergens?: string | null
@@ -589,6 +620,7 @@ export type Database = {
           id?: string
           items: string
           meal_type: string
+          season?: string | null
         }
         Update: {
           allergens?: string | null
@@ -597,6 +629,7 @@ export type Database = {
           id?: string
           items?: string
           meal_type?: string
+          season?: string | null
         }
         Relationships: []
       }
@@ -688,6 +721,7 @@ export type Database = {
           location: string | null
           name: string
           notes: string | null
+          season: string | null
           status: string | null
           supervisor: string | null
           time: string | null
@@ -701,6 +735,7 @@ export type Database = {
           location?: string | null
           name: string
           notes?: string | null
+          season?: string | null
           status?: string | null
           supervisor?: string | null
           time?: string | null
@@ -714,6 +749,7 @@ export type Database = {
           location?: string | null
           name?: string
           notes?: string | null
+          season?: string | null
           status?: string | null
           supervisor?: string | null
           time?: string | null
@@ -817,6 +853,7 @@ export type Database = {
           event_type: string
           id: string
           location: string | null
+          season: string | null
           time_slot: string
           title: string
         }
@@ -829,6 +866,7 @@ export type Database = {
           event_type: string
           id?: string
           location?: string | null
+          season?: string | null
           time_slot: string
           title: string
         }
@@ -841,6 +879,7 @@ export type Database = {
           event_type?: string
           id?: string
           location?: string | null
+          season?: string | null
           time_slot?: string
           title?: string
         }
@@ -862,6 +901,7 @@ export type Database = {
           id: string
           items: string
           meal_type: string
+          season: string | null
         }
         Insert: {
           allergens?: string | null
@@ -870,6 +910,7 @@ export type Database = {
           id?: string
           items: string
           meal_type: string
+          season?: string | null
         }
         Update: {
           allergens?: string | null
@@ -878,6 +919,7 @@ export type Database = {
           id?: string
           items?: string
           meal_type?: string
+          season?: string | null
         }
         Relationships: []
       }
@@ -890,6 +932,7 @@ export type Database = {
           instructor: string | null
           notes: string | null
           schedule_periods: string[] | null
+          season: string | null
           sport_name: string
           start_date: string | null
           updated_at: string | null
@@ -902,6 +945,7 @@ export type Database = {
           instructor?: string | null
           notes?: string | null
           schedule_periods?: string[] | null
+          season?: string | null
           sport_name: string
           start_date?: string | null
           updated_at?: string | null
@@ -914,6 +958,7 @@ export type Database = {
           instructor?: string | null
           notes?: string | null
           schedule_periods?: string[] | null
+          season?: string | null
           sport_name?: string
           start_date?: string | null
           updated_at?: string | null
@@ -942,7 +987,10 @@ export type Database = {
           home_away: string | null
           id: string
           location: string | null
+          meal_notes: string | null
+          meal_options: string[] | null
           opponent: string | null
+          season: string | null
           sport_type: string
           team: string | null
           time: string | null
@@ -961,7 +1009,10 @@ export type Database = {
           home_away?: string | null
           id?: string
           location?: string | null
+          meal_notes?: string | null
+          meal_options?: string[] | null
           opponent?: string | null
+          season?: string | null
           sport_type: string
           team?: string | null
           time?: string | null
@@ -980,7 +1031,10 @@ export type Database = {
           home_away?: string | null
           id?: string
           location?: string | null
+          meal_notes?: string | null
+          meal_options?: string[] | null
           opponent?: string | null
+          season?: string | null
           sport_type?: string
           team?: string | null
           time?: string | null
@@ -1172,6 +1226,7 @@ export type Database = {
           evaluator: string | null
           id: string
           rating: number | null
+          season: string | null
           staff_id: string | null
           supervisor_id: string | null
         }
@@ -1183,6 +1238,7 @@ export type Database = {
           evaluator?: string | null
           id?: string
           rating?: number | null
+          season?: string | null
           staff_id?: string | null
           supervisor_id?: string | null
         }
@@ -1194,6 +1250,7 @@ export type Database = {
           evaluator?: string | null
           id?: string
           rating?: number | null
+          season?: string | null
           staff_id?: string | null
           supervisor_id?: string | null
         }
@@ -1268,6 +1325,7 @@ export type Database = {
           meal: string | null
           name: string
           return_time: string | null
+          season: string | null
           sports_event_id: string | null
           status: string | null
           transportation_type: string | null
@@ -1287,6 +1345,7 @@ export type Database = {
           meal?: string | null
           name: string
           return_time?: string | null
+          season?: string | null
           sports_event_id?: string | null
           status?: string | null
           transportation_type?: string | null
@@ -1306,6 +1365,7 @@ export type Database = {
           meal?: string | null
           name?: string
           return_time?: string | null
+          season?: string | null
           sports_event_id?: string | null
           status?: string | null
           transportation_type?: string | null
@@ -1360,7 +1420,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "staff" | "viewer"
+      app_role: "admin" | "staff" | "viewer" | "division_leader" | "specialist"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1488,7 +1548,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "staff", "viewer"],
+      app_role: ["admin", "staff", "viewer", "division_leader", "specialist"],
     },
   },
 } as const
