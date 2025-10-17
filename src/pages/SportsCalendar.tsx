@@ -56,6 +56,8 @@ export default function SportsCalendar() {
     team: "",
     opponent: "",
     division_ids: [] as string[],
+    division_provides_coach: false,
+    division_provides_ref: false,
   });
   const { toast } = useToast();
 
@@ -132,13 +134,15 @@ export default function SportsCalendar() {
       title: formData.title,
       description: formData.description,
       sport_type: formData.sport_type === "Other" ? "Other" : formData.sport_type,
-      custom_sport_type: formData.sport_type === "Other" ? formData.custom_sport_type : null,
+      custom_sport_type: formData.sport_type === "Other" || formData.event_type === "Other" ? formData.custom_sport_type : null,
       event_type: formData.event_type || null,
       time: formData.time,
       location: formData.location,
       team: formData.team,
       opponent: formData.opponent,
       division_id: formData.division_ids.length === 1 ? formData.division_ids[0] : null,
+      division_provides_coach: formData.division_provides_coach,
+      division_provides_ref: formData.division_provides_ref,
     };
 
     if (editingEvent) {
@@ -184,7 +188,7 @@ export default function SportsCalendar() {
         await supabase.from("sports_calendar_divisions").insert(junctionData);
       }
 
-      // Create pending trip in transportation module
+      // Create pending trip in transportation module linked to this sports event
       const tripData = {
         name: formData.title,
         date: formData.event_date,
@@ -192,7 +196,8 @@ export default function SportsCalendar() {
         event_type: formData.sport_type === "Other" ? formData.custom_sport_type : formData.sport_type,
         destination: formData.location || null,
         departure_time: formData.time || null,
-        status: "pending"
+        status: "pending",
+        sports_event_id: newEvent.id,
       };
 
       await supabase.from("trips").insert(tripData);
@@ -216,6 +221,8 @@ export default function SportsCalendar() {
       team: "",
       opponent: "",
       division_ids: [],
+      division_provides_coach: false,
+      division_provides_ref: false,
     });
     setEditingEvent(null);
     setShowDialog(false);
@@ -238,6 +245,8 @@ export default function SportsCalendar() {
       team: event.team || "",
       opponent: event.opponent || "",
       division_ids: divisionIds,
+      division_provides_coach: event.division_provides_coach || false,
+      division_provides_ref: event.division_provides_ref || false,
     });
     setShowDialog(true);
   };
@@ -278,9 +287,9 @@ export default function SportsCalendar() {
   const getRosterIndicatorClass = (eventId: string) => {
     const count = getRosterCount(eventId);
     if (count === 0) {
-      return "border-2 border-red-500 bg-red-50 dark:bg-red-950/20";
+      return "border-l-4 border-red-500 bg-red-50 dark:bg-red-950/20";
     }
-    return "border-2 border-green-500 bg-green-50 dark:bg-green-950/20";
+    return "border-l-4 border-green-500 bg-green-50 dark:bg-green-950/20";
   };
 
   const uniqueSports = Array.from(new Set(events.map(e => getDisplaySport(e)))).filter(Boolean).sort();
@@ -756,19 +765,28 @@ export default function SportsCalendar() {
             )}
 
             <div className="space-y-2">
-              <Label>Event Type (optional)</Label>
-              <Select value={formData.event_type} onValueChange={(value) => setFormData({ ...formData, event_type: value })}>
+              <Label>Event Type</Label>
+              <Select value={formData.event_type} onValueChange={(value) => setFormData({ ...formData, event_type: value })} required>
                 <SelectTrigger>
                   <SelectValue placeholder="Select event type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Game">Game</SelectItem>
-                  <SelectItem value="Practice">Practice</SelectItem>
-                  <SelectItem value="Tournament">Tournament</SelectItem>
-                  <SelectItem value="Scrimmage">Scrimmage</SelectItem>
+                  <SelectItem value="WC One Day Tournament">WC One Day Tournament</SelectItem>
+                  <SelectItem value="WC Knock Out Tournament">WC Knock Out Tournament</SelectItem>
+                  <SelectItem value="Exhibition/Friendly">Exhibition/Friendly</SelectItem>
+                  <SelectItem value="Invitational">Invitational</SelectItem>
                   <SelectItem value="Other">Other</SelectItem>
                 </SelectContent>
               </Select>
+              {formData.event_type === "Other" && (
+                <Input
+                  placeholder="Specify event type"
+                  value={formData.custom_sport_type}
+                  onChange={(e) => setFormData({ ...formData, custom_sport_type: e.target.value })}
+                  required
+                  className="mt-2"
+                />
+              )}
             </div>
 
             <div className="space-y-2">
@@ -837,6 +855,46 @@ export default function SportsCalendar() {
               />
             </div>
 
+            <div className="space-y-3 border-t pt-4">
+              <Label className="text-base font-semibold">Staff Assignment</Label>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="division-coach"
+                  checked={formData.division_provides_coach}
+                  onCheckedChange={(checked) =>
+                    setFormData({
+                      ...formData,
+                      division_provides_coach: checked as boolean,
+                    })
+                  }
+                />
+                <label
+                  htmlFor="division-coach"
+                  className="text-sm cursor-pointer"
+                >
+                  Division will provide coach
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="division-ref"
+                  checked={formData.division_provides_ref}
+                  onCheckedChange={(checked) =>
+                    setFormData({
+                      ...formData,
+                      division_provides_ref: checked as boolean,
+                    })
+                  }
+                />
+                <label
+                  htmlFor="division-ref"
+                  className="text-sm cursor-pointer"
+                >
+                  Division will provide ref
+                </label>
+              </div>
+            </div>
+
             <div className="flex gap-2 justify-end">
               <Button type="button" variant="outline" onClick={() => { setShowDialog(false); resetForm(); }}>
                 Cancel
@@ -869,7 +927,14 @@ export default function SportsCalendar() {
           eventId={managingRoster.id}
           eventTitle={managingRoster.title}
           open={!!managingRoster}
-          onOpenChange={(open) => !open && setManagingRoster(null)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setManagingRoster(null);
+              fetchEvents(); // Refresh to update roster counts
+            }
+          }}
+          divisionProvidesCoach={events.find(e => e.id === managingRoster.id)?.division_provides_coach}
+          divisionProvidesRef={events.find(e => e.id === managingRoster.id)?.division_provides_ref}
         />
       )}
     </div>

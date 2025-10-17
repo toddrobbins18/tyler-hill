@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Calendar } from "@/components/ui/calendar";
 import { format, isSameDay } from "date-fns";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export default function Transportation() {
   const [trips, setTrips] = useState<any[]>([]);
@@ -38,6 +39,8 @@ export default function Transportation() {
   const [filterTransportType, setFilterTransportType] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"date" | "type" | "destination" | "status">("date");
+  const [viewingRoster, setViewingRoster] = useState<any>(null);
+  const [rosterData, setRosterData] = useState<any>(null);
 
   useEffect(() => {
     fetchTrips();
@@ -60,13 +63,69 @@ export default function Transportation() {
     setLoading(true);
     const { data, error } = await supabase
       .from("trips")
-      .select("*")
+      .select(`
+        *,
+        sports_event:sports_calendar!sports_event_id(
+          id,
+          title,
+          sport_type,
+          custom_sport_type
+        )
+      `)
       .order("date", { ascending: false });
 
     if (!error && data) {
-      setTrips(data);
+      // Fetch roster counts for sports events
+      const sportsEventIds = data.filter(t => t.sports_event_id).map(t => t.sports_event_id);
+      if (sportsEventIds.length > 0) {
+        const { data: rosterCounts } = await supabase
+          .from("sports_event_roster")
+          .select("event_id")
+          .in("event_id", sportsEventIds);
+
+        const counts: Record<string, number> = {};
+        rosterCounts?.forEach((item) => {
+          counts[item.event_id] = (counts[item.event_id] || 0) + 1;
+        });
+
+        // Attach roster counts to trips
+        const tripsWithRoster = data.map(trip => ({
+          ...trip,
+          rosterCount: trip.sports_event_id ? (counts[trip.sports_event_id] || 0) : null
+        }));
+        setTrips(tripsWithRoster);
+      } else {
+        setTrips(data);
+      }
     }
     setLoading(false);
+  };
+
+  const handleViewRoster = async (trip: any) => {
+    if (!trip.sports_event_id) return;
+
+    const { data: roster } = await supabase
+      .from("sports_event_roster")
+      .select(`
+        child:children(id, name, age, grade, group_name)
+      `)
+      .eq("event_id", trip.sports_event_id);
+
+    const { data: staff } = await supabase
+      .from("sports_event_staff")
+      .select(`
+        role,
+        staff:staff(id, name, role)
+      `)
+      .eq("event_id", trip.sports_event_id);
+
+    setRosterData({
+      trip,
+      children: roster?.map(r => r.child) || [],
+      coaches: staff?.filter(s => s.role === "coach").map(s => s.staff) || [],
+      refs: staff?.filter(s => s.role === "ref").map(s => s.staff) || [],
+    });
+    setViewingRoster(trip);
   };
 
   const handleDelete = async (id: string) => {
@@ -471,6 +530,30 @@ export default function Transportation() {
                     </div>
                   </div>
                 </div>
+
+                {trip.sports_event_id && trip.rosterCount !== null && (
+                  <div className="mt-4 pt-4 border-t">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${trip.rosterCount === 0 ? 'bg-red-100 dark:bg-red-950' : 'bg-green-100 dark:bg-green-950'}`}>
+                          <Users className={`h-5 w-5 ${trip.rosterCount === 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`} />
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Sports Event Roster</p>
+                          <p className="text-lg font-semibold">{trip.rosterCount} {trip.rosterCount === 1 ? 'camper' : 'campers'}</p>
+                        </div>
+                      </div>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleViewRoster(trip)}
+                      >
+                        View Roster
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {(trip.meal || trip.event_type || trip.event_length || trip.transportation_type || trip.driver) && (
                   <div className="mt-4 pt-4 border-t grid grid-cols-2 gap-4 text-sm">
                     {trip.meal && (
@@ -549,6 +632,76 @@ export default function Transportation() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* View Roster Dialog */}
+      {viewingRoster && rosterData && (
+        <Dialog open={!!viewingRoster} onOpenChange={() => { setViewingRoster(null); setRosterData(null); }}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Sports Event Roster: {viewingRoster.name}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-6">
+              {/* Campers Section */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Campers ({rosterData.children.length})
+                </h3>
+                {rosterData.children.length > 0 ? (
+                  <div className="space-y-2">
+                    {rosterData.children.map((child: any) => (
+                      <div key={child.id} className="p-3 bg-muted rounded-lg flex items-center justify-between">
+                        <span className="font-medium">{child.name}</span>
+                        <div className="flex gap-4 text-sm text-muted-foreground">
+                          {child.age && <span>Age: {child.age}</span>}
+                          {child.grade && <span>Grade: {child.grade}</span>}
+                          {child.group_name && <span>Group: {child.group_name}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No campers in roster</p>
+                )}
+              </div>
+
+              {/* Coaches Section */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3">Coaches ({rosterData.coaches.length})</h3>
+                {rosterData.coaches.length > 0 ? (
+                  <div className="space-y-2">
+                    {rosterData.coaches.map((coach: any) => (
+                      <div key={coach.id} className="p-3 bg-muted rounded-lg flex items-center justify-between">
+                        <span className="font-medium">{coach.name}</span>
+                        {coach.role && <Badge variant="secondary">{coach.role}</Badge>}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No coaches assigned</p>
+                )}
+              </div>
+
+              {/* Refs Section */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3">Referees ({rosterData.refs.length})</h3>
+                {rosterData.refs.length > 0 ? (
+                  <div className="space-y-2">
+                    {rosterData.refs.map((ref: any) => (
+                      <div key={ref.id} className="p-3 bg-muted rounded-lg flex items-center justify-between">
+                        <span className="font-medium">{ref.name}</span>
+                        {ref.role && <Badge variant="secondary">{ref.role}</Badge>}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No referees assigned</p>
+                )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
