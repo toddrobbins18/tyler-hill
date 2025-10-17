@@ -62,7 +62,7 @@ export default function SpecialEventsActivities() {
         *,
         division:divisions(id, name, gender, sort_order)
       `)
-      .eq("season", selectedSeason)
+      .or(`season.eq.${selectedSeason},season.is.null`)
       .gte("event_date", selectedDate)
       .order("event_date", { ascending: true })
       .order("time_slot", { ascending: true });

@@ -76,7 +76,7 @@ export default function ActivitiesFieldTrips() {
         *,
         division:divisions(id, name, gender, sort_order)
       `)
-      .eq("season", currentSeason)
+      .or(`season.eq.${currentSeason},season.is.null`)
       .order("event_date", { ascending: true });
 
     if (error) {

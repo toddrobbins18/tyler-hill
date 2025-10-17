@@ -60,7 +60,7 @@ export default function RainyDaySchedule() {
     const { data, error } = await supabase
       .from("rainy_day_schedule")
       .select("*")
-      .eq("season", selectedSeason)
+      .or(`season.eq.${selectedSeason},season.is.null`)
       .order("date", { ascending: true });
 
     if (!error && data) {

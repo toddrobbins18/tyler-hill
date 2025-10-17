@@ -50,7 +50,7 @@ export default function SpecialMeals() {
     const { data, error } = await supabase
       .from("special_meals")
       .select("*")
-      .eq("season", selectedSeason)
+      .or(`season.eq.${selectedSeason},season.is.null`)
       .order("date", { ascending: true });
 
     if (!error && data) {

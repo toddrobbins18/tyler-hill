@@ -44,7 +44,7 @@ export default function Roster() {
         *,
         division:divisions(id, name, gender, sort_order)
       `)
-      .eq("season", currentSeason)
+      .or(`season.eq.${currentSeason},season.is.null`)
       .order("name");
     
     if (!error && data) {

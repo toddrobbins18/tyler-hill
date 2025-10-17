@@ -42,7 +42,7 @@ export default function IncidentReports() {
     const { data, error } = await supabase
       .from("incident_reports")
       .select("*, children(name)")
-      .eq("season", selectedSeason)
+      .or(`season.eq.${selectedSeason},season.is.null`)
       .order("date", { ascending: false });
 
     if (error) {

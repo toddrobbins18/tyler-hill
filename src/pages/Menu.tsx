@@ -54,7 +54,7 @@ export default function Menu() {
     const { data, error } = await supabase
       .from("menu_items")
       .select("*")
-      .eq("season", selectedSeason)
+      .or(`season.eq.${selectedSeason},season.is.null`)
       .order("date", { ascending: false })
       .order("meal_type");
 

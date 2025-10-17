@@ -92,7 +92,7 @@ export default function SportsCalendar() {
         division:divisions(id, name, gender, sort_order),
         sports_calendar_divisions(division_id, division:divisions(id, name, gender, sort_order))
       `)
-      .eq("season", currentSeason)
+      .or(`season.eq.${currentSeason},season.is.null`)
       .order("event_date", { ascending: true });
 
     if (error) {

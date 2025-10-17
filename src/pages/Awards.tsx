@@ -58,7 +58,7 @@ export default function Awards() {
           name
         )
       `)
-      .eq("season", currentSeason)
+      .or(`season.eq.${currentSeason},season.is.null`)
       .order("date", { ascending: false });
 
     if (!error && data) {
