@@ -41,3 +41,12 @@ export function useSeasonContext() {
   }
   return context;
 }
+
+// Alias for compatibility
+export function useSeason() {
+  const context = useSeasonContext();
+  return {
+    selectedSeason: context.currentSeason,
+    setSelectedSeason: context.setCurrentSeason,
+  };
+}

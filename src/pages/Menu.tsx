@@ -15,6 +15,8 @@ import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useSeason } from "@/contexts/SeasonContext";
+import SeasonSelector from "@/components/SeasonSelector";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -28,6 +30,7 @@ export default function Menu() {
   const [calendarView, setCalendarView] = useState<View>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const { toast } = useToast();
+  const { selectedSeason } = useSeason();
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -45,12 +48,13 @@ export default function Menu() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [selectedSeason]);
 
   const fetchMenuItems = async () => {
     const { data, error } = await supabase
       .from("menu_items")
       .select("*")
+      .eq("season", selectedSeason)
       .order("date", { ascending: false })
       .order("meal_type");
 
@@ -138,6 +142,7 @@ export default function Menu() {
           <p className="text-muted-foreground">Manage daily meal menus</p>
         </div>
         <div className="flex gap-2">
+          <SeasonSelector />
           <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
             <ToggleGroupItem value="calendar" aria-label="Calendar view">
               <CalendarIcon className="h-4 w-4" />

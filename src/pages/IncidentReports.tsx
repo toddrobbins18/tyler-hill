@@ -9,6 +9,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import AddIncidentDialog from "@/components/dialogs/AddIncidentDialog";
 import EditIncidentDialog from "@/components/dialogs/EditIncidentDialog";
 import { CSVUploader } from "@/components/CSVUploader";
+import { useSeason } from "@/contexts/SeasonContext";
+import SeasonSelector from "@/components/SeasonSelector";
 
 export default function IncidentReports() {
   const [incidents, setIncidents] = useState<any[]>([]);
@@ -17,6 +19,7 @@ export default function IncidentReports() {
   const [editingIncident, setEditingIncident] = useState<any>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const { toast } = useToast();
+  const { selectedSeason } = useSeason();
 
   useEffect(() => {
     fetchIncidents();
@@ -33,12 +36,13 @@ export default function IncidentReports() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [selectedSeason]);
 
   const fetchIncidents = async () => {
     const { data, error } = await supabase
       .from("incident_reports")
       .select("*, children(name)")
+      .eq("season", selectedSeason)
       .order("date", { ascending: false });
 
     if (error) {
@@ -86,6 +90,7 @@ export default function IncidentReports() {
           <p className="text-muted-foreground">Track and manage incident reports</p>
         </div>
         <div className="flex gap-2">
+          <SeasonSelector />
           <CSVUploader tableName="incident_reports" onUploadComplete={fetchIncidents} />
           <Button onClick={() => setShowAddDialog(true)}>
             <Plus className="h-4 w-4 mr-2" />

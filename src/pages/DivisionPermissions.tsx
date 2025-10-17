@@ -70,7 +70,9 @@ export default function DivisionPermissions() {
     // Transform users data to include role
     const usersWithRoles = usersData?.map(user => ({
       ...user,
-      role: (user.user_roles as any)?.role || 'viewer'
+      role: Array.isArray(user.user_roles) 
+        ? (user.user_roles[0] as any)?.role 
+        : (user.user_roles as any)?.role || 'viewer'
     })) || [];
 
     setDivisions(divisionsData || []);

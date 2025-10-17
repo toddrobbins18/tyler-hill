@@ -15,6 +15,8 @@ import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useSeason } from "@/contexts/SeasonContext";
+import SeasonSelector from "@/components/SeasonSelector";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -35,6 +37,7 @@ export default function SpecialMeals() {
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [calendarView, setCalendarView] = useState<View>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
+  const { selectedSeason } = useSeason();
   const [formData, setFormData] = useState({
     date: "",
     meal_type: "breakfast",
@@ -47,6 +50,7 @@ export default function SpecialMeals() {
     const { data, error } = await supabase
       .from("special_meals")
       .select("*")
+      .eq("season", selectedSeason)
       .order("date", { ascending: true });
 
     if (!error && data) {
@@ -64,7 +68,7 @@ export default function SpecialMeals() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [selectedSeason]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,6 +157,7 @@ export default function SpecialMeals() {
           <p className="text-muted-foreground">Plan and manage special dietary events</p>
         </div>
         <div className="flex gap-2">
+          <SeasonSelector />
           <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
             <ToggleGroupItem value="calendar" aria-label="Calendar view">
               <CalendarIcon className="h-4 w-4" />

@@ -13,6 +13,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CSVUploader } from "@/components/CSVUploader";
 import { formatTime12Hour } from "@/lib/utils";
+import { useSeason } from "@/contexts/SeasonContext";
+import SeasonSelector from "@/components/SeasonSelector";
 
 export default function SpecialEventsActivities() {
   const [events, setEvents] = useState<any[]>([]);
@@ -33,6 +35,7 @@ export default function SpecialEventsActivities() {
     division_id: "",
   });
   const { toast } = useToast();
+  const { selectedSeason } = useSeason();
 
   useEffect(() => {
     fetchEvents();
@@ -50,7 +53,7 @@ export default function SpecialEventsActivities() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedDate]);
+  }, [selectedDate, selectedSeason]);
 
   const fetchEvents = async () => {
     const { data, error } = await supabase
@@ -59,6 +62,7 @@ export default function SpecialEventsActivities() {
         *,
         division:divisions(id, name, gender, sort_order)
       `)
+      .eq("season", selectedSeason)
       .gte("event_date", selectedDate)
       .order("event_date", { ascending: true })
       .order("time_slot", { ascending: true });
@@ -193,6 +197,7 @@ export default function SpecialEventsActivities() {
           <p className="text-muted-foreground">Special events and evening activities</p>
         </div>
         <div className="flex gap-2">
+          <SeasonSelector />
           <CSVUploader tableName="special_events_activities" onUploadComplete={fetchEvents} />
           <Button onClick={() => setShowDialog(true)}>
             <Plus className="h-4 w-4 mr-2" />
