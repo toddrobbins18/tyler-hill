@@ -204,35 +204,6 @@ export default function Transportation() {
     );
   };
 
-  const handleApprove = async (tripId: string) => {
-    const { error } = await supabase
-      .from("trips")
-      .update({ status: 'approved' })
-      .eq("id", tripId);
-
-    if (error) {
-      toast.error("Failed to approve trip");
-      console.error(error);
-    } else {
-      toast.success("Trip approved - notifications sent!");
-      fetchTrips();
-    }
-  };
-
-  const handleReject = async (tripId: string) => {
-    const { error } = await supabase
-      .from("trips")
-      .update({ status: 'rejected' })
-      .eq("id", tripId);
-
-    if (error) {
-      toast.error("Failed to reject trip");
-      console.error(error);
-    } else {
-      toast.success("Trip rejected");
-      fetchTrips();
-    }
-  };
 
   const getMealBadges = (trip: any) => {
     const mealOptions = trip.sports_event?.meal_options || [];
@@ -485,26 +456,6 @@ export default function Transportation() {
                           {getMealBadges(trip)}
                         </div>
                         <div className="flex items-center gap-2">
-                          {trip.status === 'pending' && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="default"
-                                className="h-8 bg-green-600 hover:bg-green-700"
-                                onClick={() => handleApprove(trip.id)}
-                              >
-                                Approve
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                className="h-8"
-                                onClick={() => handleReject(trip.id)}
-                              >
-                                Reject
-                              </Button>
-                            </>
-                          )}
                           <Button
                             size="icon"
                             variant="ghost"
@@ -583,27 +534,7 @@ export default function Transportation() {
                     {getMealBadges(trip)}
                   </div>
                   <div className="flex items-center gap-2">
-                    {trip.status === 'pending' && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="default"
-                          className="h-8 bg-green-600 hover:bg-green-700"
-                          onClick={() => handleApprove(trip.id)}
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          className="h-8"
-                          onClick={() => handleReject(trip.id)}
-                        >
-                          Reject
-                        </Button>
-                      </>
-                    )}
-                    <Badge 
+                    <Badge
                       variant="outline"
                       className={
                         trip.status === "confirmed" 
