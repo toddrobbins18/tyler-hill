@@ -23,7 +23,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
 
-type EventSource = 'sports_calendar' | 'activities_field_trips' | 'special_events_activities' | 'master_calendar';
+type EventSource = 'sports_calendar' | 'activities_field_trips' | 'special_events_activities';
 
 interface UnifiedEvent {
   id: string;
@@ -69,7 +69,6 @@ export default function MasterCalendar() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sports_calendar' }, () => fetchAllEvents())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'activities_field_trips' }, () => fetchAllEvents())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'special_events_activities' }, () => fetchAllEvents())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'master_calendar' }, () => fetchAllEvents())
       .subscribe();
 
     return () => {
@@ -81,11 +80,10 @@ export default function MasterCalendar() {
     setLoading(true);
     try {
       // Fetch all events in parallel
-      const [sportsData, fieldTripsData, specialEventsData, masterCalData] = await Promise.all([
+      const [sportsData, fieldTripsData, specialEventsData] = await Promise.all([
         supabase.from("sports_calendar").select(`*, division:divisions(id, name, gender), sports_calendar_divisions(division_id, division:divisions(id, name, gender))`).order("event_date", { ascending: true }),
         supabase.from("activities_field_trips").select(`*, division:divisions(id, name, gender)`).order("event_date", { ascending: true }),
-        supabase.from("special_events_activities").select(`*, division:divisions(id, name, gender)`).order("event_date", { ascending: true }),
-        supabase.from("master_calendar").select(`*, division:divisions(id, name, gender)`).order("event_date", { ascending: true })
+        supabase.from("special_events_activities").select(`*, division:divisions(id, name, gender)`).order("event_date", { ascending: true })
       ]);
 
       // Normalize all events to unified format
@@ -140,24 +138,6 @@ export default function MasterCalendar() {
             description: event.description,
             source: 'special_events_activities',
             type: event.event_type || 'Special Event',
-            division: event.division,
-            originalData: event
-          });
-        });
-      }
-
-      // Master Calendar events
-      if (masterCalData.data) {
-        masterCalData.data.forEach((event: any) => {
-          unifiedEvents.push({
-            id: `master_${event.id}`,
-            title: event.title,
-            event_date: event.event_date,
-            time: event.time,
-            location: event.location,
-            description: event.description,
-            source: 'master_calendar',
-            type: event.type || 'Event',
             division: event.division,
             originalData: event
           });
@@ -301,7 +281,6 @@ export default function MasterCalendar() {
       case 'sports_calendar': return <Trophy className="h-4 w-4" />;
       case 'activities_field_trips': return <Users className="h-4 w-4" />;
       case 'special_events_activities': return <Sparkles className="h-4 w-4" />;
-      case 'master_calendar': return <CalendarIcon className="h-4 w-4" />;
     }
   };
 
@@ -310,7 +289,6 @@ export default function MasterCalendar() {
       case 'sports_calendar': return "bg-blue-500/20 text-blue-700 border-blue-500/30";
       case 'activities_field_trips': return "bg-green-500/20 text-green-700 border-green-500/30";
       case 'special_events_activities': return "bg-purple-500/20 text-purple-700 border-purple-500/30";
-      case 'master_calendar': return "bg-orange-500/20 text-orange-700 border-orange-500/30";
     }
   };
 
@@ -319,7 +297,6 @@ export default function MasterCalendar() {
       case 'sports_calendar': return "Sports";
       case 'activities_field_trips': return "Field Trip";
       case 'special_events_activities': return "Special Event";
-      case 'master_calendar': return "General";
     }
   };
 
@@ -328,8 +305,7 @@ export default function MasterCalendar() {
     const colors: Record<EventSource, string> = {
       'sports_calendar': '#3b82f6',
       'activities_field_trips': '#22c55e',
-      'special_events_activities': '#a855f7',
-      'master_calendar': '#f97316'
+      'special_events_activities': '#a855f7'
     };
     
     return {
