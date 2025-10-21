@@ -31,7 +31,7 @@ interface Enrollment {
   end_date: string | null;
   notes: string | null;
   season: string;
-  children?: { name: string; division_id: string; gender: string };
+  children?: { name: string; division_id: string; gender: string } | null;
 }
 
 interface Child {
