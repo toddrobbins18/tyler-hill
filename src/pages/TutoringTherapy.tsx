@@ -13,14 +13,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Calendar as CalendarIcon, Plus, Pencil, Trash2, Search, X, List, CalendarRange, Filter } from "lucide-react";
-import { Calendar as BigCalendar, dateFnsLocalizer } from "react-big-calendar";
-import { parse, startOfWeek, getDay } from "date-fns";
-import { enUS } from "date-fns/locale/en-US";
-import "react-big-calendar/lib/css/react-big-calendar.css";
-
-const locales = { "en-US": enUS };
-const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
+import { Calendar as CalendarIcon, Plus, Pencil, Trash2, Search, X, Filter } from "lucide-react";
 
 interface Enrollment {
   id: string;
@@ -60,7 +53,6 @@ const TutoringTherapy = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEnrollment, setEditingEnrollment] = useState<Enrollment | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
 
   const [formData, setFormData] = useState({
     child_id: "",
@@ -273,30 +265,6 @@ const TutoringTherapy = () => {
     return acc;
   }, {} as Record<string, Enrollment[]>);
 
-  const getDaysWithActivities = () => {
-    const daysSet = new Set<string>();
-    filteredEnrollments.forEach((enrollment) => {
-      if (enrollment.start_date && enrollment.end_date) {
-        const start = new Date(enrollment.start_date);
-        const end = new Date(enrollment.end_date);
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-          daysSet.add(format(d, "yyyy-MM-dd"));
-        }
-      }
-    });
-    return Array.from(daysSet).map((dateStr) => new Date(dateStr));
-  };
-
-  const getActivitiesForDate = (date: Date) => {
-    const dateStr = format(date, "yyyy-MM-dd");
-    return filteredEnrollments.filter((enrollment) => {
-      if (!enrollment.start_date || !enrollment.end_date) return false;
-      const start = format(new Date(enrollment.start_date), "yyyy-MM-dd");
-      const end = format(new Date(enrollment.end_date), "yyyy-MM-dd");
-      return dateStr >= start && dateStr <= end;
-    });
-  };
-
   const activeFilterCount =
     (filterDivision !== "all" ? 1 : 0) +
     (filterGender !== "all" ? 1 : 0) +
@@ -325,22 +293,6 @@ const TutoringTherapy = () => {
           <p className="text-muted-foreground">Manage tutoring and therapy enrollments</p>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant={viewMode === "list" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setViewMode("list")}
-          >
-            <List className="h-4 w-4 mr-2" />
-            List
-          </Button>
-          <Button
-            variant={viewMode === "calendar" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setViewMode("calendar")}
-          >
-            <CalendarRange className="h-4 w-4 mr-2" />
-            Calendar
-          </Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={() => setEditingEnrollment(null)}>
@@ -569,22 +521,7 @@ const TutoringTherapy = () => {
         </CardContent>
       </Card>
 
-      {viewMode === "calendar" ? (
-        <Card>
-          <CardContent className="p-6">
-            <BigCalendar
-              localizer={localizer}
-              events={[]}
-              startAccessor="start"
-              endAccessor="end"
-              style={{ height: 600 }}
-              views={["month"]}
-              defaultView="month"
-            />
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-6">
+      <div className="space-y-6">
           {Object.entries(groupedByService).map(([service, serviceEnrollments]) => (
             <Card key={service}>
               <CardHeader>
@@ -663,7 +600,6 @@ const TutoringTherapy = () => {
             </Card>
           ))}
         </div>
-      )}
 
       <AlertDialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>
         <AlertDialogContent>
