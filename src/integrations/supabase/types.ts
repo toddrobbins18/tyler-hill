@@ -1515,6 +1515,48 @@ export type Database = {
           },
         ]
       }
+      tutoring_therapy: {
+        Row: {
+          child_id: string
+          created_at: string | null
+          end_date: string | null
+          id: string
+          instructor: string | null
+          notes: string | null
+          schedule_periods: string[] | null
+          season: string | null
+          service_type: string
+          start_date: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          child_id: string
+          created_at?: string | null
+          end_date?: string | null
+          id?: string
+          instructor?: string | null
+          notes?: string | null
+          schedule_periods?: string[] | null
+          season?: string | null
+          service_type: string
+          start_date?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          child_id?: string
+          created_at?: string | null
+          end_date?: string | null
+          id?: string
+          instructor?: string | null
+          notes?: string | null
+          schedule_periods?: string[] | null
+          season?: string | null
+          service_type?: string
+          start_date?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string | null
