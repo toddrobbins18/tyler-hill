@@ -455,6 +455,56 @@ export type Database = {
         }
         Relationships: []
       }
+      health_center_admissions: {
+        Row: {
+          admitted_at: string
+          admitted_by: string | null
+          checked_out_at: string | null
+          checked_out_by: string | null
+          child_id: string
+          created_at: string
+          id: string
+          notes: string | null
+          reason: string | null
+          season: string
+          updated_at: string
+        }
+        Insert: {
+          admitted_at?: string
+          admitted_by?: string | null
+          checked_out_at?: string | null
+          checked_out_by?: string | null
+          child_id: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          reason?: string | null
+          season?: string
+          updated_at?: string
+        }
+        Update: {
+          admitted_at?: string
+          admitted_by?: string | null
+          checked_out_at?: string | null
+          checked_out_by?: string | null
+          child_id?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          reason?: string | null
+          season?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "health_center_admissions_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       incident_reports: {
         Row: {
           child_id: string | null

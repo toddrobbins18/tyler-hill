@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList } from "lucide-react";
+import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList, Hospital, Clock, UserCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CSVUploader } from "@/components/CSVUploader";
 import { Calendar } from "@/components/ui/calendar";
@@ -20,10 +20,12 @@ export default function Nurse() {
   const { currentSeason } = useSeasonContext();
   const [children, setChildren] = useState<any[]>([]);
   const [medications, setMedications] = useState<any[]>([]);
+  const [admissions, setAdmissions] = useState<any[]>([]);
   const [selectedChild, setSelectedChild] = useState("");
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [searchQuery, setSearchQuery] = useState("");
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -40,14 +42,20 @@ export default function Nurse() {
   useEffect(() => {
     fetchChildren();
     fetchMedications(selectedDate);
+    fetchAdmissions();
 
-    // Realtime subscription for medication logs
+    // Realtime subscription for medication logs and health center admissions
     const channel = supabase
-      .channel('medication-changes')
+      .channel('medication-and-admissions-changes')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'medication_logs' },
         () => fetchMedications(selectedDate)
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'health_center_admissions' },
+        () => fetchAdmissions()
       )
       .subscribe();
 
@@ -188,6 +196,93 @@ export default function Nurse() {
     fetchMedications();
   };
 
+  const fetchAdmissions = async () => {
+    const { data, error } = await supabase
+      .from("health_center_admissions")
+      .select("*, children(name)")
+      .eq("season", currentSeason)
+      .is("checked_out_at", null)
+      .order("admitted_at", { ascending: false });
+
+    if (error) {
+      toast({ title: "Error fetching admissions", variant: "destructive" });
+      return;
+    }
+    setAdmissions(data || []);
+  };
+
+  const handleAdmit = async (childId: string, reason: string, notes: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    // Check if child is already admitted
+    const { data: existing } = await supabase
+      .from("health_center_admissions")
+      .select("id")
+      .eq("child_id", childId)
+      .is("checked_out_at", null)
+      .maybeSingle();
+
+    if (existing) {
+      toast({ title: "Child is already admitted", variant: "destructive" });
+      return;
+    }
+
+    const { error } = await supabase
+      .from("health_center_admissions")
+      .insert({
+        child_id: childId,
+        admitted_by: user?.id,
+        reason,
+        notes,
+        season: currentSeason,
+      });
+
+    if (error) {
+      toast({ title: "Error admitting child", variant: "destructive" });
+      return;
+    }
+
+    toast({ title: "Child admitted to Health Center" });
+    fetchAdmissions();
+  };
+
+  const handleCheckout = async (admissionId: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const { error } = await supabase
+      .from("health_center_admissions")
+      .update({
+        checked_out_at: new Date().toISOString(),
+        checked_out_by: user?.id,
+      })
+      .eq("id", admissionId);
+
+    if (error) {
+      toast({ title: "Error checking out child", variant: "destructive" });
+      return;
+    }
+
+    toast({ title: "Child checked out successfully" });
+    fetchAdmissions();
+  };
+
+  const getAdmissionDuration = (admittedAt: string) => {
+    const start = new Date(admittedAt);
+    const now = new Date();
+    const diffMs = now.getTime() - start.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (diffHours > 0) {
+      return `${diffHours}h ${diffMins}m`;
+    }
+    return `${diffMins}m`;
+  };
+
+  const filteredChildren = children.filter(child => 
+    child.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -324,9 +419,10 @@ export default function Nurse() {
       {viewMode === 'list' && (
         <>
           <Tabs defaultValue="log" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="log">Daily Log</TabsTrigger>
           <TabsTrigger value="today">Today's Medications</TabsTrigger>
+          <TabsTrigger value="health-center">Health Center</TabsTrigger>
           <TabsTrigger value="add">Add Medication</TabsTrigger>
         </TabsList>
 
@@ -458,6 +554,113 @@ export default function Nurse() {
                   ))}
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="health-center">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Hospital className="h-5 w-5 text-primary" />
+                <CardTitle>Health Center Admissions</CardTitle>
+              </div>
+              <CardDescription>Track overnight admissions to the health center</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Search Bar */}
+              <div className="space-y-2">
+                <Label>Search Children</Label>
+                <Input
+                  placeholder="Search by name..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+
+              {/* Currently Admitted Section */}
+              {admissions.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-lg flex items-center gap-2">
+                    <AlertCircle className="h-5 w-5 text-destructive" />
+                    Currently Admitted ({admissions.length})
+                  </h3>
+                  <div className="grid gap-3">
+                    {admissions.map((admission) => (
+                      <div key={admission.id} className="border rounded-lg p-4 bg-destructive/5">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-lg">{admission.children?.name}</h4>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                              <Clock className="h-4 w-4" />
+                              <span>Admitted {format(new Date(admission.admitted_at), 'MMM d, h:mm a')}</span>
+                              <Badge variant="outline" className="ml-2">
+                                {getAdmissionDuration(admission.admitted_at)}
+                              </Badge>
+                            </div>
+                            {admission.reason && (
+                              <p className="text-sm mt-2"><strong>Reason:</strong> {admission.reason}</p>
+                            )}
+                            {admission.notes && (
+                              <p className="text-sm text-muted-foreground mt-1">{admission.notes}</p>
+                            )}
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => handleCheckout(admission.id)}
+                            className="shrink-0"
+                          >
+                            <UserCheck className="h-4 w-4 mr-2" />
+                            Check Out
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Available Children Section */}
+              <div className="space-y-3">
+                <h3 className="font-semibold text-lg flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-success" />
+                  Available Children
+                </h3>
+                {loading ? (
+                  <p className="text-muted-foreground">Loading...</p>
+                ) : filteredChildren.length === 0 ? (
+                  <p className="text-muted-foreground">No children found</p>
+                ) : (
+                  <div className="grid gap-2">
+                    {filteredChildren
+                      .filter(child => !admissions.some(a => a.child_id === child.id))
+                      .map((child) => (
+                        <div key={child.id} className="border rounded-lg p-3 flex items-center justify-between bg-card hover:bg-accent/50 transition-colors">
+                          <div>
+                            <p className="font-medium">{child.name}</p>
+                            {child.medical_notes && (
+                              <p className="text-xs text-muted-foreground">{child.medical_notes}</p>
+                            )}
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              const reason = prompt("Reason for admission (optional):");
+                              const notes = prompt("Additional notes (optional):");
+                              if (reason !== null) {
+                                handleAdmit(child.id, reason || "", notes || "");
+                              }
+                            }}
+                          >
+                            <Hospital className="h-4 w-4 mr-2" />
+                            Admit
+                          </Button>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
