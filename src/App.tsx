@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
+import { SeasonProvider } from "@/contexts/SeasonContext";
 import SeasonSelector from "@/components/SeasonSelector";
 import Dashboard from "./pages/Dashboard";
 import Roster from "./pages/Roster";
@@ -40,10 +41,11 @@ const queryClient = new QueryClient();
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
+      <SeasonProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
           <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route
@@ -100,6 +102,7 @@ function App() {
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
+      </SeasonProvider>
     </QueryClientProvider>
   );
 }
