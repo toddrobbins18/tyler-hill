@@ -29,6 +29,7 @@ import SportsCalendar from "./pages/SportsCalendar";
 import ActivitiesFieldTrips from "./pages/ActivitiesFieldTrips";
 import SpecialEventsActivities from "./pages/SpecialEventsActivities";
 import SportsAcademy from "./pages/SportsAcademy";
+import TutoringTherapy from "./pages/TutoringTherapy";
 import UserApprovals from "./pages/UserApprovals";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
@@ -81,6 +82,7 @@ const App = () => (
                           <Route path="/special-events" element={<SpecialEventsActivities />} />
                           <Route path="/daily-schedule" element={<SpecialEventsActivities />} />
                           <Route path="/sports-academy" element={<SportsAcademy />} />
+                          <Route path="/tutoring-therapy" element={<TutoringTherapy />} />
                           <Route path="/messages" element={<Messages />} />
                           <Route path="/child/:id" element={<ChildProfile />} />
                           <Route path="/admin" element={<Admin />} />

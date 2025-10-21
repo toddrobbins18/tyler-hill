@@ -1,4 +1,4 @@
-import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree } from "lucide-react";
+import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree, BookOpen } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,6 +32,7 @@ const items = [
   { title: "Sports Calendar", url: "/sports-calendar", icon: Trophy },
   { title: "Staff", url: "/staff", icon: UserCog },
   { title: "Transportation", url: "/transportation", icon: Truck },
+  { title: "Tutoring & Therapy", url: "/tutoring-therapy", icon: BookOpen },
 ];
 
 export function AppSidebar() {

@@ -1555,7 +1555,15 @@ export type Database = {
           start_date?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tutoring_therapy_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
