@@ -9,6 +9,7 @@ import AddTripDialog from "@/components/dialogs/AddTripDialog";
 import EditTripDialog from "@/components/dialogs/EditTripDialog";
 import ManageTripAttendanceDialog from "@/components/dialogs/ManageTripAttendanceDialog";
 import { CSVUploader } from "@/components/CSVUploader";
+import { JSONUploader } from "@/components/JSONUploader";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -326,6 +327,7 @@ export default function Transportation() {
             </Button>
           </div>
           <CSVUploader tableName="trips" onUploadComplete={fetchTrips} />
+          <JSONUploader tableName="trips" onUploadComplete={fetchTrips} />
           <AddTripDialog onSuccess={fetchTrips} />
         </div>
       </div>

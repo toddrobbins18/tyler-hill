@@ -9,6 +9,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import AddIncidentDialog from "@/components/dialogs/AddIncidentDialog";
 import EditIncidentDialog from "@/components/dialogs/EditIncidentDialog";
 import { CSVUploader } from "@/components/CSVUploader";
+import { JSONUploader } from "@/components/JSONUploader";
 import { useSeason } from "@/contexts/SeasonContext";
 import SeasonSelector from "@/components/SeasonSelector";
 
@@ -92,6 +93,7 @@ export default function IncidentReports() {
         <div className="flex gap-2">
           <SeasonSelector />
           <CSVUploader tableName="incident_reports" onUploadComplete={fetchIncidents} />
+          <JSONUploader tableName="incident_reports" onUploadComplete={fetchIncidents} />
           <Button onClick={() => setShowAddDialog(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Add Incident

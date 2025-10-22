@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList, Hospital, Clock, UserCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CSVUploader } from "@/components/CSVUploader";
+import { JSONUploader } from "@/components/JSONUploader";
 import { Calendar } from "@/components/ui/calendar";
 import { format, isBefore, startOfDay, isToday } from "date-fns";
 import { useSeasonContext } from "@/contexts/SeasonContext";
@@ -310,6 +311,7 @@ export default function Nurse() {
             </Button>
           </div>
           <CSVUploader tableName="medication_logs" onUploadComplete={() => fetchMedications(selectedDate)} />
+          <JSONUploader tableName="medication_logs" onUploadComplete={() => fetchMedications(selectedDate)} />
         </div>
       </div>
 

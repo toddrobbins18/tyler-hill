@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import AddStaffDialog from "@/components/dialogs/AddStaffDialog";
 import EditStaffDialog from "@/components/dialogs/EditStaffDialog";
 import CSVUploader from "@/components/CSVUploader";
+import { JSONUploader } from "@/components/JSONUploader";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -115,6 +116,7 @@ export default function Staff() {
         </div>
         <div className="flex gap-2">
           <CSVUploader tableName="staff" onUploadComplete={fetchStaff} />
+          <JSONUploader tableName="staff" onUploadComplete={fetchStaff} />
           <AddStaffDialog onSuccess={fetchStaff} />
         </div>
       </div>

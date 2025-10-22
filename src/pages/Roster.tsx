@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import AddChildDialog from "@/components/dialogs/AddChildDialog";
 import EditChildDialog from "@/components/dialogs/EditChildDialog";
 import CSVUploader from "@/components/CSVUploader";
+import { JSONUploader } from "@/components/JSONUploader";
 import { toast } from "sonner";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import {
@@ -121,6 +122,7 @@ export default function Roster() {
         </div>
         <div className="flex gap-2">
           <CSVUploader tableName="children" onUploadComplete={fetchChildren} />
+          <JSONUploader tableName="children" onUploadComplete={fetchChildren} />
           <AddChildDialog onSuccess={fetchChildren} />
         </div>
       </div>

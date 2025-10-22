@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CSVUploader } from "@/components/CSVUploader";
+import { JSONUploader } from "@/components/JSONUploader";
 import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { enUS } from 'date-fns/locale';
@@ -446,6 +447,7 @@ export default function SportsCalendar() {
             </ToggleGroupItem>
           </ToggleGroup>
           <CSVUploader tableName="sports_calendar" onUploadComplete={fetchEvents} />
+          <JSONUploader tableName="sports_calendar" onUploadComplete={fetchEvents} />
           <Button onClick={() => setShowDialog(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Add Event

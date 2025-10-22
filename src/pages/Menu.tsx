@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { CSVUploader } from "@/components/CSVUploader";
+import { JSONUploader } from "@/components/JSONUploader";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar';
@@ -152,6 +153,7 @@ export default function Menu() {
             </ToggleGroupItem>
           </ToggleGroup>
           <CSVUploader tableName="menu_items" onUploadComplete={fetchMenuItems} />
+          <JSONUploader tableName="menu_items" onUploadComplete={fetchMenuItems} />
           <Dialog open={dialogOpen} onOpenChange={(open) => {
             setDialogOpen(open);
             if (!open) {
