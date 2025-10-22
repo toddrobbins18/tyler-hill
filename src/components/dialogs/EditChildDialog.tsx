@@ -76,6 +76,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
         name: formData.get("name") as string,
         person_id: formData.get("person_id") as string,
         age: formData.get("age") ? parseInt(formData.get("age") as string) : null,
+        date_of_birth: formData.get("date_of_birth") as string || null,
         gender: gender || null,
         category: formData.get("category") as string || null,
         grade: formData.get("grade") as string || null,
@@ -134,6 +135,10 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
             <div>
               <Label htmlFor="age">Age</Label>
               <Input id="age" name="age" type="number" defaultValue={child.age || ""} />
+            </div>
+            <div>
+              <Label htmlFor="date_of_birth">Date of Birth</Label>
+              <Input id="date_of_birth" name="date_of_birth" type="date" defaultValue={child.date_of_birth || ""} />
             </div>
             <div>
               <Label htmlFor="person_id">Person ID *</Label>

@@ -183,6 +183,7 @@ export default function ChildProfile() {
       <Tabs defaultValue="overview" className="space-y-6">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="birthday">Birthday</TabsTrigger>
           <TabsTrigger value="allergies">Allergies</TabsTrigger>
           <TabsTrigger value="achievements">Achievements</TabsTrigger>
           <TabsTrigger value="activities">Activities</TabsTrigger>
@@ -273,6 +274,49 @@ export default function ChildProfile() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="birthday" className="space-y-4">
+          <Card className="shadow-card">
+            <CardHeader>
+              <CardTitle>Birthday Information</CardTitle>
+              <CardDescription>Date of birth and age details</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {child.date_of_birth ? (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+                    <div className="flex items-center gap-3">
+                      <Calendar className="h-8 w-8 text-primary" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Date of Birth</p>
+                        <p className="text-2xl font-bold text-primary">
+                          {new Date(child.date_of_birth).toLocaleDateString('en-US', { 
+                            weekday: 'long', 
+                            year: 'numeric', 
+                            month: 'long', 
+                            day: 'numeric' 
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  {child.age && (
+                    <div className="p-4 rounded-lg bg-muted/50">
+                      <p className="text-sm text-muted-foreground">Current Age</p>
+                      <p className="text-xl font-semibold">{child.age} years old</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p>No birthday information available</p>
+                  <p className="text-sm mt-1">Click "Edit Profile" to add date of birth</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="allergies" className="space-y-4">

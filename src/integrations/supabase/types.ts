@@ -159,6 +159,7 @@ export type Database = {
           allergies: string | null
           category: string | null
           created_at: string | null
+          date_of_birth: string | null
           division_id: string | null
           emergency_contact: string | null
           gender: string | null
@@ -180,6 +181,7 @@ export type Database = {
           allergies?: string | null
           category?: string | null
           created_at?: string | null
+          date_of_birth?: string | null
           division_id?: string | null
           emergency_contact?: string | null
           gender?: string | null
@@ -201,6 +203,7 @@ export type Database = {
           allergies?: string | null
           category?: string | null
           created_at?: string | null
+          date_of_birth?: string | null
           division_id?: string | null
           emergency_contact?: string | null
           gender?: string | null
@@ -1301,6 +1304,7 @@ export type Database = {
       staff: {
         Row: {
           created_at: string | null
+          date_of_birth: string | null
           department: string | null
           email: string | null
           hire_date: string | null
@@ -1315,6 +1319,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          date_of_birth?: string | null
           department?: string | null
           email?: string | null
           hire_date?: string | null
@@ -1329,6 +1334,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          date_of_birth?: string | null
           department?: string | null
           email?: string | null
           hire_date?: string | null
@@ -1595,10 +1601,7 @@ export type Database = {
         Args: { _page_name: string; _user_id: string }
         Returns: boolean
       }
-      get_user_divisions: {
-        Args: { _user_id: string }
-        Returns: string[]
-      }
+      get_user_divisions: { Args: { _user_id: string }; Returns: string[] }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1606,18 +1609,12 @@ export type Database = {
         }
         Returns: boolean
       }
-      is_admin: {
-        Args: { _user_id: string }
-        Returns: boolean
-      }
+      is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_division_leader: {
         Args: { _division_id: string; _user_id: string }
         Returns: boolean
       }
-      is_specialist: {
-        Args: { _user_id: string }
-        Returns: boolean
-      }
+      is_specialist: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "staff" | "viewer" | "division_leader" | "specialist"

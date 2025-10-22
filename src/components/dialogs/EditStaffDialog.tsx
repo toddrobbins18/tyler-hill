@@ -66,6 +66,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
         email: formData.get("email") as string || null,
         phone: formData.get("phone") as string || null,
         hire_date: formData.get("hire_date") as string || null,
+        date_of_birth: formData.get("date_of_birth") as string || null,
         season: formData.get("season") as string || null,
         leader_id: leaderId || null,
       };
@@ -129,6 +130,10 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
           <div>
             <Label htmlFor="hire_date">Hire Date</Label>
             <Input id="hire_date" name="hire_date" type="date" defaultValue={staff.hire_date || ""} />
+          </div>
+          <div>
+            <Label htmlFor="date_of_birth">Date of Birth</Label>
+            <Input id="date_of_birth" name="date_of_birth" type="date" defaultValue={staff.date_of_birth || ""} />
           </div>
           <div>
             <Label htmlFor="season">Season (Year)</Label>
