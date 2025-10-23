@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList, Hospital, Clock, UserCheck } from "lucide-react";
+import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList, Hospital, Clock, UserCheck, Search, ArrowUpDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CSVUploader } from "@/components/CSVUploader";
 import { JSONUploader } from "@/components/JSONUploader";
@@ -20,6 +20,7 @@ import { useSeasonContext } from "@/contexts/SeasonContext";
 export default function Nurse() {
   const { currentSeason } = useSeasonContext();
   const [children, setChildren] = useState<any[]>([]);
+  const [divisions, setDivisions] = useState<any[]>([]);
   const [medications, setMedications] = useState<any[]>([]);
   const [admissions, setAdmissions] = useState<any[]>([]);
   const [selectedChild, setSelectedChild] = useState("");
@@ -27,6 +28,8 @@ export default function Nurse() {
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedDivision, setSelectedDivision] = useState("all");
+  const [sortBy, setSortBy] = useState<'name' | 'division'>('name');
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -42,6 +45,7 @@ export default function Nurse() {
 
   useEffect(() => {
     fetchChildren();
+    fetchDivisions();
     fetchMedications(selectedDate);
     fetchAdmissions();
 
@@ -68,7 +72,10 @@ export default function Nurse() {
   const fetchChildren = async () => {
     const { data, error } = await supabase
       .from("children")
-      .select("*")
+      .select(`
+        *,
+        division:divisions(id, name, gender, sort_order)
+      `)
       .eq("status", "active")
       .order("name");
 
@@ -78,6 +85,19 @@ export default function Nurse() {
     }
     setChildren(data || []);
     setLoading(false);
+  };
+
+  const fetchDivisions = async () => {
+    const { data, error } = await supabase
+      .from("divisions")
+      .select("*")
+      .order("sort_order");
+
+    if (error) {
+      toast({ title: "Error fetching divisions", variant: "destructive" });
+      return;
+    }
+    setDivisions(data || []);
   };
 
   const fetchMedications = async (date?: Date) => {
@@ -280,9 +300,19 @@ export default function Nurse() {
     return `${diffMins}m`;
   };
 
-  const filteredChildren = children.filter(child => 
-    child.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredChildren = children
+    .filter(child => 
+      child.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+      (selectedDivision === "all" || child.division_id === selectedDivision)
+    )
+    .sort((a, b) => {
+      if (sortBy === "division") {
+        const divA = a.division?.sort_order || 999;
+        const divB = b.division?.sort_order || 999;
+        if (divA !== divB) return divA - divB;
+      }
+      return a.name.localeCompare(b.name);
+    });
 
   return (
     <div className="space-y-8">
@@ -315,6 +345,42 @@ export default function Nurse() {
         </div>
       </div>
 
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-wrap gap-4">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by child name..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select value={selectedDivision} onValueChange={setSelectedDivision}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="All Divisions" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Divisions</SelectItem>
+                {divisions.map((div) => (
+                  <SelectItem key={div.id} value={div.id}>
+                    {div.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button 
+              variant="outline"
+              onClick={() => setSortBy(sortBy === "name" ? "division" : "name")}
+            >
+              <ArrowUpDown className="h-4 w-4 mr-2" />
+              Sort by {sortBy === "name" ? "Division" : "Name"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {viewMode === 'calendar' && (
         <div className="grid lg:grid-cols-[350px_1fr] gap-6">
           <Card>
@@ -346,13 +412,20 @@ export default function Nurse() {
                 <p className="text-muted-foreground">No medications scheduled for this date</p>
               ) : (
                 <div className="space-y-4">
-                  {children
+                  {filteredChildren
                     .filter(child => medications.some(med => med.child_id === child.id))
                     .map((child) => {
                       const childMeds = medications.filter(med => med.child_id === child.id);
                       return (
                         <div key={child.id} className="border rounded-lg p-4 space-y-3">
-                          <h3 className="font-semibold">{child.name}</h3>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold">{child.name}</h3>
+                            {child.division?.name && (
+                              <Badge variant="outline" className="text-xs">
+                                {child.division.name}
+                              </Badge>
+                            )}
+                          </div>
                           {childMeds.map((med) => {
                             const isPastDate = isBefore(startOfDay(selectedDate), startOfDay(new Date()));
                             return (
@@ -441,13 +514,20 @@ export default function Nurse() {
                 <p className="text-muted-foreground">No medications scheduled for today</p>
               ) : (
                 <div className="space-y-4">
-                  {children
+                  {filteredChildren
                     .filter(child => medications.some(med => med.child_id === child.id))
                     .map((child) => {
                       const childMeds = medications.filter(med => med.child_id === child.id);
                       return (
                         <div key={child.id} className="border rounded-lg p-4">
-                          <h3 className="font-semibold mb-3">{child.name}</h3>
+                          <div className="flex items-center gap-2 mb-3">
+                            <h3 className="font-semibold">{child.name}</h3>
+                            {child.division?.name && (
+                              <Badge variant="outline" className="text-xs">
+                                {child.division.name}
+                              </Badge>
+                            )}
+                          </div>
                           <div className="space-y-2">
                             {childMeds.map((med) => (
                               <div key={med.id} className="flex items-start gap-3 p-3 bg-muted/50 rounded">
@@ -639,7 +719,14 @@ export default function Nurse() {
                       .map((child) => (
                         <div key={child.id} className="border rounded-lg p-3 flex items-center justify-between bg-card hover:bg-accent/50 transition-colors">
                           <div>
-                            <p className="font-medium">{child.name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium">{child.name}</p>
+                              {child.division?.name && (
+                                <Badge variant="outline" className="text-xs">
+                                  {child.division.name}
+                                </Badge>
+                              )}
+                            </div>
                             {child.medical_notes && (
                               <p className="text-xs text-muted-foreground">{child.medical_notes}</p>
                             )}
@@ -685,9 +772,14 @@ export default function Nurse() {
                       <SelectValue placeholder="Select a child" />
                     </SelectTrigger>
                     <SelectContent>
-                      {children.map((child) => (
+                      {filteredChildren.map((child) => (
                         <SelectItem key={child.id} value={child.id}>
                           {child.name}
+                          {child.division?.name && (
+                            <span className="text-xs text-muted-foreground ml-2">
+                              ({child.division.name})
+                            </span>
+                          )}
                         </SelectItem>
                       ))}
                     </SelectContent>
