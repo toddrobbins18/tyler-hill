@@ -19,7 +19,7 @@ export default function CSVFormatGuide({ open, onOpenChange }: CSVFormatGuidePro
     staff: {
       title: "Staff Directory",
       columns: "name, email, phone, role, department, hire_date, leader_id, status, season",
-      example: "Jane Smith, jane@camp.com, 555-9876, Counselor, Activities, 2024-01-15, <leader_id>, active, Summer 2024",
+      example: "Jane Smith, jane@thenest.com, 555-9876, Counselor, Activities, 2024-01-15, <leader_id>, active, Summer 2024",
       notes: "leader_id must be a valid UUID from staff table. hire_date format: YYYY-MM-DD"
     },
     medication_logs: {

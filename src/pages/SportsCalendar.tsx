@@ -930,7 +930,7 @@ export default function SportsCalendar() {
                 <div className="space-y-2 mt-3">
                   <Label>Meal Notes</Label>
                   <Textarea
-                    placeholder="e.g., Other camp serves lunch"
+                    placeholder="e.g., Other location serves lunch"
                     value={formData.meal_notes}
                     onChange={(e) => setFormData({ ...formData, meal_notes: e.target.value })}
                     rows={2}

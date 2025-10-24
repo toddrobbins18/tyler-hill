@@ -323,7 +323,7 @@ export default function MasterCalendar() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold mb-2">Master Calendar</h1>
-          <p className="text-muted-foreground">Consolidated view of all camp events and activities</p>
+          <p className="text-muted-foreground">Consolidated view of all events and activities for The Nest</p>
         </div>
         <div className="flex gap-2">
           <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>

@@ -239,7 +239,7 @@ export default function ActivitiesFieldTrips() {
             <Palmtree className="h-8 w-8" />
             Activities & Field Trips
           </h1>
-          <p className="text-muted-foreground">Schedule and manage camp activities and field trips</p>
+          <p className="text-muted-foreground">Schedule and manage activities and field trips for The Nest</p>
         </div>
         <div className="flex gap-2">
           <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
@@ -517,7 +517,7 @@ export default function ActivitiesFieldTrips() {
                 <div className="space-y-2 mt-3">
                   <Label>Meal Notes</Label>
                   <Textarea
-                    placeholder="e.g., Other camp serves lunch"
+                    placeholder="e.g., Other location serves lunch"
                     value={formData.meal_notes}
                     onChange={(e) => setFormData({ ...formData, meal_notes: e.target.value })}
                     rows={2}
