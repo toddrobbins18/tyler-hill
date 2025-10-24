@@ -7,16 +7,32 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
 const menuItems = [
+  // Main Navigation Items
   { id: "dashboard", label: "Dashboard", icon: "📊" },
-  { id: "roster", label: "Roster", icon: "👥" },
+  { id: "roster", label: "Camper", icon: "👥" },
   { id: "staff", label: "Staff", icon: "👤" },
-  { id: "notes", label: "Franko Sheet", icon: "🚌" },
+  { id: "notes", label: "Franko Sheet", icon: "📝" },
   { id: "awards", label: "Awards", icon: "🏆" },
   { id: "transportation", label: "Transportation", icon: "🚌" },
   { id: "menu", label: "Menu", icon: "🍽️" },
   { id: "nurse", label: "Nurse Dashboard", icon: "💊" },
   { id: "messages", label: "Messages", icon: "💬" },
-  { id: "admin", label: "Admin", icon: "⚙️" },
+  { id: "activities", label: "Activities & Field Trips", icon: "🌴" },
+  { id: "incidents", label: "Incident Reports", icon: "⚠️" },
+  { id: "calendar", label: "Master Calendar", icon: "📅" },
+  { id: "rainy-day", label: "Rainy Day Schedule", icon: "🌧️" },
+  { id: "special-events", label: "Special Events & Evening Activities", icon: "🎉" },
+  { id: "special-meals", label: "Special Meals", icon: "🍽️" },
+  { id: "sports-academy", label: "Sports Academy", icon: "⚽" },
+  { id: "sports-calendar", label: "Sports Calendar", icon: "🏅" },
+  { id: "tutoring-therapy", label: "Tutoring & Therapy", icon: "📖" },
+  
+  // Admin Items
+  { id: "admin", label: "Admin Panel", icon: "⚙️" },
+  { id: "evaluation-questions", label: "Evaluation Questions", icon: "📋" },
+  { id: "role-permissions", label: "Role Permissions", icon: "🔒" },
+  { id: "division-permissions", label: "Division Permissions", icon: "🔐" },
+  { id: "user-approvals", label: "User Approvals", icon: "✅" },
 ];
 
 const roles = [
