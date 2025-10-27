@@ -76,21 +76,12 @@ export default function UserRoleManagement() {
 
   const deleteUser = async (userId: string, userEmail: string) => {
     try {
-      // Delete user_roles first
-      const { error: rolesError } = await supabase
-        .from("user_roles")
-        .delete()
-        .eq("user_id", userId);
+      // Call edge function to delete auth user (will cascade to profile and user_roles)
+      const { data, error } = await supabase.functions.invoke('delete-user', {
+        body: { userId }
+      });
 
-      if (rolesError) throw rolesError;
-
-      // Delete profile
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .delete()
-        .eq("id", userId);
-
-      if (profileError) throw profileError;
+      if (error) throw error;
 
       toast.success(`User ${userEmail} deleted successfully`);
       fetchUsers();
