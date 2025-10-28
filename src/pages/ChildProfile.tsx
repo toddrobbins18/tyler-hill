@@ -54,14 +54,32 @@ export default function ChildProfile() {
 
       setAwards(awardsData || []);
 
-      // Fetch incident reports for this child
-      const { data: incidentsData } = await supabase
-        .from("incident_reports")
-        .select("*")
-        .eq("child_id", id)
-        .order("date", { ascending: false });
+      // Fetch incident reports for this child through incident_children junction table
+      const { data: incidentLinks } = await supabase
+        .from("incident_children")
+        .select(`
+          incident_reports (
+            id,
+            date,
+            type,
+            severity,
+            description,
+            status,
+            reported_by,
+            tags,
+            season,
+            created_at
+          )
+        `)
+        .eq("child_id", id);
 
-      setIncidents(incidentsData || []);
+      // Flatten the nested structure and sort by date
+      const flattenedIncidents = incidentLinks
+        ?.map(link => link.incident_reports)
+        .filter(Boolean)
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) || [];
+
+      setIncidents(flattenedIncidents);
 
       // Fetch sports roster assignments
       const { data: sportsData } = await supabase
@@ -603,15 +621,35 @@ export default function ChildProfile() {
                               <p className="text-sm text-muted-foreground">Reported by {report.reported_by}</p>
                             )}
                           </div>
-                          <Badge variant="outline" className={
-                            report.severity === "high" ? "bg-destructive/10 text-destructive border-destructive/20" :
-                            report.severity === "medium" ? "bg-warning/10 text-warning border-warning/20" :
-                            "bg-muted"
-                          }>
-                            {report.severity || "low"}
-                          </Badge>
+                          <div className="flex gap-2">
+                            <Badge variant="outline" className={
+                              report.severity === "high" ? "bg-destructive/10 text-destructive border-destructive/20" :
+                              report.severity === "medium" ? "bg-warning/10 text-warning border-warning/20" :
+                              "bg-muted"
+                            }>
+                              {report.severity || "low"}
+                            </Badge>
+                            {report.status && (
+                              <Badge variant={
+                                report.status === "resolved" ? "default" :
+                                report.status === "open" ? "destructive" :
+                                "secondary"
+                              }>
+                                {report.status}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                         <p className="text-sm mb-3">{report.description}</p>
+                        {report.tags && report.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mb-2">
+                            {report.tags.map((tag: string, idx: number) => (
+                              <Badge key={idx} variant="outline" className="text-xs">
+                                {tag}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <Calendar className="h-3 w-3" />
                           <span>{new Date(report.date).toLocaleDateString()}</span>

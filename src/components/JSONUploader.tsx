@@ -198,7 +198,7 @@ export default function JSONUploader({ tableName, onUploadComplete }: JSONUpload
           if (record.description) {
             transformed.description = record.description;
           } else if (record.comments) {
-            transformed.description = "Imported incident - see original data";
+            transformed.description = record.comments;
           } else {
             transformed.description = "No description provided";
           }
