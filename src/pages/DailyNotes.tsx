@@ -1,4 +1,4 @@
-import { Calendar, MapPin, Users, Pencil, Trash2, Truck, Utensils, Bell } from "lucide-react";
+import { Calendar, MapPin, Users, Pencil, Trash2, Truck, Utensils, Bell, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -107,16 +107,95 @@ export default function DailyNotes() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">Franko Sheet</h1>
-          <p className="text-muted-foreground">Today's sports game logistics and transportation schedule</p>
+    <>
+      <style>{`
+        @media print {
+          /* Hide non-printable elements */
+          .no-print, button, [role="dialog"], aside, nav, .sidebar {
+            display: none !important;
+          }
+          
+          /* Print header */
+          @page {
+            margin: 0.5in;
+          }
+          
+          .print-header {
+            display: block !important;
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #000;
+          }
+          
+          /* Reset backgrounds and colors for print */
+          body {
+            background: white !important;
+            color: black !important;
+          }
+          
+          /* Card styling for print */
+          .print-card {
+            break-inside: avoid;
+            page-break-inside: avoid;
+            border: 1px solid #333 !important;
+            background: white !important;
+            margin-bottom: 15px;
+            padding: 15px;
+          }
+          
+          /* Badge styling */
+          .print-badge {
+            border: 1px solid #666 !important;
+            background: white !important;
+            color: black !important;
+            padding: 2px 8px;
+            display: inline-block;
+            margin-right: 5px;
+          }
+          
+          /* Typography adjustments */
+          h1, h2, h3 {
+            color: black !important;
+          }
+          
+          /* Icon visibility */
+          svg {
+            color: black !important;
+          }
+          
+          /* Remove shadows and effects */
+          * {
+            box-shadow: none !important;
+            text-shadow: none !important;
+          }
+        }
+      `}</style>
+      
+      <div className="space-y-6">
+        {/* Hidden print header - only shows when printing */}
+        <div className="print-header hidden">
+          <h1 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0 0 5px 0' }}>Franko Sheet</h1>
+          <p style={{ fontSize: '14px', margin: 0 }}>
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </p>
         </div>
-        {canEdit && (
-          <CSVUploader tableName="sports_calendar" onUploadComplete={fetchNotes} />
-        )}
-      </div>
+
+        <div className="flex items-center justify-between no-print">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground mb-2">Franko Sheet</h1>
+            <p className="text-muted-foreground">Today's sports game logistics and transportation schedule</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button onClick={() => window.print()} variant="outline">
+              <Printer className="h-4 w-4 mr-2" />
+              Print
+            </Button>
+            {canEdit && (
+              <CSVUploader tableName="sports_calendar" onUploadComplete={fetchNotes} />
+            )}
+          </div>
+        </div>
 
       {loading ? (
         <div className="flex justify-center py-12">
@@ -130,38 +209,38 @@ export default function DailyNotes() {
             const tripInfo = Array.isArray(note.trips) ? note.trips[0] : note.trips;
             
             return (
-              <Card key={note.id} className="shadow-card hover:shadow-md transition-all group">
+              <Card key={note.id} className="shadow-card hover:shadow-md transition-all group print-card">
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-3">
                         <CardTitle className="text-xl">{note.title}</CardTitle>
-                        <Badge variant="outline" className="bg-secondary/10 text-secondary-foreground">
+                        <Badge variant="outline" className="bg-secondary/10 text-secondary-foreground print-badge">
                           {note.sport_type}
                         </Badge>
                         {note.home_away && (
                           <Badge 
                             variant="outline" 
-                            className={note.home_away === 'home' 
+                            className={`print-badge ${note.home_away === 'home' 
                               ? 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20' 
-                              : 'bg-pink-500/10 text-pink-700 dark:text-pink-300 border-pink-500/20'}
+                              : 'bg-pink-500/10 text-pink-700 dark:text-pink-300 border-pink-500/20'}`}
                           >
                             {note.home_away.toUpperCase()}
                           </Badge>
                         )}
                         {tripInfo?.status === 'approved' && (
-                          <Badge className="bg-green-600 text-white">
+                          <Badge className="bg-green-600 text-white print-badge">
                             <Bell className="h-3 w-3 mr-1" />
                             Approved
                           </Badge>
                         )}
                         {notificationLogs[note.id] && (
-                          <Badge variant="outline" className="bg-primary/10">
+                          <Badge variant="outline" className="bg-primary/10 print-badge">
                             Notified {notificationLogs[note.id].recipient_count} staff
                           </Badge>
                         )}
                         {divisions.length > 0 && divisions.map((div: any, idx: number) => (
-                          <Badge key={idx} variant="secondary">
+                          <Badge key={idx} variant="secondary" className="print-badge">
                             {div.name}
                           </Badge>
                         ))}
@@ -221,7 +300,7 @@ export default function DailyNotes() {
                     </div>
                     
                     {canEdit && (
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 no-print">
                         <Button
                           size="icon"
                           variant="ghost"
@@ -260,6 +339,7 @@ export default function DailyNotes() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+      </div>
+    </>
   );
 }
