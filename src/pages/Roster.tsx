@@ -50,21 +50,37 @@ export default function Roster() {
 
   const fetchChildren = async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    
+    // Fetch first batch (0-999)
+    const { data: batch1, error: error1 } = await supabase
       .from("children")
       .select(`
         *,
         division:divisions(id, name, gender, sort_order)
       `)
       .order("name")
-      .range(0, 1999);
+      .range(0, 999);
+
+    // Fetch second batch (1000-1999)
+    const { data: batch2, error: error2 } = await supabase
+      .from("children")
+      .select(`
+        *,
+        division:divisions(id, name, gender, sort_order)
+      `)
+      .order("name")
+      .range(1000, 1999);
     
-    if (!error && data) {
-      setChildren(data);
+    // Combine both batches
+    const allData = [...(batch1 || []), ...(batch2 || [])];
+    
+    if (!error1 && !error2 && allData.length > 0) {
+      setChildren(allData);
       // Extract unique seasons
-      const uniqueSeasons = [...new Set(data?.map(child => child.season).filter(Boolean))].sort().reverse();
+      const uniqueSeasons = [...new Set(allData.map(child => child.season).filter(Boolean))].sort().reverse();
       setSeasons(uniqueSeasons as string[]);
     }
+    
     setLoading(false);
   };
 
