@@ -11,7 +11,6 @@ import EditIncidentDialog from "@/components/dialogs/EditIncidentDialog";
 import { CSVUploader } from "@/components/CSVUploader";
 import { JSONUploader } from "@/components/JSONUploader";
 import { useSeason } from "@/contexts/SeasonContext";
-import SeasonSelector from "@/components/SeasonSelector";
 
 export default function IncidentReports() {
   const [incidents, setIncidents] = useState<any[]>([]);
@@ -98,7 +97,6 @@ export default function IncidentReports() {
           <p className="text-muted-foreground">Track and manage incident reports</p>
         </div>
         <div className="flex gap-2">
-          <SeasonSelector />
           <CSVUploader tableName="incident_reports" onUploadComplete={fetchIncidents} />
           <JSONUploader tableName="incident_reports" onUploadComplete={fetchIncidents} />
           <Button onClick={() => setShowAddDialog(true)}>
