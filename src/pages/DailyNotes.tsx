@@ -115,17 +115,31 @@ export default function DailyNotes() {
             display: none !important;
           }
           
-          /* Print header */
+          /* Page setup - compact margins */
           @page {
-            margin: 0.5in;
+            margin: 0.3in;
           }
           
+          /* Print header - elegant & compact */
           .print-header {
             display: block !important;
             text-align: center;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #000;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #ddd;
+          }
+          
+          .print-header h1 {
+            font-size: 18px !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.5px !important;
+            margin: 0 0 5px 0 !important;
+          }
+          
+          .print-header p {
+            font-size: 11px !important;
+            color: #666 !important;
+            margin: 0 !important;
           }
           
           /* Reset backgrounds and colors for print */
@@ -134,34 +148,78 @@ export default function DailyNotes() {
             color: black !important;
           }
           
-          /* Card styling for print */
+          /* Card styling - compact & beautiful */
           .print-card {
             break-inside: avoid;
             page-break-inside: avoid;
-            border: 1px solid #333 !important;
+            border: 1px solid #ccc !important;
+            border-radius: 6px !important;
             background: white !important;
-            margin-bottom: 15px;
-            padding: 15px;
+            margin-bottom: 10px !important;
+            padding: 10px !important;
           }
           
-          /* Badge styling */
+          /* Badge styling - refined */
           .print-badge {
-            border: 1px solid #666 !important;
+            border: 1px solid #999 !important;
+            border-radius: 3px !important;
             background: white !important;
             color: black !important;
-            padding: 2px 8px;
-            display: inline-block;
-            margin-right: 5px;
+            padding: 2px 6px !important;
+            display: inline-block !important;
+            margin-right: 4px !important;
+            font-size: 10px !important;
           }
           
-          /* Typography adjustments */
-          h1, h2, h3 {
+          /* Typography refinements */
+          h3, .text-xl {
+            font-size: 16px !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.3px !important;
+            line-height: 1.3 !important;
+            margin-bottom: 8px !important;
             color: black !important;
           }
           
-          /* Icon visibility */
-          svg {
-            color: black !important;
+          .text-lg, .font-semibold {
+            font-size: 14px !important;
+            font-weight: 600 !important;
+            line-height: 1.3 !important;
+          }
+          
+          .text-sm {
+            font-size: 11px !important;
+            line-height: 1.4 !important;
+          }
+          
+          .text-xs {
+            font-size: 9px !important;
+            line-height: 1.3 !important;
+            color: #666 !important;
+          }
+          
+          /* Icon sizing - compact */
+          svg, .lucide {
+            width: 12px !important;
+            height: 12px !important;
+            color: #666 !important;
+          }
+          
+          /* Spacing adjustments */
+          .gap-2 {
+            gap: 6px !important;
+          }
+          
+          .gap-1 {
+            gap: 4px !important;
+          }
+          
+          .mb-3 {
+            margin-bottom: 8px !important;
+          }
+          
+          .mt-1 {
+            margin-top: 4px !important;
           }
           
           /* Remove shadows and effects */
@@ -175,8 +233,8 @@ export default function DailyNotes() {
       <div className="space-y-6">
         {/* Hidden print header - only shows when printing */}
         <div className="print-header hidden">
-          <h1 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0 0 5px 0' }}>Franko Sheet</h1>
-          <p style={{ fontSize: '14px', margin: 0 }}>
+          <h1>Franko Sheet</h1>
+          <p>
             {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </p>
         </div>
