@@ -57,8 +57,8 @@ export default function Roster() {
         division:divisions(id, name, gender, sort_order)
       `)
       .or(`season.eq.${currentSeason},season.is.null`)
-      .limit(2000)
-      .order("name");
+      .order("name")
+      .range(0, 1999);
     
     if (!error && data) {
       setChildren(data);
