@@ -110,9 +110,32 @@ export default function DailyNotes() {
     <>
       <style>{`
         @media print {
-          /* Hide non-printable elements */
-          .no-print, button, [role="dialog"], aside, nav, .sidebar {
+          /* Hide ALL non-printable elements */
+          .no-print,
+          button,
+          [role="dialog"],
+          aside,
+          nav,
+          header,
+          .sidebar,
+          [data-sidebar],
+          [data-sidebar="sidebar"],
+          [data-sidebar-trigger] {
             display: none !important;
+            visibility: hidden !important;
+          }
+          
+          /* Make main content full width */
+          main {
+            margin: 0 !important;
+            padding: 0.5in !important;
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+          
+          /* Ensure the flex container doesn't break layout */
+          .flex-1 {
+            width: 100% !important;
           }
           
           /* Page setup - compact margins */
