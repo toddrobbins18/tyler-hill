@@ -20,9 +20,9 @@ export default function SeasonSelector() {
 
     if (data) {
       const uniqueSeasons = [...new Set(data.map(d => d.season).filter(Boolean))];
-      if (uniqueSeasons.length > 0) {
-        setAvailableSeasons(uniqueSeasons as string[]);
-      }
+      // Merge with default seasons to ensure 2025 and 2026 are always available
+      const allSeasons = [...new Set([...availableSeasons, ...uniqueSeasons])].sort().reverse();
+      setAvailableSeasons(allSeasons as string[]);
     }
   };
 

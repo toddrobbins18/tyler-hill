@@ -6,7 +6,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Palmtree, Plus, List, Pencil, Trash2, Calendar as CalendarIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useSeasonContext } from "@/contexts/SeasonContext";
-import SeasonSelector from "@/components/SeasonSelector";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -265,7 +264,6 @@ export default function ActivitiesFieldTrips() {
             </h1>
             <p className="text-muted-foreground">Schedule and manage activities and field trips for The Nest</p>
           </div>
-          <SeasonSelector />
         </div>
         <div className="flex gap-2">
           <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>

@@ -6,7 +6,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Trophy, Plus, List, Pencil, Trash2, Calendar as CalendarIcon, UserCheck, Search, X, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useSeasonContext } from "@/contexts/SeasonContext";
-import SeasonSelector from "@/components/SeasonSelector";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -461,7 +460,6 @@ export default function SportsCalendar() {
             </h1>
             <p className="text-muted-foreground">Track sports events and games</p>
           </div>
-          <SeasonSelector />
         </div>
         <div className="flex gap-2">
           <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>

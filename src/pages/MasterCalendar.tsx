@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useSeasonContext } from "@/contexts/SeasonContext";
-import SeasonSelector from "@/components/SeasonSelector";
 import { Calendar as CalendarIcon, Plus, List, Pencil, Trash2, Search, X, Trophy, Users, Star, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -342,7 +341,6 @@ export default function MasterCalendar() {
             <h1 className="text-3xl font-bold mb-2">Master Calendar</h1>
             <p className="text-muted-foreground">Consolidated view of all events and activities for The Nest</p>
           </div>
-          <SeasonSelector />
         </div>
         <div className="flex gap-2">
           <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
