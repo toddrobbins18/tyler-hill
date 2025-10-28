@@ -135,14 +135,25 @@ export default function JSONUploader({ tableName, onUploadComplete }: JSONUpload
         const personIds = data.map((record: any) => record.person_id).filter(Boolean);
         
         if (personIds.length > 0) {
-          toast.loading("Checking for existing records...", { id: 'duplicate-check' });
+          toast.loading(`Checking for existing records (${personIds.length} IDs to check)...`, { id: 'duplicate-check' });
           
-          const { data: existingRecords } = await supabase
-            .from('children')
-            .select('person_id')
-            .in('person_id', personIds);
+          // Check duplicates in batches to avoid query size limits
+          const checkBatchSize = 500;
+          const existingPersonIds = new Set<string>();
           
-          const existingPersonIds = new Set(existingRecords?.map(r => r.person_id) || []);
+          for (let i = 0; i < personIds.length; i += checkBatchSize) {
+            const batch = personIds.slice(i, i + checkBatchSize);
+            const progress = `${i + batch.length}/${personIds.length}`;
+            
+            toast.loading(`Checking duplicates... (${progress})`, { id: 'duplicate-check' });
+            
+            const { data: existingRecords } = await supabase
+              .from('children')
+              .select('person_id')
+              .in('person_id', batch);
+            
+            existingRecords?.forEach(r => existingPersonIds.add(r.person_id));
+          }
           
           const originalLength = data.length;
           data = data.filter((record: any) => !existingPersonIds.has(record.person_id));
@@ -152,6 +163,8 @@ export default function JSONUploader({ tableName, onUploadComplete }: JSONUpload
           
           if (duplicateCount > 0) {
             toast.info(`Found ${duplicateCount} duplicate records. Uploading ${data.length} new records.`);
+          } else {
+            toast.success(`All ${data.length} records are new. Ready to upload.`);
           }
         }
       }
