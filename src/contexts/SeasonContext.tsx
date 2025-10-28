@@ -20,6 +20,14 @@ export function SeasonProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('currentSeason', currentSeason);
   }, [currentSeason]);
 
+  // One-time migration: Update 2025 to 2026 in localStorage
+  useEffect(() => {
+    const storedSeason = localStorage.getItem('currentSeason');
+    if (storedSeason === '2025') {
+      setCurrentSeason('2026');
+    }
+  }, []);
+
   return (
     <SeasonContext.Provider
       value={{
