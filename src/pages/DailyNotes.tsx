@@ -124,9 +124,9 @@ export default function DailyNotes() {
           .print-header {
             display: block !important;
             text-align: center;
-            margin-bottom: 12px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid #ddd;
+            margin-bottom: 12px !important;
+            padding-bottom: 8px !important;
+            border-bottom: 1px solid #ddd !important;
           }
           
           .print-header h1 {
@@ -143,24 +143,38 @@ export default function DailyNotes() {
           }
           
           /* Reset backgrounds and colors for print */
-          body {
+          body, html {
             background: white !important;
             color: black !important;
           }
           
-          /* Card styling - compact & beautiful */
-          .print-card {
-            break-inside: avoid;
-            page-break-inside: avoid;
+          /* Card styling - compact & beautiful - AGGRESSIVE OVERRIDES */
+          .print-card,
+          .print-card > div,
+          .print-card [class*="rounded"],
+          [class*="Card"] {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
             border: 1px solid #ccc !important;
             border-radius: 6px !important;
             background: white !important;
             margin-bottom: 10px !important;
             padding: 10px !important;
+            box-shadow: none !important;
           }
           
-          /* Badge styling - refined */
-          .print-badge {
+          /* Card header specific */
+          .print-card > div:first-child,
+          .print-card [class*="CardHeader"] {
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          
+          /* Badge styling - refined - OVERRIDE ALL BADGE VARIANTS */
+          .print-badge,
+          .print-badge > *,
+          [class*="Badge"],
+          [class*="badge"] {
             border: 1px solid #999 !important;
             border-radius: 3px !important;
             background: white !important;
@@ -168,64 +182,113 @@ export default function DailyNotes() {
             padding: 2px 6px !important;
             display: inline-block !important;
             margin-right: 4px !important;
+            margin-bottom: 2px !important;
             font-size: 10px !important;
+            line-height: 1.2 !important;
+            font-weight: 500 !important;
           }
           
-          /* Typography refinements */
-          h3, .text-xl {
+          /* Typography refinements - TARGET ALL TEXT VARIANTS */
+          .print-card h3,
+          .print-card [class*="text-xl"],
+          .print-card [class*="CardTitle"],
+          h3.text-xl {
             font-size: 16px !important;
             font-weight: 700 !important;
             letter-spacing: 0.3px !important;
             line-height: 1.3 !important;
-            margin-bottom: 8px !important;
+            margin-bottom: 6px !important;
+            margin-top: 0 !important;
             color: black !important;
           }
           
-          .text-lg, .font-semibold {
+          .print-card [class*="text-lg"],
+          .print-card .font-semibold,
+          .print-card span.font-semibold {
             font-size: 14px !important;
             font-weight: 600 !important;
             line-height: 1.3 !important;
           }
           
-          .text-sm {
+          .print-card [class*="text-sm"],
+          .print-card .text-sm {
             font-size: 11px !important;
             line-height: 1.4 !important;
           }
           
-          .text-xs {
+          .print-card [class*="text-xs"],
+          .print-card .text-xs {
             font-size: 9px !important;
             line-height: 1.3 !important;
             color: #666 !important;
+            font-style: italic !important;
           }
           
-          /* Icon sizing - compact */
-          svg, .lucide {
+          /* Icon sizing - compact - OVERRIDE ALL ICONS */
+          .print-card svg,
+          .print-card .lucide,
+          svg.lucide,
+          [class*="lucide"] {
             width: 12px !important;
             height: 12px !important;
+            min-width: 12px !important;
+            min-height: 12px !important;
             color: #666 !important;
+            stroke-width: 2 !important;
+            flex-shrink: 0 !important;
           }
           
-          /* Spacing adjustments */
-          .gap-2 {
+          /* Spacing adjustments - OVERRIDE TAILWIND GAPS */
+          .print-card [class*="gap-2"],
+          .print-card .gap-2,
+          [class*="gap-2"] {
             gap: 6px !important;
           }
           
-          .gap-1 {
+          .print-card [class*="gap-1"],
+          .print-card .gap-1 {
             gap: 4px !important;
           }
           
-          .mb-3 {
-            margin-bottom: 8px !important;
+          .print-card [class*="mb-3"],
+          .print-card .mb-3 {
+            margin-bottom: 6px !important;
           }
           
-          .mt-1 {
+          .print-card [class*="mt-1"],
+          .print-card .mt-1 {
             margin-top: 4px !important;
           }
           
+          .print-card [class*="mt-0"],
+          .print-card .mt-0 {
+            margin-top: 0 !important;
+          }
+          
+          /* Grid/Flex containers in cards */
+          .print-card [class*="grid"],
+          .print-card .grid {
+            gap: 6px !important;
+          }
+          
+          .print-card [class*="flex"],
+          .print-card .flex {
+            gap: 6px !important;
+          }
+          
           /* Remove shadows and effects */
-          * {
+          *, *::before, *::after {
             box-shadow: none !important;
             text-shadow: none !important;
+            transition: none !important;
+            animation: none !important;
+          }
+          
+          /* Food badge specific color override */
+          .print-card [class*="green"] {
+            background: #f0f9f0 !important;
+            color: #2d5016 !important;
+            border-color: #4a7c2f !important;
           }
         }
       `}</style>
