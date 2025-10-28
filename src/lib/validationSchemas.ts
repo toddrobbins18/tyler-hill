@@ -77,13 +77,17 @@ export const menuItemSchema = z.object({
 
 // Incident report validation schema
 export const incidentReportSchema = z.object({
-  child_id: z.string().uuid("Invalid child ID"),
+  child_id: z.string().uuid().optional(),
+  child_ids: z.array(z.string().uuid()).optional(),
   date: z.string().min(1, "Date is required"),
   type: z.string().min(1, "Type is required"),
   description: z.string().min(1, "Description is required"),
   severity: z.string().optional(),
+  tags: z.array(z.string()).optional(),
   reported_by: z.string().optional(),
+  reporter_id: z.string().uuid().optional(),
   status: z.string().optional(),
+  season: z.string().optional(),
 });
 
 // Medication validation schema

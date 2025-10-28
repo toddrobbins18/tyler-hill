@@ -42,7 +42,14 @@ export default function IncidentReports() {
   const fetchIncidents = async () => {
     const { data, error } = await supabase
       .from("incident_reports")
-      .select("*, children(name)")
+      .select(`
+        *,
+        incident_children(
+          child_id,
+          children(name)
+        ),
+        staff(name)
+      `)
       .or(`season.eq.${selectedSeason},season.is.null`)
       .order("date", { ascending: false });
 
@@ -116,7 +123,9 @@ export default function IncidentReports() {
               <CardHeader>
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
-                    <CardTitle className="text-lg">{incident.children?.name}</CardTitle>
+                    <CardTitle className="text-lg">
+                      {incident.incident_children?.map((ic: any) => ic.children?.name).join(", ") || "No children assigned"}
+                    </CardTitle>
                     <CardDescription>{new Date(incident.date).toLocaleDateString()}</CardDescription>
                   </div>
                   <div className="flex gap-1">
@@ -138,18 +147,21 @@ export default function IncidentReports() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant={getSeverityColor(incident.severity)}>
                     {incident.severity || 'Not Set'}
                   </Badge>
                   <Badge variant="outline">{incident.type}</Badge>
+                  {incident.tags?.map((tag: string) => (
+                    <Badge key={tag} variant="secondary">{tag}</Badge>
+                  ))}
                 </div>
                 <p className="text-sm text-muted-foreground line-clamp-3">
                   {incident.description}
                 </p>
-                {incident.reported_by && (
+                {(incident.staff?.name || incident.reported_by) && (
                   <p className="text-xs text-muted-foreground">
-                    Reported by: {incident.reported_by}
+                    Reported by: {incident.staff?.name || incident.reported_by}
                   </p>
                 )}
                 <Badge variant={incident.status === 'open' ? 'default' : 'secondary'}>

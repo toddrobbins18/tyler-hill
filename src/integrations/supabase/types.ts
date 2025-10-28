@@ -508,6 +508,42 @@ export type Database = {
           },
         ]
       }
+      incident_children: {
+        Row: {
+          child_id: string
+          created_at: string | null
+          id: string
+          incident_id: string
+        }
+        Insert: {
+          child_id: string
+          created_at?: string | null
+          id?: string
+          incident_id: string
+        }
+        Update: {
+          child_id?: string
+          created_at?: string | null
+          id?: string
+          incident_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "incident_children_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incident_children_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "incident_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       incident_reports: {
         Row: {
           child_id: string | null
@@ -516,9 +552,11 @@ export type Database = {
           description: string
           id: string
           reported_by: string | null
+          reporter_id: string | null
           season: string | null
           severity: string | null
           status: string | null
+          tags: string[] | null
           type: string
         }
         Insert: {
@@ -528,9 +566,11 @@ export type Database = {
           description: string
           id?: string
           reported_by?: string | null
+          reporter_id?: string | null
           season?: string | null
           severity?: string | null
           status?: string | null
+          tags?: string[] | null
           type: string
         }
         Update: {
@@ -540,9 +580,11 @@ export type Database = {
           description?: string
           id?: string
           reported_by?: string | null
+          reporter_id?: string | null
           season?: string | null
           severity?: string | null
           status?: string | null
+          tags?: string[] | null
           type?: string
         }
         Relationships: [
@@ -551,6 +593,13 @@ export type Database = {
             columns: ["child_id"]
             isOneToOne: false
             referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incident_reports_reporter_id_fkey"
+            columns: ["reporter_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
             referencedColumns: ["id"]
           },
         ]

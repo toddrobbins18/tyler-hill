@@ -129,6 +129,64 @@ export default function JSONUploader({ tableName, onUploadComplete }: JSONUpload
         data = data.map(transformCamperData);
       }
 
+      // Transform MongoDB incident reports format
+      if (tableName === 'incident_reports') {
+        toast.info("Processing incident report format...");
+        data = data.map((record: any) => {
+          const transformed: any = {};
+          
+          // Map campers array to child_ids for junction table insertion
+          if (record.campers && Array.isArray(record.campers)) {
+            transformed.child_ids = record.campers;
+          }
+          
+          // Keep tags array as-is
+          if (record.tags && Array.isArray(record.tags)) {
+            transformed.tags = record.tags;
+          } else {
+            transformed.tags = [];
+          }
+          
+          // Map reporter ObjectId to reporter_id (we'll store the ID as-is for now)
+          if (record.reporter) {
+            transformed.reporter_id = record.reporter;
+          }
+          
+          // Extract description from comments or use existing
+          if (record.description) {
+            transformed.description = record.description;
+          } else if (record.comments) {
+            transformed.description = "Imported incident - see original data";
+          } else {
+            transformed.description = "No description provided";
+          }
+          
+          // Map date format (handle MongoDB date objects)
+          if (record.date) {
+            if (record.date.$date) {
+              transformed.date = new Date(record.date.$date).toISOString().split('T')[0];
+            } else {
+              transformed.date = new Date(record.date).toISOString().split('T')[0];
+            }
+          }
+          
+          // Default type and severity if not provided
+          transformed.type = record.type || "other";
+          transformed.severity = record.severity || "medium";
+          transformed.status = record.status || "open";
+          
+          // Copy over other relevant fields
+          const keepFields = ['reported_by', 'season'];
+          keepFields.forEach(field => {
+            if (record[field] !== undefined) {
+              transformed[field] = record[field];
+            }
+          });
+          
+          return transformed;
+        });
+      }
+
       // Check for duplicates if dealing with children table and person_id exists
       let duplicateCount = 0;
       if (tableName === 'children') {
@@ -245,17 +303,67 @@ export default function JSONUploader({ tableName, onUploadComplete }: JSONUpload
           id: 'batch-upload' 
         });
         
-        const { error: batchError } = await supabase.from(tableName as any).insert(batch as any);
-        
-        if (batchError) {
-          console.error(`Batch ${batchNumber} (records ${recordRange}) failed:`, batchError);
-          batchFailures.push({ 
-            batchNumber, 
-            records: batch,
-            error: batchError.message 
+        // Special handling for incident reports with child_ids
+        if (tableName === 'incident_reports') {
+          const incidentsToInsert = batch.map(record => {
+            const { child_ids, ...incidentData } = record;
+            return incidentData;
           });
+          
+          const { data: insertedIncidents, error: batchError } = await supabase
+            .from('incident_reports')
+            .insert(incidentsToInsert)
+            .select();
+          
+          if (batchError) {
+            console.error(`Batch ${batchNumber} (records ${recordRange}) failed:`, batchError);
+            batchFailures.push({ 
+              batchNumber, 
+              records: batch,
+              error: batchError.message 
+            });
+          } else if (insertedIncidents) {
+            // Now insert into incident_children junction table
+            const junctionRecords: any[] = [];
+            for (let j = 0; j < insertedIncidents.length; j++) {
+              const incident = insertedIncidents[j];
+              const originalRecord = batch[j];
+              if (originalRecord.child_ids && Array.isArray(originalRecord.child_ids)) {
+                for (const child_id of originalRecord.child_ids) {
+                  junctionRecords.push({
+                    incident_id: incident.id,
+                    child_id: child_id
+                  });
+                }
+              }
+            }
+            
+            if (junctionRecords.length > 0) {
+              const { error: junctionError } = await supabase
+                .from('incident_children')
+                .insert(junctionRecords);
+              
+              if (junctionError) {
+                console.error(`Junction table insert failed for batch ${batchNumber}:`, junctionError);
+              }
+            }
+            
+            successCount += batch.length;
+          }
         } else {
-          successCount += batch.length;
+          // Standard insert for other tables
+          const { error: batchError } = await supabase.from(tableName as any).insert(batch as any);
+          
+          if (batchError) {
+            console.error(`Batch ${batchNumber} (records ${recordRange}) failed:`, batchError);
+            batchFailures.push({ 
+              batchNumber, 
+              records: batch,
+              error: batchError.message 
+            });
+          } else {
+            successCount += batch.length;
+          }
         }
       }
 

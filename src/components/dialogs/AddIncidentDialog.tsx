@@ -16,12 +16,16 @@ interface AddIncidentDialogProps {
 
 export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: AddIncidentDialogProps) {
   const [children, setChildren] = useState<any[]>([]);
+  const [staff, setStaff] = useState<any[]>([]);
+  const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
   const [formData, setFormData] = useState({
-    child_id: "",
     date: new Date().toISOString().split('T')[0],
     type: "",
     description: "",
     severity: "medium",
+    reporter_id: "",
     reported_by: "",
     status: "open",
   });
@@ -30,6 +34,7 @@ export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: Add
   useEffect(() => {
     if (open) {
       fetchChildren();
+      fetchStaff();
     }
   }, [open]);
 
@@ -45,30 +50,85 @@ export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: Add
     }
   };
 
+  const fetchStaff = async () => {
+    const { data, error } = await supabase
+      .from("staff")
+      .select("*")
+      .eq("status", "active")
+      .order("name");
+
+    if (!error && data) {
+      setStaff(data);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const { error } = await supabase
-      .from("incident_reports")
-      .insert(formData);
+    if (selectedChildren.length === 0) {
+      toast({ title: "Please select at least one child", variant: "destructive" });
+      return;
+    }
 
-    if (error) {
+    const { data: incident, error: incidentError } = await supabase
+      .from("incident_reports")
+      .insert({ ...formData, tags })
+      .select()
+      .single();
+
+    if (incidentError || !incident) {
       toast({ title: "Error adding incident", variant: "destructive" });
+      return;
+    }
+
+    const childrenInserts = selectedChildren.map(child_id => ({
+      incident_id: incident.id,
+      child_id
+    }));
+
+    const { error: childrenError } = await supabase
+      .from("incident_children")
+      .insert(childrenInserts);
+
+    if (childrenError) {
+      toast({ title: "Error linking children to incident", variant: "destructive" });
       return;
     }
 
     toast({ title: "Incident report added successfully" });
     setFormData({
-      child_id: "",
       date: new Date().toISOString().split('T')[0],
       type: "",
       description: "",
       severity: "medium",
+      reporter_id: "",
       reported_by: "",
       status: "open",
     });
+    setSelectedChildren([]);
+    setTags([]);
+    setTagInput("");
     onSuccess();
     onOpenChange(false);
+  };
+
+  const handleAddTag = () => {
+    if (tagInput.trim() && !tags.includes(tagInput.trim())) {
+      setTags([...tags, tagInput.trim()]);
+      setTagInput("");
+    }
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    setTags(tags.filter(tag => tag !== tagToRemove));
+  };
+
+  const toggleChildSelection = (childId: string) => {
+    setSelectedChildren(prev =>
+      prev.includes(childId)
+        ? prev.filter(id => id !== childId)
+        : [...prev, childId]
+    );
   };
 
   return (
@@ -79,19 +139,28 @@ export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: Add
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label>Child</Label>
-            <Select value={formData.child_id} onValueChange={(value) => setFormData({ ...formData, child_id: value })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a child" />
-              </SelectTrigger>
-              <SelectContent>
-                {children.map((child) => (
-                  <SelectItem key={child.id} value={child.id}>
+            <Label>Children Involved *</Label>
+            <div className="border rounded-md p-2 max-h-48 overflow-y-auto">
+              {children.map((child) => (
+                <div key={child.id} className="flex items-center space-x-2 py-1">
+                  <input
+                    type="checkbox"
+                    id={`child-${child.id}`}
+                    checked={selectedChildren.includes(child.id)}
+                    onChange={() => toggleChildSelection(child.id)}
+                    className="rounded"
+                  />
+                  <label htmlFor={`child-${child.id}`} className="cursor-pointer flex-1">
                     {child.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  </label>
+                </div>
+              ))}
+            </div>
+            {selectedChildren.length > 0 && (
+              <p className="text-sm text-muted-foreground">
+                {selectedChildren.length} child{selectedChildren.length > 1 ? 'ren' : ''} selected
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -147,11 +216,66 @@ export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: Add
           </div>
 
           <div className="space-y-2">
-            <Label>Reported By</Label>
+            <Label>Tags (Optional)</Label>
+            <div className="flex gap-2">
+              <Input
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddTag();
+                  }
+                }}
+                placeholder="Add tag (e.g., Verbal, Physical, Friendship)"
+              />
+              <Button type="button" onClick={handleAddTag} variant="outline">
+                Add
+              </Button>
+            </div>
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1 px-2 py-1 bg-secondary text-secondary-foreground rounded-md text-sm"
+                  >
+                    {tag}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTag(tag)}
+                      className="hover:text-destructive"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label>Staff Reporter</Label>
+            <Select value={formData.reporter_id} onValueChange={(value) => setFormData({ ...formData, reporter_id: value })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select staff member" />
+              </SelectTrigger>
+              <SelectContent>
+                {staff.map((member) => (
+                  <SelectItem key={member.id} value={member.id}>
+                    {member.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Reported By (External)</Label>
             <Input
               value={formData.reported_by}
               onChange={(e) => setFormData({ ...formData, reported_by: e.target.value })}
-              placeholder="Staff member name"
+              placeholder="External reporter name (if not staff)"
             />
           </div>
 
