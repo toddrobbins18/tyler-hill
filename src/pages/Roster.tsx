@@ -22,6 +22,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 export default function Roster() {
   const { currentSeason } = useSeasonContext();
@@ -35,6 +44,8 @@ export default function Roster() {
   const [loading, setLoading] = useState(true);
   const [editingChild, setEditingChild] = useState<string | null>(null);
   const [deletingChild, setDeletingChild] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
   const navigate = useNavigate();
 
   const fetchChildren = async () => {
@@ -46,6 +57,7 @@ export default function Roster() {
         division:divisions(id, name, gender, sort_order)
       `)
       .or(`season.eq.${currentSeason},season.is.null`)
+      .limit(2000)
       .order("name");
     
     if (!error && data) {
@@ -73,6 +85,10 @@ export default function Roster() {
     fetchDivisions();
   }, [currentSeason]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedDivision, selectedSeason, sortBy]);
+
   const filteredChildren = children
     .filter((child) => {
       const matchesSearch = 
@@ -96,6 +112,43 @@ export default function Roster() {
       }
       return a.name.localeCompare(b.name);
     });
+
+  const totalPages = Math.ceil(filteredChildren.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedChildren = filteredChildren.slice(startIndex, endIndex);
+
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    const maxVisiblePages = 5;
+    
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      pages.push(1);
+      
+      if (currentPage > 3) {
+        pages.push('ellipsis-start');
+      }
+      
+      const start = Math.max(2, currentPage - 1);
+      const end = Math.min(totalPages - 1, currentPage + 1);
+      
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+      
+      if (currentPage < totalPages - 2) {
+        pages.push('ellipsis-end');
+      }
+      
+      pages.push(totalPages);
+    }
+    
+    return pages;
+  };
 
   const handleDelete = async (id: string) => {
     const { error } = await supabase
@@ -175,8 +228,14 @@ export default function Roster() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredChildren.map((child) => (
+        <>
+          <div className="flex justify-between items-center text-sm text-muted-foreground mb-4">
+            <span>
+              Showing {filteredChildren.length === 0 ? 0 : startIndex + 1}-{Math.min(endIndex, filteredChildren.length)} of {filteredChildren.length} campers
+            </span>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {paginatedChildren.map((child) => (
             <Card 
               key={child.id} 
               className="shadow-card hover:shadow-md transition-all group"
@@ -240,6 +299,43 @@ export default function Roster() {
             </Card>
           ))}
         </div>
+
+        {totalPages > 1 && (
+          <Pagination className="mt-8">
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                />
+              </PaginationItem>
+              
+              {getPageNumbers().map((page, idx) => (
+                <PaginationItem key={`${page}-${idx}`}>
+                  {typeof page === 'number' ? (
+                    <PaginationLink
+                      onClick={() => setCurrentPage(page)}
+                      isActive={currentPage === page}
+                      className="cursor-pointer"
+                    >
+                      {page}
+                    </PaginationLink>
+                  ) : (
+                    <PaginationEllipsis />
+                  )}
+                </PaginationItem>
+              ))}
+              
+              <PaginationItem>
+                <PaginationNext
+                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        )}
+        </>
       )}
 
       {!loading && filteredChildren.length === 0 && (
