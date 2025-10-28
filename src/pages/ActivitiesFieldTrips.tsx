@@ -70,21 +70,41 @@ export default function ActivitiesFieldTrips() {
   }, [currentSeason]);
 
   const fetchEvents = async () => {
-    const { data, error } = await supabase
+    // Fetch first batch (0-999)
+    const { data: batch1, error: error1 } = await supabase
       .from("activities_field_trips")
       .select(`
         *,
         division:divisions(id, name, gender, sort_order)
       `)
-      .or(`season.eq.${currentSeason},season.is.null`)
-      .order("event_date", { ascending: true });
+      .order("event_date", { ascending: true })
+      .range(0, 999);
 
-    if (error) {
+    // Fetch second batch (1000-1999)
+    const { data: batch2, error: error2 } = await supabase
+      .from("activities_field_trips")
+      .select(`
+        *,
+        division:divisions(id, name, gender, sort_order)
+      `)
+      .order("event_date", { ascending: true })
+      .range(1000, 1999);
+
+    // Combine batches
+    const allData = [...(batch1 || []), ...(batch2 || [])];
+
+    if (error1 || error2) {
       toast({ title: "Error fetching field trips", variant: "destructive" });
       setLoading(false);
       return;
     }
-    setEvents(data || []);
+
+    // Filter by season in JavaScript
+    const filteredData = allData.filter(event => 
+      event.season === currentSeason || event.season === null
+    );
+
+    setEvents(filteredData);
     setLoading(false);
   };
 
@@ -108,6 +128,7 @@ export default function ActivitiesFieldTrips() {
       capacity: formData.capacity ? parseInt(formData.capacity) : null,
       meal_options: formData.meal_options,
       meal_notes: formData.meal_notes || null,
+      season: currentSeason,
     };
 
     if (editingEvent) {
@@ -141,7 +162,8 @@ export default function ActivitiesFieldTrips() {
         departure_time: formData.time || null,
         capacity: formData.capacity ? parseInt(formData.capacity) : null,
         chaperone: formData.chaperone || null,
-        status: "pending"
+        status: "pending",
+        season: currentSeason,
       };
 
       const { error: tripError } = await supabase

@@ -86,21 +86,41 @@ export default function SportsCalendar() {
   }, [currentSeason]);
 
   const fetchEvents = async () => {
-    const { data, error } = await supabase
+    // Fetch first batch (0-999)
+    const { data: batch1, error: error1 } = await supabase
       .from("sports_calendar")
       .select(`
         *,
         division:divisions(id, name, gender, sort_order),
         sports_calendar_divisions(division_id, division:divisions(id, name, gender, sort_order))
       `)
-      .or(`season.eq.${currentSeason},season.is.null`)
-      .order("event_date", { ascending: true });
+      .order("event_date", { ascending: true })
+      .range(0, 999);
 
-    if (error) {
+    // Fetch second batch (1000-1999)
+    const { data: batch2, error: error2 } = await supabase
+      .from("sports_calendar")
+      .select(`
+        *,
+        division:divisions(id, name, gender, sort_order),
+        sports_calendar_divisions(division_id, division:divisions(id, name, gender, sort_order))
+      `)
+      .order("event_date", { ascending: true })
+      .range(1000, 1999);
+
+    // Combine batches
+    const allData = [...(batch1 || []), ...(batch2 || [])];
+
+    if (error1 || error2) {
       toast({ title: "Error fetching events", variant: "destructive" });
       setLoading(false);
       return;
     }
+
+    // Filter by season in JavaScript
+    const filteredData = allData.filter(event => 
+      event.season === currentSeason || event.season === null
+    );
 
     // Fetch roster counts
     const { data: rosterData } = await supabase
@@ -113,7 +133,7 @@ export default function SportsCalendar() {
     });
     setRosterCounts(counts);
 
-    setEvents(data || []);
+    setEvents(filteredData);
     setLoading(false);
   };
 
@@ -153,6 +173,7 @@ export default function SportsCalendar() {
       division_provides_ref: formData.division_provides_ref,
       meal_options: formData.meal_options,
       meal_notes: formData.meal_notes || null,
+      season: currentSeason,
     };
 
     if (editingEvent) {
@@ -208,6 +229,7 @@ export default function SportsCalendar() {
         departure_time: formData.time || null,
         status: "pending",
         sports_event_id: newEvent.id,
+        season: currentSeason,
       };
 
       await supabase.from("trips").insert(tripData);

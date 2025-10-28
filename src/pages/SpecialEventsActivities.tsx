@@ -56,23 +56,45 @@ export default function SpecialEventsActivities() {
   }, [selectedDate, selectedSeason]);
 
   const fetchEvents = async () => {
-    const { data, error } = await supabase
+    // Fetch first batch (0-999)
+    const { data: batch1, error: error1 } = await supabase
       .from("special_events_activities")
       .select(`
         *,
         division:divisions(id, name, gender, sort_order)
       `)
-      .or(`season.eq.${selectedSeason},season.is.null`)
       .gte("event_date", selectedDate)
       .order("event_date", { ascending: true })
-      .order("time_slot", { ascending: true });
+      .order("time_slot", { ascending: true })
+      .range(0, 999);
 
-    if (error) {
+    // Fetch second batch (1000-1999)
+    const { data: batch2, error: error2 } = await supabase
+      .from("special_events_activities")
+      .select(`
+        *,
+        division:divisions(id, name, gender, sort_order)
+      `)
+      .gte("event_date", selectedDate)
+      .order("event_date", { ascending: true })
+      .order("time_slot", { ascending: true })
+      .range(1000, 1999);
+
+    // Combine batches
+    const allData = [...(batch1 || []), ...(batch2 || [])];
+
+    if (error1 || error2) {
       toast({ title: "Error fetching schedule", variant: "destructive" });
       setLoading(false);
       return;
     }
-    setEvents(data || []);
+
+    // Filter by season in JavaScript
+    const filteredData = allData.filter(event => 
+      event.season === selectedSeason || event.season === null
+    );
+
+    setEvents(filteredData);
     setLoading(false);
   };
 
@@ -92,7 +114,8 @@ export default function SpecialEventsActivities() {
 
     const submitData = {
       ...formData,
-      division_id: formData.division_id || null
+      division_id: formData.division_id || null,
+      season: selectedSeason,
     };
 
     if (editingEvent) {

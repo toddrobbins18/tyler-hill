@@ -79,12 +79,20 @@ export default function MasterCalendar() {
   const fetchAllEvents = async () => {
     setLoading(true);
     try {
-      // Fetch all events in parallel
-      const [sportsData, fieldTripsData, specialEventsData] = await Promise.all([
-        supabase.from("sports_calendar").select(`*, division:divisions(id, name, gender), sports_calendar_divisions(division_id, division:divisions(id, name, gender))`).order("event_date", { ascending: true }),
-        supabase.from("activities_field_trips").select(`*, division:divisions(id, name, gender)`).order("event_date", { ascending: true }),
-        supabase.from("special_events_activities").select(`*, division:divisions(id, name, gender)`).order("event_date", { ascending: true })
+      // Fetch all events in parallel with batch fetching
+      const [sportsBatch1, sportsBatch2, fieldTripsBatch1, fieldTripsBatch2, specialBatch1, specialBatch2] = await Promise.all([
+        supabase.from("sports_calendar").select(`*, division:divisions(id, name, gender), sports_calendar_divisions(division_id, division:divisions(id, name, gender))`).order("event_date", { ascending: true }).range(0, 999),
+        supabase.from("sports_calendar").select(`*, division:divisions(id, name, gender), sports_calendar_divisions(division_id, division:divisions(id, name, gender))`).order("event_date", { ascending: true }).range(1000, 1999),
+        supabase.from("activities_field_trips").select(`*, division:divisions(id, name, gender)`).order("event_date", { ascending: true }).range(0, 999),
+        supabase.from("activities_field_trips").select(`*, division:divisions(id, name, gender)`).order("event_date", { ascending: true }).range(1000, 1999),
+        supabase.from("special_events_activities").select(`*, division:divisions(id, name, gender)`).order("event_date", { ascending: true }).range(0, 999),
+        supabase.from("special_events_activities").select(`*, division:divisions(id, name, gender)`).order("event_date", { ascending: true }).range(1000, 1999)
       ]);
+
+      // Combine batches
+      const sportsData = { data: [...(sportsBatch1.data || []), ...(sportsBatch2.data || [])] };
+      const fieldTripsData = { data: [...(fieldTripsBatch1.data || []), ...(fieldTripsBatch2.data || [])] };
+      const specialEventsData = { data: [...(specialBatch1.data || []), ...(specialBatch2.data || [])] };
 
       // Normalize all events to unified format
       const unifiedEvents: UnifiedEvent[] = [];
