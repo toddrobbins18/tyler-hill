@@ -33,7 +33,7 @@ export default function JSONUploader({ tableName, onUploadComplete }: JSONUpload
 
     try {
       const text = await file.text();
-      const data = JSON.parse(text);
+      let data = JSON.parse(text);
 
       if (!Array.isArray(data)) {
         toast.error("JSON file must contain an array of objects");
@@ -47,11 +47,39 @@ export default function JSONUploader({ tableName, onUploadComplete }: JSONUpload
         return;
       }
 
-      // Limit to 1000 records to prevent DoS
-      if (data.length > 1000) {
-        toast.error("JSON file too large. Maximum 1000 records allowed.");
+      // Limit to 2500 records for bulk imports
+      if (data.length > 2500) {
+        toast.error("JSON file too large. Maximum 2500 records allowed.");
         setUploading(false);
         return;
+      }
+
+      // Transform camper data if needed (first/last → name, _id → person_id)
+      const transformCamperData = (record: any) => {
+        if (record.first && record.last) {
+          const transformed: any = {
+            name: `${record.first} ${record.last}`.trim(),
+            person_id: record._id,
+          };
+          
+          // Copy over other fields that might exist
+          const excludeFields = ['first', 'last', '_id', '__v', 'winner_ids'];
+          Object.keys(record).forEach(key => {
+            if (!excludeFields.includes(key)) {
+              transformed[key] = record[key];
+            }
+          });
+          
+          return transformed;
+        }
+        return record;
+      };
+
+      // Auto-detect and transform if needed
+      const needsTransformation = data.some((record: any) => record.first && record.last);
+      if (needsTransformation && tableName === 'children') {
+        toast.info("Detected camper format - transforming data...");
+        data = data.map(transformCamperData);
       }
 
       // Select appropriate schema based on table
@@ -106,11 +134,38 @@ export default function JSONUploader({ tableName, onUploadComplete }: JSONUpload
         return;
       }
 
-      const { error } = await supabase.from(tableName as any).insert(validatedRows as any);
+      // Batch processing for large uploads
+      const batchSize = 100;
+      const totalBatches = Math.ceil(validatedRows.length / batchSize);
+      let successCount = 0;
+      let failedBatches = 0;
 
-      if (error) throw error;
+      for (let i = 0; i < validatedRows.length; i += batchSize) {
+        const batch = validatedRows.slice(i, i + batchSize);
+        const batchNumber = Math.floor(i / batchSize) + 1;
+        
+        toast.loading(`Uploading batch ${batchNumber} of ${totalBatches}...`, { 
+          id: 'batch-upload' 
+        });
+        
+        const { error: batchError } = await supabase.from(tableName as any).insert(batch as any);
+        
+        if (batchError) {
+          console.error(`Batch ${batchNumber} failed:`, batchError);
+          failedBatches++;
+        } else {
+          successCount += batch.length;
+        }
+      }
 
-      toast.success(`Successfully uploaded ${validatedRows.length} records`);
+      toast.dismiss('batch-upload');
+
+      if (failedBatches > 0) {
+        toast.warning(`Uploaded ${successCount} records successfully. ${failedBatches} batch(es) failed.`);
+      } else {
+        toast.success(`Successfully uploaded all ${validatedRows.length} records`);
+      }
+      
       onUploadComplete?.();
     } catch (error) {
       if (error instanceof SyntaxError) {
