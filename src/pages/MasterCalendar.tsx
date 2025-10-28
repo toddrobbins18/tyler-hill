@@ -3,6 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useSeasonContext } from "@/contexts/SeasonContext";
+import SeasonSelector from "@/components/SeasonSelector";
 import { Calendar as CalendarIcon, Plus, List, Pencil, Trash2, Search, X, Trophy, Users, Star, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -39,6 +41,7 @@ interface UnifiedEvent {
 }
 
 export default function MasterCalendar() {
+  const { currentSeason } = useSeasonContext();
   const [events, setEvents] = useState<UnifiedEvent[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
   const [children, setChildren] = useState<any[]>([]);
@@ -74,7 +77,7 @@ export default function MasterCalendar() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [currentSeason]);
 
   const fetchAllEvents = async () => {
     setLoading(true);
@@ -94,12 +97,17 @@ export default function MasterCalendar() {
       const fieldTripsData = { data: [...(fieldTripsBatch1.data || []), ...(fieldTripsBatch2.data || [])] };
       const specialEventsData = { data: [...(specialBatch1.data || []), ...(specialBatch2.data || [])] };
 
+      // Filter by season
+      const sportsFiltered = sportsData.data.filter((e: any) => e.season === currentSeason || e.season === null);
+      const fieldTripsFiltered = fieldTripsData.data.filter((e: any) => e.season === currentSeason || e.season === null);
+      const specialEventsFiltered = specialEventsData.data.filter((e: any) => e.season === currentSeason || e.season === null);
+
       // Normalize all events to unified format
       const unifiedEvents: UnifiedEvent[] = [];
 
       // Sports Calendar events
-      if (sportsData.data) {
-        sportsData.data.forEach((event: any) => {
+      if (sportsFiltered) {
+        sportsFiltered.forEach((event: any) => {
           const divisions = event.sports_calendar_divisions?.map((d: any) => d.division) || (event.division ? [event.division] : []);
           unifiedEvents.push({
             id: `sports_${event.id}`,
@@ -117,8 +125,8 @@ export default function MasterCalendar() {
       }
 
       // Field Trips events
-      if (fieldTripsData.data) {
-        fieldTripsData.data.forEach((event: any) => {
+      if (fieldTripsFiltered) {
+        fieldTripsFiltered.forEach((event: any) => {
           unifiedEvents.push({
             id: `fieldtrip_${event.id}`,
             title: event.title,
@@ -135,8 +143,8 @@ export default function MasterCalendar() {
       }
 
       // Special Events events
-      if (specialEventsData.data) {
-        specialEventsData.data.forEach((event: any) => {
+      if (specialEventsFiltered) {
+        specialEventsFiltered.forEach((event: any) => {
           unifiedEvents.push({
             id: `special_${event.id}`,
             title: event.title,
@@ -329,9 +337,12 @@ export default function MasterCalendar() {
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">Master Calendar</h1>
-          <p className="text-muted-foreground">Consolidated view of all events and activities for The Nest</p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Master Calendar</h1>
+            <p className="text-muted-foreground">Consolidated view of all events and activities for The Nest</p>
+          </div>
+          <SeasonSelector />
         </div>
         <div className="flex gap-2">
           <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
