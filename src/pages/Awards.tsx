@@ -11,6 +11,7 @@ import EditAwardDialog from "@/components/dialogs/EditAwardDialog";
 import { CSVUploader } from "@/components/CSVUploader";
 import { JSONUploader } from "@/components/JSONUploader";
 import { useSeasonContext } from "@/contexts/SeasonContext";
+import { usePermissions } from "@/hooks/usePermissions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +26,7 @@ import {
 export default function Awards() {
   const navigate = useNavigate();
   const { currentSeason } = useSeasonContext();
+  const { getDivisionFilter } = usePermissions();
   const [awards, setAwards] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingAward, setEditingAward] = useState<string | null>(null);
@@ -50,20 +52,34 @@ export default function Awards() {
 
   const fetchAwards = async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    const divisionFilter = getDivisionFilter();
+    
+    let query = supabase
       .from("awards")
       .select(`
         *,
         children:child_id (
           id,
-          name
+          name,
+          division_id
         )
       `)
       .or(`season.eq.${currentSeason},season.is.null`)
       .order("date", { ascending: false });
+    
+    const { data, error } = await query;
 
     if (!error && data) {
-      setAwards(data);
+      // Filter awards by division on client side (since we need to filter via children table)
+      const divisionFilter = getDivisionFilter();
+      if (divisionFilter !== null && divisionFilter.length > 0) {
+        const filtered = data.filter(award => 
+          award.children?.division_id && divisionFilter.includes(award.children.division_id)
+        );
+        setAwards(filtered);
+      } else {
+        setAwards(data);
+      }
     }
     setLoading(false);
   };

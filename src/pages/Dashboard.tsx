@@ -6,9 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { getDivisionFilter } = usePermissions();
   const [stats, setStats] = useState({
     totalChildren: 0,
     activeRoutes: 0,
@@ -66,12 +68,19 @@ export default function Dashboard() {
     const today = new Date().toISOString().split('T')[0];
     const weekStart = new Date();
     weekStart.setDate(weekStart.getDate() - 7);
+    const divisionFilter = getDivisionFilter();
 
-    // Fetch children count
-    const { count: childrenCount } = await supabase
+    // Fetch children count with division filtering
+    let childrenQuery = supabase
       .from('children')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'active');
+    
+    if (divisionFilter !== null && divisionFilter.length > 0) {
+      childrenQuery = childrenQuery.in('division_id', divisionFilter);
+    }
+    
+    const { count: childrenCount } = await childrenQuery;
 
     // Fetch active trips count
     const { count: tripsCount } = await supabase
@@ -92,12 +101,14 @@ export default function Dashboard() {
       .select('*', { count: 'exact', head: true })
       .gte('date', weekStart.toISOString().split('T')[0]);
 
-    // Fetch recent notes
-    const { data: notes } = await supabase
+    // Fetch recent notes with division filtering
+    let notesQuery = supabase
       .from('daily_notes')
-      .select('*, children(name)')
+      .select('*, children(name, division_id)')
       .order('created_at', { ascending: false })
       .limit(3);
+    
+    const { data: notes } = await notesQuery;
 
     // Fetch upcoming trips and events
     const { data: trips } = await supabase

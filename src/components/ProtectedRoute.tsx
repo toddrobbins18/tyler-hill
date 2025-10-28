@@ -1,11 +1,16 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { usePermissions } from "@/hooks/usePermissions";
+import { Shield } from "lucide-react";
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [approved, setApproved] = useState(true);
+  const [hasPageAccess, setHasPageAccess] = useState(true);
+  const { canAccessPage, loading: permissionsLoading } = usePermissions();
 
   useEffect(() => {
     checkAuth();
@@ -22,6 +27,12 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
 
     return () => subscription.unsubscribe();
   }, [navigate]);
+
+  useEffect(() => {
+    if (approved && !permissionsLoading) {
+      checkPageAccess();
+    }
+  }, [location.pathname, approved, permissionsLoading]);
 
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -55,6 +66,19 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     setLoading(false);
   };
 
+  const checkPageAccess = async () => {
+    // Extract page name from path
+    const path = location.pathname;
+    let pageName = path.substring(1) || "dashboard";
+    
+    // Remove any child route params (e.g., /child/123 -> child)
+    pageName = pageName.split('/')[0];
+    
+    // Check if user has access to this page
+    const hasAccess = await canAccessPage(pageName);
+    setHasPageAccess(hasAccess);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -76,6 +100,26 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
             className="text-primary hover:underline"
           >
             Sign Out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasPageAccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="text-center space-y-4">
+          <Shield className="h-16 w-16 mx-auto text-muted-foreground" />
+          <h1 className="text-2xl font-bold">Access Denied</h1>
+          <p className="text-muted-foreground">
+            You don't have permission to access this page. Please contact your administrator.
+          </p>
+          <button 
+            onClick={() => navigate("/")} 
+            className="text-primary hover:underline"
+          >
+            Go to Dashboard
           </button>
         </div>
       </div>

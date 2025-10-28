@@ -2,6 +2,7 @@ import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utens
 import { NavLink } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { usePermissions } from "@/hooks/usePermissions";
 import {
   Sidebar,
   SidebarContent,
@@ -15,30 +16,32 @@ import {
 } from "@/components/ui/sidebar";
 
 const items = [
-  { title: "Activities & Field Trips", url: "/activities", icon: Palmtree },
-  { title: "Awards", url: "/awards", icon: Award },
-  { title: "Camper", url: "/roster", icon: Users },
-  { title: "Dashboard", url: "/", icon: Home },
-  { title: "Franko Sheet", url: "/notes", icon: Truck },
-  { title: "Incident Reports", url: "/incidents", icon: AlertTriangle },
-  { title: "Master Calendar", url: "/calendar", icon: Calendar },
-  { title: "Menu", url: "/menu", icon: Utensils },
-  { title: "Messages", url: "/messages", icon: Mail },
-  { title: "Nurse Dashboard", url: "/nurse", icon: Pill },
-  { title: "Rainy Day Schedule", url: "/rainy-day", icon: CloudRain },
-  { title: "Special Events & Evening Activities", url: "/special-events", icon: Calendar },
-  { title: "Special Meals", url: "/special-meals", icon: Utensils },
-  { title: "Sports Academy", url: "/sports-academy", icon: Trophy },
-  { title: "Sports Calendar", url: "/sports-calendar", icon: Trophy },
-  { title: "Staff", url: "/staff", icon: UserCog },
-  { title: "Transportation", url: "/transportation", icon: Truck },
-  { title: "Tutoring & Therapy", url: "/tutoring-therapy", icon: BookOpen },
+  { title: "Activities & Field Trips", url: "/activities", icon: Palmtree, menuId: "activities" },
+  { title: "Awards", url: "/awards", icon: Award, menuId: "awards" },
+  { title: "Camper", url: "/roster", icon: Users, menuId: "roster" },
+  { title: "Dashboard", url: "/", icon: Home, menuId: "dashboard" },
+  { title: "Franko Sheet", url: "/notes", icon: Truck, menuId: "notes" },
+  { title: "Incident Reports", url: "/incidents", icon: AlertTriangle, menuId: "incidents" },
+  { title: "Master Calendar", url: "/calendar", icon: Calendar, menuId: "calendar" },
+  { title: "Menu", url: "/menu", icon: Utensils, menuId: "menu" },
+  { title: "Messages", url: "/messages", icon: Mail, menuId: "messages" },
+  { title: "Nurse Dashboard", url: "/nurse", icon: Pill, menuId: "nurse" },
+  { title: "Rainy Day Schedule", url: "/rainy-day", icon: CloudRain, menuId: "rainy-day" },
+  { title: "Special Events & Evening Activities", url: "/special-events", icon: Calendar, menuId: "special-events" },
+  { title: "Special Meals", url: "/special-meals", icon: Utensils, menuId: "special-meals" },
+  { title: "Sports Academy", url: "/sports-academy", icon: Trophy, menuId: "sports-academy" },
+  { title: "Sports Calendar", url: "/sports-calendar", icon: Trophy, menuId: "sports-calendar" },
+  { title: "Staff", url: "/staff", icon: UserCog, menuId: "staff" },
+  { title: "Transportation", url: "/transportation", icon: Truck, menuId: "transportation" },
+  { title: "Tutoring & Therapy", url: "/tutoring-therapy", icon: BookOpen, menuId: "tutoring-therapy" },
 ];
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
   const [isAdmin, setIsAdmin] = useState(false);
+  const [visibleItems, setVisibleItems] = useState(items);
+  const { userRole, canAccessPage, loading: permissionsLoading } = usePermissions();
 
   useEffect(() => {
     checkAdminStatus();
@@ -49,6 +52,12 @@ export function AppSidebar() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!permissionsLoading && userRole) {
+      filterMenuItems();
+    }
+  }, [userRole, permissionsLoading]);
 
   const checkAdminStatus = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -67,6 +76,17 @@ export function AppSidebar() {
     setIsAdmin(!!roles);
   };
 
+  const filterMenuItems = async () => {
+    const filtered = [];
+    for (const item of items) {
+      const hasAccess = await canAccessPage(item.menuId);
+      if (hasAccess) {
+        filtered.push(item);
+      }
+    }
+    setVisibleItems(filtered);
+  };
+
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarContent>
@@ -80,7 +100,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Main Menu</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
+              {visibleItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink

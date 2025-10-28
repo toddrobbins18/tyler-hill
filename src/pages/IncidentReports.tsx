@@ -11,8 +11,10 @@ import EditIncidentDialog from "@/components/dialogs/EditIncidentDialog";
 import { CSVUploader } from "@/components/CSVUploader";
 import { JSONUploader } from "@/components/JSONUploader";
 import { useSeason } from "@/contexts/SeasonContext";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function IncidentReports() {
+  const { getDivisionFilter } = usePermissions();
   const [incidents, setIncidents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -46,7 +48,7 @@ export default function IncidentReports() {
         *,
         incident_children(
           child_id,
-          children(name)
+          children(name, division_id)
         ),
         staff(name)
       `)
@@ -58,7 +60,19 @@ export default function IncidentReports() {
       setLoading(false);
       return;
     }
-    setIncidents(data || []);
+    
+    // Filter incidents by division
+    const divisionFilter = getDivisionFilter();
+    if (data && divisionFilter !== null && divisionFilter.length > 0) {
+      const filtered = data.filter(incident => {
+        return incident.incident_children?.some((ic: any) => 
+          ic.children?.division_id && divisionFilter.includes(ic.children.division_id)
+        );
+      });
+      setIncidents(filtered);
+    } else {
+      setIncidents(data || []);
+    }
     setLoading(false);
   };
 
