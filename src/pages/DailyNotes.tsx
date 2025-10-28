@@ -36,6 +36,7 @@ export default function DailyNotes() {
       .channel('franko-sheet-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sports_calendar' }, () => fetchNotes())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'trips' }, () => fetchNotes())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'special_events_activities' }, () => fetchNotes())
       .subscribe();
 
     return () => {
@@ -52,7 +53,8 @@ export default function DailyNotes() {
     setLoading(true);
     const today = new Date().toISOString().split('T')[0];
     
-    const { data, error } = await supabase
+    // Fetch sports calendar events
+    const { data: sportsData, error: sportsError } = await supabase
       .from("sports_calendar")
       .select(`
         *,
@@ -64,11 +66,29 @@ export default function DailyNotes() {
       .or(`season.eq.${currentSeason},season.is.null`)
       .order("time", { ascending: true });
 
-    if (!error && data) {
-      setNotes(data);
+    // Fetch evening/night activities
+    const { data: activitiesData, error: activitiesError } = await supabase
+      .from("special_events_activities")
+      .select(`
+        *,
+        divisions(name, gender)
+      `)
+      .eq("event_date", today)
+      .in("time_slot", ["Evening (5-9 PM)", "Night (9 PM+)"])
+      .or(`season.eq.${currentSeason},season.is.null`)
+      .order("time_slot", { ascending: true });
+
+    // Combine data and mark type
+    const combined = [
+      ...(sportsData?.map(item => ({ ...item, _type: 'sports' })) || []),
+      ...(activitiesData?.map(item => ({ ...item, _type: 'activity' })) || [])
+    ];
+
+    if (!sportsError || !activitiesError) {
+      setNotes(combined);
       
-      // Fetch notification logs for these events
-      const eventIds = data.map(event => event.id);
+      // Fetch notification logs for sports events
+      const eventIds = sportsData?.map(event => event.id) || [];
       if (eventIds.length > 0) {
         const { data: logs } = await supabase
           .from("notification_logs")
@@ -348,7 +368,11 @@ export default function DailyNotes() {
       ) : notes.length > 0 ? (
         <div className="grid gap-4">
           {notes.map((note) => {
-            const divisions = note.sports_calendar_divisions?.map((d: any) => d.divisions) || [];
+            const isSportsEvent = note._type === 'sports';
+            const isActivity = note._type === 'activity';
+            const divisions = isSportsEvent 
+              ? (note.sports_calendar_divisions?.map((d: any) => d.divisions) || [])
+              : (note.divisions ? [note.divisions] : []);
             const hasMeals = note.meal_options && note.meal_options.length > 0;
             const tripInfo = Array.isArray(note.trips) ? note.trips[0] : note.trips;
             
@@ -359,10 +383,20 @@ export default function DailyNotes() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-3">
                         <CardTitle className="text-xl">{note.title}</CardTitle>
-                        <Badge variant="outline" className="bg-secondary/10 text-secondary-foreground print-badge">
-                          {note.sport_type}
-                        </Badge>
-                        {note.home_away && (
+                        
+                        {isSportsEvent && (
+                          <Badge variant="outline" className="bg-secondary/10 text-secondary-foreground print-badge">
+                            {note.sport_type}
+                          </Badge>
+                        )}
+                        
+                        {isActivity && (
+                          <Badge variant="secondary" className="bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20 print-badge">
+                            {note.time_slot}
+                          </Badge>
+                        )}
+                        
+                        {isSportsEvent && note.home_away && (
                           <Badge 
                             variant="outline" 
                             className={`print-badge ${note.home_away === 'home' 
@@ -372,13 +406,13 @@ export default function DailyNotes() {
                             {note.home_away.toUpperCase()}
                           </Badge>
                         )}
-                        {tripInfo?.status === 'approved' && (
+                        {isSportsEvent && tripInfo?.status === 'approved' && (
                           <Badge className="bg-green-600 text-white print-badge">
                             <Bell className="h-3 w-3 mr-1" />
                             Approved
                           </Badge>
                         )}
-                        {notificationLogs[note.id] && (
+                        {isSportsEvent && notificationLogs[note.id] && (
                           <Badge variant="outline" className="bg-primary/10 print-badge">
                             Notified {notificationLogs[note.id].recipient_count} staff
                           </Badge>
@@ -391,10 +425,19 @@ export default function DailyNotes() {
                       </div>
                       
                       <div className="grid gap-2 text-sm">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-semibold text-lg">{note.time || "Time TBD"}</span>
-                        </div>
+                        {isSportsEvent && note.time && (
+                          <div className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-semibold text-lg">{note.time}</span>
+                          </div>
+                        )}
+                        
+                        {isActivity && note.time_slot && (
+                          <div className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-semibold text-lg">{note.time_slot}</span>
+                          </div>
+                        )}
                         
                         {note.location && (
                           <div className="flex items-center gap-2">
@@ -403,14 +446,14 @@ export default function DailyNotes() {
                           </div>
                         )}
                         
-                        {note.opponent && (
+                        {isSportsEvent && note.opponent && (
                           <div className="flex items-center gap-2">
                             <Users className="h-4 w-4 text-muted-foreground" />
                             <span><span className="font-medium">vs</span> {note.opponent}</span>
                           </div>
                         )}
                         
-                        {tripInfo?.driver && (
+                        {isSportsEvent && tripInfo?.driver && (
                           <div className="flex items-center gap-2">
                             <Truck className="h-4 w-4 text-muted-foreground" />
                             <span><span className="font-medium">Driver:</span> {tripInfo.driver}</span>
@@ -419,6 +462,12 @@ export default function DailyNotes() {
                                 | Chaperone: {tripInfo.chaperone}
                               </span>
                             )}
+                          </div>
+                        )}
+                        
+                        {isActivity && note.description && (
+                          <div className="text-sm text-muted-foreground mt-1">
+                            {note.description}
                           </div>
                         )}
                         
@@ -463,7 +512,7 @@ export default function DailyNotes() {
         </div>
       ) : (
         <div className="text-center py-12">
-          <p className="text-muted-foreground">No games scheduled for today</p>
+          <p className="text-muted-foreground">No games or evening activities scheduled for today</p>
         </div>
       )}
 
