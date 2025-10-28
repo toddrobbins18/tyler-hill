@@ -194,11 +194,14 @@ export default function JSONUploader({ tableName, onUploadComplete }: JSONUpload
             transformed.reported_by = record.reported_by;
           }
           
-          // Extract description
-          if (record.description) {
+          // Extract description - ensure it's a string, not an array
+          if (typeof record.description === 'string' && record.description.trim()) {
             transformed.description = record.description;
-          } else if (record.comments) {
+          } else if (typeof record.comments === 'string' && record.comments.trim()) {
             transformed.description = record.comments;
+          } else if (Array.isArray(record.description) && record.description.length > 0) {
+            // Description is MongoDB ObjectId reference - use placeholder
+            transformed.description = "Imported incident - see original data";
           } else {
             transformed.description = "No description provided";
           }
