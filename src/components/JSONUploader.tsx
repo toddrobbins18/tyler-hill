@@ -132,27 +132,69 @@ export default function JSONUploader({ tableName, onUploadComplete }: JSONUpload
       // Transform MongoDB incident reports format
       if (tableName === 'incident_reports') {
         toast.info("Processing incident report format...");
+        
+        // First, collect all unique camper IDs for batch lookup
+        const allCamperIds = new Set<string>();
+        data.forEach((record: any) => {
+          if (record.campers && Array.isArray(record.campers)) {
+            record.campers.forEach((id: string) => allCamperIds.add(id));
+          }
+        });
+        
+        // Batch lookup children UUIDs by person_id
+        const camperIdMap = new Map<string, string>(); // MongoDB ID -> UUID
+        if (allCamperIds.size > 0) {
+          toast.loading(`Looking up ${allCamperIds.size} camper IDs...`, { id: 'camper-lookup' });
+          const { data: childrenData, error } = await supabase
+            .from('children')
+            .select('id, person_id')
+            .in('person_id', Array.from(allCamperIds));
+          
+          if (childrenData) {
+            childrenData.forEach(child => {
+              if (child.person_id) {
+                camperIdMap.set(child.person_id, child.id);
+              }
+            });
+            toast.success(`Mapped ${camperIdMap.size} of ${allCamperIds.size} campers`, { id: 'camper-lookup' });
+          } else if (error) {
+            console.error("Error looking up campers:", error);
+            toast.error("Failed to lookup camper IDs", { id: 'camper-lookup' });
+          }
+        }
+        
+        // Report any unmapped campers
+        const unmappedCampers = Array.from(allCamperIds).filter(id => !camperIdMap.has(id));
+        if (unmappedCampers.length > 0) {
+          console.warn(`Could not find ${unmappedCampers.length} campers in database:`, unmappedCampers);
+          toast.warning(`${unmappedCampers.length} camper IDs could not be mapped - incidents will be created without these children`);
+        }
+        
+        // Transform each record
         data = data.map((record: any) => {
           const transformed: any = {};
           
-          // Map campers array to child_ids for junction table insertion
+          // Map campers array to child_ids using lookup
           if (record.campers && Array.isArray(record.campers)) {
-            transformed.child_ids = record.campers;
-          }
-          
-          // Keep tags array as-is
-          if (record.tags && Array.isArray(record.tags)) {
-            transformed.tags = record.tags;
+            transformed.child_ids = record.campers
+              .map((camperId: string) => camperIdMap.get(camperId))
+              .filter(Boolean); // Remove any unmapped IDs
           } else {
-            transformed.tags = [];
+            transformed.child_ids = [];
           }
           
-          // Map reporter ObjectId to reporter_id (we'll store the ID as-is for now)
-          if (record.reporter) {
-            transformed.reporter_id = record.reporter;
+          // Keep tags array
+          transformed.tags = record.tags && Array.isArray(record.tags) ? record.tags : [];
+          
+          // Handle reporter - extract $oid value but store in reported_by text field
+          // since staff table is empty
+          if (record.reporter && record.reporter.$oid) {
+            transformed.reported_by = `Imported - Reporter ID: ${record.reporter.$oid}`;
+          } else if (record.reported_by) {
+            transformed.reported_by = record.reported_by;
           }
           
-          // Extract description from comments or use existing
+          // Extract description
           if (record.description) {
             transformed.description = record.description;
           } else if (record.comments) {
@@ -161,7 +203,7 @@ export default function JSONUploader({ tableName, onUploadComplete }: JSONUpload
             transformed.description = "No description provided";
           }
           
-          // Map date format (handle MongoDB date objects)
+          // Map date format
           if (record.date) {
             if (record.date.$date) {
               transformed.date = new Date(record.date.$date).toISOString().split('T')[0];
@@ -170,18 +212,13 @@ export default function JSONUploader({ tableName, onUploadComplete }: JSONUpload
             }
           }
           
-          // Default type and severity if not provided
+          // Defaults
           transformed.type = record.type || "other";
           transformed.severity = record.severity || "medium";
           transformed.status = record.status || "open";
           
-          // Copy over other relevant fields
-          const keepFields = ['reported_by', 'season'];
-          keepFields.forEach(field => {
-            if (record[field] !== undefined) {
-              transformed[field] = record[field];
-            }
-          });
+          // Copy season if present
+          if (record.season) transformed.season = record.season;
           
           return transformed;
         });

@@ -77,8 +77,7 @@ export const menuItemSchema = z.object({
 
 // Incident report validation schema
 export const incidentReportSchema = z.object({
-  child_id: z.string().uuid().optional(),
-  child_ids: z.array(z.string().uuid()).optional(),
+  child_ids: z.array(z.string().uuid()).default([]),
   date: z.string().min(1, "Date is required"),
   type: z.string().min(1, "Type is required"),
   description: z.string().min(1, "Description is required"),
