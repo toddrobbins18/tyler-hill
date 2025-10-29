@@ -198,11 +198,18 @@ export default function Transportation() {
   };
 
   const getStatusBadge = (trip: any) => {
+    // Check for explicit status first
     if (trip.status === 'approved') {
       return <Badge className="bg-green-600 text-white hover:bg-green-700">Approved</Badge>;
-    } else if (trip.status === 'pending') {
+    }
+    if (trip.status === 'confirmed') {
+      return <Badge className="bg-green-600 text-white hover:bg-green-700">Confirmed</Badge>;
+    }
+    if (trip.status === 'pending') {
       return <Badge variant="destructive">Pending Approval</Badge>;
     }
+    
+    // Only check transportation details if no explicit status
     const isPending = !trip.transportation_type || !trip.driver;
     return isPending ? (
       <Badge variant="destructive">Pending</Badge>
@@ -542,16 +549,6 @@ export default function Transportation() {
                     {getMealBadges(trip)}
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge
-                      variant="outline"
-                      className={
-                        trip.status === "confirmed" 
-                          ? "bg-success/10 text-success border-success/20"
-                          : "bg-warning/10 text-warning border-warning/20"
-                      }
-                    >
-                      {trip.status || "Upcoming"}
-                    </Badge>
                     <Button
                       size="icon"
                       variant="ghost"
