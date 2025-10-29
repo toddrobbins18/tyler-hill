@@ -1,538 +1,310 @@
-import { Calendar, MapPin, Users, Pencil, Trash2, Truck, Utensils, Bell, Printer } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
-import { CSVUploader } from "@/components/CSVUploader";
-import { useSeasonContext } from "@/contexts/SeasonContext";
-import { usePermissions } from "@/hooks/usePermissions";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { useEffect, useState } from 'react';
+import { Printer } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useSeasonContext } from '@/contexts/SeasonContext';
+import { supabase } from '@/integrations/supabase/client';
+import { format } from 'date-fns';
+
+interface ScheduleEvent {
+  id: string;
+  time: string;
+  title: string;
+  location: string;
+  type: 'sports' | 'activity';
+  isFeatured?: boolean;
+  opponent?: string;
+  meal_options?: string[];
+  meal_notes?: string;
+  description?: string;
+}
 
 export default function DailyNotes() {
-  const { currentSeason } = useSeasonContext();
-  const { userRole, canAccessPage } = usePermissions();
-  const [notes, setNotes] = useState<any[]>([]);
+  const [scheduleEvents, setScheduleEvents] = useState<ScheduleEvent[]>([]);
+  const [featuredEvent, setFeaturedEvent] = useState<ScheduleEvent | null>(null);
   const [loading, setLoading] = useState(true);
-  const [canEdit, setCanEdit] = useState(false);
-  const [deletingNote, setDeletingNote] = useState<string | null>(null);
-  const [notificationLogs, setNotificationLogs] = useState<Record<string, any>>({});
+  const { currentSeason } = useSeasonContext();
 
   useEffect(() => {
-    fetchNotes();
-    checkEditPermission();
+    fetchSchedule();
 
-    const channel = supabase
-      .channel('franko-sheet-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sports_calendar' }, () => fetchNotes())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'trips' }, () => fetchNotes())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'special_events_activities' }, () => fetchNotes())
+    const sportsChannel = supabase
+      .channel('sports-calendar-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sports_calendar' }, fetchSchedule)
+      .subscribe();
+
+    const eventsChannel = supabase
+      .channel('special-events-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'special_events_activities' }, fetchSchedule)
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(sportsChannel);
+      supabase.removeChannel(eventsChannel);
     };
-  }, [currentSeason, userRole]);
+  }, [currentSeason]);
 
-  const checkEditPermission = async () => {
-    const hasPermission = await canAccessPage('notes');
-    setCanEdit(hasPermission && (userRole === 'admin' || userRole === 'staff'));
-  };
+  const fetchSchedule = async () => {
+    try {
+      setLoading(true);
+      const today = new Date().toISOString().split('T')[0];
 
-  const fetchNotes = async () => {
-    setLoading(true);
-    const today = new Date().toISOString().split('T')[0];
-    
-    // Fetch sports calendar events
-    const { data: sportsData, error: sportsError } = await supabase
-      .from("sports_calendar")
-      .select(`
-        *,
-        trips!sports_event_id(driver, chaperone, status),
-        divisions(name, gender),
-        sports_calendar_divisions(division_id, divisions(name, gender))
-      `)
-      .eq("event_date", today)
-      .or(`season.eq.${currentSeason},season.is.null`)
-      .order("time", { ascending: true });
+      // Fetch sports calendar events
+      const { data: sportsData } = await supabase
+        .from('sports_calendar')
+        .select('*')
+        .eq('event_date', today)
+        .eq('season', currentSeason)
+        .order('time');
 
-    // Fetch evening/night activities
-    const { data: activitiesData, error: activitiesError } = await supabase
-      .from("special_events_activities")
-      .select(`
-        *,
-        divisions(name, gender)
-      `)
-      .eq("event_date", today)
-      .in("time_slot", ["Evening (5-9 PM)", "Night (9 PM+)"])
-      .or(`season.eq.${currentSeason},season.is.null`)
-      .order("time_slot", { ascending: true });
+      // Fetch evening/night activities
+      const { data: activitiesData } = await supabase
+        .from('special_events_activities')
+        .select('*')
+        .eq('event_date', today)
+        .eq('season', currentSeason)
+        .in('time_slot', ['Evening (5-9 PM)', 'Night (9 PM+)'])
+        .order('time_slot');
 
-    // Combine data and mark type
-    const combined = [
-      ...(sportsData?.map(item => ({ ...item, _type: 'sports' })) || []),
-      ...(activitiesData?.map(item => ({ ...item, _type: 'activity' })) || [])
-    ];
+      const events: ScheduleEvent[] = [
+        ...(sportsData || []).map(event => ({
+          id: event.id,
+          type: 'sports' as const,
+          time: event.time || '',
+          title: event.title,
+          location: event.location || '',
+          opponent: event.opponent,
+          meal_options: event.meal_options,
+          meal_notes: event.meal_notes,
+          description: event.description,
+          isFeatured: false,
+        })),
+        ...(activitiesData || []).map(activity => ({
+          id: activity.id,
+          type: 'activity' as const,
+          time: activity.time_slot === 'Evening (5-9 PM)' ? '7:00 PM' : '9:00 PM',
+          title: activity.title,
+          location: activity.location || '',
+          description: activity.description,
+          isFeatured: false,
+        }))
+      ];
 
-    if (!sportsError || !activitiesError) {
-      setNotes(combined);
-      
-      // Fetch notification logs for sports events
-      const eventIds = sportsData?.map(event => event.id) || [];
-      if (eventIds.length > 0) {
-        const { data: logs } = await supabase
-          .from("notification_logs")
-          .select("event_id, recipient_count, sent_at, notification_version")
-          .in("event_id", eventIds)
-          .order("sent_at", { ascending: false });
-
-        if (logs) {
-          const logsMap: Record<string, any> = {};
-          logs.forEach(log => {
-            if (!logsMap[log.event_id]) {
-              logsMap[log.event_id] = log;
-            }
-          });
-          setNotificationLogs(logsMap);
-        }
+      // Mark first sports event as featured if exists
+      const firstSportsEvent = events.find(e => e.type === 'sports');
+      if (firstSportsEvent) {
+        firstSportsEvent.isFeatured = true;
+        setFeaturedEvent(firstSportsEvent);
       }
+
+      setScheduleEvents(events);
+    } catch (error) {
+      console.error('Error fetching schedule:', error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  const handleDelete = async (id: string) => {
-    const { error } = await supabase
-      .from("sports_calendar")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      toast.error("Failed to delete event");
-      console.error(error);
-    } else {
-      toast.success("Event deleted successfully");
-      fetchNotes();
-    }
-    setDeletingNote(null);
+  const handlePrint = () => {
+    window.print();
   };
+
+  const today = format(new Date(), 'EEEE, MMMM d, yyyy');
 
   return (
-    <>
+    <div className="container mx-auto p-4">
       <style>{`
         @media print {
-          /* Hide ALL non-printable elements */
-          .no-print,
-          button,
-          [role="dialog"],
-          aside,
-          nav,
-          header,
-          .sidebar,
-          [data-sidebar],
-          [data-sidebar="sidebar"],
-          [data-sidebar-trigger] {
+          body * {
+            visibility: hidden;
+          }
+          .print-content, .print-content * {
+            visibility: visible;
+          }
+          .print-content {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            padding: 20px;
+          }
+          .no-print {
             display: none !important;
-            visibility: hidden !important;
           }
-          
-          /* Make main content full width */
-          main {
-            margin: 0 !important;
-            padding: 0.5in !important;
-            width: 100% !important;
-            max-width: 100% !important;
+          .newspaper-header {
+            border-bottom: 4px double #000;
+            padding-bottom: 12px;
+            margin-bottom: 16px;
           }
-          
-          /* Ensure the flex container doesn't break layout */
-          .flex-1 {
-            width: 100% !important;
-          }
-          
-          /* Page setup - compact margins */
-          @page {
-            margin: 0.3in;
-          }
-          
-          /* Print header - elegant & compact */
-          .print-header {
-            display: block !important;
+          .newspaper-title {
+            font-family: Georgia, serif;
+            font-size: 48px;
+            font-weight: bold;
             text-align: center;
-            margin-bottom: 12px !important;
-            padding-bottom: 8px !important;
-            border-bottom: 1px solid #ddd !important;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
           }
-          
-          .print-header h1 {
-            font-size: 18px !important;
-            font-weight: 700 !important;
-            letter-spacing: 0.5px !important;
-            margin: 0 0 5px 0 !important;
+          .newspaper-tagline {
+            text-align: center;
+            font-size: 12px;
+            letter-spacing: 3px;
+            border-top: 1px solid #000;
+            border-bottom: 1px solid #000;
+            padding: 4px 0;
+            margin-bottom: 4px;
           }
-          
-          .print-header p {
-            font-size: 11px !important;
-            color: #666 !important;
-            margin: 0 !important;
+          .newspaper-date {
+            text-align: center;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 16px;
           }
-          
-          /* Reset backgrounds and colors for print */
-          body, html {
-            background: white !important;
-            color: black !important;
+          .section-title {
+            font-family: Georgia, serif;
+            font-size: 20px;
+            font-weight: bold;
+            text-transform: uppercase;
+            border-bottom: 2px solid #000;
+            margin-bottom: 12px;
+            padding-bottom: 4px;
           }
-          
-          /* Card styling - compact & beautiful - AGGRESSIVE OVERRIDES */
-          .print-card,
-          .print-card > div,
-          .print-card [class*="rounded"],
-          [class*="Card"] {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-            border: 1px solid #ccc !important;
-            border-radius: 6px !important;
-            background: white !important;
-            margin-bottom: 10px !important;
-            padding: 10px !important;
-            box-shadow: none !important;
+          .schedule-item {
+            display: flex;
+            gap: 16px;
+            padding: 8px 0;
+            border-bottom: 1px dotted #ccc;
+            font-size: 13px;
           }
-          
-          /* Card header specific */
-          .print-card > div:first-child,
-          .print-card [class*="CardHeader"] {
-            padding: 0 !important;
-            margin: 0 !important;
+          .schedule-time {
+            font-weight: bold;
+            min-width: 80px;
           }
-          
-          /* Badge styling - refined - OVERRIDE ALL BADGE VARIANTS */
-          .print-badge,
-          .print-badge > *,
-          [class*="Badge"],
-          [class*="badge"] {
-            border: 1px solid #999 !important;
-            border-radius: 3px !important;
-            background: white !important;
-            color: black !important;
-            padding: 2px 6px !important;
-            display: inline-block !important;
-            margin-right: 4px !important;
-            margin-bottom: 2px !important;
-            font-size: 10px !important;
-            line-height: 1.2 !important;
-            font-weight: 500 !important;
+          .boxed-section {
+            border: 2px solid #000;
+            padding: 16px;
+            margin-bottom: 16px;
+            background: white;
           }
-          
-          /* Typography refinements - TARGET ALL TEXT VARIANTS */
-          .print-card h3,
-          .print-card [class*="text-xl"],
-          .print-card [class*="CardTitle"],
-          h3.text-xl {
-            font-size: 16px !important;
-            font-weight: 700 !important;
-            letter-spacing: 0.3px !important;
-            line-height: 1.3 !important;
-            margin-bottom: 6px !important;
-            margin-top: 0 !important;
-            color: black !important;
+          .featured-title {
+            font-family: Georgia, serif;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 12px;
+            text-align: center;
           }
-          
-          .print-card [class*="text-lg"],
-          .print-card .font-semibold,
-          .print-card span.font-semibold {
-            font-size: 14px !important;
-            font-weight: 600 !important;
-            line-height: 1.3 !important;
+          .two-column-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 16px;
           }
-          
-          .print-card [class*="text-sm"],
-          .print-card .text-sm {
-            font-size: 11px !important;
-            line-height: 1.4 !important;
-          }
-          
-          .print-card [class*="text-xs"],
-          .print-card .text-xs {
-            font-size: 9px !important;
-            line-height: 1.3 !important;
-            color: #666 !important;
-            font-style: italic !important;
-          }
-          
-          /* Icon sizing - compact - OVERRIDE ALL ICONS */
-          .print-card svg,
-          .print-card .lucide,
-          svg.lucide,
-          [class*="lucide"] {
-            width: 12px !important;
-            height: 12px !important;
-            min-width: 12px !important;
-            min-height: 12px !important;
-            color: #666 !important;
-            stroke-width: 2 !important;
-            flex-shrink: 0 !important;
-          }
-          
-          /* Spacing adjustments - OVERRIDE TAILWIND GAPS */
-          .print-card [class*="gap-2"],
-          .print-card .gap-2,
-          [class*="gap-2"] {
-            gap: 6px !important;
-          }
-          
-          .print-card [class*="gap-1"],
-          .print-card .gap-1 {
-            gap: 4px !important;
-          }
-          
-          .print-card [class*="mb-3"],
-          .print-card .mb-3 {
-            margin-bottom: 6px !important;
-          }
-          
-          .print-card [class*="mt-1"],
-          .print-card .mt-1 {
-            margin-top: 4px !important;
-          }
-          
-          .print-card [class*="mt-0"],
-          .print-card .mt-0 {
-            margin-top: 0 !important;
-          }
-          
-          /* Grid/Flex containers in cards */
-          .print-card [class*="grid"],
-          .print-card .grid {
-            gap: 6px !important;
-          }
-          
-          .print-card [class*="flex"],
-          .print-card .flex {
-            gap: 6px !important;
-          }
-          
-          /* Remove shadows and effects */
-          *, *::before, *::after {
-            box-shadow: none !important;
-            text-shadow: none !important;
-            transition: none !important;
-            animation: none !important;
-          }
-          
-          /* Food badge specific color override */
-          .print-card [class*="green"] {
-            background: #f0f9f0 !important;
-            color: #2d5016 !important;
-            border-color: #4a7c2f !important;
+          @page {
+            margin: 0.5in;
           }
         }
       `}</style>
       
-      <div className="space-y-6">
-        {/* Hidden print header - only shows when printing */}
-        <div className="print-header hidden">
-          <h1>Franko Sheet</h1>
-          <p>
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-          </p>
+      <div className="flex justify-between items-center mb-6 no-print">
+        <h1 className="text-3xl font-bold">Franko Sheet</h1>
+        <Button onClick={handlePrint} variant="outline">
+          <Printer className="h-4 w-4 mr-2" />
+          Print
+        </Button>
+      </div>
+
+      <div className="print-content">
+        {/* Newspaper Header */}
+        <div className="newspaper-header">
+          <div className="newspaper-title">TYLER HILL DAILY NEWS</div>
+          <div className="newspaper-tagline">LIVE THIS MOMENT | HOME OF THE BEARS</div>
+          <div className="newspaper-date">{today}</div>
         </div>
 
-        <div className="flex items-center justify-between no-print">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">Franko Sheet</h1>
-            <p className="text-muted-foreground">Today's sports game logistics and transportation schedule</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button onClick={() => window.print()} variant="outline">
-              <Printer className="h-4 w-4 mr-2" />
-              Print
-            </Button>
-            {canEdit && (
-              <CSVUploader tableName="sports_calendar" onUploadComplete={fetchNotes} />
-            )}
-          </div>
-        </div>
-
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
-      ) : notes.length > 0 ? (
-        <div className="grid gap-4">
-          {notes.map((note) => {
-            const isSportsEvent = note._type === 'sports';
-            const isActivity = note._type === 'activity';
-            const divisions = isSportsEvent 
-              ? (note.sports_calendar_divisions?.map((d: any) => d.divisions) || [])
-              : (note.divisions ? [note.divisions] : []);
-            const hasMeals = note.meal_options && note.meal_options.length > 0;
-            const tripInfo = Array.isArray(note.trips) ? note.trips[0] : note.trips;
-            
-            return (
-              <Card key={note.id} className="shadow-card hover:shadow-md transition-all group print-card">
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-3">
-                        <CardTitle className="text-xl">{note.title}</CardTitle>
-                        
-                        {isSportsEvent && (
-                          <Badge variant="outline" className="bg-secondary/10 text-secondary-foreground print-badge">
-                            {note.sport_type}
-                          </Badge>
-                        )}
-                        
-                        {isActivity && (
-                          <Badge variant="secondary" className="bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20 print-badge">
-                            {note.time_slot}
-                          </Badge>
-                        )}
-                        
-                        {isSportsEvent && note.home_away && (
-                          <Badge 
-                            variant="outline" 
-                            className={`print-badge ${note.home_away === 'home' 
-                              ? 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20' 
-                              : 'bg-pink-500/10 text-pink-700 dark:text-pink-300 border-pink-500/20'}`}
-                          >
-                            {note.home_away.toUpperCase()}
-                          </Badge>
-                        )}
-                        {isSportsEvent && tripInfo?.status === 'approved' && (
-                          <Badge className="bg-green-600 text-white print-badge">
-                            <Bell className="h-3 w-3 mr-1" />
-                            Approved
-                          </Badge>
-                        )}
-                        {isSportsEvent && notificationLogs[note.id] && (
-                          <Badge variant="outline" className="bg-primary/10 print-badge">
-                            Notified {notificationLogs[note.id].recipient_count} staff
-                          </Badge>
-                        )}
-                        {divisions.length > 0 && divisions.map((div: any, idx: number) => (
-                          <Badge key={idx} variant="secondary" className="print-badge">
-                            {div.name}
-                          </Badge>
-                        ))}
-                      </div>
-                      
-                      <div className="grid gap-2 text-sm">
-                        {isSportsEvent && note.time && (
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-semibold text-lg">{note.time}</span>
-                          </div>
-                        )}
-                        
-                        {isActivity && note.time_slot && (
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-semibold text-lg">{note.time_slot}</span>
-                          </div>
-                        )}
-                        
-                        {note.location && (
-                          <div className="flex items-center gap-2">
-                            <MapPin className="h-4 w-4 text-muted-foreground" />
-                            <span>{note.location}</span>
-                          </div>
-                        )}
-                        
-                        {isSportsEvent && note.opponent && (
-                          <div className="flex items-center gap-2">
-                            <Users className="h-4 w-4 text-muted-foreground" />
-                            <span><span className="font-medium">vs</span> {note.opponent}</span>
-                          </div>
-                        )}
-                        
-                        {isSportsEvent && tripInfo?.driver && (
-                          <div className="flex items-center gap-2">
-                            <Truck className="h-4 w-4 text-muted-foreground" />
-                            <span><span className="font-medium">Driver:</span> {tripInfo.driver}</span>
-                            {tripInfo.chaperone && (
-                              <span className="text-muted-foreground">
-                                | Chaperone: {tripInfo.chaperone}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        
-                        {isActivity && note.description && (
-                          <div className="text-sm text-muted-foreground mt-1">
-                            {note.description}
-                          </div>
-                        )}
-                        
-                        {hasMeals && (
-                          <div className="flex items-start gap-2">
-                            <Utensils className="h-4 w-4 text-muted-foreground mt-0.5" />
-                            <div className="flex-1">
-                              <Badge variant="outline" className="bg-green-500/10 text-green-700 dark:text-green-300 border-green-500/20 mb-1">
-                                Food Needed
-                              </Badge>
-                              {note.meal_options && (
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {note.meal_options.join(', ')}
-                                </p>
-                              )}
-                              {note.meal_notes && (
-                                <p className="text-xs text-muted-foreground mt-1">{note.meal_notes}</p>
-                              )}
-                            </div>
-                          </div>
-                        )}
+        {loading ? (
+          <div className="text-center py-8">Loading...</div>
+        ) : (
+          <>
+            {/* Schedule Section */}
+            <div className="mb-6">
+              <div className="section-title">Today's Schedule</div>
+              {scheduleEvents.filter(e => !e.isFeatured).length > 0 ? (
+                <div>
+                  {scheduleEvents.filter(e => !e.isFeatured).map((event) => (
+                    <div key={event.id} className="schedule-item">
+                      <div className="schedule-time">{event.time}</div>
+                      <div className="flex-1">
+                        <strong>{event.title}</strong>
+                        {event.location && ` - ${event.location}`}
+                        {event.opponent && ` vs ${event.opponent}`}
                       </div>
                     </div>
-                    
-                    {canEdit && (
-                      <div className="flex items-center gap-1 no-print">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
-                          onClick={() => setDeletingNote(note.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-4 text-muted-foreground">
+                  No additional events scheduled
+                </div>
+              )}
+            </div>
+
+            {/* Two Column Layout */}
+            <div className="two-column-layout">
+              {/* Featured Event */}
+              {featuredEvent ? (
+                <div className="boxed-section">
+                  <div className="section-title" style={{ fontSize: '16px' }}>Featured Event</div>
+                  <div className="featured-title">{featuredEvent.title}</div>
+                  <div style={{ fontSize: '14px', lineHeight: '1.6' }}>
+                    {featuredEvent.time && (
+                      <div><strong>Time:</strong> {featuredEvent.time}</div>
+                    )}
+                    {featuredEvent.location && (
+                      <div><strong>Location:</strong> {featuredEvent.location}</div>
+                    )}
+                    {featuredEvent.opponent && (
+                      <div><strong>Opponent:</strong> {featuredEvent.opponent}</div>
+                    )}
+                    {featuredEvent.meal_options && featuredEvent.meal_options.length > 0 && (
+                      <div><strong>Meal:</strong> {featuredEvent.meal_options.join(', ')}</div>
+                    )}
+                    {featuredEvent.meal_notes && (
+                      <div><strong>Notes:</strong> {featuredEvent.meal_notes}</div>
+                    )}
+                    {featuredEvent.description && (
+                      <div style={{ marginTop: '8px' }}>{featuredEvent.description}</div>
                     )}
                   </div>
-                </CardHeader>
-              </Card>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">No games or evening activities scheduled for today</p>
-        </div>
-      )}
+                </div>
+              ) : (
+                <div className="boxed-section">
+                  <div className="section-title" style={{ fontSize: '16px' }}>Featured Event</div>
+                  <div className="text-center py-8 text-muted-foreground">
+                    No featured event today
+                  </div>
+                </div>
+              )}
 
-      <AlertDialog open={!!deletingNote} onOpenChange={(open) => !open && setDeletingNote(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the sports event from the calendar.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deletingNote && handleDelete(deletingNote)}>
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+              {/* Meal Schedule */}
+              <div className="boxed-section">
+                <div className="section-title" style={{ fontSize: '16px' }}>Da Bears' Buffet</div>
+                <div style={{ fontSize: '14px', lineHeight: '1.8' }}>
+                  <div style={{ marginBottom: '12px' }}>
+                    <strong style={{ fontSize: '15px' }}>Breakfast</strong>
+                    <div style={{ marginLeft: '12px', color: '#666' }}>7:30 AM - 8:30 AM</div>
+                  </div>
+                  <div style={{ marginBottom: '12px' }}>
+                    <strong style={{ fontSize: '15px' }}>Lunch</strong>
+                    <div style={{ marginLeft: '12px', color: '#666' }}>12:30 PM - 1:30 PM</div>
+                  </div>
+                  <div>
+                    <strong style={{ fontSize: '15px' }}>Dinner</strong>
+                    <div style={{ marginLeft: '12px', color: '#666' }}>6:00 PM - 7:00 PM</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
-    </>
+    </div>
   );
 }
