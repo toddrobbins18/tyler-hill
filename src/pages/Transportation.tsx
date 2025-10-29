@@ -185,12 +185,12 @@ export default function Transportation() {
   };
 
   const getStatusColor = (trip: any) => {
-    // If trip is approved, always show green card styling
-    if (trip.status === 'approved') {
+    // If trip is approved or confirmed, always show green card styling
+    if (trip.status === 'approved' || trip.status === 'confirmed') {
       return "border-l-4 border-l-green-500 bg-green-50 dark:bg-green-950/20";
     }
     
-    // For non-approved trips, check if transportation details are missing
+    // For pending or no status trips, check if transportation details are missing
     const isPending = !trip.transportation_type || !trip.driver;
     return isPending 
       ? "border-l-4 border-l-red-500 bg-red-50 dark:bg-red-950/20" 
