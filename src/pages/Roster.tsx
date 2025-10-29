@@ -38,8 +38,6 @@ export default function Roster() {
   const [children, setChildren] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
   const [selectedDivision, setSelectedDivision] = useState<string>("all");
-  const [selectedSeason, setSelectedSeason] = useState<string>("all");
-  const [seasons, setSeasons] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<"name" | "division">("name");
   const [loading, setLoading] = useState(true);
   const [editingChild, setEditingChild] = useState<string | null>(null);
@@ -76,9 +74,6 @@ export default function Roster() {
     
     if (!error1 && !error2 && allData.length > 0) {
       setChildren(allData);
-      // Extract unique seasons
-      const uniqueSeasons = [...new Set(allData.map(child => child.season).filter(Boolean))].sort().reverse();
-      setSeasons(uniqueSeasons as string[]);
     }
     
     setLoading(false);
@@ -102,7 +97,7 @@ export default function Roster() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedDivision, selectedSeason, sortBy]);
+  }, [searchTerm, selectedDivision, currentSeason, sortBy]);
 
   const filteredChildren = children
     .filter((child) => {
@@ -115,7 +110,7 @@ export default function Roster() {
         selectedDivision === "all" || child.division_id === selectedDivision;
       
       const matchesSeason = 
-        selectedSeason === "all" || child.season === selectedSeason;
+        child.season === currentSeason;
       
       return matchesSearch && matchesDivision && matchesSeason;
     })
@@ -217,19 +212,7 @@ export default function Roster() {
             </option>
           ))}
         </select>
-        <select
-          value={selectedSeason}
-          onChange={(e) => setSelectedSeason(e.target.value)}
-          className="px-4 py-2 border rounded-md bg-background"
-        >
-          <option value="all">All Seasons</option>
-          {seasons.map((season) => (
-            <option key={season} value={season}>
-              {season}
-            </option>
-          ))}
-        </select>
-        <Button 
+        <Button
           variant="outline"
           onClick={() => setSortBy(sortBy === "name" ? "division" : "name")}
         >
