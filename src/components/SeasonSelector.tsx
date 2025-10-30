@@ -30,7 +30,7 @@ export default function SeasonSelector() {
     <div className="flex items-center gap-2 w-full">
       <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0 hidden sm:block" />
       <Select value={currentSeason} onValueChange={setCurrentSeason}>
-        <SelectTrigger className="w-full">
+        <SelectTrigger className="w-full text-foreground">
           <SelectValue placeholder="Select season" />
         </SelectTrigger>
         <SelectContent>
