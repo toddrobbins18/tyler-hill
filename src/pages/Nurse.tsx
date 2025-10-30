@@ -84,6 +84,7 @@ export default function Nurse() {
         division:divisions(id, name, gender, sort_order)
       `)
       .eq("status", "active")
+      .eq("season", currentSeason)
       .order("name");
 
     if (error) {
