@@ -16,7 +16,6 @@ import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useSeason } from "@/contexts/SeasonContext";
-import SeasonSelector from "@/components/SeasonSelector";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -174,7 +173,6 @@ export default function RainyDaySchedule() {
           <p className="text-muted-foreground">Plan indoor activities for inclement weather</p>
         </div>
         <div className="flex gap-2">
-          <SeasonSelector />
           <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
             <ToggleGroupItem value="calendar" aria-label="Calendar view">
               <CalendarIcon className="h-4 w-4" />

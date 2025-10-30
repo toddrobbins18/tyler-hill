@@ -12,6 +12,7 @@ import EditStaffDialog from "@/components/dialogs/EditStaffDialog";
 import CSVUploader from "@/components/CSVUploader";
 import { JSONUploader } from "@/components/JSONUploader";
 import { toast } from "sonner";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,11 +27,10 @@ import {
 export default function Staff() {
   const [searchTerm, setSearchTerm] = useState("");
   const [staff, setStaff] = useState<any[]>([]);
-  const [selectedSeason, setSelectedSeason] = useState("all");
-  const [seasons, setSeasons] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingStaff, setEditingStaff] = useState<string | null>(null);
   const [deletingStaff, setDeletingStaff] = useState<string | null>(null);
+  const { currentSeason } = useSeasonContext();
   const navigate = useNavigate();
 
   const fetchStaff = async () => {
@@ -64,9 +64,6 @@ export default function Staff() {
       );
 
       setStaff(staffWithEvals);
-      // Extract unique seasons
-      const uniqueSeasons = [...new Set(staffData?.map(member => member.season).filter(Boolean))].sort().reverse();
-      setSeasons(uniqueSeasons as string[]);
     }
     setLoading(false);
   };
@@ -81,8 +78,7 @@ export default function Staff() {
       (member.role?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
       (member.department?.toLowerCase() || "").includes(searchTerm.toLowerCase());
     
-    const matchesSeason = 
-      selectedSeason === "all" || member.season === selectedSeason;
+    const matchesSeason = member.season === currentSeason || member.season === null;
     
     return matchesSearch && matchesSeason;
   });
@@ -121,28 +117,14 @@ export default function Staff() {
         </div>
       </div>
 
-      <div className="flex gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search staff by name, role, or department..."
-            className="pl-10"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        <select
-          value={selectedSeason}
-          onChange={(e) => setSelectedSeason(e.target.value)}
-          className="px-4 py-2 border rounded-md bg-background"
-        >
-          <option value="all">All Seasons</option>
-          {seasons.map((season) => (
-            <option key={season} value={season}>
-              {season}
-            </option>
-          ))}
-        </select>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search staff by name, role, or department..."
+          className="pl-10"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
       </div>
 
       {loading ? (

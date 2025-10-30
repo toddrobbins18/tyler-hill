@@ -14,7 +14,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CSVUploader } from "@/components/CSVUploader";
 import { formatTime12Hour } from "@/lib/utils";
 import { useSeason } from "@/contexts/SeasonContext";
-import SeasonSelector from "@/components/SeasonSelector";
 
 export default function SpecialEventsActivities() {
   const [events, setEvents] = useState<any[]>([]);
@@ -220,7 +219,6 @@ export default function SpecialEventsActivities() {
           <p className="text-muted-foreground">Special events and evening activities</p>
         </div>
         <div className="flex gap-2">
-          <SeasonSelector />
           <CSVUploader tableName="special_events_activities" onUploadComplete={fetchEvents} />
           <Button onClick={() => setShowDialog(true)}>
             <Plus className="h-4 w-4 mr-2" />
