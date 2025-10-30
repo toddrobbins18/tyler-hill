@@ -229,7 +229,7 @@ export default function Nurse() {
       .from("health_center_admissions")
       .select(`
         *,
-        children:child_id (
+        children!fk_health_center_admissions_child_id (
           id,
           name,
           division:division_id (
@@ -253,7 +253,7 @@ export default function Nurse() {
       .from("health_center_admissions")
       .select(`
         *,
-        children:child_id (
+        children!fk_health_center_admissions_child_id (
           id,
           name,
           division:division_id (
