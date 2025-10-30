@@ -98,7 +98,9 @@ export function AppSidebar() {
         </div>
         
         <div className="px-4 pb-4">
-          <SeasonSelector />
+          <div className={`transition-all ${isCollapsed ? 'scale-90 origin-left' : ''}`}>
+            <SeasonSelector />
+          </div>
         </div>
         
         <SidebarGroup>

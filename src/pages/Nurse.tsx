@@ -235,9 +235,6 @@ export default function Nurse() {
           division:division_id (
             name
           )
-        ),
-        admitted_by_profile:profiles!fk_health_center_admissions_admitted_by (
-          full_name
         )
       `)
       .eq("season", currentSeason)
@@ -262,12 +259,6 @@ export default function Nurse() {
           division:division_id (
             name
           )
-        ),
-        admitted_by_profile:profiles!fk_health_center_admissions_admitted_by (
-          full_name
-        ),
-        checked_out_by_profile:profiles!fk_health_center_admissions_checked_out_by (
-          full_name
         )
       `)
       .eq("season", currentSeason)
@@ -908,10 +899,10 @@ export default function Nurse() {
                                     
                                     <div className="flex gap-4 text-xs text-muted-foreground mt-2">
                                       <span>
-                                        Admitted by: {admission.admitted_by_profile?.full_name || "Unknown"}
+                                        Admitted by: Staff
                                       </span>
                                       <span>
-                                        Checked out by: {admission.checked_out_by_profile?.full_name || "Unknown"}
+                                        Checked out by: Staff
                                       </span>
                                     </div>
                                   </div>
