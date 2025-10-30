@@ -97,8 +97,8 @@ export function AppSidebar() {
           </h1>
         </div>
         
-        <div className="px-4 pb-4">
-          <div className={`transition-all ${isCollapsed ? 'scale-90 origin-left' : ''}`}>
+        <div className="pb-4">
+          <div className={`transition-all ${isCollapsed ? 'px-2 scale-75' : 'px-4'}`}>
             <SeasonSelector />
           </div>
         </div>
