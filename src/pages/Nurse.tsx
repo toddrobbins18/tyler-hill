@@ -24,7 +24,7 @@ export default function Nurse() {
   const [medications, setMedications] = useState<any[]>([]);
   const [admissions, setAdmissions] = useState<any[]>([]);
   const [admissionHistory, setAdmissionHistory] = useState<any[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
+  const [showHistory, setShowHistory] = useState(true);
   const [selectedChildForHistory, setSelectedChildForHistory] = useState<string | null>(null);
   const [selectedChild, setSelectedChild] = useState("");
   const [loading, setLoading] = useState(true);
