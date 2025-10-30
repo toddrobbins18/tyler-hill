@@ -1,98 +1,101 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getRecipientsForEmailType, sendEmailNotifications } from "../_shared/emailHelpers.ts";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
 serve(async (req) => {
-  // Handle CORS preflight requests
-  if (req.method === "OPTIONS") {
+  if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
     const { type, record } = await req.json();
-    console.log("Processing notification for type:", type, "record:", record);
+    console.log(`Processing transportation event: ${type}`);
 
-    // Find transportation director (staff with department 'Transportation' or role containing 'Transport')
-    const { data: transportStaff, error: staffError } = await supabase
-      .from("staff")
-      .select("id, name, email")
-      .or('department.ilike.%transport%,role.ilike.%transport%')
-      .eq("status", "active");
+    // Get recipients based on configuration
+    const recipients = await getRecipientsForEmailType(supabase, 'transportation_event');
 
-    if (staffError) {
-      console.error("Error finding transport staff:", staffError);
-      throw staffError;
-    }
-
-    if (!transportStaff || transportStaff.length === 0) {
-      console.log("No transportation staff found, skipping notification");
+    if (!recipients.length) {
+      console.log('No recipients configured for transportation events');
       return new Response(
-        JSON.stringify({ message: "No transportation staff found" }),
-        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        JSON.stringify({ message: 'No recipients configured' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       );
     }
 
-    // Get profiles for the transport staff to find user_ids
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, email")
-      .in("email", transportStaff.map(s => s.email).filter(Boolean));
+    // Create notification content based on event type
+    let subject = '';
+    let content = '';
 
-    if (!profiles || profiles.length === 0) {
-      console.log("No profiles found for transportation staff");
+    if (type === 'INSERT') {
+      subject = `New Trip Created: ${record.name}`;
+      content = `
+A new trip has been scheduled:
+
+**Trip Name:** ${record.name}
+**Type:** ${record.type}
+**Date:** ${new Date(record.date).toLocaleDateString()}
+**Destination:** ${record.destination || 'N/A'}
+**Departure Time:** ${record.departure_time || 'N/A'}
+**Return Time:** ${record.return_time || 'N/A'}
+**Transportation:** ${record.transportation_type || 'N/A'}
+**Driver:** ${record.driver || 'N/A'}
+**Chaperone:** ${record.chaperone || 'N/A'}
+
+Please review the trip details in the Transportation section.
+      `.trim();
+    } else if (type === 'UPDATE') {
+      subject = `Trip Updated: ${record.name}`;
+      content = `
+A trip has been updated:
+
+**Trip Name:** ${record.name}
+**Type:** ${record.type}
+**Date:** ${new Date(record.date).toLocaleDateString()}
+**Status:** ${record.status}
+**Destination:** ${record.destination || 'N/A'}
+**Departure Time:** ${record.departure_time || 'N/A'}
+**Return Time:** ${record.return_time || 'N/A'}
+**Transportation:** ${record.transportation_type || 'N/A'}
+**Driver:** ${record.driver || 'N/A'}
+
+Please review the updated trip details in the Transportation section.
+      `.trim();
+    } else {
+      console.log(`Unknown event type: ${type}`);
       return new Response(
-        JSON.stringify({ message: "No profiles found" }),
-        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        JSON.stringify({ message: 'Unknown event type' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       );
     }
 
-    // Create notification messages for each transportation staff member
-    const messages = profiles.map(profile => ({
-      recipient_id: profile.id,
-      subject: `New ${type}: ${record.title || record.name}`,
-      content: `A new ${type} has been scheduled:\n\nTitle: ${record.title || record.name}\nDate: ${record.event_date || record.date}\nLocation: ${record.location || record.destination || 'Not specified'}\n\nPlease review and arrange transportation as needed.`,
-      read: false,
-    }));
+    // Send notifications
+    await sendEmailNotifications(supabase, recipients, subject, content);
 
-    const { error: messageError } = await supabase
-      .from("messages")
-      .insert(messages);
-
-    if (messageError) {
-      console.error("Error creating messages:", messageError);
-      throw messageError;
-    }
-
-    console.log(`Sent ${messages.length} notifications to transportation staff`);
+    console.log(`Successfully sent transportation notifications to ${recipients.length} recipients`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        notificationsSent: messages.length 
+        recipients_notified: recipients.length 
       }),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
+
   } catch (error: any) {
-    console.error("Error in notify-transportation-events:", error);
+    console.error('Error in notify-transportation-events:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
 });

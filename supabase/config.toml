@@ -20,3 +20,12 @@ verify_jwt = false
 
 [functions.send-bulk-email]
 verify_jwt = true
+
+[functions.send-incident-notification]
+verify_jwt = false
+
+[functions.send-health-center-notification]
+verify_jwt = false
+
+[functions.send-user-approval-notification]
+verify_jwt = false

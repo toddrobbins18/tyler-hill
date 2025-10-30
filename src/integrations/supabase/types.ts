@@ -112,6 +112,33 @@ export type Database = {
         }
         Relationships: []
       }
+      automated_email_config: {
+        Row: {
+          created_at: string | null
+          email_type: string
+          enabled: boolean | null
+          id: string
+          recipient_tags: string[]
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email_type: string
+          enabled?: boolean | null
+          id?: string
+          recipient_tags?: string[]
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email_type?: string
+          enabled?: boolean | null
+          id?: string
+          recipient_tags?: string[]
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       awards: {
         Row: {
           category: string | null
