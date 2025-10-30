@@ -204,7 +204,7 @@ export default function DailyNotes() {
       `}</style>
       
       <div className="flex justify-between items-center mb-6 no-print">
-        <h1 className="text-3xl font-bold">Franko Sheet</h1>
+        <h1 className="text-3xl font-bold">Daily News</h1>
         <Button onClick={handlePrint} variant="outline">
           <Printer className="h-4 w-4 mr-2" />
           Print

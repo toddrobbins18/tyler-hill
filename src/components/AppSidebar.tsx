@@ -20,7 +20,7 @@ const items = [
   { title: "Awards", url: "/awards", icon: Award, menuId: "awards" },
   { title: "Camper", url: "/roster", icon: Users, menuId: "roster" },
   { title: "Dashboard", url: "/", icon: Home, menuId: "dashboard" },
-  { title: "Franko Sheet", url: "/notes", icon: Truck, menuId: "notes" },
+  { title: "Daily News", url: "/notes", icon: Truck, menuId: "notes" },
   { title: "Incident Reports", url: "/incidents", icon: AlertTriangle, menuId: "incidents" },
   { title: "Master Calendar", url: "/calendar", icon: Calendar, menuId: "calendar" },
   { title: "Menu", url: "/menu", icon: Utensils, menuId: "menu" },
