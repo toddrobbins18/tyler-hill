@@ -1,21 +1,29 @@
 import { useState, useEffect } from "react";
-import { Mail, Send, Eye, Clock, Bell } from "lucide-react";
+import { Mail, Send, Eye, Clock, Bell, Users, User, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { format } from "date-fns";
 
-interface RecipientGroup {
-  id: string;
-  name: string;
+interface TagGroup {
+  tag: string;
+  label: string;
   count: number;
-  role: string;
+  color: string;
+}
+
+interface UserOption {
+  id: string;
+  email: string;
+  full_name: string;
+  tags: string[];
 }
 
 interface Message {
@@ -27,22 +35,49 @@ interface Message {
   sender_id: string | null;
 }
 
+const TAG_LABELS = {
+  nurse: "Nurses",
+  transportation: "Transportation",
+  food_service: "Food Service",
+  specialist: "Specialists",
+  division_leader: "Division Leaders",
+  director: "Directors",
+  general_staff: "General Staff",
+  admin_staff: "Admin Staff",
+};
+
+const TAG_COLORS = {
+  nurse: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  transportation: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+  food_service: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+  specialist: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  division_leader: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
+  director: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  general_staff: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200",
+  admin_staff: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+};
+
 export default function Messages() {
-  const [recipientGroups, setRecipientGroups] = useState<RecipientGroup[]>([]);
-  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const [tagGroups, setTagGroups] = useState<TagGroup[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [allUsers, setAllUsers] = useState<UserOption[]>([]);
+  const [userSearchQuery, setUserSearchQuery] = useState("");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
   const [viewMode, setViewMode] = useState<'compose' | 'inbox'>('inbox');
   const [receivedMessages, setReceivedMessages] = useState<Message[]>([]);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [showRecipientPreview, setShowRecipientPreview] = useState(false);
 
   useEffect(() => {
-    fetchRecipientGroups();
+    fetchTagGroups();
+    fetchAllUsers();
     fetchMessages();
 
-    // Subscribe to real-time message updates
     const channel = supabase
       .channel('messages-changes')
       .on(
@@ -91,68 +126,128 @@ export default function Messages() {
     }
   };
 
-  const fetchRecipientGroups = async () => {
+  const fetchTagGroups = async () => {
     setLoading(true);
     
-    // Fetch all users with accounts (from profiles)
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, email, user_roles(role)");
+    const { data: userTags, error } = await supabase
+      .from("user_tags")
+      .select("tag");
 
-    if (!profiles) {
+    if (error || !userTags) {
       setLoading(false);
       return;
     }
 
-    // Group by role
-    const roleGroups: Record<string, number> = {};
-    
-    profiles.forEach((profile: any) => {
-      const roles = profile.user_roles || [];
-      roles.forEach((roleObj: any) => {
-        const role = roleObj.role;
-        roleGroups[role] = (roleGroups[role] || 0) + 1;
-      });
+    const tagCounts: Record<string, number> = {};
+    userTags.forEach((item) => {
+      tagCounts[item.tag] = (tagCounts[item.tag] || 0) + 1;
     });
 
-    // Create recipient groups from roles
-    const groups: RecipientGroup[] = Object.entries(roleGroups).map(([role, count]) => ({
-      id: role,
-      name: role.charAt(0).toUpperCase() + role.slice(1) + "s",
+    const groups: TagGroup[] = Object.entries(tagCounts).map(([tag, count]) => ({
+      tag,
+      label: TAG_LABELS[tag as keyof typeof TAG_LABELS] || tag,
       count,
-      role,
+      color: TAG_COLORS[tag as keyof typeof TAG_COLORS] || "bg-gray-100 text-gray-800",
     }));
 
-    setRecipientGroups(groups);
+    setTagGroups(groups);
     setLoading(false);
   };
 
-  const handleGroupToggle = (groupId: string) => {
-    setSelectedGroups(prev =>
-      prev.includes(groupId)
-        ? prev.filter(id => id !== groupId)
-        : [...prev, groupId]
+  const fetchAllUsers = async () => {
+    const { data: profiles, error: profilesError } = await supabase
+      .from("profiles")
+      .select("id, email, full_name")
+      .order("full_name");
+
+    if (profilesError || !profiles) return;
+
+    const { data: userTags } = await supabase
+      .from("user_tags")
+      .select("user_id, tag");
+
+    const users: UserOption[] = profiles.map((profile) => ({
+      id: profile.id,
+      email: profile.email || "",
+      full_name: profile.full_name || "Unknown",
+      tags: userTags?.filter((tag) => tag.user_id === profile.id).map((tag) => tag.tag) || [],
+    }));
+
+    setAllUsers(users);
+  };
+
+  const handleTagToggle = (tag: string) => {
+    setSelectedTags(prev =>
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
     );
   };
 
-  const handleSend = () => {
+  const handleUserToggle = (userId: string) => {
+    setSelectedUserIds(prev =>
+      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    );
+  };
+
+  const getUniqueRecipients = () => {
+    const recipientSet = new Set<string>();
+
+    selectedTags.forEach((tag) => {
+      allUsers.forEach((user) => {
+        if (user.tags.includes(tag)) {
+          recipientSet.add(user.id);
+        }
+      });
+    });
+
+    selectedUserIds.forEach((id) => recipientSet.add(id));
+
+    return Array.from(recipientSet).map((id) => allUsers.find((u) => u.id === id)!).filter(Boolean);
+  };
+
+  const filteredUsers = allUsers.filter((user) =>
+    user.full_name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+    user.email.toLowerCase().includes(userSearchQuery.toLowerCase())
+  );
+
+  const uniqueRecipients = getUniqueRecipients();
+
+  const handleSend = async () => {
     if (!subject.trim() || !message.trim()) {
       toast.error("Please fill in subject and message");
       return;
     }
 
-    if (selectedGroups.length === 0) {
-      toast.error("Please select at least one recipient group");
+    if (uniqueRecipients.length === 0) {
+      toast.error("Please select at least one recipient");
       return;
     }
 
-    // TODO: Implement actual email sending via edge function
-    toast.success(`Message queued to send to ${selectedGroups.length} group(s)`);
-    
-    // Reset form
-    setSubject("");
-    setMessage("");
-    setSelectedGroups([]);
+    setSending(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("send-bulk-email", {
+        body: {
+          subject,
+          message,
+          recipientTags: selectedTags,
+          recipientIds: selectedUserIds,
+        },
+      });
+
+      if (error) throw error;
+
+      toast.success(`Email queued for ${uniqueRecipients.length} recipient(s)`);
+      
+      setSubject("");
+      setMessage("");
+      setSelectedTags([]);
+      setSelectedUserIds([]);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to send email");
+      console.error(error);
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -185,7 +280,6 @@ export default function Messages() {
 
       {viewMode === 'inbox' ? (
         <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
-          {/* Message List */}
           <Card>
             <CardHeader>
               <CardTitle>Notifications & Messages</CardTitle>
@@ -234,7 +328,6 @@ export default function Messages() {
             </CardContent>
           </Card>
 
-          {/* Message Detail */}
           <Card>
             <CardHeader>
               {selectedMessage ? (
@@ -267,13 +360,11 @@ export default function Messages() {
           </Card>
         </div>
       ) : (
-        // Compose Mode - Keep existing compose UI
-        <div className="grid gap-6 md:grid-cols-3">
-        <div className="md:col-span-2">
-          <Card className="shadow-card">
+        <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
+          <Card>
             <CardHeader>
               <CardTitle>Compose Message</CardTitle>
-              <CardDescription>Create and send messages to selected groups</CardDescription>
+              <CardDescription>Create and send messages to selected recipients</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -290,7 +381,7 @@ export default function Messages() {
                 <label className="text-sm font-medium mb-2 block">Message</label>
                 <Textarea
                   placeholder="Write your message here..."
-                  rows={8}
+                  rows={12}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                 />
@@ -300,78 +391,150 @@ export default function Messages() {
                 <Button variant="outline" onClick={() => {
                   setSubject("");
                   setMessage("");
-                  setSelectedGroups([]);
+                  setSelectedTags([]);
+                  setSelectedUserIds([]);
                 }}>
                   Clear
                 </Button>
-                <Button onClick={handleSend}>
+                <Button onClick={handleSend} disabled={sending}>
                   <Send className="h-4 w-4 mr-2" />
-                  Send Message
+                  {sending ? "Sending..." : "Send Message"}
                 </Button>
               </div>
             </CardContent>
           </Card>
-        </div>
 
-        <div className="space-y-4">
-          <Card className="shadow-card">
-            <CardHeader>
-              <CardTitle>Recipients</CardTitle>
-              <CardDescription>Select who will receive this message</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {loading ? (
-                <p className="text-sm text-muted-foreground">Loading recipients...</p>
-              ) : recipientGroups.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No recipient groups found</p>
-              ) : (
-                recipientGroups.map((group) => (
-                  <div
-                    key={group.id}
-                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                      selectedGroups.includes(group.id)
-                        ? "bg-primary/10 border-primary"
-                        : "border-border hover:bg-muted/50"
-                    }`}
-                    onClick={() => handleGroupToggle(group.id)}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="font-medium text-sm">{group.name}</p>
-                      <input
-                        type="checkbox"
-                        className="rounded"
-                        checked={selectedGroups.includes(group.id)}
-                        onChange={() => handleGroupToggle(group.id)}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
+          <div className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Tag Groups
+                </CardTitle>
+                <CardDescription>Select groups by tag</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {loading ? (
+                  <p className="text-sm text-muted-foreground">Loading...</p>
+                ) : tagGroups.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No tags found</p>
+                ) : (
+                  tagGroups.map((group) => (
+                    <div
+                      key={group.tag}
+                      className="flex items-center justify-between p-2 rounded hover:bg-muted/50 cursor-pointer"
+                      onClick={() => handleTagToggle(group.tag)}
+                    >
+                      <div className="flex items-center gap-2 flex-1">
+                        <Checkbox
+                          checked={selectedTags.includes(group.tag)}
+                          onCheckedChange={() => handleTagToggle(group.tag)}
+                        />
+                        <span className="text-sm font-medium">{group.label}</span>
+                      </div>
                       <Badge variant="secondary" className="text-xs">
-                        {group.count} {group.count === 1 ? "person" : "people"}
+                        {group.count}
                       </Badge>
-                      <span className="text-xs text-muted-foreground">{group.role}</span>
                     </div>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
+                  ))
+                )}
+              </CardContent>
+            </Card>
 
-          <Card className="shadow-card bg-info/5 border-info/20">
-            <CardContent className="p-4">
-              <div className="flex gap-3">
-                <Mail className="h-5 w-5 text-info flex-shrink-0 mt-0.5" />
-                <div className="text-sm">
-                  <p className="font-medium mb-1 text-info">Email Integration</p>
-                  <p className="text-xs text-muted-foreground">
-                    Messages will be sent only to users with active accounts. Recipients can reply directly.
-                  </p>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Individual Users
+                </CardTitle>
+                <CardDescription>Select specific users</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Input
+                  placeholder="Search users..."
+                  value={userSearchQuery}
+                  onChange={(e) => setUserSearchQuery(e.target.value)}
+                />
+                <ScrollArea className="h-[200px]">
+                  <div className="space-y-2">
+                    {filteredUsers.map((user) => (
+                      <div
+                        key={user.id}
+                        className="flex items-start gap-2 p-2 rounded hover:bg-muted/50 cursor-pointer"
+                        onClick={() => handleUserToggle(user.id)}
+                      >
+                        <Checkbox
+                          checked={selectedUserIds.includes(user.id)}
+                          onCheckedChange={() => handleUserToggle(user.id)}
+                          className="mt-0.5"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{user.full_name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                          {user.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {user.tags.map((tag) => (
+                                <Badge key={tag} variant="outline" className="text-xs">
+                                  {TAG_LABELS[tag as keyof typeof TAG_LABELS]}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">Recipient Preview</CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowRecipientPreview(!showRecipientPreview)}
+                  >
+                    {showRecipientPreview ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </Button>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+                <CardDescription>
+                  {uniqueRecipients.length} {uniqueRecipients.length === 1 ? 'recipient' : 'recipients'} selected
+                </CardDescription>
+              </CardHeader>
+              {showRecipientPreview && (
+                <CardContent>
+                  <ScrollArea className="h-[150px]">
+                    <div className="space-y-1 text-xs">
+                      {uniqueRecipients.map((recipient) => (
+                        <div key={recipient.id}>
+                          <span className="font-medium">{recipient.full_name}</span>
+                          <span className="text-muted-foreground ml-2">{recipient.email}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              )}
+            </Card>
+
+            <Card className="bg-info/5 border-info/20">
+              <CardContent className="p-4">
+                <div className="flex gap-3">
+                  <Mail className="h-5 w-5 text-info flex-shrink-0 mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-medium mb-1 text-info">Email Integration Pending</p>
+                    <p className="text-xs text-muted-foreground">
+                      Email sending functionality will be enabled once Microsoft 365 integration is configured. For now, messages are logged but not sent.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
-      </div>
       )}
     </div>
   );

@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { Shield, Users, Database, FileText } from "lucide-react";
+import { Shield, Users, Database, FileText, Tag } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import UserRoleManagement from "@/components/admin/UserRoleManagement";
 import DataManagement from "@/components/admin/DataManagement";
 import AuditLog from "@/components/admin/AuditLog";
+import UserTagManagement from "@/components/admin/UserTagManagement";
 
 export default function Admin() {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -58,10 +59,14 @@ export default function Admin() {
       </div>
 
       <Tabs defaultValue="users" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 lg:w-auto">
+        <TabsList className="grid w-full grid-cols-4 lg:w-auto">
           <TabsTrigger value="users" className="gap-2">
             <Users className="h-4 w-4" />
             User Management
+          </TabsTrigger>
+          <TabsTrigger value="tags" className="gap-2">
+            <Tag className="h-4 w-4" />
+            User Tags
           </TabsTrigger>
           <TabsTrigger value="data" className="gap-2">
             <Database className="h-4 w-4" />
@@ -75,6 +80,10 @@ export default function Admin() {
 
         <TabsContent value="users" className="space-y-6">
           <UserRoleManagement />
+        </TabsContent>
+
+        <TabsContent value="tags" className="space-y-6">
+          <UserTagManagement />
         </TabsContent>
 
         <TabsContent value="data" className="space-y-6">

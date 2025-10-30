@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.send-event-notifications]
 verify_jwt = false
+
+[functions.send-bulk-email]
+verify_jwt = true
