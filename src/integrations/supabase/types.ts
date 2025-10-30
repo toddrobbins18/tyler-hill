@@ -350,6 +350,45 @@ export type Database = {
         }
         Relationships: []
       }
+      email_logs: {
+        Row: {
+          created_at: string | null
+          error_details: Json | null
+          id: string
+          recipient_count: number
+          recipient_ids: string[] | null
+          recipient_tags: string[] | null
+          sent_at: string | null
+          sent_by: string | null
+          status: string | null
+          subject: string
+        }
+        Insert: {
+          created_at?: string | null
+          error_details?: Json | null
+          id?: string
+          recipient_count: number
+          recipient_ids?: string[] | null
+          recipient_tags?: string[] | null
+          sent_at?: string | null
+          sent_by?: string | null
+          status?: string | null
+          subject: string
+        }
+        Update: {
+          created_at?: string | null
+          error_details?: Json | null
+          id?: string
+          recipient_count?: number
+          recipient_ids?: string[] | null
+          recipient_tags?: string[] | null
+          sent_at?: string | null
+          sent_by?: string | null
+          status?: string | null
+          subject?: string
+        }
+        Relationships: []
+      }
       evaluation_questions: {
         Row: {
           category: string | null
@@ -1648,6 +1687,30 @@ export type Database = {
         }
         Relationships: []
       }
+      user_tags: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          id: string
+          tag: Database["public"]["Enums"]["tag_type"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          tag: Database["public"]["Enums"]["tag_type"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          tag?: Database["public"]["Enums"]["tag_type"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -1674,6 +1737,15 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "staff" | "viewer" | "division_leader" | "specialist"
+      tag_type:
+        | "nurse"
+        | "transportation"
+        | "food_service"
+        | "specialist"
+        | "division_leader"
+        | "director"
+        | "general_staff"
+        | "admin_staff"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1802,6 +1874,16 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "staff", "viewer", "division_leader", "specialist"],
+      tag_type: [
+        "nurse",
+        "transportation",
+        "food_service",
+        "specialist",
+        "division_leader",
+        "director",
+        "general_staff",
+        "admin_staff",
+      ],
     },
   },
 } as const
