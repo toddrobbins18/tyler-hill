@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
+import SeasonSelector from "@/components/SeasonSelector";
 import {
   Sidebar,
   SidebarContent,
@@ -94,6 +95,10 @@ export function AppSidebar() {
           <h1 className={`font-bold transition-opacity ${isCollapsed ? 'opacity-0 text-xs' : 'opacity-100 text-xl'}`}>
             The Nest
           </h1>
+        </div>
+        
+        <div className="px-4 pb-4">
+          <SeasonSelector />
         </div>
         
         <SidebarGroup>

@@ -6,7 +6,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { SeasonProvider } from "@/contexts/SeasonContext";
-import SeasonSelector from "@/components/SeasonSelector";
 import Dashboard from "./pages/Dashboard";
 import Roster from "./pages/Roster";
 import Staff from "./pages/Staff";
@@ -58,9 +57,6 @@ function App() {
                       <div className="flex-1 flex flex-col">
                         <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur px-6">
                           <SidebarTrigger />
-                          <div className="ml-auto">
-                            <SeasonSelector />
-                          </div>
                         </header>
                         <main className="flex-1 p-6 md:p-8 bg-background">
                           <Routes>

@@ -235,10 +235,6 @@ export default function Nurse() {
           division:division_id (
             name
           )
-        ),
-        admitted_by_staff:admitted_by (
-          id,
-          name
         )
       `)
       .eq("season", currentSeason)
@@ -263,14 +259,6 @@ export default function Nurse() {
           division:division_id (
             name
           )
-        ),
-        admitted_by_staff:admitted_by (
-          id,
-          name
-        ),
-        checked_out_by_staff:checked_out_by (
-          id,
-          name
         )
       `)
       .eq("season", currentSeason)

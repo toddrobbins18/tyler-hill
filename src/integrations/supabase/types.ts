@@ -500,6 +500,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "fk_health_center_admissions_child_id"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "health_center_admissions_child_id_fkey"
             columns: ["child_id"]
             isOneToOne: false
