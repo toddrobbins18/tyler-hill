@@ -235,6 +235,9 @@ export default function Nurse() {
           division:division_id (
             name
           )
+        ),
+        admitted_by_profile:profiles!fk_health_center_admissions_admitted_by (
+          full_name
         )
       `)
       .eq("season", currentSeason)
@@ -259,6 +262,12 @@ export default function Nurse() {
           division:division_id (
             name
           )
+        ),
+        admitted_by_profile:profiles!fk_health_center_admissions_admitted_by (
+          full_name
+        ),
+        checked_out_by_profile:profiles!fk_health_center_admissions_checked_out_by (
+          full_name
         )
       `)
       .eq("season", currentSeason)
@@ -552,10 +561,11 @@ export default function Nurse() {
       {viewMode === 'list' && (
         <>
           <Tabs defaultValue="log" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="log">Daily Log</TabsTrigger>
           <TabsTrigger value="today">Today's Medications</TabsTrigger>
           <TabsTrigger value="health-center">Health Center</TabsTrigger>
+          <TabsTrigger value="health-log">Health Center Log</TabsTrigger>
           <TabsTrigger value="add">Add Medication</TabsTrigger>
         </TabsList>
 
@@ -809,111 +819,109 @@ export default function Nurse() {
                 )}
               </div>
 
-              {/* Admission History Section */}
-              <div className="mt-8 border-t pt-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-lg font-semibold">📊 Admission History</h3>
-                    <p className="text-sm text-muted-foreground">Past health center admissions this season</p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowHistory(!showHistory)}
-                  >
-                    {showHistory ? "Hide History" : "View Past Admissions"}
-                  </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Health Center Log Tab */}
+        <TabsContent value="health-log">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>📊 Health Center Admission History</CardTitle>
+                  <CardDescription>Past health center admissions this season</CardDescription>
                 </div>
-
-                {showHistory && (
-                  <div className="space-y-4">
-                    {Object.keys(groupedHistory).length === 0 ? (
-                      <p className="text-muted-foreground text-center py-8">No admission history found for this season</p>
-                    ) : (
-                      <div className="grid gap-4">
-                        {Object.values(groupedHistory).map((group: any) => {
-                          const child = group.child;
-                          const childAdmissions = group.admissions;
-                          const isExpanded = selectedChildForHistory === child.id;
-                          
-                          return (
-                            <Card key={child.id} className="overflow-hidden">
-                              <CardHeader className="cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setSelectedChildForHistory(isExpanded ? null : child.id)}>
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-3">
-                                    <div>
-                                      <CardTitle className="text-base">{child.name}</CardTitle>
-                                      <CardDescription className="text-sm">
-                                        {child.division?.name || "No Division"}
-                                      </CardDescription>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-4">
-                                    <div className="text-right">
-                                      <Badge variant="secondary" className="mb-1">
-                                        {childAdmissions.length} {childAdmissions.length === 1 ? 'admission' : 'admissions'}
-                                      </Badge>
-                                      <p className="text-xs text-muted-foreground">
-                                        Last: {format(new Date(childAdmissions[0].admitted_at), "MMM d, h:mm a")}
-                                      </p>
-                                    </div>
-                                    <Button variant="ghost" size="sm">
-                                      {isExpanded ? "▲" : "▼"}
-                                    </Button>
-                                  </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {Object.keys(groupedHistory).length === 0 ? (
+                  <p className="text-muted-foreground text-center py-8">No admission history found for this season</p>
+                ) : (
+                  <div className="grid gap-4">
+                    {Object.values(groupedHistory).map((group: any) => {
+                      const child = group.child;
+                      const childAdmissions = group.admissions;
+                      const isExpanded = selectedChildForHistory === child.id;
+                      
+                      return (
+                        <Card key={child.id} className="overflow-hidden">
+                          <CardHeader className="cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setSelectedChildForHistory(isExpanded ? null : child.id)}>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div>
+                                  <CardTitle className="text-base">{child.name}</CardTitle>
+                                  <CardDescription className="text-sm">
+                                    {child.division?.name || "No Division"}
+                                  </CardDescription>
                                 </div>
-                              </CardHeader>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <div className="text-right">
+                                  <Badge variant="secondary" className="mb-1">
+                                    {childAdmissions.length} {childAdmissions.length === 1 ? 'admission' : 'admissions'}
+                                  </Badge>
+                                  <p className="text-xs text-muted-foreground">
+                                    Last: {format(new Date(childAdmissions[0].admitted_at), "MMM d, h:mm a")}
+                                  </p>
+                                </div>
+                                <Button variant="ghost" size="sm">
+                                  {isExpanded ? "▲" : "▼"}
+                                </Button>
+                              </div>
+                            </div>
+                          </CardHeader>
 
-                              {isExpanded && (
-                                <CardContent className="pt-0">
-                                  <div className="space-y-3">
-                                    {childAdmissions.map((admission: any, index: number) => (
-                                      <div key={admission.id} className="border-l-2 border-primary/30 pl-4 py-2">
-                                        <div className="flex items-start justify-between mb-2">
-                                          <div>
-                                            <p className="font-medium text-sm">
-                                              Admission #{childAdmissions.length - index}
-                                            </p>
-                                            <p className="text-xs text-muted-foreground">
-                                              {format(new Date(admission.admitted_at), "MMM d, yyyy • h:mm a")} - {format(new Date(admission.checked_out_at), "h:mm a")}
-                                            </p>
-                                          </div>
-                                          <Badge variant="outline">
-                                            {getAdmissionDuration(admission.admitted_at, admission.checked_out_at)}
-                                          </Badge>
-                                        </div>
-                                        
-                                        {admission.reason && (
-                                          <div className="mb-2">
-                                            <p className="text-xs font-medium text-muted-foreground">Reason:</p>
-                                            <p className="text-sm">{admission.reason}</p>
-                                          </div>
-                                        )}
-                                        
-                                        {admission.notes && (
-                                          <div className="mb-2">
-                                            <p className="text-xs font-medium text-muted-foreground">Notes:</p>
-                                            <p className="text-sm">{admission.notes}</p>
-                                          </div>
-                                        )}
-                                        
-                                        <div className="flex gap-4 text-xs text-muted-foreground mt-2">
-                                          <span>
-                                            Admitted by: {admission.admitted_by_staff?.name || "Unknown"}
-                                          </span>
-                                          <span>
-                                            Checked out by: {admission.checked_out_by_staff?.name || "Unknown"}
-                                          </span>
-                                        </div>
+                          {isExpanded && (
+                            <CardContent className="pt-0">
+                              <div className="space-y-3">
+                                {childAdmissions.map((admission: any, index: number) => (
+                                  <div key={admission.id} className="border-l-2 border-primary/30 pl-4 py-2">
+                                    <div className="flex items-start justify-between mb-2">
+                                      <div>
+                                        <p className="font-medium text-sm">
+                                          Admission #{childAdmissions.length - index}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                          {format(new Date(admission.admitted_at), "MMM d, yyyy • h:mm a")} - {format(new Date(admission.checked_out_at), "h:mm a")}
+                                        </p>
                                       </div>
-                                    ))}
+                                      <Badge variant="outline">
+                                        {getAdmissionDuration(admission.admitted_at, admission.checked_out_at)}
+                                      </Badge>
+                                    </div>
+                                    
+                                    {admission.reason && (
+                                      <div className="mb-2">
+                                        <p className="text-xs font-medium text-muted-foreground">Reason:</p>
+                                        <p className="text-sm">{admission.reason}</p>
+                                      </div>
+                                    )}
+                                    
+                                    {admission.notes && (
+                                      <div className="mb-2">
+                                        <p className="text-xs font-medium text-muted-foreground">Notes:</p>
+                                        <p className="text-sm">{admission.notes}</p>
+                                      </div>
+                                    )}
+                                    
+                                    <div className="flex gap-4 text-xs text-muted-foreground mt-2">
+                                      <span>
+                                        Admitted by: {admission.admitted_by_profile?.full_name || "Unknown"}
+                                      </span>
+                                      <span>
+                                        Checked out by: {admission.checked_out_by_profile?.full_name || "Unknown"}
+                                      </span>
+                                    </div>
                                   </div>
-                                </CardContent>
-                              )}
-                            </Card>
-                          );
-                        })}
-                      </div>
-                    )}
+                                ))}
+                              </div>
+                            </CardContent>
+                          )}
+                        </Card>
+                      );
+                    })}
                   </div>
                 )}
               </div>
