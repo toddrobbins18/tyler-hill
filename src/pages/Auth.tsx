@@ -33,7 +33,7 @@ export default function Auth() {
     try {
       const { data: profile, error } = await supabase
         .from('profiles')
-        .select('company_id, approved')
+        .select('approved') // , company_id
         .eq('id', userId)
         .single();
 
@@ -49,15 +49,15 @@ export default function Auth() {
         return;
       }
 
-      if (!profile?.company_id) {
-        toast({
-          title: "No Company Assigned",
-          description: "Your account has no company assigned. Please contact an administrator.",
-          variant: "destructive",
-        });
-        await supabase.auth.signOut();
-        return;
-      }
+      // if (!profile?.company_id) {
+      //   toast({
+      //     title: "No Company Assigned",
+      //     description: "Your account has no company assigned. Please contact an administrator.",
+      //     variant: "destructive",
+      //   });
+      //   await supabase.auth.signOut();
+      //   return;
+      // }
 
       navigate("/");
     } catch (error) {

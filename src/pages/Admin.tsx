@@ -8,7 +8,7 @@ import DataManagement from "@/components/admin/DataManagement";
 import AuditLog from "@/components/admin/AuditLog";
 import UserTagManagement from "@/components/admin/UserTagManagement";
 import AutomatedEmailConfig from "@/components/admin/AutomatedEmailConfig";
-import CompanyManagement from "@/pages/admin/CompanyManagement";
+// import CompanyManagement from "@/pages/admin/CompanyManagement";
 
 export default function Admin() {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -63,7 +63,7 @@ export default function Admin() {
       </div>
 
       <Tabs defaultValue="users" className="space-y-6">
-        <TabsList className={`grid w-full ${isSuperAdmin ? 'grid-cols-6' : 'grid-cols-5'} lg:w-auto`}>
+        <TabsList className="grid w-full grid-cols-5 lg:w-auto">
           <TabsTrigger value="users" className="gap-2">
             <Users className="h-4 w-4" />
             User Management
@@ -76,12 +76,12 @@ export default function Admin() {
             <Mail className="h-4 w-4" />
             Email Automation
           </TabsTrigger>
-          {isSuperAdmin && (
+          {/* {isSuperAdmin && (
             <TabsTrigger value="companies" className="gap-2">
               <Building2 className="h-4 w-4" />
               Companies
             </TabsTrigger>
-          )}
+          )} */}
           <TabsTrigger value="data" className="gap-2">
             <Database className="h-4 w-4" />
             Data Management
@@ -104,11 +104,11 @@ export default function Admin() {
           <AutomatedEmailConfig />
         </TabsContent>
 
-        {isSuperAdmin && (
+        {/* {isSuperAdmin && (
           <TabsContent value="companies" className="space-y-6">
             <CompanyManagement />
           </TabsContent>
-        )}
+        )} */}
 
         <TabsContent value="data" className="space-y-6">
           <DataManagement />

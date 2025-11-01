@@ -6,7 +6,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SeasonProvider } from "@/contexts/SeasonContext";
-import { CompanyProvider } from "@/contexts/CompanyContext";
+// import { CompanyProvider } from "@/contexts/CompanyContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Dashboard from "./pages/Dashboard";
 import Roster from "./pages/Roster";
@@ -42,7 +42,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <CompanyProvider>
+        {/* <CompanyProvider> */}
           <SeasonProvider>
             <TooltipProvider>
               <Toaster />
@@ -99,7 +99,7 @@ function App() {
               </Routes>
             </TooltipProvider>
           </SeasonProvider>
-        </CompanyProvider>
+        {/* </CompanyProvider> */}
       </BrowserRouter>
     </QueryClientProvider>
   );
