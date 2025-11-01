@@ -1,9 +1,11 @@
-import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree, BookOpen } from "lucide-react";
+import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree, BookOpen, Building2 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCompany } from "@/contexts/CompanyContext";
 import SeasonSelector from "@/components/SeasonSelector";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Sidebar,
   SidebarContent,
@@ -42,7 +44,8 @@ export function AppSidebar() {
   const isCollapsed = state === "collapsed";
   const [isAdmin, setIsAdmin] = useState(false);
   const [visibleItems, setVisibleItems] = useState(items);
-  const { userRole, canAccessPage, loading: permissionsLoading } = usePermissions();
+  const { userRole, canAccessPage, loading: permissionsLoading, isSuperAdmin: isSuperAdminPerm } = usePermissions();
+  const { currentCompany, availableCompanies, switchCompany, loading: companyLoading, isSuperAdmin } = useCompany();
 
   useEffect(() => {
     checkAdminStatus();
@@ -91,11 +94,43 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarContent>
-        <div className="px-4 py-6">
-          <h1 className={`font-bold transition-opacity ${isCollapsed ? 'opacity-0 text-xs' : 'opacity-100 text-xl'}`}>
-            The Nest
+        <div className="px-4 py-6 flex items-center gap-3">
+          {currentCompany?.logo_url && !isCollapsed && (
+            <img 
+              src={currentCompany.logo_url} 
+              alt={currentCompany.name}
+              className="h-10 w-10 object-contain"
+            />
+          )}
+          <h1 
+            className={`font-bold transition-opacity ${isCollapsed ? 'opacity-0 text-xs' : 'opacity-100 text-xl'}`}
+            style={{ color: currentCompany?.theme_color || undefined }}
+          >
+            {currentCompany?.name || 'The Nest'}
           </h1>
         </div>
+        
+        {isSuperAdmin && !isCollapsed && (
+          <div className="px-4 pb-4">
+            <Select 
+              value={currentCompany?.id} 
+              onValueChange={switchCompany}
+              disabled={companyLoading}
+            >
+              <SelectTrigger className="w-full">
+                <Building2 className="mr-2 h-4 w-4" />
+                <SelectValue placeholder="Select company..." />
+              </SelectTrigger>
+              <SelectContent>
+                {availableCompanies.map(company => (
+                  <SelectItem key={company.id} value={company.id}>
+                    {company.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         
         <div className="pb-4">
           <div className={`transition-all ${isCollapsed ? 'px-2 scale-75' : 'px-4'}`}>

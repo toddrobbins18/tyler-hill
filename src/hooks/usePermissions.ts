@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-export type AppRole = 'admin' | 'staff' | 'division_leader' | 'specialist' | 'viewer';
+export type AppRole = 'admin' | 'staff' | 'division_leader' | 'specialist' | 'viewer' | 'super_admin';
 
 export function usePermissions() {
   const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [userDivisions, setUserDivisions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
     fetchUserPermissions();
@@ -30,6 +31,7 @@ export function usePermissions() {
 
       if (roleData) {
         setUserRole(roleData.role as AppRole);
+        setIsSuperAdmin(roleData.role === 'super_admin');
       }
 
       // Fetch user divisions (only if not admin)
@@ -73,8 +75,8 @@ export function usePermissions() {
 
   // Check if user can see data for a division
   const canSeeDivision = (divisionId: string): boolean => {
-    // Admins and specialists can see all divisions
-    if (userRole === 'admin' || userRole === 'specialist') {
+    // Super admins, admins and specialists can see all divisions
+    if (userRole === 'super_admin' || userRole === 'admin' || userRole === 'specialist') {
       return true;
     }
     
@@ -84,8 +86,8 @@ export function usePermissions() {
 
   // Get division filter for queries
   const getDivisionFilter = (): string[] | null => {
-    // Admins and specialists see all divisions (no filter)
-    if (userRole === 'admin' || userRole === 'specialist') {
+    // Super admins, admins and specialists see all divisions (no filter)
+    if (userRole === 'super_admin' || userRole === 'admin' || userRole === 'specialist') {
       return null;
     }
     
@@ -100,5 +102,6 @@ export function usePermissions() {
     canAccessPage,
     canSeeDivision,
     getDivisionFilter,
+    isSuperAdmin,
   };
 }
