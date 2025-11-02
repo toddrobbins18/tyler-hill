@@ -29,8 +29,10 @@ export function usePermissions() {
         .eq('user_id', user.id);
 
       if (rolesData && rolesData.length > 0) {
-        // Determine effective role (prioritize super_admin > admin > others)
+        // Get all roles
         const roles = rolesData.map(r => r.role as AppRole);
+        
+        // Prioritize roles: super_admin > admin > others
         const isSuperAdminUser = roles.includes('super_admin');
         const effectiveRole = isSuperAdminUser ? 'super_admin' : 
                               roles.includes('admin') ? 'admin' : roles[0];
@@ -40,18 +42,15 @@ export function usePermissions() {
       }
 
       // Fetch user divisions (only if not admin or super_admin)
-      if (rolesData && rolesData.length > 0) {
-        const roles = rolesData.map(r => r.role);
-        if (!roles.includes('admin') && !roles.includes('super_admin')) {
-          const { data: divisionData } = await supabase
-            .from('division_permissions')
-            .select('division_id')
-            .eq('user_id', user.id)
-            .eq('can_access', true);
+      if (!rolesData?.some(r => r.role === 'admin' || r.role === 'super_admin')) {
+        const { data: divisionData } = await supabase
+          .from('division_permissions')
+          .select('division_id')
+          .eq('user_id', user.id)
+          .eq('can_access', true);
 
-          if (divisionData) {
-            setUserDivisions(divisionData.map(d => d.division_id));
-          }
+        if (divisionData) {
+          setUserDivisions(divisionData.map(d => d.division_id));
         }
       }
     } catch (error) {
