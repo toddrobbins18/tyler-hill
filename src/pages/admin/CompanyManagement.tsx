@@ -54,8 +54,8 @@ export default function CompanyManagement() {
         for (const company of companiesData) {
           const [usersResult, childrenResult, staffResult] = await Promise.all([
             supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('company_id', company.id),
-            supabase.from('children').select('id', { count: 'exact', head: true }).eq('company_id', company.id),
-            supabase.from('staff').select('id', { count: 'exact', head: true }).eq('company_id', company.id),
+            supabase.from('children').select('id', { count: 'exact', head: true }),
+            supabase.from('staff').select('id', { count: 'exact', head: true }),
           ]);
 
           stats[company.id] = {

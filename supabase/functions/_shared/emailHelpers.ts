@@ -1,17 +1,22 @@
 export async function getRecipientsForEmailType(
   supabase: any,
   emailType: string,
-  companyId: string
+  companyId?: string
 ): Promise<any[]> {
-  console.log(`Getting recipients for email type: ${emailType}, company: ${companyId}`);
+  console.log(`Getting recipients for email type: ${emailType}, company: ${companyId || 'all'}`);
   
-  // Get configuration for this email type and company
-  const { data: config, error: configError } = await supabase
+  // Build query for email config
+  let configQuery = supabase
     .from('automated_email_config')
     .select('recipient_tags, enabled')
-    .eq('email_type', emailType)
-    .eq('company_id', companyId)
-    .single();
+    .eq('email_type', emailType);
+    
+  // Filter by company if provided
+  if (companyId) {
+    configQuery = configQuery.eq('company_id', companyId);
+  }
+  
+  const { data: config, error: configError } = await configQuery.maybeSingle();
   
   if (configError) {
     console.error('Error fetching email config:', configError);
@@ -25,12 +30,18 @@ export async function getRecipientsForEmailType(
   
   console.log(`Config found. Recipient tags:`, config.recipient_tags);
   
-  // Get all users with any of the specified tags in this company
-  const { data: userTags, error: tagsError } = await supabase
+  // Build query for user tags
+  let tagsQuery = supabase
     .from('user_tags')
     .select('user_id')
-    .in('tag', config.recipient_tags)
-    .eq('company_id', companyId);
+    .in('tag', config.recipient_tags);
+    
+  // Filter by company if provided
+  if (companyId) {
+    tagsQuery = tagsQuery.eq('company_id', companyId);
+  }
+  
+  const { data: userTags, error: tagsError } = await tagsQuery;
   
   if (tagsError) {
     console.error('Error fetching user tags:', tagsError);
@@ -45,12 +56,18 @@ export async function getRecipientsForEmailType(
   const userIds = [...new Set(userTags.map((t: any) => t.user_id))];
   console.log(`Found ${userIds.length} unique users with tags`);
   
-  // Get profiles for these users in this company
-  const { data: profiles, error: profilesError } = await supabase
+  // Build query for profiles
+  let profilesQuery = supabase
     .from('profiles')
     .select('id, email, full_name')
-    .in('id', userIds)
-    .eq('company_id', companyId);
+    .in('id', userIds);
+    
+  // Filter by company if provided
+  if (companyId) {
+    profilesQuery = profilesQuery.eq('company_id', companyId);
+  }
+  
+  const { data: profiles, error: profilesError } = await profilesQuery;
   
   if (profilesError) {
     console.error('Error fetching profiles:', profilesError);
@@ -66,9 +83,9 @@ export async function sendEmailNotifications(
   recipients: any[],
   subject: string,
   content: string,
-  companyId: string
+  companyId?: string
 ): Promise<void> {
-  console.log(`Sending email notifications to ${recipients.length} recipients in company ${companyId}`);
+  console.log(`Sending email notifications to ${recipients.length} recipients${companyId ? ` in company ${companyId}` : ''}`);
   console.log(`Subject: ${subject}`);
   
   // TODO: Microsoft Graph API integration will go here
@@ -79,13 +96,21 @@ export async function sendEmailNotifications(
     return;
   }
   
-  const messages = recipients.map(recipient => ({
-    recipient_id: recipient.id,
-    subject: subject,
-    content: content,
-    read: false,
-    company_id: companyId,
-  }));
+  const messages = recipients.map(recipient => {
+    const message: any = {
+      recipient_id: recipient.id,
+      subject: subject,
+      content: content,
+      read: false,
+    };
+    
+    // Add company_id if provided
+    if (companyId) {
+      message.company_id = companyId;
+    }
+    
+    return message;
+  });
   
   const { error } = await supabase.from('messages').insert(messages);
   
