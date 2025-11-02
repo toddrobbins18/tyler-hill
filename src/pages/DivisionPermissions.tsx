@@ -6,6 +6,7 @@ import { Users, Shield } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { useCompany } from "@/contexts/CompanyContext";
 
 export default function DivisionPermissions() {
   const [divisions, setDivisions] = useState<any[]>([]);
@@ -13,9 +14,12 @@ export default function DivisionPermissions() {
   const [permissions, setPermissions] = useState<Record<string, Record<string, boolean>>>({});
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { currentCompany } = useCompany();
 
   useEffect(() => {
-    fetchData();
+    if (currentCompany?.id) {
+      fetchData();
+    }
 
     const channel = supabase
       .channel('division-permissions-changes')
@@ -26,7 +30,7 @@ export default function DivisionPermissions() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [currentCompany?.id]);
 
   const fetchData = async () => {
     // Fetch divisions
@@ -40,6 +44,7 @@ export default function DivisionPermissions() {
       .from("profiles")
       .select("id, full_name, email")
       .eq("approved", true)
+      .eq("company_id", currentCompany?.id)
       .order("full_name");
 
     if (!usersData) {

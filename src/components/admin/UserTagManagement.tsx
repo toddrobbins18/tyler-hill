@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Users, Search, Tag } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { useCompany } from "@/contexts/CompanyContext";
 
 interface UserWithTags {
   id: string;
@@ -42,10 +43,13 @@ export default function UserTagManagement() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTag, setSelectedTag] = useState<string>("all");
+  const { currentCompany } = useCompany();
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    if (currentCompany?.id) {
+      fetchUsers();
+    }
+  }, [currentCompany?.id]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -53,6 +57,7 @@ export default function UserTagManagement() {
     const { data: profiles, error: profilesError } = await supabase
       .from("profiles")
       .select("id, email, full_name")
+      .eq("company_id", currentCompany?.id)
       .order("full_name");
 
     if (profilesError) {

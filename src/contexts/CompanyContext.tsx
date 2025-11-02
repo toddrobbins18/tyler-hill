@@ -122,9 +122,6 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
           title: "Viewing Company",
           description: `Now viewing ${company.name}`,
         });
-        
-        // Reload page to refresh all queries with new company context
-        window.location.reload();
       }
     } catch (error) {
       console.error('Error switching company:', error);
