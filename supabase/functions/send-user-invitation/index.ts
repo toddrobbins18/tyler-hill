@@ -47,13 +47,24 @@ serve(async (req) => {
       );
     }
 
-    const { email, fullName, role } = await req.json();
+    const { email, fullName, role, companyId } = await req.json();
 
-    console.log('Sending invitation to:', email);
+    console.log('Sending invitation to:', email, 'for company:', companyId);
+
+    // Get admin's company if not provided
+    let targetCompanyId = companyId;
+    if (!targetCompanyId) {
+      const { data: adminProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+      targetCompanyId = adminProfile?.company_id;
+    }
 
     // Get the app URL
     const appUrl = Deno.env.get('SUPABASE_URL')?.replace('https://', 'https://') || 'https://your-app.lovable.app';
-    const signupUrl = `${appUrl.replace('.supabase.co', '.lovableproject.com')}/auth`;
+    const signupUrl = `${appUrl.replace('.supabase.co', '.lovableproject.com')}/auth?company_id=${targetCompanyId}&email=${encodeURIComponent(email)}`;
 
     // Send invitation email
     const emailResponse = await resend.emails.send({

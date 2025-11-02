@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UserPlus, Mail } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useCompany } from "@/contexts/CompanyContext";
 import { toast } from "sonner";
 
 interface AddUserDialogProps {
@@ -16,6 +17,7 @@ interface AddUserDialogProps {
 export default function AddUserDialog({ onUserAdded }: AddUserDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const { currentCompany } = useCompany();
   
   // Direct creation form
   const [email, setEmail] = useState("");
@@ -37,7 +39,7 @@ export default function AddUserDialog({ onUserAdded }: AddUserDialogProps) {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("create-user", {
-        body: { email, password, fullName, role },
+        body: { email, password, fullName, role, companyId: currentCompany?.id },
       });
 
       if (error) throw error;
@@ -66,7 +68,7 @@ export default function AddUserDialog({ onUserAdded }: AddUserDialogProps) {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("send-user-invitation", {
-        body: { email: inviteEmail, fullName: inviteFullName, role: inviteRole },
+        body: { email: inviteEmail, fullName: inviteFullName, role: inviteRole, companyId: currentCompany?.id },
       });
 
       if (error) throw error;

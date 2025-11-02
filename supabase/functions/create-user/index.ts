@@ -44,9 +44,20 @@ serve(async (req) => {
       );
     }
 
-    const { email, password, fullName, role } = await req.json();
+    const { email, password, fullName, role, companyId } = await req.json();
 
-    console.log('Creating user:', { email, fullName, role });
+    console.log('Creating user:', { email, fullName, role, companyId });
+
+    // Get admin's company if companyId not provided
+    let targetCompanyId = companyId;
+    if (!targetCompanyId) {
+      const { data: adminProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+      targetCompanyId = adminProfile?.company_id;
+    }
 
     // Create the user
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
@@ -73,6 +84,7 @@ serve(async (req) => {
         full_name: fullName,
         email,
         approved: true,
+        company_id: targetCompanyId,
       });
 
     if (profileError) {

@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { useCompany } from "@/contexts/CompanyContext";
 import { toast } from "sonner";
 import { Shield, UserCog, Eye, Trophy, Users, Trash2 } from "lucide-react";
 import AddUserDialog from "./AddUserDialog";
@@ -21,16 +22,20 @@ interface UserWithRole {
 export default function UserRoleManagement() {
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
+  const { currentCompany } = useCompany();
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    if (currentCompany?.id) {
+      fetchUsers();
+    }
+  }, [currentCompany?.id]);
 
   const fetchUsers = async () => {
     setLoading(true);
     const { data: profiles } = await supabase
       .from("profiles")
-      .select("id, email, full_name");
+      .select("id, email, full_name")
+      .eq('company_id', currentCompany?.id);
 
     if (profiles) {
       const usersWithRoles = await Promise.all(
