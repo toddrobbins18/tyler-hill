@@ -97,9 +97,6 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       if (company) {
         setCurrentCompany(company);
         
-        // Set session variable for RLS
-        await supabase.rpc('set_current_company', { company_id: companyId });
-        
         toast({
           title: "Company Switched",
           description: `Now viewing ${company.name}`,

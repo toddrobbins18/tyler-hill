@@ -1807,6 +1807,7 @@ export type Database = {
       }
       is_specialist: { Args: { _user_id: string }; Returns: boolean }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
+      set_current_company: { Args: { company_id: string }; Returns: undefined }
     }
     Enums: {
       app_role:
