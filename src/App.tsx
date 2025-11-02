@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
+import { UserProfileDropdown } from "@/components/UserProfileDropdown";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SeasonProvider } from "@/contexts/SeasonContext";
@@ -57,8 +58,9 @@ function App() {
                         <div className="flex min-h-screen w-full">
                           <AppSidebar />
                           <div className="flex-1 flex flex-col">
-                            <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur px-6">
+                            <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-4 border-b bg-background/95 backdrop-blur px-6">
                               <SidebarTrigger />
+                              <UserProfileDropdown />
                             </header>
                             <main className="flex-1 p-6 md:p-8 bg-background">
                               <Routes>
