@@ -51,12 +51,28 @@ function darkenColor(hsl: string, amount: number): string {
 
 // Apply theme color to CSS variables
 export function applyThemeColor(color: string) {
+  console.log('🎨 Applying theme color:', color);
+  
   const hsl = hexToHSL(color);
+  console.log('🎨 Converted to HSL:', hsl);
+  
   const root = document.documentElement;
   
   // Calculate sidebar colors - darker versions for background
   const sidebarBg = darkenColor(hsl, 40); // Very dark for background
   const sidebarAccent = darkenColor(hsl, 32); // Slightly lighter for hover
+  
+  console.log('🎨 Sidebar BG:', sidebarBg);
+  console.log('🎨 Sidebar Accent:', sidebarAccent);
+  
+  // Force remove and re-add to ensure update
+  root.style.removeProperty('--primary');
+  root.style.removeProperty('--ring');
+  root.style.removeProperty('--sidebar-background');
+  root.style.removeProperty('--sidebar-accent');
+  root.style.removeProperty('--sidebar-border');
+  root.style.removeProperty('--sidebar-primary');
+  root.style.removeProperty('--sidebar-ring');
   
   // Apply all theme colors
   root.style.setProperty('--primary', hsl);
@@ -66,4 +82,6 @@ export function applyThemeColor(color: string) {
   root.style.setProperty('--sidebar-border', sidebarAccent);
   root.style.setProperty('--sidebar-primary', hsl);
   root.style.setProperty('--sidebar-ring', hsl);
+  
+  console.log('✅ Theme applied successfully');
 }

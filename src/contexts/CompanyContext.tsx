@@ -109,6 +109,8 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     try {
       const company = availableCompanies.find(c => c.id === companyId);
       if (company) {
+        console.log('🔄 Switching to company:', company.name, 'Color:', company.theme_color);
+        
         // Save to sessionStorage for super admins
         sessionStorage.setItem('viewing_company_id', companyId);
         setCurrentCompany(company);
@@ -116,6 +118,12 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         // Apply theme color immediately
         if (company.theme_color) {
           applyThemeColor(company.theme_color);
+          
+          // Force re-render after a brief delay to ensure DOM updates
+          setTimeout(() => {
+            console.log('🔄 Re-applying theme after timeout');
+            applyThemeColor(company.theme_color);
+          }, 100);
         }
         
         toast({

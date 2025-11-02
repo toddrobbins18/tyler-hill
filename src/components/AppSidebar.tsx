@@ -129,9 +129,13 @@ export function AppSidebar() {
                 <Building2 className="mr-2 h-4 w-4" />
                 <SelectValue placeholder="Select company..." />
               </SelectTrigger>
-              <SelectContent className="bg-popover text-popover-foreground border border-border z-50">
+              <SelectContent className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 z-50">
                 {availableCompanies.map(company => (
-                  <SelectItem key={company.id} value={company.id}>
+                  <SelectItem 
+                    key={company.id} 
+                    value={company.id}
+                    className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
                     {company.name}
                   </SelectItem>
                 ))}
