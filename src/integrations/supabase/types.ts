@@ -264,6 +264,39 @@ export type Database = {
           },
         ]
       }
+      companies: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean
+          logo_url: string | null
+          name: string
+          slug: string
+          theme_color: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean
+          logo_url?: string | null
+          name: string
+          slug: string
+          theme_color?: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean
+          logo_url?: string | null
+          name?: string
+          slug?: string
+          theme_color?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       daily_notes: {
         Row: {
           activities: string | null
@@ -941,6 +974,7 @@ export type Database = {
         Row: {
           approval_requested_at: string | null
           approved: boolean | null
+          company_id: string | null
           created_at: string | null
           email: string | null
           full_name: string | null
@@ -951,6 +985,7 @@ export type Database = {
         Insert: {
           approval_requested_at?: string | null
           approved?: boolean | null
+          company_id?: string | null
           created_at?: string | null
           email?: string | null
           full_name?: string | null
@@ -961,6 +996,7 @@ export type Database = {
         Update: {
           approval_requested_at?: string | null
           approved?: boolean | null
+          company_id?: string | null
           created_at?: string | null
           email?: string | null
           full_name?: string | null
@@ -968,7 +1004,15 @@ export type Database = {
           role?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       rainy_day_schedule: {
         Row: {
@@ -1763,7 +1807,13 @@ export type Database = {
       is_specialist: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
-      app_role: "admin" | "staff" | "viewer" | "division_leader" | "specialist"
+      app_role:
+        | "admin"
+        | "staff"
+        | "viewer"
+        | "division_leader"
+        | "specialist"
+        | "super_admin"
       tag_type:
         | "nurse"
         | "transportation"
@@ -1900,7 +1950,14 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "staff", "viewer", "division_leader", "specialist"],
+      app_role: [
+        "admin",
+        "staff",
+        "viewer",
+        "division_leader",
+        "specialist",
+        "super_admin",
+      ],
       tag_type: [
         "nurse",
         "transportation",
