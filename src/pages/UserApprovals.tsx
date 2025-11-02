@@ -1,15 +1,19 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, XCircle, Clock } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useCompany } from "@/contexts/CompanyContext";
+import { CheckCircle, XCircle, Clock, Shield, Building2 } from "lucide-react";
 
 export default function UserApprovals() {
   const [pendingUsers, setPendingUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { isSuperAdmin } = usePermissions();
+  const { currentCompany } = useCompany();
 
   useEffect(() => {
     fetchPendingUsers();
@@ -89,6 +93,28 @@ export default function UserApprovals() {
         <h1 className="text-3xl font-bold mb-2">User Approvals</h1>
         <p className="text-muted-foreground">Approve or reject pending user registrations</p>
       </div>
+
+      {/* Super Admin Status Banner */}
+      {isSuperAdmin && (
+        <Card className="p-4 bg-primary/5 border-primary/20">
+          <div className="flex items-center gap-3">
+            <Shield className="h-5 w-5 text-primary" />
+            <div className="flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="default" className="bg-primary">
+                  Super Admin
+                </Badge>
+                {currentCompany && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Building2 className="h-4 w-4" />
+                    <span>Viewing: <strong className="text-foreground">{currentCompany.name}</strong></span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {loading ? (
         <p className="text-muted-foreground">Loading...</p>

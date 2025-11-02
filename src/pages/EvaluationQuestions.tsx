@@ -7,7 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, ClipboardList } from "lucide-react";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useCompany } from "@/contexts/CompanyContext";
+import { Plus, Pencil, Trash2, ClipboardList, Shield, Building2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
@@ -17,6 +19,8 @@ export default function EvaluationQuestions() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const { toast } = useToast();
+  const { isSuperAdmin } = usePermissions();
+  const { currentCompany } = useCompany();
 
   const [formData, setFormData] = useState({
     question_text: "",
@@ -136,6 +140,28 @@ export default function EvaluationQuestions() {
         <h1 className="text-3xl font-bold mb-2">Evaluation Questions</h1>
         <p className="text-muted-foreground">Manage questions for staff evaluations</p>
       </div>
+
+      {/* Super Admin Status Banner */}
+      {isSuperAdmin && (
+        <Card className="p-4 bg-primary/5 border-primary/20">
+          <div className="flex items-center gap-3">
+            <Shield className="h-5 w-5 text-primary" />
+            <div className="flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="default" className="bg-primary">
+                  Super Admin
+                </Badge>
+                {currentCompany && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Building2 className="h-4 w-4" />
+                    <span>Viewing: <strong className="text-foreground">{currentCompany.name}</strong></span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>

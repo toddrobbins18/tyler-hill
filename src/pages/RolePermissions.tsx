@@ -1,8 +1,11 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Shield, Users, Eye, UserCog, Trophy } from "lucide-react";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useCompany } from "@/contexts/CompanyContext";
+import { Shield, Users, Eye, UserCog, Trophy, Building2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
@@ -47,6 +50,8 @@ export default function RolePermissions() {
   const [permissions, setPermissions] = useState<Record<string, Record<string, boolean>>>({});
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { isSuperAdmin } = usePermissions();
+  const { currentCompany } = useCompany();
 
   useEffect(() => {
     fetchPermissions();
@@ -114,6 +119,28 @@ export default function RolePermissions() {
         <h1 className="text-3xl font-bold mb-2">Role Permissions</h1>
         <p className="text-muted-foreground">Manage access permissions for different user roles</p>
       </div>
+
+      {/* Super Admin Status Banner */}
+      {isSuperAdmin && (
+        <Card className="p-4 bg-primary/5 border-primary/20">
+          <div className="flex items-center gap-3">
+            <Shield className="h-5 w-5 text-primary" />
+            <div className="flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="default" className="bg-primary">
+                  Super Admin
+                </Badge>
+                {currentCompany && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Building2 className="h-4 w-4" />
+                    <span>Viewing: <strong className="text-foreground">{currentCompany.name}</strong></span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {loading ? (
         <Card>
