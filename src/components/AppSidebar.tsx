@@ -6,6 +6,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useCompany } from "@/contexts/CompanyContext";
 import SeasonSelector from "@/components/SeasonSelector";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Sidebar,
   SidebarContent,
@@ -118,30 +119,60 @@ export function AppSidebar() {
           </h1>
         </div>
         
-        {isSuperAdmin && !isCollapsed && (
-          <div className="px-4 pb-4">
-            <Select 
-              value={currentCompany?.id} 
-              onValueChange={switchCompany}
-              disabled={companyLoading}
-            >
-              <SelectTrigger className="w-full">
-                <Building2 className="mr-2 h-4 w-4" />
-                <SelectValue placeholder="Select company..." />
-              </SelectTrigger>
-              <SelectContent className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 z-50">
-                {availableCompanies.map(company => (
-                  <SelectItem 
-                    key={company.id} 
-                    value={company.id}
-                    className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
-                  >
-                    {company.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        {isSuperAdmin && (
+          isCollapsed ? (
+            <div className="px-2 pb-4">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button className="w-full h-10 flex items-center justify-center rounded-md hover:bg-sidebar-accent">
+                    <Building2 className="h-5 w-5" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-60 bg-popover text-popover-foreground border z-50" side="right">
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium mb-2">Switch Company</p>
+                    {availableCompanies.map(company => (
+                      <button
+                        key={company.id}
+                        onClick={() => switchCompany(company.id)}
+                        className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                          currentCompany?.id === company.id 
+                            ? 'bg-primary text-primary-foreground' 
+                            : 'hover:bg-accent hover:text-accent-foreground'
+                        }`}
+                      >
+                        {company.name}
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+          ) : (
+            <div className="px-4 pb-4">
+              <Select 
+                value={currentCompany?.id} 
+                onValueChange={switchCompany}
+                disabled={companyLoading}
+              >
+                <SelectTrigger className="w-full">
+                  <Building2 className="mr-2 h-4 w-4" />
+                  <SelectValue placeholder="Select company..." />
+                </SelectTrigger>
+                <SelectContent className="bg-popover text-popover-foreground border z-50">
+                  {availableCompanies.map(company => (
+                    <SelectItem 
+                      key={company.id} 
+                      value={company.id}
+                      className="cursor-pointer"
+                    >
+                      {company.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )
         )}
         
         <div className="pb-4">
