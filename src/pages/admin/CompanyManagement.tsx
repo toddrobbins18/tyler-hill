@@ -30,6 +30,13 @@ export default function CompanyManagement() {
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [companyStats, setCompanyStats] = useState<Record<string, CompanyStats>>({});
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [creatingCompany, setCreatingCompany] = useState(false);
+  const [newCompany, setNewCompany] = useState<Partial<Company>>({
+    name: '',
+    slug: '',
+    theme_color: '#0066cc',
+    is_active: true,
+  });
   const { toast } = useToast();
   const { refetchCompanies } = useCompany();
 
@@ -75,6 +82,86 @@ export default function CompanyManagement() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateCompany = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    try {
+      // Generate slug from name if not provided
+      const slug = newCompany.slug || newCompany.name?.toLowerCase().replace(/\s+/g, '-') || '';
+
+      // Check if slug is unique
+      const { data: existingCompany } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('slug', slug)
+        .maybeSingle();
+
+      if (existingCompany) {
+        toast({
+          title: "Error",
+          description: "A company with this slug already exists",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      let logoUrl = null;
+
+      // Upload logo if file selected
+      if (logoFile) {
+        const fileExt = logoFile.name.split('.').pop();
+        const fileName = `${slug}-${Date.now()}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('company-logos')
+          .upload(fileName, logoFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('company-logos')
+          .getPublicUrl(fileName);
+
+        logoUrl = publicUrl;
+      }
+
+      const { error } = await supabase
+        .from('companies')
+        .insert({
+          name: newCompany.name!,
+          slug,
+          theme_color: newCompany.theme_color || '#0066cc',
+          logo_url: logoUrl,
+          is_active: newCompany.is_active ?? true,
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Company created successfully",
+      });
+
+      setCreatingCompany(false);
+      setNewCompany({
+        name: '',
+        slug: '',
+        theme_color: '#0066cc',
+        is_active: true,
+      });
+      setLogoFile(null);
+      fetchCompanies();
+      refetchCompanies();
+    } catch (error) {
+      console.error('Error creating company:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create company",
+        variant: "destructive",
+      });
     }
   };
 
@@ -146,13 +233,132 @@ export default function CompanyManagement() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Building2 className="h-5 w-5" />
-            Company Management
-          </CardTitle>
-          <CardDescription>
-            Manage all companies in the multi-tenant system
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="h-5 w-5" />
+                Company Management
+              </CardTitle>
+              <CardDescription>
+                Manage all companies in the multi-tenant system
+              </CardDescription>
+            </div>
+            <Dialog open={creatingCompany} onOpenChange={setCreatingCompany}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Building2 className="h-4 w-4 mr-2" />
+                  Create New Company
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                  <DialogTitle>Create New Company</DialogTitle>
+                  <DialogDescription>
+                    Add a new company to the multi-tenant system
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleCreateCompany} className="space-y-4">
+                  <div>
+                    <Label htmlFor="new-name">Company Name</Label>
+                    <Input
+                      id="new-name"
+                      value={newCompany.name || ''}
+                      onChange={(e) => {
+                        const name = e.target.value;
+                        setNewCompany(prev => ({ 
+                          ...prev, 
+                          name,
+                          slug: name.toLowerCase().replace(/\s+/g, '-')
+                        }));
+                      }}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="new-slug">Slug</Label>
+                    <Input
+                      id="new-slug"
+                      value={newCompany.slug || ''}
+                      onChange={(e) => setNewCompany(prev => ({ 
+                        ...prev, 
+                        slug: e.target.value.toLowerCase().replace(/\s+/g, '-')
+                      }))}
+                      placeholder="company-slug"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="new-theme_color">Theme Color</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="new-theme_color"
+                        type="color"
+                        value={newCompany.theme_color || '#0066cc'}
+                        onChange={(e) => setNewCompany(prev => ({ 
+                          ...prev, 
+                          theme_color: e.target.value
+                        }))}
+                        className="w-20 h-10"
+                      />
+                      <Input
+                        type="text"
+                        value={newCompany.theme_color || '#0066cc'}
+                        onChange={(e) => setNewCompany(prev => ({ 
+                          ...prev, 
+                          theme_color: e.target.value
+                        }))}
+                        placeholder="#0066cc"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="new-logo">Company Logo (Optional)</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="new-logo"
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
+                      />
+                      <Upload className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="new-is_active"
+                      checked={newCompany.is_active ?? true}
+                      onChange={(e) => setNewCompany(prev => ({ 
+                        ...prev, 
+                        is_active: e.target.checked
+                      }))}
+                      className="rounded"
+                    />
+                    <Label htmlFor="new-is_active">Active</Label>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setCreatingCompany(false);
+                        setNewCompany({
+                          name: '',
+                          slug: '',
+                          theme_color: '#0066cc',
+                          is_active: true,
+                        });
+                        setLogoFile(null);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit">Create Company</Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">

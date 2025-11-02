@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
@@ -7,7 +8,8 @@ import { UserProfileDropdown } from "@/components/UserProfileDropdown";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SeasonProvider } from "@/contexts/SeasonContext";
-import { CompanyProvider } from "@/contexts/CompanyContext";
+import { CompanyProvider, useCompany } from "@/contexts/CompanyContext";
+import { applyThemeColor } from "@/utils/themeUtils";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Dashboard from "./pages/Dashboard";
 import Roster from "./pages/Roster";
@@ -39,16 +41,20 @@ import Auth from "./pages/Auth";
 
 const queryClient = new QueryClient();
 
-function App() {
+function AppContent() {
+  const { currentCompany } = useCompany();
+
+  useEffect(() => {
+    if (currentCompany?.theme_color) {
+      applyThemeColor(currentCompany.theme_color);
+    }
+  }, [currentCompany]);
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <CompanyProvider>
-          <SeasonProvider>
-            <TooltipProvider>
-              <Toaster />
-              <Sonner />
-              <Routes>
+    <>
+      <Toaster />
+      <Sonner />
+      <Routes>
                 <Route path="/auth" element={<Auth />} />
                 <Route
                   path="*"
@@ -99,6 +105,18 @@ function App() {
                   }
                 />
               </Routes>
+            </>
+  );
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <CompanyProvider>
+          <SeasonProvider>
+            <TooltipProvider>
+              <AppContent />
             </TooltipProvider>
           </SeasonProvider>
         </CompanyProvider>

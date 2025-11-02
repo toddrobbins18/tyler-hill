@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { applyThemeColor } from '@/utils/themeUtils';
 
 interface Company {
   id: string;
@@ -60,6 +61,10 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
       if (profile?.companies) {
         setCurrentCompany(profile.companies as any);
+        // Apply theme color
+        if ((profile.companies as any).theme_color) {
+          applyThemeColor((profile.companies as any).theme_color);
+        }
       }
 
       // If super admin, load all companies
@@ -96,6 +101,11 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       const company = availableCompanies.find(c => c.id === companyId);
       if (company) {
         setCurrentCompany(company);
+        
+        // Apply theme color
+        if (company.theme_color) {
+          applyThemeColor(company.theme_color);
+        }
         
         toast({
           title: "Company Switched",
