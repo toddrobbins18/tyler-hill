@@ -185,6 +185,7 @@ export type Database = {
           age: number | null
           allergies: string | null
           category: string | null
+          company_id: string | null
           created_at: string | null
           date_of_birth: string | null
           division_id: string | null
@@ -207,6 +208,7 @@ export type Database = {
           age?: number | null
           allergies?: string | null
           category?: string | null
+          company_id?: string | null
           created_at?: string | null
           date_of_birth?: string | null
           division_id?: string | null
@@ -229,6 +231,7 @@ export type Database = {
           age?: number | null
           allergies?: string | null
           category?: string | null
+          company_id?: string | null
           created_at?: string | null
           date_of_birth?: string | null
           division_id?: string | null
@@ -248,6 +251,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "children_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "children_division_id_fkey"
             columns: ["division_id"]
@@ -1469,6 +1479,7 @@ export type Database = {
       }
       staff: {
         Row: {
+          company_id: string | null
           created_at: string | null
           date_of_birth: string | null
           department: string | null
@@ -1484,6 +1495,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          company_id?: string | null
           created_at?: string | null
           date_of_birth?: string | null
           department?: string | null
@@ -1499,6 +1511,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          company_id?: string | null
           created_at?: string | null
           date_of_birth?: string | null
           department?: string | null
@@ -1514,6 +1527,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "staff_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "staff_leader_id_fkey"
             columns: ["leader_id"]
