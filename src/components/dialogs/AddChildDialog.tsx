@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { childSchema } from "@/lib/validationSchemas";
 import { z } from "zod";
+import { useCompany } from "@/contexts/CompanyContext";
 
 export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }) {
   const [open, setOpen] = useState(false);
@@ -19,6 +20,7 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
   const [leaderId, setLeaderId] = useState("");
   const [divisionId, setDivisionId] = useState("");
   const [gender, setGender] = useState("");
+  const { currentCompany } = useCompany();
 
   useEffect(() => {
     if (open) {
@@ -82,7 +84,10 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
         medical_notes?: string | null;
       };
 
-      const { error } = await supabase.from("children").insert([validatedData]);
+      const { error } = await supabase.from("children").insert([{
+        ...validatedData,
+        company_id: currentCompany?.id
+      }]);
 
       if (error) {
         toast.error("Failed to add child");

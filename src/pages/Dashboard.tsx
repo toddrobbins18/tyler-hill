@@ -7,10 +7,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useSeasonContext } from "@/contexts/SeasonContext";
+import { useCompany } from "@/contexts/CompanyContext";
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { getDivisionFilter } = usePermissions();
+  const { currentCompany } = useCompany();
   const [stats, setStats] = useState({
     totalChildren: 0,
     activeRoutes: 0,
@@ -27,7 +30,9 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
-    fetchDashboardData();
+    if (currentCompany?.id) {
+      fetchDashboardData();
+    }
 
     // Realtime subscriptions for live updates
     const childrenChannel = supabase
@@ -65,6 +70,8 @@ export default function Dashboard() {
   }, []);
 
   const fetchDashboardData = async () => {
+    if (!currentCompany?.id) return;
+    
     const today = new Date().toISOString().split('T')[0];
     const weekStart = new Date();
     weekStart.setDate(weekStart.getDate() - 7);
@@ -74,7 +81,8 @@ export default function Dashboard() {
     let childrenQuery = supabase
       .from('children')
       .select('*', { count: 'exact', head: true })
-      .eq('status', 'active');
+      .eq('status', 'active')
+      .eq('company_id', currentCompany.id);
     
     if (divisionFilter !== null && divisionFilter.length > 0) {
       childrenQuery = childrenQuery.in('division_id', divisionFilter);

@@ -12,6 +12,8 @@ import CSVUploader from "@/components/CSVUploader";
 import { JSONUploader } from "@/components/JSONUploader";
 import { toast } from "sonner";
 import { useSeasonContext } from "@/contexts/SeasonContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useCompany } from "@/contexts/CompanyContext";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,6 +36,7 @@ import {
 
 export default function Roster() {
   const { currentSeason } = useSeasonContext();
+  const { currentCompany } = useCompany();
   const [searchTerm, setSearchTerm] = useState("");
   const [children, setChildren] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
@@ -49,6 +52,12 @@ export default function Roster() {
   const fetchChildren = async () => {
     setLoading(true);
     
+    if (!currentCompany?.id) {
+      setChildren([]);
+      setLoading(false);
+      return;
+    }
+    
     // Fetch first batch (0-999)
     const { data: batch1, error: error1 } = await supabase
       .from("children")
@@ -56,6 +65,7 @@ export default function Roster() {
         *,
         division:divisions(id, name, gender, sort_order)
       `)
+      .eq('company_id', currentCompany.id)
       .order("name")
       .range(0, 999);
 
@@ -66,6 +76,7 @@ export default function Roster() {
         *,
         division:divisions(id, name, gender, sort_order)
       `)
+      .eq('company_id', currentCompany.id)
       .order("name")
       .range(1000, 1999);
     
@@ -91,9 +102,11 @@ export default function Roster() {
   };
 
   useEffect(() => {
-    fetchChildren();
-    fetchDivisions();
-  }, [currentSeason]);
+    if (currentCompany?.id) {
+      fetchChildren();
+      fetchDivisions();
+    }
+  }, [currentSeason, currentCompany?.id]);
 
   useEffect(() => {
     setCurrentPage(1);

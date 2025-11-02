@@ -9,12 +9,14 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { staffSchema } from "@/lib/validationSchemas";
 import { z } from "zod";
+import { useCompany } from "@/contexts/CompanyContext";
 
 export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [supervisors, setSupervisors] = useState<any[]>([]);
   const [leaderId, setLeaderId] = useState("");
+  const { currentCompany } = useCompany();
 
   useEffect(() => {
     if (open) {
@@ -59,7 +61,10 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
         leader_id?: string | null;
       };
 
-      const { error } = await supabase.from("staff").insert([validatedData]);
+      const { error } = await supabase.from("staff").insert([{
+        ...validatedData,
+        company_id: currentCompany?.id
+      }]);
 
       if (error) {
         toast.error("Failed to add staff member");

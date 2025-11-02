@@ -77,6 +77,16 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
         if (companies) {
           setAvailableCompanies(companies);
+          
+          // Check if there's a saved viewing company in sessionStorage
+          const savedViewingId = sessionStorage.getItem('viewing_company_id');
+          if (savedViewingId) {
+            const viewingCompany = companies.find(c => c.id === savedViewingId);
+            if (viewingCompany) {
+              setCurrentCompany(viewingCompany);
+              applyThemeColor(viewingCompany.theme_color);
+            }
+          }
         }
       }
     } catch (error) {
@@ -96,19 +106,20 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   };
 
   const switchCompany = async (companyId: string) => {
-    setLoading(true);
     try {
       const company = availableCompanies.find(c => c.id === companyId);
       if (company) {
+        // Save to sessionStorage for super admins
+        sessionStorage.setItem('viewing_company_id', companyId);
         setCurrentCompany(company);
         
-        // Apply theme color
+        // Apply theme color immediately
         if (company.theme_color) {
           applyThemeColor(company.theme_color);
         }
         
         toast({
-          title: "Company Switched",
+          title: "Viewing Company",
           description: `Now viewing ${company.name}`,
         });
         
@@ -122,8 +133,6 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         description: "Failed to switch company",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
   };
 

@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Shield, UserCog, Eye, Trophy, Users, Trash2 } from "lucide-react";
 import AddUserDialog from "./AddUserDialog";
 
-type UserRole = "admin" | "staff" | "viewer" | "division_leader" | "specialist";
+type UserRole = "super_admin" | "admin" | "staff" | "viewer" | "division_leader" | "specialist";
 
 interface UserWithRole {
   id: string;
@@ -35,15 +35,26 @@ export default function UserRoleManagement() {
     if (profiles) {
       const usersWithRoles = await Promise.all(
         profiles.map(async (profile) => {
-          const { data: roleData } = await supabase
+          // Fetch ALL roles for this user
+          const { data: rolesData } = await supabase
             .from("user_roles")
             .select("role")
-            .eq("user_id", profile.id)
-            .single();
+            .eq("user_id", profile.id);
+
+          // Determine highest priority role
+          const roles = rolesData?.map(r => r.role) || [];
+          let displayRole: UserRole = "viewer";
+
+          if (roles.includes("super_admin")) displayRole = "super_admin";
+          else if (roles.includes("admin")) displayRole = "admin";
+          else if (roles.includes("division_leader")) displayRole = "division_leader";
+          else if (roles.includes("staff")) displayRole = "staff";
+          else if (roles.includes("specialist")) displayRole = "specialist";
 
           return {
             ...profile,
-            role: (roleData?.role || "viewer") as UserRole,
+            role: displayRole,
+            full_name: profile.full_name || profile.email?.split('@')[0] || 'Unknown'
           };
         })
       );
@@ -93,6 +104,8 @@ export default function UserRoleManagement() {
 
   const getRoleIcon = (role: UserRole) => {
     switch (role) {
+      case "super_admin":
+        return <Shield className="h-4 w-4" />;
       case "admin":
         return <Shield className="h-4 w-4" />;
       case "staff":
@@ -108,6 +121,8 @@ export default function UserRoleManagement() {
 
   const getRoleBadgeVariant = (role: UserRole) => {
     switch (role) {
+      case "super_admin":
+        return "destructive";
       case "admin":
         return "destructive";
       case "staff":
@@ -154,8 +169,10 @@ export default function UserRoleManagement() {
               <div className="flex items-center gap-3">
                 <Badge variant={getRoleBadgeVariant(user.role)} className="gap-1">
                   {getRoleIcon(user.role)}
-                  {user.role === 'division_leader' ? 'Division Leader' : 
-                   user.role === 'specialist' ? 'Specialist' : user.role}
+                  {user.role === 'super_admin' ? 'Super Admin' :
+                   user.role === 'division_leader' ? 'Division Leader' : 
+                   user.role === 'specialist' ? 'Specialist' : 
+                   user.role.charAt(0).toUpperCase() + user.role.slice(1)}
                 </Badge>
                 <Select
                   value={user.role}
@@ -170,6 +187,7 @@ export default function UserRoleManagement() {
                     <SelectItem value="division_leader">Division Leader</SelectItem>
                     <SelectItem value="specialist">Specialist</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="super_admin">Super Admin</SelectItem>
                   </SelectContent>
                 </Select>
                 <AlertDialog>

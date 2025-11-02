@@ -13,6 +13,7 @@ import CSVUploader from "@/components/CSVUploader";
 import { JSONUploader } from "@/components/JSONUploader";
 import { toast } from "sonner";
 import { useSeasonContext } from "@/contexts/SeasonContext";
+import { useCompany } from "@/contexts/CompanyContext";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,13 +32,22 @@ export default function Staff() {
   const [editingStaff, setEditingStaff] = useState<string | null>(null);
   const [deletingStaff, setDeletingStaff] = useState<string | null>(null);
   const { currentSeason } = useSeasonContext();
+  const { currentCompany } = useCompany();
   const navigate = useNavigate();
 
   const fetchStaff = async () => {
     setLoading(true);
+    
+    if (!currentCompany?.id) {
+      setStaff([]);
+      setLoading(false);
+      return;
+    }
+    
     const { data: staffData, error: staffError } = await supabase
       .from("staff")
       .select("*")
+      .eq("company_id", currentCompany.id)
       .order("name");
 
     if (!staffError && staffData) {
@@ -69,8 +79,10 @@ export default function Staff() {
   };
 
   useEffect(() => {
-    fetchStaff();
-  }, []);
+    if (currentCompany?.id) {
+      fetchStaff();
+    }
+  }, [currentCompany?.id]);
 
   const filteredStaff = staff.filter((member) => {
     const matchesSearch = 

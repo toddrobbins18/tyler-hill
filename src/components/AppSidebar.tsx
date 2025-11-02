@@ -96,6 +96,7 @@ export function AppSidebar() {
   };
 
   const handleLogout = async () => {
+    sessionStorage.removeItem('viewing_company_id');
     try {
       await supabase.auth.signOut();
       toast.success("Logged out successfully");
