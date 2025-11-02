@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-export type AppRole = 'admin' | 'staff' | 'division_leader' | 'specialist' | 'viewer'; // | 'super_admin';
+export type AppRole = 'admin' | 'staff' | 'division_leader' | 'specialist' | 'viewer' | 'super_admin';
 
 export function usePermissions() {
   const [userRole, setUserRole] = useState<AppRole | null>(null);
@@ -22,28 +22,36 @@ export function usePermissions() {
         return;
       }
 
-      // Fetch user role
-      const { data: roleData } = await supabase
+      // Fetch all user roles
+      const { data: rolesData } = await supabase
         .from('user_roles')
         .select('role')
-        .eq('user_id', user.id)
-        .maybeSingle();
+        .eq('user_id', user.id);
 
-      if (roleData) {
-        setUserRole(roleData.role as AppRole);
-        // setIsSuperAdmin(roleData.role === 'super_admin');
+      if (rolesData && rolesData.length > 0) {
+        // Determine effective role (prioritize super_admin > admin > others)
+        const roles = rolesData.map(r => r.role as AppRole);
+        const isSuperAdminUser = roles.includes('super_admin');
+        const effectiveRole = isSuperAdminUser ? 'super_admin' : 
+                              roles.includes('admin') ? 'admin' : roles[0];
+        
+        setUserRole(effectiveRole);
+        setIsSuperAdmin(isSuperAdminUser);
       }
 
-      // Fetch user divisions (only if not admin)
-      if (roleData?.role !== 'admin') {
-        const { data: divisionData } = await supabase
-          .from('division_permissions')
-          .select('division_id')
-          .eq('user_id', user.id)
-          .eq('can_access', true);
+      // Fetch user divisions (only if not admin or super_admin)
+      if (rolesData && rolesData.length > 0) {
+        const roles = rolesData.map(r => r.role);
+        if (!roles.includes('admin') && !roles.includes('super_admin')) {
+          const { data: divisionData } = await supabase
+            .from('division_permissions')
+            .select('division_id')
+            .eq('user_id', user.id)
+            .eq('can_access', true);
 
-        if (divisionData) {
-          setUserDivisions(divisionData.map(d => d.division_id));
+          if (divisionData) {
+            setUserDivisions(divisionData.map(d => d.division_id));
+          }
         }
       }
     } catch (error) {
@@ -75,8 +83,8 @@ export function usePermissions() {
 
   // Check if user can see data for a division
   const canSeeDivision = (divisionId: string): boolean => {
-    // Admins and specialists can see all divisions
-    if (userRole === 'admin' || userRole === 'specialist') {
+    // Admins, super_admins, and specialists can see all divisions
+    if (userRole === 'admin' || userRole === 'super_admin' || userRole === 'specialist') {
       return true;
     }
     
@@ -86,8 +94,8 @@ export function usePermissions() {
 
   // Get division filter for queries
   const getDivisionFilter = (): string[] | null => {
-    // Admins and specialists see all divisions (no filter)
-    if (userRole === 'admin' || userRole === 'specialist') {
+    // Admins, super_admins, and specialists see all divisions (no filter)
+    if (userRole === 'admin' || userRole === 'super_admin' || userRole === 'specialist') {
       return null;
     }
     

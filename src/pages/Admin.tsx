@@ -30,10 +30,9 @@ export default function Admin() {
       .from("user_roles")
       .select("role")
       .eq("user_id", user.id)
-      .eq("role", "admin")
-      .maybeSingle();
+      .in("role", ["admin", "super_admin"]);
 
-    setIsAdmin(!!roles);
+    setIsAdmin(!!roles && roles.length > 0);
     setLoading(false);
   };
 
