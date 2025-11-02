@@ -31,13 +31,39 @@ export function hexToHSL(hex: string): string {
   return `${h} ${s}% ${l}%`;
 }
 
+// Parse HSL string back to numbers
+function parseHSL(hsl: string): { h: number; s: number; l: number } {
+  const matches = hsl.match(/(\d+)\s+(\d+)%\s+(\d+)%/);
+  if (!matches) throw new Error('Invalid HSL format');
+  return {
+    h: parseInt(matches[1]),
+    s: parseInt(matches[2]),
+    l: parseInt(matches[3])
+  };
+}
+
+// Create a darker version of the color for sidebar background
+function darkenColor(hsl: string, amount: number): string {
+  const { h, s, l } = parseHSL(hsl);
+  const newL = Math.max(0, l - amount); // Reduce lightness, min 0
+  return `${h} ${s}% ${newL}%`;
+}
+
 // Apply theme color to CSS variables
 export function applyThemeColor(color: string) {
   const hsl = hexToHSL(color);
   const root = document.documentElement;
   
+  // Calculate sidebar colors - darker versions for background
+  const sidebarBg = darkenColor(hsl, 40); // Very dark for background
+  const sidebarAccent = darkenColor(hsl, 32); // Slightly lighter for hover
+  
+  // Apply all theme colors
   root.style.setProperty('--primary', hsl);
   root.style.setProperty('--ring', hsl);
+  root.style.setProperty('--sidebar-background', sidebarBg);
+  root.style.setProperty('--sidebar-accent', sidebarAccent);
+  root.style.setProperty('--sidebar-border', sidebarAccent);
   root.style.setProperty('--sidebar-primary', hsl);
   root.style.setProperty('--sidebar-ring', hsl);
 }
