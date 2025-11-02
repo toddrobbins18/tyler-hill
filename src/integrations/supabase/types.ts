@@ -1791,6 +1791,7 @@ export type Database = {
         Args: { _page_name: string; _user_id: string }
         Returns: boolean
       }
+      get_user_company: { Args: { _user_id: string }; Returns: string }
       get_user_divisions: { Args: { _user_id: string }; Returns: string[] }
       has_role: {
         Args: {
@@ -1805,6 +1806,7 @@ export type Database = {
         Returns: boolean
       }
       is_specialist: { Args: { _user_id: string }; Returns: boolean }
+      is_super_admin: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       app_role:

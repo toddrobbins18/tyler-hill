@@ -3,7 +3,7 @@ import { NavLink } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
-// import { useCompany } from "@/contexts/CompanyContext";
+import { useCompany } from "@/contexts/CompanyContext";
 import SeasonSelector from "@/components/SeasonSelector";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -45,7 +45,7 @@ export function AppSidebar() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [visibleItems, setVisibleItems] = useState(items);
   const { userRole, canAccessPage, loading: permissionsLoading } = usePermissions();
-  // const { currentCompany, availableCompanies, switchCompany, loading: companyLoading, isSuperAdmin } = useCompany();
+  const { currentCompany, availableCompanies, switchCompany, loading: companyLoading, isSuperAdmin } = useCompany();
 
   useEffect(() => {
     checkAdminStatus();
@@ -102,7 +102,7 @@ export function AppSidebar() {
           </h1>
         </div>
         
-        {/* {isSuperAdmin && !isCollapsed && (
+        {isSuperAdmin && !isCollapsed && (
           <div className="px-4 pb-4">
             <Select 
               value={currentCompany?.id} 
@@ -122,7 +122,7 @@ export function AppSidebar() {
               </SelectContent>
             </Select>
           </div>
-        )} */}
+        )}
         
         <div className="pb-4">
           <div className={`transition-all ${isCollapsed ? 'px-2 scale-75' : 'px-4'}`}>
