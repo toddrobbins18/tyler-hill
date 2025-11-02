@@ -114,6 +114,7 @@ export type Database = {
       }
       automated_email_config: {
         Row: {
+          company_id: string
           created_at: string | null
           email_type: string
           enabled: boolean | null
@@ -122,6 +123,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          company_id: string
           created_at?: string | null
           email_type: string
           enabled?: boolean | null
@@ -130,6 +132,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          company_id?: string
           created_at?: string | null
           email_type?: string
           enabled?: boolean | null
@@ -137,7 +140,15 @@ export type Database = {
           recipient_tags?: string[]
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "automated_email_config_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       awards: {
         Row: {
@@ -367,6 +378,7 @@ export type Database = {
       division_permissions: {
         Row: {
           can_access: boolean | null
+          company_id: string
           created_at: string | null
           division_id: string
           id: string
@@ -374,6 +386,7 @@ export type Database = {
         }
         Insert: {
           can_access?: boolean | null
+          company_id: string
           created_at?: string | null
           division_id: string
           id?: string
@@ -381,12 +394,20 @@ export type Database = {
         }
         Update: {
           can_access?: boolean | null
+          company_id?: string
           created_at?: string | null
           division_id?: string
           id?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "division_permissions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "division_permissions_division_id_fkey"
             columns: ["division_id"]
@@ -398,6 +419,7 @@ export type Database = {
       }
       divisions: {
         Row: {
+          company_id: string
           created_at: string | null
           gender: string
           id: string
@@ -405,6 +427,7 @@ export type Database = {
           sort_order: number
         }
         Insert: {
+          company_id: string
           created_at?: string | null
           gender: string
           id?: string
@@ -412,13 +435,22 @@ export type Database = {
           sort_order: number
         }
         Update: {
+          company_id?: string
           created_at?: string | null
           gender?: string
           id?: string
           name?: string
           sort_order?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "divisions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       email_logs: {
         Row: {
@@ -1072,6 +1104,7 @@ export type Database = {
       role_permissions: {
         Row: {
           can_access: boolean | null
+          company_id: string
           created_at: string | null
           id: string
           menu_item: string
@@ -1079,6 +1112,7 @@ export type Database = {
         }
         Insert: {
           can_access?: boolean | null
+          company_id: string
           created_at?: string | null
           id?: string
           menu_item: string
@@ -1086,12 +1120,21 @@ export type Database = {
         }
         Update: {
           can_access?: boolean | null
+          company_id?: string
           created_at?: string | null
           id?: string
           menu_item?: string
           role?: Database["public"]["Enums"]["app_role"]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "role_permissions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       roster_template_children: {
         Row: {
@@ -1759,27 +1802,39 @@ export type Database = {
       }
       user_roles: {
         Row: {
+          company_id: string
           created_at: string | null
           id: string
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Insert: {
+          company_id: string
           created_at?: string | null
           id?: string
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Update: {
+          company_id?: string
           created_at?: string | null
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_tags: {
         Row: {
+          company_id: string
           created_at: string | null
           created_by: string | null
           id: string
@@ -1787,6 +1842,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          company_id: string
           created_at?: string | null
           created_by?: string | null
           id?: string
@@ -1794,13 +1850,22 @@ export type Database = {
           user_id: string
         }
         Update: {
+          company_id?: string
           created_at?: string | null
           created_by?: string | null
           id?: string
           tag?: Database["public"]["Enums"]["tag_type"]
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_tags_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
