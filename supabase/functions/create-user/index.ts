@@ -66,6 +66,7 @@ serve(async (req) => {
       email_confirm: true,
       user_metadata: {
         full_name: fullName,
+        company_id: targetCompanyId,
       },
     });
 
@@ -75,24 +76,7 @@ serve(async (req) => {
     }
 
     console.log('User created:', newUser.user.id);
-
-    // Create profile
-    const { error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .insert({
-        id: newUser.user.id,
-        full_name: fullName,
-        email,
-        approved: true,
-        company_id: targetCompanyId,
-      });
-
-    if (profileError) {
-      console.error('Error creating profile:', profileError);
-      throw profileError;
-    }
-
-    console.log('Profile created');
+    // Profile is created automatically by handle_new_user trigger
 
     // Assign role
     const { error: roleError } = await supabaseAdmin
