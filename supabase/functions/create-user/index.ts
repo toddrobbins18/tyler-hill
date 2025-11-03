@@ -67,6 +67,7 @@ serve(async (req) => {
       user_metadata: {
         full_name: fullName,
         company_id: targetCompanyId,
+        approved: true,
       },
     });
 
