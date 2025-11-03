@@ -85,6 +85,7 @@ serve(async (req) => {
       .insert({
         user_id: newUser.user.id,
         role,
+        company_id: targetCompanyId,
       });
 
     if (roleError) {
