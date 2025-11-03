@@ -1,14 +1,19 @@
 import { Auth as SupabaseAuth } from "@supabase/auth-ui-react";
 import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Auth() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+
+  // Extract company_id and email from URL query parameters
+  const companyId = searchParams.get('company_id');
+  const inviteEmail = searchParams.get('email');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -49,15 +54,15 @@ export default function Auth() {
         return;
       }
 
-      // if (!profile?.company_id) {
-      //   toast({
-      //     title: "No Company Assigned",
-      //     description: "Your account has no company assigned. Please contact an administrator.",
-      //     variant: "destructive",
-      //   });
-      //   await supabase.auth.signOut();
-      //   return;
-      // }
+      if (!profile?.company_id) {
+        toast({
+          title: "Company Assignment Pending",
+          description: "Your account is awaiting company assignment by an administrator.",
+          variant: "destructive",
+        });
+        await supabase.auth.signOut();
+        return;
+      }
 
       navigate("/");
     } catch (error) {
@@ -100,6 +105,10 @@ export default function Auth() {
                 },
               }}
               providers={[]}
+              additionalData={{
+                ...(companyId && { company_id: companyId }),
+                ...(inviteEmail && { email: inviteEmail }),
+              }}
             />
           </>
         )}
