@@ -36,14 +36,20 @@ Deno.serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    // Check if user is admin
-    const { data: roleData, error: roleError } = await supabaseAdmin
+    // Check if user is admin or super_admin
+    const { data: rolesData, error: roleError } = await supabaseAdmin
       .from('user_roles')
       .select('role')
-      .eq('user_id', user.id)
-      .single();
+      .eq('user_id', user.id);
 
-    if (roleError || roleData?.role !== 'admin') {
+    if (roleError) {
+      throw new Error('Failed to fetch user roles');
+    }
+
+    const roles = rolesData?.map(r => r.role) || [];
+    const isAdmin = roles.includes('admin') || roles.includes('super_admin');
+
+    if (!isAdmin) {
       throw new Error('Unauthorized: Admin access required');
     }
 
