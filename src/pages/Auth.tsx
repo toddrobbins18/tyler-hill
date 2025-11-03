@@ -38,7 +38,7 @@ export default function Auth() {
     try {
       const { data: profile, error } = await supabase
         .from('profiles')
-        .select('approved') // , company_id
+        .select('approved, company_id')
         .eq('id', userId)
         .single();
 

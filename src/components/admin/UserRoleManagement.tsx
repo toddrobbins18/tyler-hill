@@ -79,7 +79,11 @@ export default function UserRoleManagement() {
     // Insert new role
     const { error } = await supabase
       .from("user_roles")
-      .insert({ user_id: userId, role: newRole });
+      .insert({ 
+        user_id: userId, 
+        role: newRole,
+        company_id: currentCompany!.id 
+      });
 
     if (error) {
       toast.error("Failed to update role");

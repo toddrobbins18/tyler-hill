@@ -105,6 +105,7 @@ export default function DivisionPermissions() {
         user_id: userId,
         division_id: divisionId,
         can_access: !currentValue,
+        company_id: currentCompany!.id
       }, {
         onConflict: 'user_id,division_id'
       });

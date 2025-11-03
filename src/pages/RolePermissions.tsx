@@ -100,6 +100,7 @@ export default function RolePermissions() {
         role: role as any,
         menu_item: menuItem,
         can_access: !currentValue,
+        company_id: currentCompany!.id
       }, {
         onConflict: 'role,menu_item'
       });

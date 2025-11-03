@@ -98,7 +98,8 @@ export default function UserTagManagement() {
       .insert({ 
         user_id: userId, 
         tag: tag as any,
-        created_by: user.id 
+        created_by: user.id,
+        company_id: currentCompany!.id
       });
 
     if (error) {
