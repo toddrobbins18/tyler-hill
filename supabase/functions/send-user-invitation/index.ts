@@ -32,15 +32,24 @@ serve(async (req) => {
       );
     }
 
-    // Check if user is admin
-    const { data: roles } = await supabaseAdmin
+    // Check if user is admin or super_admin
+    const { data: rolesData, error: roleError } = await supabaseAdmin
       .from('user_roles')
       .select('role')
-      .eq('user_id', user.id)
-      .eq('role', 'admin')
-      .maybeSingle();
+      .eq('user_id', user.id);
 
-    if (!roles) {
+    if (roleError) {
+      console.error('Failed to fetch user roles:', roleError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to verify permissions' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const roles = rolesData?.map(r => r.role) || [];
+    const isAdmin = roles.includes('admin') || roles.includes('super_admin');
+
+    if (!isAdmin) {
       return new Response(
         JSON.stringify({ error: 'Forbidden: Admin access required' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
