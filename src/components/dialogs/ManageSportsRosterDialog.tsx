@@ -125,6 +125,7 @@ export default function ManageSportsRosterDialog({
         event_id: eventId,
         child_id: childId,
         confirmed: true,
+        company_id: currentCompany?.id,
       }));
       await supabase.from("sports_event_roster").insert(rosterEntries);
     }
@@ -132,8 +133,8 @@ export default function ManageSportsRosterDialog({
     // Save staff assignments
     await supabase.from("sports_event_staff").delete().eq("event_id", eventId);
     const staffEntries = [
-      ...assignedCoaches.map(staffId => ({ event_id: eventId, staff_id: staffId, role: "coach" })),
-      ...assignedRefs.map(staffId => ({ event_id: eventId, staff_id: staffId, role: "ref" })),
+      ...assignedCoaches.map(staffId => ({ event_id: eventId, staff_id: staffId, role: "coach", company_id: currentCompany?.id })),
+      ...assignedRefs.map(staffId => ({ event_id: eventId, staff_id: staffId, role: "ref", company_id: currentCompany?.id })),
     ];
     if (staffEntries.length > 0) {
       await supabase.from("sports_event_staff").insert(staffEntries);
@@ -155,6 +156,7 @@ export default function ManageSportsRosterDialog({
       .insert({
         name: templateName,
         description: templateDescription,
+        company_id: currentCompany?.id,
       })
       .select()
       .single();

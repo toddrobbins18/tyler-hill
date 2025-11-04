@@ -124,6 +124,7 @@ export default function SpecialEventsActivities() {
       ...formData,
       division_id: formData.division_id || null,
       season: selectedSeason,
+      company_id: currentCompany?.id,
     };
 
     if (editingEvent) {

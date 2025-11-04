@@ -95,6 +95,7 @@ export default function ManageTripAttendanceDialog({
           trip_id: tripId,
           child_id: childId,
           confirmed: true,
+          company_id: currentCompany?.id,
         }));
 
         const { error } = await supabase

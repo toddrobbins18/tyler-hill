@@ -138,6 +138,7 @@ export default function ActivitiesFieldTrips() {
       meal_options: formData.meal_options,
       meal_notes: formData.meal_notes || null,
       season: currentSeason,
+      company_id: currentCompany?.id,
     };
 
     if (editingEvent) {
@@ -173,6 +174,7 @@ export default function ActivitiesFieldTrips() {
         chaperone: formData.chaperone || null,
         status: "pending",
         season: currentSeason,
+        company_id: currentCompany?.id,
       };
 
       const { error: tripError } = await supabase

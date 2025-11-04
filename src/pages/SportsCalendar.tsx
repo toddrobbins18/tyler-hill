@@ -184,6 +184,7 @@ export default function SportsCalendar() {
       meal_options: formData.meal_options,
       meal_notes: formData.meal_notes || null,
       season: currentSeason,
+      company_id: currentCompany?.id,
     };
 
     if (editingEvent) {
@@ -202,7 +203,8 @@ export default function SportsCalendar() {
       if (formData.division_ids.length > 0) {
         const junctionData = formData.division_ids.map(divId => ({
           sports_event_id: editingEvent.id,
-          division_id: divId
+          division_id: divId,
+          company_id: currentCompany?.id,
         }));
         await supabase.from("sports_calendar_divisions").insert(junctionData);
       }
@@ -224,7 +226,8 @@ export default function SportsCalendar() {
       if (formData.division_ids.length > 0) {
         const junctionData = formData.division_ids.map(divId => ({
           sports_event_id: newEvent.id,
-          division_id: divId
+          division_id: divId,
+          company_id: currentCompany?.id,
         }));
         await supabase.from("sports_calendar_divisions").insert(junctionData);
       }
@@ -240,6 +243,7 @@ export default function SportsCalendar() {
         status: "pending",
         sports_event_id: newEvent.id,
         season: currentSeason,
+        company_id: currentCompany?.id,
       };
 
       await supabase.from("trips").insert(tripData);
