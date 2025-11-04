@@ -65,6 +65,7 @@ export default function SpecialEventsActivities() {
         division:divisions(id, name, gender, sort_order)
       `)
       .eq("event_date", selectedDate)
+      .eq('company_id', currentCompany.id)
       .order("event_date", { ascending: true })
       .order("time_slot", { ascending: true })
       .range(0, 999);
@@ -77,6 +78,7 @@ export default function SpecialEventsActivities() {
         division:divisions(id, name, gender, sort_order)
       `)
       .eq("event_date", selectedDate)
+      .eq('company_id', currentCompany.id)
       .order("event_date", { ascending: true })
       .order("time_slot", { ascending: true })
       .range(1000, 1999);

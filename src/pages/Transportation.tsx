@@ -158,7 +158,8 @@ export default function Transportation() {
       .select(`
         child:children(id, name, age, grade, group_name)
       `)
-      .eq("event_id", trip.sports_event_id);
+      .eq("event_id", trip.sports_event_id)
+      .eq('company_id', currentCompany.id);
 
     const { data: staff } = await supabase
       .from("sports_event_staff")
@@ -166,7 +167,8 @@ export default function Transportation() {
         role,
         staff:staff(id, name, role)
       `)
-      .eq("event_id", trip.sports_event_id);
+      .eq("event_id", trip.sports_event_id)
+      .eq('company_id', currentCompany.id);
 
     setRosterData({
       trip,

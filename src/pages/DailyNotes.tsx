@@ -56,6 +56,7 @@ export default function DailyNotes() {
         .from('sports_calendar')
         .select('*')
         .eq('event_date', today)
+        .eq('company_id', currentCompany.id)
         .eq('season', currentSeason)
         .order('time');
 
@@ -64,6 +65,7 @@ export default function DailyNotes() {
         .from('special_events_activities')
         .select('*')
         .eq('event_date', today)
+        .eq('company_id', currentCompany.id)
         .eq('season', currentSeason)
         .in('time_slot', ['Evening (5-9 PM)', 'Night (9 PM+)'])
         .order('time_slot');

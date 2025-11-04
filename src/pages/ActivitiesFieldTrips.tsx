@@ -79,6 +79,7 @@ export default function ActivitiesFieldTrips() {
         *,
         division:divisions(id, name, gender, sort_order)
       `)
+      .eq('company_id', currentCompany.id)
       .order("event_date", { ascending: true })
       .range(0, 999);
 
@@ -89,6 +90,7 @@ export default function ActivitiesFieldTrips() {
         *,
         division:divisions(id, name, gender, sort_order)
       `)
+      .eq('company_id', currentCompany.id)
       .order("event_date", { ascending: true })
       .range(1000, 1999);
 
