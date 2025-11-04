@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useCompany } from "@/contexts/CompanyContext";
 
 interface AddIncidentDialogProps {
   open: boolean;
@@ -15,6 +16,7 @@ interface AddIncidentDialogProps {
 }
 
 export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: AddIncidentDialogProps) {
+  const { currentCompany } = useCompany();
   const [children, setChildren] = useState<any[]>([]);
   const [staff, setStaff] = useState<any[]>([]);
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
@@ -39,10 +41,12 @@ export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: Add
   }, [open]);
 
   const fetchChildren = async () => {
+    if (!currentCompany?.id) return;
     const { data, error } = await supabase
       .from("children")
       .select("*")
       .eq("status", "active")
+      .eq("company_id", currentCompany.id)
       .order("name");
 
     if (!error && data) {
@@ -51,10 +55,12 @@ export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: Add
   };
 
   const fetchStaff = async () => {
+    if (!currentCompany?.id) return;
     const { data, error } = await supabase
       .from("staff")
       .select("*")
       .eq("status", "active")
+      .eq("company_id", currentCompany.id)
       .order("name");
 
     if (!error && data) {
@@ -72,7 +78,7 @@ export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: Add
 
     const { data: incident, error: incidentError } = await supabase
       .from("incident_reports")
-      .insert({ ...formData, tags })
+      .insert({ ...formData, tags, company_id: currentCompany?.id })
       .select()
       .single();
 

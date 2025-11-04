@@ -1,10 +1,11 @@
+import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useCompany } from "@/contexts/CompanyContext";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Search, Users, Save, X, Pencil, Trash2, UserPlus } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -30,6 +31,7 @@ export default function ManageSportsRosterDialog({
   divisionProvidesCoach = false,
   divisionProvidesRef = false,
 }: ManageSportsRosterDialogProps) {
+  const { currentCompany } = useCompany();
   const [children, setChildren] = useState<any[]>([]);
   const [staff, setStaff] = useState<any[]>([]);
   const [roster, setRoster] = useState<Set<string>>(new Set());
@@ -55,11 +57,14 @@ export default function ManageSportsRosterDialog({
   const fetchData = async () => {
     setLoading(true);
     
+    if (!currentCompany?.id) return;
+    
     // Fetch all active children
     const { data: childrenData } = await supabase
       .from("children")
       .select("*")
       .eq("status", "active")
+      .eq("company_id", currentCompany.id)
       .order("name");
 
     // Fetch all active staff
@@ -67,6 +72,7 @@ export default function ManageSportsRosterDialog({
       .from("staff")
       .select("*")
       .eq("status", "active")
+      .eq("company_id", currentCompany.id)
       .order("name");
 
     // Fetch existing roster

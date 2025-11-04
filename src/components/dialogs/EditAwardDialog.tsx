@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useCompany } from "@/contexts/CompanyContext";
 
 interface EditAwardDialogProps {
   awardId: string;
@@ -16,6 +17,7 @@ interface EditAwardDialogProps {
 }
 
 export default function EditAwardDialog({ awardId, open, onOpenChange, onSuccess }: EditAwardDialogProps) {
+  const { currentCompany } = useCompany();
   const [loading, setLoading] = useState(false);
   const [children, setChildren] = useState<any[]>([]);
   const [formData, setFormData] = useState({
@@ -52,10 +54,12 @@ export default function EditAwardDialog({ awardId, open, onOpenChange, onSuccess
   };
 
   const fetchChildren = async () => {
+    if (!currentCompany?.id) return;
     const { data } = await supabase
       .from("children")
       .select("id, name")
       .eq("status", "active")
+      .eq("company_id", currentCompany.id)
       .order("name");
     
     if (data) setChildren(data);

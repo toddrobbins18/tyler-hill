@@ -30,18 +30,22 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
   }, [open]);
 
   const fetchStaff = async () => {
+    if (!currentCompany?.id) return;
     const { data } = await supabase
       .from("staff")
       .select("id, name, role")
       .eq("status", "active")
+      .eq("company_id", currentCompany.id)
       .order("name");
     setStaff(data || []);
   };
 
   const fetchDivisions = async () => {
+    if (!currentCompany?.id) return;
     const { data } = await supabase
       .from("divisions")
       .select("*")
+      .eq("company_id", currentCompany.id)
       .order("sort_order");
     setDivisions(data || []);
   };

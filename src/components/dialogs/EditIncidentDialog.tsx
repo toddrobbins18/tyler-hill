@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useCompany } from "@/contexts/CompanyContext";
 
 interface EditIncidentDialogProps {
   open: boolean;
@@ -16,6 +17,7 @@ interface EditIncidentDialogProps {
 }
 
 export default function EditIncidentDialog({ open, onOpenChange, incident, onSuccess }: EditIncidentDialogProps) {
+  const { currentCompany } = useCompany();
   const [children, setChildren] = useState<any[]>([]);
   const [staff, setStaff] = useState<any[]>([]);
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
@@ -56,10 +58,12 @@ export default function EditIncidentDialog({ open, onOpenChange, incident, onSuc
   }, [incident, open]);
 
   const fetchChildren = async () => {
+    if (!currentCompany?.id) return;
     const { data, error } = await supabase
       .from("children")
       .select("*")
       .eq("status", "active")
+      .eq("company_id", currentCompany.id)
       .order("name");
 
     if (!error && data) {
@@ -68,10 +72,12 @@ export default function EditIncidentDialog({ open, onOpenChange, incident, onSuc
   };
 
   const fetchStaff = async () => {
+    if (!currentCompany?.id) return;
     const { data, error } = await supabase
       .from("staff")
       .select("*")
       .eq("status", "active")
+      .eq("company_id", currentCompany.id)
       .order("name");
 
     if (!error && data) {

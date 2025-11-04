@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { childSchema } from "@/lib/validationSchemas";
 import { z } from "zod";
+import { useCompany } from "@/contexts/CompanyContext";
 
 interface EditChildDialogProps {
   childId: string;
@@ -18,6 +19,7 @@ interface EditChildDialogProps {
 }
 
 export default function EditChildDialog({ childId, open, onOpenChange, onSuccess }: EditChildDialogProps) {
+  const { currentCompany } = useCompany();
   const [loading, setLoading] = useState(false);
   const [child, setChild] = useState<any>(null);
   const [staff, setStaff] = useState<any[]>([]);
@@ -50,18 +52,22 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
   };
 
   const fetchStaff = async () => {
+    if (!currentCompany?.id) return;
     const { data } = await supabase
       .from("staff")
       .select("id, name, role")
       .eq("status", "active")
+      .eq("company_id", currentCompany.id)
       .order("name");
     setStaff(data || []);
   };
 
   const fetchDivisions = async () => {
+    if (!currentCompany?.id) return;
     const { data } = await supabase
       .from("divisions")
       .select("*")
+      .eq("company_id", currentCompany.id)
       .order("sort_order");
     setDivisions(data || []);
   };

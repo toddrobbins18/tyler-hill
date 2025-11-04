@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { staffSchema } from "@/lib/validationSchemas";
 import { z } from "zod";
+import { useCompany } from "@/contexts/CompanyContext";
 
 interface EditStaffDialogProps {
   staffId: string;
@@ -17,6 +18,7 @@ interface EditStaffDialogProps {
 }
 
 export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess }: EditStaffDialogProps) {
+  const { currentCompany } = useCompany();
   const [loading, setLoading] = useState(false);
   const [staff, setStaff] = useState<any>(null);
   const [supervisors, setSupervisors] = useState<any[]>([]);
@@ -43,10 +45,12 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
   };
 
   const fetchSupervisors = async () => {
+    if (!currentCompany?.id) return;
     const { data } = await supabase
       .from("staff")
       .select("id, name, role")
       .eq("status", "active")
+      .eq("company_id", currentCompany.id)
       .in("role", ["Director", "Supervisor", "Manager"])
       .neq("id", staffId)
       .order("name");

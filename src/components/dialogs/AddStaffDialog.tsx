@@ -25,10 +25,12 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
   }, [open]);
 
   const fetchSupervisors = async () => {
+    if (!currentCompany?.id) return;
     const { data } = await supabase
       .from("staff")
       .select("id, name, role")
       .eq("status", "active")
+      .eq("company_id", currentCompany.id)
       .in("role", ["Director", "Supervisor", "Manager"])
       .order("name");
     setSupervisors(data || []);

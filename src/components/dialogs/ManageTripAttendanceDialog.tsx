@@ -1,9 +1,10 @@
+import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useCompany } from "@/contexts/CompanyContext";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,7 @@ export default function ManageTripAttendanceDialog({
   open,
   onOpenChange,
 }: ManageTripAttendanceDialogProps) {
+  const { currentCompany } = useCompany();
   const [children, setChildren] = useState<any[]>([]);
   const [attendees, setAttendees] = useState<Set<string>>(new Set());
   const [selectedDivision, setSelectedDivision] = useState<string>("all");
@@ -35,15 +37,18 @@ export default function ManageTripAttendanceDialog({
   }, [open, tripId]);
 
   const fetchDivisionsAndChildren = async () => {
+    if (!currentCompany?.id) return;
     const { data: divisionsData } = await supabase
       .from("divisions")
       .select("*")
+      .eq("company_id", currentCompany.id)
       .order("sort_order");
 
     const { data: childrenData } = await supabase
       .from("children")
       .select("*, division:divisions(*)")
       .eq("status", "active")
+      .eq("company_id", currentCompany.id)
       .order("name");
 
     if (divisionsData) setDivisions(divisionsData);

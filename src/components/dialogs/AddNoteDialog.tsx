@@ -8,12 +8,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useCompany } from "@/contexts/CompanyContext";
 
 interface AddNoteDialogProps {
   onSuccess: () => void;
 }
 
 export default function AddNoteDialog({ onSuccess }: AddNoteDialogProps) {
+  const { currentCompany } = useCompany();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [children, setChildren] = useState<any[]>([]);
@@ -34,10 +36,12 @@ export default function AddNoteDialog({ onSuccess }: AddNoteDialogProps) {
   }, [open]);
 
   const fetchChildren = async () => {
+    if (!currentCompany?.id) return;
     const { data } = await supabase
       .from("children")
       .select("id, name")
       .eq("status", "active")
+      .eq("company_id", currentCompany.id)
       .order("name");
     
     if (data) setChildren(data);
@@ -51,7 +55,7 @@ export default function AddNoteDialog({ onSuccess }: AddNoteDialogProps) {
 
     const { error } = await supabase
       .from("daily_notes")
-      .insert([{ ...formData, created_by: user?.id }]);
+      .insert([{ ...formData, created_by: user?.id, company_id: currentCompany?.id }]);
 
     if (error) {
       toast.error("Failed to add note");
