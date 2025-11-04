@@ -10,11 +10,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import EditChildDialog from "@/components/dialogs/EditChildDialog";
 import { toast as sonnerToast } from "sonner";
+import { useCompany } from "@/contexts/CompanyContext";
 
 export default function ChildProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { currentCompany } = useCompany();
   const [loading, setLoading] = useState(true);
   const [child, setChild] = useState<any>(null);
   const [awards, setAwards] = useState<any[]>([]);
@@ -50,6 +52,7 @@ export default function ChildProfile() {
         .from("awards")
         .select("*")
         .eq("child_id", id)
+        .eq("company_id", currentCompany?.id || '')
         .order("date", { ascending: false });
 
       setAwards(awardsData || []);
@@ -97,7 +100,8 @@ export default function ChildProfile() {
             opponent
           )
         `)
-        .eq("child_id", id);
+        .eq("child_id", id)
+        .eq("company_id", currentCompany?.id || '');
 
       setSportsRoster(sportsData || []);
 
@@ -116,7 +120,8 @@ export default function ChildProfile() {
             return_time
           )
         `)
-        .eq("child_id", id);
+        .eq("child_id", id)
+        .eq("company_id", currentCompany?.id || '');
 
       setTripAttendance(tripData || []);
 
@@ -125,6 +130,7 @@ export default function ChildProfile() {
         .from("sports_academy")
         .select("*")
         .eq("child_id", id)
+        .eq("company_id", currentCompany?.id || '')
         .order("sport_name", { ascending: true });
 
       setSportsAcademy(academyData || []);

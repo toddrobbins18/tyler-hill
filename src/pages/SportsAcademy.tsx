@@ -90,6 +90,7 @@ export default function SportsAcademy() {
         *,
         child:children(id, name, age, gender, division_id, division:divisions(id, name, gender))
       `)
+      .eq("company_id", currentCompany?.id || '')
       .order("sport_name", { ascending: true });
 
     if (error) {

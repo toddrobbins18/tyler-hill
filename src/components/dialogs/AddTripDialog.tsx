@@ -7,12 +7,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useCompany } from "@/contexts/CompanyContext";
 
 interface AddTripDialogProps {
   onSuccess: () => void;
 }
 
 export default function AddTripDialog({ onSuccess }: AddTripDialogProps) {
+  const { currentCompany } = useCompany();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -41,6 +43,7 @@ export default function AddTripDialog({ onSuccess }: AddTripDialogProps) {
       .insert([{
         ...formData,
         capacity: formData.capacity ? parseInt(formData.capacity) : null,
+        company_id: currentCompany?.id,
       }]);
 
     if (error) {

@@ -95,6 +95,7 @@ const TutoringTherapy = () => {
             gender
           )
         `)
+        .eq("company_id", currentCompany?.id || '')
         .order("service_type");
 
       if (error) throw error;

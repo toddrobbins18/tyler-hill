@@ -128,6 +128,7 @@ export default function Nurse() {
       .select("*, children(name), staff(name)")
       .eq("date", dateStr)
       .eq("season", currentSeason)
+      .eq("company_id", currentCompany?.id || '')
       .order("meal_time");
 
     if (error) {

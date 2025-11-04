@@ -96,6 +96,7 @@ export default function SportsCalendar() {
         division:divisions(id, name, gender, sort_order),
         sports_calendar_divisions(division_id, division:divisions(id, name, gender, sort_order))
       `)
+      .eq("company_id", currentCompany?.id || '')
       .order("event_date", { ascending: true })
       .range(0, 999);
 
@@ -107,6 +108,7 @@ export default function SportsCalendar() {
         division:divisions(id, name, gender, sort_order),
         sports_calendar_divisions(division_id, division:divisions(id, name, gender, sort_order))
       `)
+      .eq("company_id", currentCompany?.id || '')
       .order("event_date", { ascending: true })
       .range(1000, 1999);
 
@@ -127,7 +129,8 @@ export default function SportsCalendar() {
     // Fetch roster counts
     const { data: rosterData } = await supabase
       .from("sports_event_roster")
-      .select("event_id");
+      .select("event_id")
+      .eq("company_id", currentCompany?.id || '');
 
     const counts: Record<string, number> = {};
     rosterData?.forEach((item) => {

@@ -9,10 +9,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import EditStaffDialog from "@/components/dialogs/EditStaffDialog";
+import { useCompany } from "@/contexts/CompanyContext";
 
 export default function StaffProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { currentCompany } = useCompany();
   const [staff, setStaff] = useState<any>(null);
   const [evaluations, setEvaluations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,6 +47,7 @@ export default function StaffProfile() {
       .from("staff_evaluations")
       .select("*")
       .eq("staff_id", id)
+      .eq("company_id", currentCompany?.id || '')
       .order("date", { ascending: false });
 
     if (!evalsError && evalsData) {
