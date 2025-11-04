@@ -91,9 +91,15 @@ export default function Roster() {
   };
 
   const fetchDivisions = async () => {
+    if (!currentCompany?.id) {
+      setDivisions([]);
+      return;
+    }
+    
     const { data } = await supabase
       .from("divisions")
       .select("*")
+      .eq('company_id', currentCompany.id)
       .order("sort_order");
     
     if (data) {
