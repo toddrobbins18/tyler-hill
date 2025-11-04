@@ -5,6 +5,7 @@ import { Upload, HelpCircle, Download } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import JSONFormatGuide from "./dialogs/JSONFormatGuide";
+import { useCompany } from "@/contexts/CompanyContext";
 import { 
   childSchema, staffSchema, awardSchema, dailyNoteSchema, tripSchema, menuItemSchema,
   incidentReportSchema, medicationSchema, calendarEventSchema, sportsCalendarSchema
@@ -31,6 +32,7 @@ export default function JSONUploader({ tableName, onUploadComplete }: JSONUpload
   const [showGuide, setShowGuide] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const { currentCompany } = useCompany();
   const [uploadStats, setUploadStats] = useState<{
     total: number;
     newRecords: number;
@@ -148,6 +150,7 @@ export default function JSONUploader({ tableName, onUploadComplete }: JSONUpload
           const { data: childrenData, error } = await supabase
             .from('children')
             .select('id, person_id')
+            .eq('company_id', currentCompany?.id || '')
             .in('person_id', Array.from(allCamperIds));
           
           if (childrenData) {
@@ -391,8 +394,12 @@ export default function JSONUploader({ tableName, onUploadComplete }: JSONUpload
             successCount += batch.length;
           }
         } else {
-          // Standard insert for other tables
-          const { error: batchError } = await supabase.from(tableName as any).insert(batch as any);
+          // Standard insert for other tables - add company_id
+          const batchWithCompany = batch.map(row => ({
+            ...row,
+            company_id: currentCompany?.id
+          }));
+          const { error: batchError } = await supabase.from(tableName as any).insert(batchWithCompany as any);
           
           if (batchError) {
             console.error(`Batch ${batchNumber} (records ${recordRange}) failed:`, batchError);

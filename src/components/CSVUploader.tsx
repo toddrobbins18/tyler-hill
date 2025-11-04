@@ -5,6 +5,7 @@ import { Upload, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import CSVFormatGuide from "./dialogs/CSVFormatGuide";
+import { useCompany } from "@/contexts/CompanyContext";
 import { 
   childSchema, staffSchema, awardSchema, dailyNoteSchema, tripSchema, menuItemSchema,
   incidentReportSchema, medicationSchema, calendarEventSchema, sportsCalendarSchema,
@@ -21,6 +22,7 @@ interface CSVUploaderProps {
 export default function CSVUploader({ tableName, onUploadComplete }: CSVUploaderProps) {
   const [uploading, setUploading] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const { currentCompany } = useCompany();
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -124,7 +126,13 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
         return;
       }
 
-      const { error } = await supabase.from(tableName as any).insert(validatedRows as any);
+      // Add company_id to each row
+      const rowsWithCompany = validatedRows.map(row => ({
+        ...row,
+        company_id: currentCompany?.id
+      }));
+
+      const { error } = await supabase.from(tableName as any).insert(rowsWithCompany as any);
 
       if (error) throw error;
 

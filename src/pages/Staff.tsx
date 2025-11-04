@@ -57,6 +57,7 @@ export default function Staff() {
             .from("staff_evaluations")
             .select("rating, date, comments")
             .eq("staff_id", member.id)
+            .eq("company_id", currentCompany.id)
             .order("date", { ascending: false });
 
           const averageRating = evals?.length
