@@ -170,6 +170,7 @@ export default function ManageSportsRosterDialog({
       const templateChildren = Array.from(roster).map(childId => ({
         template_id: template.id,
         child_id: childId,
+        company_id: currentCompany?.id,
       }));
       await supabase.from("roster_template_children").insert(templateChildren);
     }

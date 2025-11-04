@@ -16,9 +16,11 @@ import { Calendar } from "@/components/ui/calendar";
 import { format, isSameDay, parseISO } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 
 export default function SportsAcademy() {
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [children, setChildren] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
@@ -158,6 +160,8 @@ export default function SportsAcademy() {
       start_date: formData.start_date || null,
       end_date: formData.end_date || null,
       notes: formData.notes || null,
+      company_id: currentCompany?.id,
+      season: currentSeason,
     };
 
     if (editingEnrollment) {

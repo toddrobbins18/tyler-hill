@@ -157,6 +157,8 @@ export default function Nurse() {
       frequency: formData.frequency,
       days_of_week: formData.days_of_week,
       end_date: formData.end_date || null,
+      company_id: currentCompany?.id,
+      season: currentSeason,
     });
 
     if (error) {

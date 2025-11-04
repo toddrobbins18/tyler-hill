@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { Calendar as CalendarIcon, Plus, Pencil, Trash2, Search, X, Filter } from "lucide-react";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 
 interface Enrollment {
   id: string;
@@ -44,6 +45,7 @@ interface Division {
 
 const TutoringTherapy = () => {
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [children, setChildren] = useState<Child[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
@@ -176,6 +178,8 @@ const TutoringTherapy = () => {
         start_date: formData.start_date ? format(formData.start_date, "yyyy-MM-dd") : null,
         end_date: formData.end_date ? format(formData.end_date, "yyyy-MM-dd") : null,
         notes: formData.notes || null,
+        company_id: currentCompany?.id,
+        season: currentSeason,
       };
 
       if (editingEnrollment) {
