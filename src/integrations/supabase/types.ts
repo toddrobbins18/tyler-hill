@@ -19,6 +19,7 @@ export type Database = {
           activity_type: string
           capacity: number | null
           chaperone: string | null
+          company_id: string | null
           created_at: string | null
           created_by: string | null
           description: string | null
@@ -36,6 +37,7 @@ export type Database = {
           activity_type: string
           capacity?: number | null
           chaperone?: string | null
+          company_id?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
@@ -53,6 +55,7 @@ export type Database = {
           activity_type?: string
           capacity?: number | null
           chaperone?: string | null
+          company_id?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
@@ -67,6 +70,13 @@ export type Database = {
           title?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "activities_field_trips_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "activities_field_trips_division_id_fkey"
             columns: ["division_id"]
@@ -154,6 +164,7 @@ export type Database = {
         Row: {
           category: string | null
           child_id: string | null
+          company_id: string | null
           created_at: string | null
           date: string
           description: string | null
@@ -164,6 +175,7 @@ export type Database = {
         Insert: {
           category?: string | null
           child_id?: string | null
+          company_id?: string | null
           created_at?: string | null
           date: string
           description?: string | null
@@ -174,6 +186,7 @@ export type Database = {
         Update: {
           category?: string | null
           child_id?: string | null
+          company_id?: string | null
           created_at?: string | null
           date?: string
           description?: string | null
@@ -187,6 +200,13 @@ export type Database = {
             columns: ["child_id"]
             isOneToOne: false
             referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "awards_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]
@@ -322,6 +342,7 @@ export type Database = {
         Row: {
           activities: string | null
           child_id: string | null
+          company_id: string | null
           created_at: string | null
           created_by: string | null
           date: string
@@ -335,6 +356,7 @@ export type Database = {
         Insert: {
           activities?: string | null
           child_id?: string | null
+          company_id?: string | null
           created_at?: string | null
           created_by?: string | null
           date: string
@@ -348,6 +370,7 @@ export type Database = {
         Update: {
           activities?: string | null
           child_id?: string | null
+          company_id?: string | null
           created_at?: string | null
           created_by?: string | null
           date?: string
@@ -364,6 +387,13 @@ export type Database = {
             columns: ["child_id"]
             isOneToOne: false
             referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_notes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
           {
@@ -568,6 +598,7 @@ export type Database = {
       }
       events: {
         Row: {
+          company_id: string | null
           created_at: string | null
           date: string
           description: string | null
@@ -578,6 +609,7 @@ export type Database = {
           type: string
         }
         Insert: {
+          company_id?: string | null
           created_at?: string | null
           date: string
           description?: string | null
@@ -588,6 +620,7 @@ export type Database = {
           type: string
         }
         Update: {
+          company_id?: string | null
           created_at?: string | null
           date?: string
           description?: string | null
@@ -597,7 +630,15 @@ export type Database = {
           title?: string
           type?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "events_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       health_center_admissions: {
         Row: {
@@ -606,6 +647,7 @@ export type Database = {
           checked_out_at: string | null
           checked_out_by: string | null
           child_id: string
+          company_id: string | null
           created_at: string
           id: string
           notes: string | null
@@ -619,6 +661,7 @@ export type Database = {
           checked_out_at?: string | null
           checked_out_by?: string | null
           child_id: string
+          company_id?: string | null
           created_at?: string
           id?: string
           notes?: string | null
@@ -632,6 +675,7 @@ export type Database = {
           checked_out_at?: string | null
           checked_out_by?: string | null
           child_id?: string
+          company_id?: string | null
           created_at?: string
           id?: string
           notes?: string | null
@@ -652,6 +696,13 @@ export type Database = {
             columns: ["child_id"]
             isOneToOne: false
             referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "health_center_admissions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]
@@ -695,6 +746,7 @@ export type Database = {
       incident_reports: {
         Row: {
           child_id: string | null
+          company_id: string | null
           created_at: string | null
           date: string
           description: string
@@ -709,6 +761,7 @@ export type Database = {
         }
         Insert: {
           child_id?: string | null
+          company_id?: string | null
           created_at?: string | null
           date: string
           description: string
@@ -723,6 +776,7 @@ export type Database = {
         }
         Update: {
           child_id?: string | null
+          company_id?: string | null
           created_at?: string | null
           date?: string
           description?: string
@@ -741,6 +795,13 @@ export type Database = {
             columns: ["child_id"]
             isOneToOne: false
             referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incident_reports_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
           {
@@ -809,6 +870,7 @@ export type Database = {
           administered_by: string | null
           alert_sent: boolean | null
           child_id: string | null
+          company_id: string | null
           created_at: string | null
           date: string
           days_of_week: string[] | null
@@ -832,6 +894,7 @@ export type Database = {
           administered_by?: string | null
           alert_sent?: boolean | null
           child_id?: string | null
+          company_id?: string | null
           created_at?: string | null
           date: string
           days_of_week?: string[] | null
@@ -855,6 +918,7 @@ export type Database = {
           administered_by?: string | null
           alert_sent?: boolean | null
           child_id?: string | null
+          company_id?: string | null
           created_at?: string | null
           date?: string
           days_of_week?: string[] | null
@@ -887,11 +951,19 @@ export type Database = {
             referencedRelation: "children"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "medication_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
         ]
       }
       menu_items: {
         Row: {
           allergens: string | null
+          company_id: string | null
           created_at: string | null
           date: string
           id: string
@@ -901,6 +973,7 @@ export type Database = {
         }
         Insert: {
           allergens?: string | null
+          company_id?: string | null
           created_at?: string | null
           date: string
           id?: string
@@ -910,6 +983,7 @@ export type Database = {
         }
         Update: {
           allergens?: string | null
+          company_id?: string | null
           created_at?: string | null
           date?: string
           id?: string
@@ -917,7 +991,15 @@ export type Database = {
           meal_type?: string
           season?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "menu_items_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       messages: {
         Row: {
@@ -1060,6 +1142,7 @@ export type Database = {
         Row: {
           activity_type: string
           capacity: number | null
+          company_id: string | null
           created_at: string | null
           date: string
           id: string
@@ -1074,6 +1157,7 @@ export type Database = {
         Insert: {
           activity_type: string
           capacity?: number | null
+          company_id?: string | null
           created_at?: string | null
           date: string
           id?: string
@@ -1088,6 +1172,7 @@ export type Database = {
         Update: {
           activity_type?: string
           capacity?: number | null
+          company_id?: string | null
           created_at?: string | null
           date?: string
           id?: string
@@ -1099,7 +1184,15 @@ export type Database = {
           supervisor?: string | null
           time?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "rainy_day_schedule_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       role_permissions: {
         Row: {
@@ -1139,18 +1232,21 @@ export type Database = {
       roster_template_children: {
         Row: {
           child_id: string | null
+          company_id: string | null
           created_at: string | null
           id: string
           template_id: string | null
         }
         Insert: {
           child_id?: string | null
+          company_id?: string | null
           created_at?: string | null
           id?: string
           template_id?: string | null
         }
         Update: {
           child_id?: string | null
+          company_id?: string | null
           created_at?: string | null
           id?: string
           template_id?: string | null
@@ -1164,6 +1260,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "roster_template_children_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "roster_template_children_template_id_fkey"
             columns: ["template_id"]
             isOneToOne: false
@@ -1174,6 +1277,7 @@ export type Database = {
       }
       roster_templates: {
         Row: {
+          company_id: string | null
           created_at: string | null
           created_by: string | null
           description: string | null
@@ -1182,6 +1286,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          company_id?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
@@ -1190,6 +1295,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          company_id?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
@@ -1197,10 +1303,19 @@ export type Database = {
           name?: string
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "roster_templates_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       special_events_activities: {
         Row: {
+          company_id: string | null
           created_at: string | null
           created_by: string | null
           description: string | null
@@ -1214,6 +1329,7 @@ export type Database = {
           title: string
         }
         Insert: {
+          company_id?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
@@ -1227,6 +1343,7 @@ export type Database = {
           title: string
         }
         Update: {
+          company_id?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
@@ -1247,11 +1364,19 @@ export type Database = {
             referencedRelation: "divisions"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "special_events_activities_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
         ]
       }
       special_meals: {
         Row: {
           allergens: string | null
+          company_id: string | null
           created_at: string | null
           date: string
           id: string
@@ -1261,6 +1386,7 @@ export type Database = {
         }
         Insert: {
           allergens?: string | null
+          company_id?: string | null
           created_at?: string | null
           date: string
           id?: string
@@ -1270,6 +1396,7 @@ export type Database = {
         }
         Update: {
           allergens?: string | null
+          company_id?: string | null
           created_at?: string | null
           date?: string
           id?: string
@@ -1277,11 +1404,20 @@ export type Database = {
           meal_type?: string
           season?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "special_meals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sports_academy: {
         Row: {
           child_id: string
+          company_id: string | null
           created_at: string | null
           end_date: string | null
           id: string
@@ -1295,6 +1431,7 @@ export type Database = {
         }
         Insert: {
           child_id: string
+          company_id?: string | null
           created_at?: string | null
           end_date?: string | null
           id?: string
@@ -1308,6 +1445,7 @@ export type Database = {
         }
         Update: {
           child_id?: string
+          company_id?: string | null
           created_at?: string | null
           end_date?: string | null
           id?: string
@@ -1327,10 +1465,18 @@ export type Database = {
             referencedRelation: "children"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "sports_academy_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
         ]
       }
       sports_calendar: {
         Row: {
+          company_id: string | null
           created_at: string | null
           created_by: string | null
           custom_sport_type: string | null
@@ -1353,6 +1499,7 @@ export type Database = {
           title: string
         }
         Insert: {
+          company_id?: string | null
           created_at?: string | null
           created_by?: string | null
           custom_sport_type?: string | null
@@ -1375,6 +1522,7 @@ export type Database = {
           title: string
         }
         Update: {
+          company_id?: string | null
           created_at?: string | null
           created_by?: string | null
           custom_sport_type?: string | null
@@ -1398,6 +1546,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "sports_calendar_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "sports_calendar_division_id_fkey"
             columns: ["division_id"]
             isOneToOne: false
@@ -1408,24 +1563,34 @@ export type Database = {
       }
       sports_calendar_divisions: {
         Row: {
+          company_id: string | null
           created_at: string | null
           division_id: string
           id: string
           sports_event_id: string
         }
         Insert: {
+          company_id?: string | null
           created_at?: string | null
           division_id: string
           id?: string
           sports_event_id: string
         }
         Update: {
+          company_id?: string | null
           created_at?: string | null
           division_id?: string
           id?: string
           sports_event_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "sports_calendar_divisions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "sports_calendar_divisions_division_id_fkey"
             columns: ["division_id"]
@@ -1445,6 +1610,7 @@ export type Database = {
       sports_event_roster: {
         Row: {
           child_id: string
+          company_id: string | null
           confirmed: boolean | null
           created_at: string | null
           event_id: string
@@ -1452,6 +1618,7 @@ export type Database = {
         }
         Insert: {
           child_id: string
+          company_id?: string | null
           confirmed?: boolean | null
           created_at?: string | null
           event_id: string
@@ -1459,6 +1626,7 @@ export type Database = {
         }
         Update: {
           child_id?: string
+          company_id?: string | null
           confirmed?: boolean | null
           created_at?: string | null
           event_id?: string
@@ -1473,6 +1641,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "sports_event_roster_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "sports_event_roster_event_id_fkey"
             columns: ["event_id"]
             isOneToOne: false
@@ -1483,6 +1658,7 @@ export type Database = {
       }
       sports_event_staff: {
         Row: {
+          company_id: string | null
           created_at: string | null
           event_id: string | null
           id: string
@@ -1490,6 +1666,7 @@ export type Database = {
           staff_id: string | null
         }
         Insert: {
+          company_id?: string | null
           created_at?: string | null
           event_id?: string | null
           id?: string
@@ -1497,6 +1674,7 @@ export type Database = {
           staff_id?: string | null
         }
         Update: {
+          company_id?: string | null
           created_at?: string | null
           event_id?: string | null
           id?: string
@@ -1504,6 +1682,13 @@ export type Database = {
           staff_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "sports_event_staff_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "sports_event_staff_event_id_fkey"
             columns: ["event_id"]
@@ -1590,6 +1775,7 @@ export type Database = {
         Row: {
           category: string | null
           comments: string | null
+          company_id: string | null
           created_at: string | null
           date: string
           evaluator: string | null
@@ -1602,6 +1788,7 @@ export type Database = {
         Insert: {
           category?: string | null
           comments?: string | null
+          company_id?: string | null
           created_at?: string | null
           date: string
           evaluator?: string | null
@@ -1614,6 +1801,7 @@ export type Database = {
         Update: {
           category?: string | null
           comments?: string | null
+          company_id?: string | null
           created_at?: string | null
           date?: string
           evaluator?: string | null
@@ -1624,6 +1812,13 @@ export type Database = {
           supervisor_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "staff_evaluations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "staff_evaluations_staff_id_fkey"
             columns: ["staff_id"]
@@ -1643,6 +1838,7 @@ export type Database = {
       trip_attendees: {
         Row: {
           child_id: string
+          company_id: string | null
           confirmed: boolean | null
           created_at: string | null
           id: string
@@ -1650,6 +1846,7 @@ export type Database = {
         }
         Insert: {
           child_id: string
+          company_id?: string | null
           confirmed?: boolean | null
           created_at?: string | null
           id?: string
@@ -1657,6 +1854,7 @@ export type Database = {
         }
         Update: {
           child_id?: string
+          company_id?: string | null
           confirmed?: boolean | null
           created_at?: string | null
           id?: string
@@ -1668,6 +1866,13 @@ export type Database = {
             columns: ["child_id"]
             isOneToOne: false
             referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_attendees_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
           {
@@ -1683,6 +1888,7 @@ export type Database = {
         Row: {
           capacity: number | null
           chaperone: string | null
+          company_id: string | null
           created_at: string | null
           date: string
           departure_time: string | null
@@ -1703,6 +1909,7 @@ export type Database = {
         Insert: {
           capacity?: number | null
           chaperone?: string | null
+          company_id?: string | null
           created_at?: string | null
           date: string
           departure_time?: string | null
@@ -1723,6 +1930,7 @@ export type Database = {
         Update: {
           capacity?: number | null
           chaperone?: string | null
+          company_id?: string | null
           created_at?: string | null
           date?: string
           departure_time?: string | null
@@ -1742,6 +1950,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "trips_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "trips_sports_event_id_fkey"
             columns: ["sports_event_id"]
             isOneToOne: false
@@ -1753,6 +1968,7 @@ export type Database = {
       tutoring_therapy: {
         Row: {
           child_id: string
+          company_id: string | null
           created_at: string | null
           end_date: string | null
           id: string
@@ -1766,6 +1982,7 @@ export type Database = {
         }
         Insert: {
           child_id: string
+          company_id?: string | null
           created_at?: string | null
           end_date?: string | null
           id?: string
@@ -1779,6 +1996,7 @@ export type Database = {
         }
         Update: {
           child_id?: string
+          company_id?: string | null
           created_at?: string | null
           end_date?: string | null
           id?: string
@@ -1796,6 +2014,13 @@ export type Database = {
             columns: ["child_id"]
             isOneToOne: false
             referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tutoring_therapy_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]

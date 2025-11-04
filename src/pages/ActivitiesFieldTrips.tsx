@@ -19,12 +19,14 @@ import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useCompany } from "@/contexts/CompanyContext";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
 
 export default function ActivitiesFieldTrips() {
   const { currentSeason } = useSeasonContext();
+  const { currentCompany } = useCompany();
   const [events, setEvents] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
   const [selectedDivision, setSelectedDivision] = useState<string>("all");
@@ -109,9 +111,14 @@ export default function ActivitiesFieldTrips() {
   };
 
   const fetchDivisions = async () => {
+    if (!currentCompany?.id) {
+      setDivisions([]);
+      return;
+    }
     const { data } = await supabase
       .from("divisions")
       .select("*")
+      .eq('company_id', currentCompany.id)
       .order("sort_order");
     
     if (data) {

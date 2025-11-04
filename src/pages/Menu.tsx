@@ -17,6 +17,7 @@ import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useSeason } from "@/contexts/SeasonContext";
+import { useCompany } from "@/contexts/CompanyContext";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -31,6 +32,7 @@ export default function Menu() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const { toast } = useToast();
   const { selectedSeason } = useSeason();
+  const { currentCompany } = useCompany();
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -51,9 +53,16 @@ export default function Menu() {
   }, [selectedSeason]);
 
   const fetchMenuItems = async () => {
+    if (!currentCompany?.id) {
+      setMenuItems([]);
+      setLoading(false);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("menu_items")
       .select("*")
+      .eq('company_id', currentCompany.id)
       .or(`season.eq.${selectedSeason},season.is.null`)
       .order("date", { ascending: false })
       .order("meal_type");
@@ -81,7 +90,10 @@ export default function Menu() {
       }
       toast({ title: "Menu item updated successfully" });
     } else {
-      const { error } = await supabase.from("menu_items").insert(formData);
+      const { error } = await supabase.from("menu_items").insert({
+        ...formData,
+        company_id: currentCompany?.id
+      });
 
       if (error) {
         toast({ title: "Error adding menu item", variant: "destructive" });

@@ -16,9 +16,11 @@ import { JSONUploader } from "@/components/JSONUploader";
 import { Calendar } from "@/components/ui/calendar";
 import { format, isBefore, startOfDay, isToday } from "date-fns";
 import { useSeasonContext } from "@/contexts/SeasonContext";
+import { useCompany } from "@/contexts/CompanyContext";
 
 export default function Nurse() {
   const { currentSeason } = useSeasonContext();
+  const { currentCompany } = useCompany();
   const [children, setChildren] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
   const [medications, setMedications] = useState<any[]>([]);
@@ -77,6 +79,11 @@ export default function Nurse() {
   }, [selectedDate, currentSeason]);
 
   const fetchChildren = async () => {
+    if (!currentCompany?.id) {
+      setChildren([]);
+      setLoading(false);
+      return;
+    }
     const { data, error } = await supabase
       .from("children")
       .select(`
@@ -85,6 +92,7 @@ export default function Nurse() {
       `)
       .eq("status", "active")
       .eq("season", currentSeason)
+      .eq('company_id', currentCompany.id)
       .order("name");
 
     if (error) {
@@ -96,9 +104,14 @@ export default function Nurse() {
   };
 
   const fetchDivisions = async () => {
+    if (!currentCompany?.id) {
+      setDivisions([]);
+      return;
+    }
     const { data, error } = await supabase
       .from("divisions")
       .select("*")
+      .eq('company_id', currentCompany.id)
       .order("sort_order");
 
     if (error) {

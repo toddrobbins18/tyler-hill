@@ -14,8 +14,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CSVUploader } from "@/components/CSVUploader";
 import { formatTime12Hour } from "@/lib/utils";
 import { useSeason } from "@/contexts/SeasonContext";
+import { useCompany } from "@/contexts/CompanyContext";
 
 export default function SpecialEventsActivities() {
+  const { currentCompany } = useCompany();
   const [events, setEvents] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
   const [selectedDivision, setSelectedDivision] = useState<string>("all");
@@ -98,9 +100,14 @@ export default function SpecialEventsActivities() {
   };
 
   const fetchDivisions = async () => {
+    if (!currentCompany?.id) {
+      setDivisions([]);
+      return;
+    }
     const { data } = await supabase
       .from("divisions")
       .select("*")
+      .eq('company_id', currentCompany.id)
       .order("sort_order");
     
     if (data) {

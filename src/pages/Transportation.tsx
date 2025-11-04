@@ -27,9 +27,11 @@ import { format, isSameDay } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatTime12Hour } from "@/lib/utils";
 import { useSeasonContext } from "@/contexts/SeasonContext";
+import { useCompany } from "@/contexts/CompanyContext";
 
 export default function Transportation() {
   const { currentSeason } = useSeasonContext();
+  const { currentCompany } = useCompany();
   const [trips, setTrips] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingTrip, setEditingTrip] = useState<string | null>(null);
@@ -79,6 +81,12 @@ export default function Transportation() {
   }, []);
 
   const fetchTrips = async () => {
+    if (!currentCompany?.id) {
+      setTrips([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     const { data, error } = await supabase
       .from("trips")
@@ -93,6 +101,7 @@ export default function Transportation() {
           meal_notes
         )
       `)
+      .eq('company_id', currentCompany.id)
       .eq("season", currentSeason)
       .order("date", { ascending: false });
 

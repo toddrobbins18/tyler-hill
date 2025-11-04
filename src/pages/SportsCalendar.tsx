@@ -22,12 +22,14 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import ManageSportsRosterDialog from "@/components/dialogs/ManageSportsRosterDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useCompany } from "@/contexts/CompanyContext";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
 
 export default function SportsCalendar() {
   const { currentSeason } = useSeasonContext();
+  const { currentCompany } = useCompany();
   const [events, setEvents] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
   const [selectedDivisions, setSelectedDivisions] = useState<string[]>([]);
@@ -138,9 +140,14 @@ export default function SportsCalendar() {
   };
 
   const fetchDivisions = async () => {
+    if (!currentCompany?.id) {
+      setDivisions([]);
+      return;
+    }
     const { data } = await supabase
       .from("divisions")
       .select("*")
+      .eq('company_id', currentCompany.id)
       .order("sort_order");
     
     if (data) {

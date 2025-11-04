@@ -16,6 +16,7 @@ import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useSeason } from "@/contexts/SeasonContext";
+import { useCompany } from "@/contexts/CompanyContext";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -37,6 +38,7 @@ export default function SpecialMeals() {
   const [calendarView, setCalendarView] = useState<View>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const { selectedSeason } = useSeason();
+  const { currentCompany } = useCompany();
   const [formData, setFormData] = useState({
     date: "",
     meal_type: "breakfast",
@@ -45,10 +47,17 @@ export default function SpecialMeals() {
   });
 
   const fetchMeals = async () => {
+    if (!currentCompany?.id) {
+      setMeals([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     const { data, error } = await supabase
       .from("special_meals")
       .select("*")
+      .eq('company_id', currentCompany.id)
       .or(`season.eq.${selectedSeason},season.is.null`)
       .order("date", { ascending: true });
 
@@ -88,7 +97,10 @@ export default function SpecialMeals() {
         resetForm();
       }
     } else {
-      const { error } = await supabase.from("special_meals").insert([formData]);
+      const { error } = await supabase.from("special_meals").insert([{
+        ...formData,
+        company_id: currentCompany?.id
+      }]);
 
       if (error) {
         toast.error("Failed to add special meal");

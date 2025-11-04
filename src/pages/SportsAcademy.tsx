@@ -15,8 +15,10 @@ import { CSVUploader } from "@/components/CSVUploader";
 import { Calendar } from "@/components/ui/calendar";
 import { format, isSameDay, parseISO } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useCompany } from "@/contexts/CompanyContext";
 
 export default function SportsAcademy() {
+  const { currentCompany } = useCompany();
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [children, setChildren] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
@@ -100,10 +102,15 @@ export default function SportsAcademy() {
   };
 
   const fetchChildren = async () => {
+    if (!currentCompany?.id) {
+      setChildren([]);
+      return;
+    }
     const { data } = await supabase
       .from("children")
       .select("id, name, age, gender, division_id")
       .eq("status", "active")
+      .eq('company_id', currentCompany.id)
       .order("name");
     
     if (data) {
@@ -112,9 +119,14 @@ export default function SportsAcademy() {
   };
 
   const fetchDivisions = async () => {
+    if (!currentCompany?.id) {
+      setDivisions([]);
+      return;
+    }
     const { data } = await supabase
       .from("divisions")
       .select("*")
+      .eq('company_id', currentCompany.id)
       .order("sort_order");
     
     if (data) {

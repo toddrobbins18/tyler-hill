@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Calendar as CalendarIcon, Plus, Pencil, Trash2, Search, X, Filter } from "lucide-react";
+import { useCompany } from "@/contexts/CompanyContext";
 
 interface Enrollment {
   id: string;
@@ -42,6 +43,7 @@ interface Division {
 }
 
 const TutoringTherapy = () => {
+  const { currentCompany } = useCompany();
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [children, setChildren] = useState<Child[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
@@ -106,8 +108,12 @@ const TutoringTherapy = () => {
   };
 
   const fetchChildren = async () => {
+    if (!currentCompany?.id) {
+      setChildren([]);
+      return;
+    }
     try {
-      const { data, error } = await supabase.from("children").select("*").order("name");
+      const { data, error } = await supabase.from("children").select("*").eq('company_id', currentCompany.id).order("name");
       if (error) throw error;
       setChildren(data || []);
     } catch (error) {
@@ -116,8 +122,12 @@ const TutoringTherapy = () => {
   };
 
   const fetchDivisions = async () => {
+    if (!currentCompany?.id) {
+      setDivisions([]);
+      return;
+    }
     try {
-      const { data, error } = await supabase.from("divisions").select("*").order("sort_order");
+      const { data, error } = await supabase.from("divisions").select("*").eq('company_id', currentCompany.id).order("sort_order");
       if (error) throw error;
       setDivisions(data || []);
     } catch (error) {

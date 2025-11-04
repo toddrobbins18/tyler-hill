@@ -20,6 +20,7 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { formatTime12Hour } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useCompany } from "@/contexts/CompanyContext";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -41,6 +42,7 @@ interface UnifiedEvent {
 
 export default function MasterCalendar() {
   const { currentSeason } = useSeasonContext();
+  const { currentCompany } = useCompany();
   const [events, setEvents] = useState<UnifiedEvent[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
   const [children, setChildren] = useState<any[]>([]);
@@ -169,17 +171,29 @@ export default function MasterCalendar() {
   };
 
   const fetchDivisions = async () => {
-    const { data } = await supabase.from("divisions").select("*").order("sort_order");
+    if (!currentCompany?.id) {
+      setDivisions([]);
+      return;
+    }
+    const { data } = await supabase.from("divisions").select("*").eq('company_id', currentCompany.id).order("sort_order");
     if (data) setDivisions(data);
   };
 
   const fetchChildren = async () => {
-    const { data } = await supabase.from("children").select("id, name").eq("status", "active").order("name");
+    if (!currentCompany?.id) {
+      setChildren([]);
+      return;
+    }
+    const { data } = await supabase.from("children").select("id, name").eq("status", "active").eq('company_id', currentCompany.id).order("name");
     if (data) setChildren(data);
   };
 
   const fetchStaff = async () => {
-    const { data } = await supabase.from("staff").select("id, name").eq("status", "active").order("name");
+    if (!currentCompany?.id) {
+      setStaff([]);
+      return;
+    }
+    const { data } = await supabase.from("staff").select("id, name").eq("status", "active").eq('company_id', currentCompany.id).order("name");
     if (data) setStaff(data);
   };
 

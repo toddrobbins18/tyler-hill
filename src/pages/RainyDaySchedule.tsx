@@ -16,6 +16,7 @@ import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useSeason } from "@/contexts/SeasonContext";
+import { useCompany } from "@/contexts/CompanyContext";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -42,6 +43,7 @@ export default function RainyDaySchedule() {
   const [calendarView, setCalendarView] = useState<View>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const { selectedSeason } = useSeason();
+  const { currentCompany } = useCompany();
   const [formData, setFormData] = useState({
     name: "",
     date: "",
@@ -55,10 +57,17 @@ export default function RainyDaySchedule() {
   });
 
   const fetchActivities = async () => {
+    if (!currentCompany?.id) {
+      setActivities([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     const { data, error } = await supabase
       .from("rainy_day_schedule")
       .select("*")
+      .eq('company_id', currentCompany.id)
       .or(`season.eq.${selectedSeason},season.is.null`)
       .order("date", { ascending: true });
 
@@ -103,7 +112,10 @@ export default function RainyDaySchedule() {
         resetForm();
       }
     } else {
-      const { error } = await supabase.from("rainy_day_schedule").insert([dataToSubmit]);
+      const { error } = await supabase.from("rainy_day_schedule").insert([{
+        ...dataToSubmit,
+        company_id: currentCompany?.id
+      }]);
 
       if (error) {
         toast.error("Failed to add activity");
