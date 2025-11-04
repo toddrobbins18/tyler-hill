@@ -67,7 +67,7 @@ export default function Dashboard() {
       supabase.removeChannel(tripsChannel);
       supabase.removeChannel(menuChannel);
     };
-  }, []);
+  }, [currentCompany?.id]);
 
   const fetchDashboardData = async () => {
     if (!currentCompany?.id) return;
@@ -95,24 +95,28 @@ export default function Dashboard() {
       .from('trips')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'active')
+      .eq('company_id', currentCompany.id)
       .gte('date', today);
 
     // Fetch today's notes count
     const { count: notesCount } = await supabase
       .from('daily_notes')
       .select('*', { count: 'exact', head: true })
-      .eq('date', today);
+      .eq('date', today)
+      .eq('company_id', currentCompany.id);
 
     // Fetch this week's awards
     const { count: awardsCount } = await supabase
       .from('awards')
       .select('*', { count: 'exact', head: true })
+      .eq('company_id', currentCompany.id)
       .gte('date', weekStart.toISOString().split('T')[0]);
 
     // Fetch recent notes with division filtering
     let notesQuery = supabase
       .from('daily_notes')
       .select('*, children(name, division_id)')
+      .eq('company_id', currentCompany.id)
       .order('created_at', { ascending: false })
       .limit(3);
     
@@ -122,6 +126,7 @@ export default function Dashboard() {
     const { data: trips } = await supabase
       .from('trips')
       .select('*')
+      .eq('company_id', currentCompany.id)
       .gte('date', today)
       .order('date')
       .limit(5);
@@ -130,7 +135,8 @@ export default function Dashboard() {
     const { data: menu } = await supabase
       .from('menu_items')
       .select('*')
-      .eq('date', today);
+      .eq('date', today)
+      .eq('company_id', currentCompany.id);
 
     setStats({
       totalChildren: childrenCount || 0,

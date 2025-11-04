@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSeasonContext } from '@/contexts/SeasonContext';
+import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 
@@ -22,9 +23,11 @@ export default function DailyNotes() {
   const [scheduleEvents, setScheduleEvents] = useState<ScheduleEvent[]>([]);
   const [featuredEvent, setFeaturedEvent] = useState<ScheduleEvent | null>(null);
   const [loading, setLoading] = useState(true);
+  const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
 
   useEffect(() => {
+    if (!currentCompany?.id) return;
     fetchSchedule();
 
     const sportsChannel = supabase

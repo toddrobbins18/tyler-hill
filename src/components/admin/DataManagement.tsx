@@ -3,10 +3,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { useCompany } from "@/contexts/CompanyContext";
 import { toast } from "sonner";
 import { Users, UserCog, Award, FileText, Truck, Calendar, Trash2, AlertTriangle } from "lucide-react";
 
 export default function DataManagement() {
+  const { currentCompany } = useCompany();
   const [stats, setStats] = useState({
     children: 0,
     staff: 0,
@@ -17,17 +19,20 @@ export default function DataManagement() {
   });
 
   useEffect(() => {
+    if (!currentCompany?.id) return;
     fetchStats();
-  }, []);
+  }, [currentCompany?.id]);
 
   const fetchStats = async () => {
+    if (!currentCompany?.id) return;
+    
     const [children, staff, awards, dailyNotes, trips, events] = await Promise.all([
-      supabase.from("children").select("id", { count: "exact", head: true }),
-      supabase.from("staff").select("id", { count: "exact", head: true }),
-      supabase.from("awards").select("id", { count: "exact", head: true }),
-      supabase.from("daily_notes").select("id", { count: "exact", head: true }),
-      supabase.from("trips").select("id", { count: "exact", head: true }),
-      supabase.from("events").select("id", { count: "exact", head: true }),
+      supabase.from("children").select("id", { count: "exact", head: true }).eq("company_id", currentCompany.id),
+      supabase.from("staff").select("id", { count: "exact", head: true }).eq("company_id", currentCompany.id),
+      supabase.from("awards").select("id", { count: "exact", head: true }).eq("company_id", currentCompany.id),
+      supabase.from("daily_notes").select("id", { count: "exact", head: true }).eq("company_id", currentCompany.id),
+      supabase.from("trips").select("id", { count: "exact", head: true }).eq("company_id", currentCompany.id),
+      supabase.from("events").select("id", { count: "exact", head: true }).eq("company_id", currentCompany.id),
     ]);
 
     setStats({

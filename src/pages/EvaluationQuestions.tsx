@@ -30,6 +30,7 @@ export default function EvaluationQuestions() {
   });
 
   useEffect(() => {
+    if (!currentCompany?.id) return;
     fetchQuestions();
 
     const channel = supabase
@@ -40,7 +41,7 @@ export default function EvaluationQuestions() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [currentCompany?.id]);
 
   const fetchQuestions = async () => {
     const { data, error } = await supabase

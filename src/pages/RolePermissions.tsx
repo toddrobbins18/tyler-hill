@@ -69,7 +69,8 @@ export default function RolePermissions() {
   const fetchPermissions = async () => {
     const { data, error } = await supabase
       .from("role_permissions")
-      .select("*");
+      .select("*")
+      .eq("company_id", currentCompany!.id);
 
     if (error) {
       toast({ title: "Error fetching permissions", variant: "destructive" });

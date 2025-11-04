@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
+import { useCompany } from "@/contexts/CompanyContext";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -72,8 +73,10 @@ export default function Messages() {
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showRecipientPreview, setShowRecipientPreview] = useState(false);
+  const { currentCompany } = useCompany();
 
   useEffect(() => {
+    if (!currentCompany?.id) return;
     fetchTagGroups();
     fetchAllUsers();
     fetchMessages();
@@ -90,7 +93,7 @@ export default function Messages() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [currentCompany?.id]);
 
   const fetchMessages = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -131,7 +134,8 @@ export default function Messages() {
     
     const { data: userTags, error } = await supabase
       .from("user_tags")
-      .select("tag");
+      .select("tag")
+      .eq("company_id", currentCompany!.id);
 
     if (error || !userTags) {
       setLoading(false);
@@ -158,13 +162,15 @@ export default function Messages() {
     const { data: profiles, error: profilesError } = await supabase
       .from("profiles")
       .select("id, email, full_name")
+      .eq("company_id", currentCompany!.id)
       .order("full_name");
 
     if (profilesError || !profiles) return;
 
     const { data: userTags } = await supabase
       .from("user_tags")
-      .select("user_id, tag");
+      .select("user_id, tag")
+      .eq("company_id", currentCompany!.id);
 
     const users: UserOption[] = profiles.map((profile) => ({
       id: profile.id,

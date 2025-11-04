@@ -12,6 +12,7 @@ import { CSVUploader } from "@/components/CSVUploader";
 import { JSONUploader } from "@/components/JSONUploader";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCompany } from "@/contexts/CompanyContext";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +28,7 @@ export default function Awards() {
   const navigate = useNavigate();
   const { currentSeason } = useSeasonContext();
   const { getDivisionFilter } = usePermissions();
+  const { currentCompany } = useCompany();
   const [awards, setAwards] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingAward, setEditingAward] = useState<string | null>(null);
@@ -34,6 +36,7 @@ export default function Awards() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
 
   useEffect(() => {
+    if (!currentCompany?.id) return;
     fetchAwards();
 
     const channel = supabase
@@ -48,7 +51,7 @@ export default function Awards() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentSeason]);
+  }, [currentSeason, currentCompany?.id]);
 
   const fetchAwards = async () => {
     setLoading(true);
@@ -65,6 +68,7 @@ export default function Awards() {
         )
       `)
       .or(`season.eq.${currentSeason},season.is.null`)
+      .eq("company_id", currentCompany!.id)
       .order("date", { ascending: false });
     
     const { data, error } = await query;

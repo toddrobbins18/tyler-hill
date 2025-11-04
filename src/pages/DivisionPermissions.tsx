@@ -39,6 +39,7 @@ export default function DivisionPermissions() {
     const { data: divisionsData } = await supabase
       .from("divisions")
       .select("*")
+      .eq("company_id", currentCompany!.id)
       .order("sort_order");
 
     // Fetch approved users

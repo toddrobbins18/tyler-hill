@@ -12,6 +12,7 @@ import { CSVUploader } from "@/components/CSVUploader";
 import { JSONUploader } from "@/components/JSONUploader";
 import { useSeason } from "@/contexts/SeasonContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCompany } from "@/contexts/CompanyContext";
 
 export default function IncidentReports() {
   const { getDivisionFilter } = usePermissions();
@@ -23,8 +24,10 @@ export default function IncidentReports() {
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
   const { toast } = useToast();
   const { selectedSeason } = useSeason();
+  const { currentCompany } = useCompany();
 
   useEffect(() => {
+    if (!currentCompany?.id) return;
     fetchIncidents();
 
     const channel = supabase
@@ -39,7 +42,7 @@ export default function IncidentReports() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedSeason]);
+  }, [selectedSeason, currentCompany?.id]);
 
   const fetchIncidents = async () => {
     const { data, error } = await supabase
@@ -53,6 +56,7 @@ export default function IncidentReports() {
         staff(name)
       `)
       .or(`season.eq.${selectedSeason},season.is.null`)
+      .eq("company_id", currentCompany!.id)
       .order("date", { ascending: false });
 
     if (error) {

@@ -16,6 +16,7 @@ export default function UserApprovals() {
   const { currentCompany } = useCompany();
 
   useEffect(() => {
+    if (!currentCompany?.id) return;
     fetchPendingUsers();
 
     const channel = supabase
@@ -30,13 +31,14 @@ export default function UserApprovals() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [currentCompany?.id]);
 
   const fetchPendingUsers = async () => {
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
       .eq("approved", false)
+      .eq("company_id", currentCompany!.id)
       .order("approval_requested_at", { ascending: false });
 
     if (error) {
