@@ -100,7 +100,15 @@ export default function StaffProfile() {
         </Avatar>
         <div className="flex-1">
           <h1 className="text-3xl font-bold text-foreground mb-1">{staff.name}</h1>
-          <p className="text-muted-foreground">{staff.role} • {staff.department}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-muted-foreground">{staff.role} • {staff.department}</p>
+            {staff.staff_type && (
+              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                {staff.staff_type === "general_counselor" ? "General Counselor" : 
+                 staff.staff_type === "specialist" ? "Specialist" : "Both"}
+              </Badge>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <Button onClick={() => setEditDialogOpen(true)}>

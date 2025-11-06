@@ -1837,6 +1837,7 @@ export type Database = {
           phone: string | null
           role: string
           season: string | null
+          staff_type: string | null
           status: string | null
           updated_at: string | null
         }
@@ -1853,6 +1854,7 @@ export type Database = {
           phone?: string | null
           role: string
           season?: string | null
+          staff_type?: string | null
           status?: string | null
           updated_at?: string | null
         }
@@ -1869,6 +1871,7 @@ export type Database = {
           phone?: string | null
           role?: string
           season?: string | null
+          staff_type?: string | null
           status?: string | null
           updated_at?: string | null
         }

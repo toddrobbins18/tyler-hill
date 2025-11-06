@@ -29,6 +29,8 @@ export const staffSchema = z.object({
   email: z.union([z.string().trim().email("Invalid email address").max(255), z.literal("")]).nullable().optional(),
   phone: z.string().trim().max(20, "Phone must be less than 20 characters").nullable().optional(),
   hire_date: z.string().nullable().optional(),
+  leader_id: z.string().uuid().nullable().optional(),
+  staff_type: z.enum(["general_counselor", "specialist", "both"]).nullable().optional(),
 });
 
 // Award validation schema

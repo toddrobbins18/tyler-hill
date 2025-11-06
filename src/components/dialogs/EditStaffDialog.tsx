@@ -23,6 +23,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
   const [staff, setStaff] = useState<any>(null);
   const [supervisors, setSupervisors] = useState<any[]>([]);
   const [leaderId, setLeaderId] = useState("");
+  const [staffType, setStaffType] = useState<string>("");
 
   useEffect(() => {
     if (open && staffId) {
@@ -41,6 +42,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
     if (!error && data) {
       setStaff(data);
       setLeaderId(data.leader_id || "");
+      setStaffType(data.staff_type || "");
     }
   };
 
@@ -73,6 +75,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
         date_of_birth: formData.get("date_of_birth") as string || null,
         season: formData.get("season") as string || null,
         leader_id: leaderId || null,
+        staff_type: staffType || null,
       };
 
       const validatedData = staffSchema.parse(data);
@@ -142,6 +145,20 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
           <div>
             <Label htmlFor="season">Season (Year)</Label>
             <Input id="season" name="season" defaultValue={staff.season || ""} placeholder="e.g., 2024" maxLength={4} />
+          </div>
+          <div>
+            <Label>Staff Type</Label>
+            <Select value={staffType || "none"} onValueChange={(val) => setStaffType(val === "none" ? "" : val)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select staff type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Not Specified</SelectItem>
+                <SelectItem value="general_counselor">General Counselor</SelectItem>
+                <SelectItem value="specialist">Specialist</SelectItem>
+                <SelectItem value="both">Both</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label>Reports To (Supervisor)</Label>

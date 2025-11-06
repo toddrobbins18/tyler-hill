@@ -194,12 +194,20 @@ export default function Staff() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  {staffMember.department && (
-                    <Badge variant="outline" className="bg-secondary/10 text-secondary border-secondary/20">
-                      {staffMember.department}
-                    </Badge>
-                  )}
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    {staffMember.department && (
+                      <Badge variant="outline" className="bg-secondary/10 text-secondary border-secondary/20">
+                        {staffMember.department}
+                      </Badge>
+                    )}
+                    {staffMember.staff_type && (
+                      <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                        {staffMember.staff_type === "general_counselor" ? "General Counselor" : 
+                         staffMember.staff_type === "specialist" ? "Specialist" : "Both"}
+                      </Badge>
+                    )}
+                  </div>
                   <Badge 
                     variant="outline" 
                     className={

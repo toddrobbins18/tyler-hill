@@ -16,6 +16,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
   const [loading, setLoading] = useState(false);
   const [supervisors, setSupervisors] = useState<any[]>([]);
   const [leaderId, setLeaderId] = useState("");
+  const [staffType, setStaffType] = useState<string>("");
   const { currentCompany } = useCompany();
 
   useEffect(() => {
@@ -51,6 +52,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
         hire_date: formData.get("hire_date") as string || null,
         season: formData.get("season") as string || null,
         leader_id: leaderId || null,
+        staff_type: staffType || null,
       };
 
       const validatedData = staffSchema.parse(data) as {
@@ -75,6 +77,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
         toast.success("Staff member added successfully");
         setOpen(false);
         setLeaderId("");
+        setStaffType("");
         onSuccess?.();
       }
     } catch (error) {
@@ -129,6 +132,20 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
           <div>
             <Label htmlFor="season">Season (Year)</Label>
             <Input id="season" name="season" placeholder="e.g., 2024" maxLength={4} />
+          </div>
+          <div>
+            <Label>Staff Type</Label>
+            <Select value={staffType || "none"} onValueChange={(val) => setStaffType(val === "none" ? "" : val)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select staff type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Not Specified</SelectItem>
+                <SelectItem value="general_counselor">General Counselor</SelectItem>
+                <SelectItem value="specialist">Specialist</SelectItem>
+                <SelectItem value="both">Both</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label>Reports To (Supervisor)</Label>
