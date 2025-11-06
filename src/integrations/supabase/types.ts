@@ -573,35 +573,58 @@ export type Database = {
       evaluation_questions: {
         Row: {
           category: string | null
+          company_id: string | null
           created_at: string | null
+          display_order: number | null
+          evaluated_by: string | null
+          guidance_text: string | null
           id: string
           is_active: boolean | null
           options: string[] | null
           question_text: string
           question_type: string
+          staff_type: string | null
           updated_at: string | null
         }
         Insert: {
           category?: string | null
+          company_id?: string | null
           created_at?: string | null
+          display_order?: number | null
+          evaluated_by?: string | null
+          guidance_text?: string | null
           id?: string
           is_active?: boolean | null
           options?: string[] | null
           question_text: string
           question_type: string
+          staff_type?: string | null
           updated_at?: string | null
         }
         Update: {
           category?: string | null
+          company_id?: string | null
           created_at?: string | null
+          display_order?: number | null
+          evaluated_by?: string | null
+          guidance_text?: string | null
           id?: string
           is_active?: boolean | null
           options?: string[] | null
           question_text?: string
           question_type?: string
+          staff_type?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "evaluation_questions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       evaluation_responses: {
         Row: {
