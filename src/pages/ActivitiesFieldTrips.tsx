@@ -47,7 +47,8 @@ export default function ActivitiesFieldTrips() {
     location: "",
     capacity: "",
     chaperone: "",
-    division_id: "",
+    division_ids: [] as string[],
+    home_away: "" as "home" | "away" | "",
     meal_options: [] as string[],
     meal_notes: "",
   });
@@ -108,7 +109,22 @@ export default function ActivitiesFieldTrips() {
       event.season === currentSeason || event.season === null
     );
 
-    setEvents(filteredData);
+    // Fetch division associations for each event
+    const eventsWithDivisions = await Promise.all(
+      filteredData.map(async (event) => {
+        const { data: divisionLinks } = await supabase
+          .from("activities_field_trips_divisions")
+          .select("division_id, divisions(id, name, gender, sort_order)")
+          .eq("activity_id", event.id);
+        
+        return {
+          ...event,
+          divisions: divisionLinks?.map(link => link.divisions).filter(Boolean) || []
+        };
+      })
+    );
+
+    setEvents(eventsWithDivisions);
     setLoading(false);
   };
 
@@ -132,9 +148,15 @@ export default function ActivitiesFieldTrips() {
     e.preventDefault();
 
     const submitData = {
-      ...formData,
-      division_id: formData.division_id || null,
+      event_date: formData.event_date,
+      title: formData.title,
+      description: formData.description,
+      activity_type: formData.activity_type,
+      time: formData.time,
+      location: formData.location,
       capacity: formData.capacity ? parseInt(formData.capacity) : null,
+      chaperone: formData.chaperone,
+      home_away: formData.home_away || null,
       meal_options: formData.meal_options,
       meal_notes: formData.meal_notes || null,
       season: currentSeason,
@@ -151,41 +173,81 @@ export default function ActivitiesFieldTrips() {
         toast({ title: "Error updating field trip", variant: "destructive" });
         return;
       }
+
+      // Update division associations
+      await supabase
+        .from("activities_field_trips_divisions")
+        .delete()
+        .eq("activity_id", editingEvent.id);
+
+      if (formData.division_ids.length > 0) {
+        await supabase
+          .from("activities_field_trips_divisions")
+          .insert(
+            formData.division_ids.map(divId => ({
+              activity_id: editingEvent.id,
+              division_id: divId,
+              company_id: currentCompany?.id,
+            }))
+          );
+      }
+
       toast({ title: "Field trip updated successfully" });
     } else {
-      const { error } = await supabase
+      const { data: newActivity, error } = await supabase
         .from("activities_field_trips")
-        .insert(submitData);
+        .insert(submitData)
+        .select()
+        .single();
 
-      if (error) {
+      if (error || !newActivity) {
         toast({ title: "Error adding field trip", variant: "destructive" });
         return;
       }
 
-      // Create pending trip in transportation module
-      const tripData = {
-        name: formData.title,
-        date: formData.event_date,
-        type: "field_trip",
-        event_type: formData.activity_type,
-        destination: formData.location || null,
-        departure_time: formData.time || null,
-        capacity: formData.capacity ? parseInt(formData.capacity) : null,
-        chaperone: formData.chaperone || null,
-        status: "pending",
-        season: currentSeason,
-        company_id: currentCompany?.id,
-      };
-
-      const { error: tripError } = await supabase
-        .from("trips")
-        .insert(tripData);
-
-      if (tripError) {
-        console.error("Error creating pending trip:", tripError);
+      // Insert division associations
+      if (formData.division_ids.length > 0) {
+        await supabase
+          .from("activities_field_trips_divisions")
+          .insert(
+            formData.division_ids.map(divId => ({
+              activity_id: newActivity.id,
+              division_id: divId,
+              company_id: currentCompany?.id,
+            }))
+          );
       }
 
-      toast({ title: "Activity added and pending trip created" });
+      // Only create trip if NOT a HOME event
+      if (formData.home_away !== 'home') {
+        const tripData = {
+          name: formData.title,
+          date: formData.event_date,
+          type: "field_trip",
+          event_type: formData.activity_type,
+          destination: formData.location || null,
+          departure_time: formData.time || null,
+          capacity: formData.capacity ? parseInt(formData.capacity) : null,
+          chaperone: formData.chaperone || null,
+          status: "pending",
+          season: currentSeason,
+          company_id: currentCompany?.id,
+        };
+
+        const { error: tripError } = await supabase
+          .from("trips")
+          .insert(tripData);
+
+        if (tripError) {
+          console.error("Error creating pending trip:", tripError);
+        }
+      }
+
+      toast({ 
+        title: formData.home_away === 'home' 
+          ? "Activity added (no trip created for HOME event)" 
+          : "Activity added and pending trip created" 
+      });
     }
 
     resetForm();
@@ -201,7 +263,8 @@ export default function ActivitiesFieldTrips() {
       location: "",
       capacity: "",
       chaperone: "",
-      division_id: "",
+      division_ids: [],
+      home_away: "",
       meal_options: [],
       meal_notes: "",
     });
@@ -210,8 +273,15 @@ export default function ActivitiesFieldTrips() {
     fetchEvents();
   };
 
-  const handleEdit = (event: any) => {
+  const handleEdit = async (event: any) => {
     setEditingEvent(event);
+    
+    // Fetch division associations
+    const { data: divisionLinks } = await supabase
+      .from("activities_field_trips_divisions")
+      .select("division_id")
+      .eq("activity_id", event.id);
+    
     setFormData({
       event_date: event.event_date,
       title: event.title,
@@ -221,7 +291,8 @@ export default function ActivitiesFieldTrips() {
       location: event.location || "",
       capacity: event.capacity?.toString() || "",
       chaperone: event.chaperone || "",
-      division_id: event.division_id || "",
+      division_ids: divisionLinks?.map(link => link.division_id) || [],
+      home_away: event.home_away || "",
       meal_options: event.meal_options || [],
       meal_notes: event.meal_notes || "",
     });
@@ -247,11 +318,15 @@ export default function ActivitiesFieldTrips() {
   };
 
   const filteredAndSortedEvents = events
-    .filter(event => selectedDivision === "all" || event.division_id === selectedDivision)
+    .filter(event => {
+      if (selectedDivision === "all") return true;
+      // Check if any of the event's divisions match the selected division
+      return event.divisions?.some((div: any) => div.id === selectedDivision);
+    })
     .sort((a, b) => {
       if (sortBy === "division") {
-        const divA = a.division?.sort_order || 999;
-        const divB = b.division?.sort_order || 999;
+        const divA = a.divisions?.[0]?.sort_order || 999;
+        const divB = b.divisions?.[0]?.sort_order || 999;
         if (divA !== divB) return divA - divB;
       }
       return new Date(a.event_date).getTime() - new Date(b.event_date).getTime();
@@ -389,9 +464,12 @@ export default function ActivitiesFieldTrips() {
                     <CardContent className="space-y-2">
                       <div className="flex gap-2 flex-wrap">
                         <Badge>{event.activity_type}</Badge>
-                        {event.division && (
-                          <Badge variant="secondary">{event.division.name}</Badge>
+                        {event.home_away && (
+                          <Badge variant="outline">{event.home_away.toUpperCase()}</Badge>
                         )}
+                        {event.divisions?.map((div: any) => (
+                          <Badge key={div.id} variant="secondary">{div.name}</Badge>
+                        ))}
                       </div>
                       {event.time && (
                         <p className="text-sm text-muted-foreground">⏰ {event.time}</p>
@@ -466,20 +544,55 @@ export default function ActivitiesFieldTrips() {
             </div>
 
             <div className="space-y-2">
-              <Label>Division (optional)</Label>
-              <Select value={formData.division_id || "none"} onValueChange={(value) => setFormData({ ...formData, division_id: value === "none" ? "" : value })}>
+              <Label>Location Type</Label>
+              <Select value={formData.home_away || "none"} onValueChange={(value) => setFormData({ ...formData, home_away: value === "none" ? "" : value as any })}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select division (optional)" />
+                  <SelectValue placeholder="Select location type (optional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {divisions.map((division) => (
-                    <SelectItem key={division.id} value={division.id}>
-                      {division.name}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="none">Not Specified</SelectItem>
+                  <SelectItem value="home">HOME</SelectItem>
+                  <SelectItem value="away">AWAY</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Divisions (select multiple)</Label>
+              <div className="border rounded-md p-4 space-y-2 max-h-48 overflow-y-auto">
+                {divisions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No divisions available</p>
+                ) : (
+                  divisions.map((division) => (
+                    <div key={division.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`div-${division.id}`}
+                        checked={formData.division_ids.includes(division.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setFormData({
+                              ...formData,
+                              division_ids: [...formData.division_ids, division.id]
+                            });
+                          } else {
+                            setFormData({
+                              ...formData,
+                              division_ids: formData.division_ids.filter(id => id !== division.id)
+                            });
+                          }
+                        }}
+                      />
+                      <label
+                        htmlFor={`div-${division.id}`}
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                      >
+                        {division.name}
+                      </label>
+                    </div>
+                  ))
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">Leave unchecked for all divisions</p>
             </div>
 
             <div className="space-y-2">

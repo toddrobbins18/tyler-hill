@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CSVUploader } from "@/components/CSVUploader";
+import { Checkbox } from "@/components/ui/checkbox";
 import { formatTime12Hour } from "@/lib/utils";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
@@ -33,7 +34,7 @@ export default function SpecialEventsActivities() {
     event_type: "",
     time_slot: "",
     location: "",
-    division_id: "",
+    division_ids: [] as string[],
   });
   const { toast } = useToast();
   const { selectedSeason } = useSeason();
@@ -97,7 +98,22 @@ export default function SpecialEventsActivities() {
       event.season === selectedSeason || event.season === null
     );
 
-    setEvents(filteredData);
+    // Fetch division associations for each event
+    const eventsWithDivisions = await Promise.all(
+      filteredData.map(async (event) => {
+        const { data: divisionLinks } = await supabase
+          .from("special_events_divisions")
+          .select("division_id, divisions(id, name, gender, sort_order)")
+          .eq("event_id", event.id);
+        
+        return {
+          ...event,
+          divisions: divisionLinks?.map(link => link.divisions).filter(Boolean) || []
+        };
+      })
+    );
+
+    setEvents(eventsWithDivisions);
     setLoading(false);
   };
 
@@ -121,8 +137,12 @@ export default function SpecialEventsActivities() {
     e.preventDefault();
 
     const submitData = {
-      ...formData,
-      division_id: formData.division_id || null,
+      event_date: formData.event_date,
+      title: formData.title,
+      description: formData.description,
+      event_type: formData.event_type,
+      time_slot: formData.time_slot,
+      location: formData.location,
       season: selectedSeason,
       company_id: currentCompany?.id,
     };
@@ -137,16 +157,51 @@ export default function SpecialEventsActivities() {
         toast({ title: "Error updating event", variant: "destructive" });
         return;
       }
+
+      // Update division associations
+      await supabase
+        .from("special_events_divisions")
+        .delete()
+        .eq("event_id", editingEvent.id);
+
+      if (formData.division_ids.length > 0) {
+        await supabase
+          .from("special_events_divisions")
+          .insert(
+            formData.division_ids.map(divId => ({
+              event_id: editingEvent.id,
+              division_id: divId,
+              company_id: currentCompany?.id,
+            }))
+          );
+      }
+
       toast({ title: "Event updated successfully" });
     } else {
-      const { error } = await supabase
+      const { data: newEvent, error } = await supabase
         .from("special_events_activities")
-        .insert(submitData);
+        .insert(submitData)
+        .select()
+        .single();
 
-      if (error) {
+      if (error || !newEvent) {
         toast({ title: "Error adding event", variant: "destructive" });
         return;
       }
+
+      // Insert division associations
+      if (formData.division_ids.length > 0) {
+        await supabase
+          .from("special_events_divisions")
+          .insert(
+            formData.division_ids.map(divId => ({
+              event_id: newEvent.id,
+              division_id: divId,
+              company_id: currentCompany?.id,
+            }))
+          );
+      }
+
       toast({ title: "Event added successfully" });
     }
 
@@ -161,15 +216,22 @@ export default function SpecialEventsActivities() {
       event_type: "",
       time_slot: "",
       location: "",
-      division_id: "",
+      division_ids: [],
     });
     setEditingEvent(null);
     setShowDialog(false);
     fetchEvents();
   };
 
-  const handleEdit = (event: any) => {
+  const handleEdit = async (event: any) => {
     setEditingEvent(event);
+    
+    // Fetch division associations
+    const { data: divisionLinks } = await supabase
+      .from("special_events_divisions")
+      .select("division_id")
+      .eq("event_id", event.id);
+    
     setFormData({
       event_date: event.event_date,
       title: event.title,
@@ -177,7 +239,7 @@ export default function SpecialEventsActivities() {
       event_type: event.event_type,
       time_slot: event.time_slot || "",
       location: event.location || "",
-      division_id: event.division_id || "",
+      division_ids: divisionLinks?.map(link => link.division_id) || [],
     });
     setShowDialog(true);
   };
@@ -200,9 +262,11 @@ export default function SpecialEventsActivities() {
     fetchEvents();
   };
 
-  const filteredEvents = events.filter(
-    event => selectedDivision === "all" || event.division_id === selectedDivision
-  );
+  const filteredEvents = events.filter(event => {
+    if (selectedDivision === "all") return true;
+    // Check if any of the event's divisions match the selected division
+    return event.divisions?.some((div: any) => div.id === selectedDivision);
+  });
 
   const groupedByDate = filteredEvents.reduce((acc, event) => {
     const date = event.event_date;
@@ -314,9 +378,9 @@ export default function SpecialEventsActivities() {
                     <CardContent className="space-y-2">
                       <div className="flex gap-2 flex-wrap">
                         <Badge>{event.event_type}</Badge>
-                        {event.division && (
-                          <Badge variant="secondary">{event.division.name}</Badge>
-                        )}
+                        {event.divisions?.map((div: any) => (
+                          <Badge key={div.id} variant="secondary">{div.name}</Badge>
+                        ))}
                       </div>
                       {event.location && (
                         <p className="text-sm text-muted-foreground">📍 {event.location}</p>
@@ -397,20 +461,41 @@ export default function SpecialEventsActivities() {
             </div>
 
             <div className="space-y-2">
-              <Label>Division (optional)</Label>
-              <Select value={formData.division_id || "none"} onValueChange={(value) => setFormData({ ...formData, division_id: value === "none" ? "" : value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select division (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">All Divisions</SelectItem>
-                  {divisions && divisions.map((division) => (
-                    <SelectItem key={division.id} value={division.id}>
-                      {division.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Divisions (select multiple)</Label>
+              <div className="border rounded-md p-4 space-y-2 max-h-48 overflow-y-auto">
+                {divisions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No divisions available</p>
+                ) : (
+                  divisions.map((division) => (
+                    <div key={division.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`div-${division.id}`}
+                        checked={formData.division_ids.includes(division.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setFormData({
+                              ...formData,
+                              division_ids: [...formData.division_ids, division.id]
+                            });
+                          } else {
+                            setFormData({
+                              ...formData,
+                              division_ids: formData.division_ids.filter(id => id !== division.id)
+                            });
+                          }
+                        }}
+                      />
+                      <label
+                        htmlFor={`div-${division.id}`}
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                      >
+                        {division.name}
+                      </label>
+                    </div>
+                  ))
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">Leave unchecked for all divisions</p>
             </div>
 
             <div className="space-y-2">

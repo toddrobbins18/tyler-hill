@@ -25,6 +25,7 @@ export type Database = {
           description: string | null
           division_id: string | null
           event_date: string
+          home_away: string | null
           id: string
           location: string | null
           meal_notes: string | null
@@ -43,6 +44,7 @@ export type Database = {
           description?: string | null
           division_id?: string | null
           event_date: string
+          home_away?: string | null
           id?: string
           location?: string | null
           meal_notes?: string | null
@@ -61,6 +63,7 @@ export type Database = {
           description?: string | null
           division_id?: string | null
           event_date?: string
+          home_away?: string | null
           id?: string
           location?: string | null
           meal_notes?: string | null
@@ -79,6 +82,52 @@ export type Database = {
           },
           {
             foreignKeyName: "activities_field_trips_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      activities_field_trips_divisions: {
+        Row: {
+          activity_id: string
+          company_id: string
+          created_at: string | null
+          division_id: string
+          id: string
+        }
+        Insert: {
+          activity_id: string
+          company_id: string
+          created_at?: string | null
+          division_id: string
+          id?: string
+        }
+        Update: {
+          activity_id?: string
+          company_id?: string
+          created_at?: string | null
+          division_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activities_field_trips_divisions_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities_field_trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activities_field_trips_divisions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activities_field_trips_divisions_division_id_fkey"
             columns: ["division_id"]
             isOneToOne: false
             referencedRelation: "divisions"
@@ -1369,6 +1418,52 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      special_events_divisions: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          division_id: string
+          event_id: string
+          id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          division_id: string
+          event_id: string
+          id?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          division_id?: string
+          event_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "special_events_divisions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "special_events_divisions_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "special_events_divisions_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "special_events_activities"
             referencedColumns: ["id"]
           },
         ]
