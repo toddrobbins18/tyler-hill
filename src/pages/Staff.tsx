@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Search, Star, TrendingUp, Pencil, Trash2 } from "lucide-react";
+import { Search, Star, TrendingUp, Pencil, Trash2, ClipboardCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import AddStaffDialog from "@/components/dialogs/AddStaffDialog";
 import EditStaffDialog from "@/components/dialogs/EditStaffDialog";
+import { EvaluateStaffDialog } from "@/components/dialogs/EvaluateStaffDialog";
 import CSVUploader from "@/components/CSVUploader";
 import { JSONUploader } from "@/components/JSONUploader";
 import { toast } from "sonner";
@@ -31,6 +32,7 @@ export default function Staff() {
   const [loading, setLoading] = useState(true);
   const [editingStaff, setEditingStaff] = useState<string | null>(null);
   const [deletingStaff, setDeletingStaff] = useState<string | null>(null);
+  const [evaluatingStaff, setEvaluatingStaff] = useState<string | null>(null);
   const { currentSeason } = useSeasonContext();
   const { currentCompany } = useCompany();
   const navigate = useNavigate();
@@ -174,6 +176,18 @@ export default function Staff() {
                       className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
                       onClick={(e) => {
                         e.stopPropagation();
+                        setEvaluatingStaff(staffMember.id);
+                      }}
+                      title="Evaluate Staff"
+                    >
+                      <ClipboardCheck className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setEditingStaff(staffMember.id);
                       }}
                     >
@@ -261,6 +275,18 @@ export default function Staff() {
           staffId={editingStaff}
           open={!!editingStaff}
           onOpenChange={(open) => !open && setEditingStaff(null)}
+          onSuccess={fetchStaff}
+        />
+      )}
+
+      {evaluatingStaff && (
+        <EvaluateStaffDialog
+          open={!!evaluatingStaff}
+          onOpenChange={(open) => !open && setEvaluatingStaff(null)}
+          staffId={evaluatingStaff}
+          staffName={staff.find(s => s.id === evaluatingStaff)?.name || ""}
+          staffRole={staff.find(s => s.id === evaluatingStaff)?.role || ""}
+          staffType={staff.find(s => s.id === evaluatingStaff)?.staff_type || null}
           onSuccess={fetchStaff}
         />
       )}

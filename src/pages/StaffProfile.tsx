@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Star, Calendar, TrendingUp, Award, Pencil } from "lucide-react";
+import { ArrowLeft, Star, Calendar, TrendingUp, Award, Pencil, ClipboardCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import EditStaffDialog from "@/components/dialogs/EditStaffDialog";
+import { EvaluateStaffDialog } from "@/components/dialogs/EvaluateStaffDialog";
 import { useCompany } from "@/contexts/CompanyContext";
 
 export default function StaffProfile() {
@@ -19,6 +20,7 @@ export default function StaffProfile() {
   const [evaluations, setEvaluations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [evaluateDialogOpen, setEvaluateDialogOpen] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -111,6 +113,10 @@ export default function StaffProfile() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <Button onClick={() => setEvaluateDialogOpen(true)}>
+            <ClipboardCheck className="h-4 w-4 mr-2" />
+            Evaluate Staff
+          </Button>
           <Button onClick={() => setEditDialogOpen(true)}>
             <Pencil className="h-4 w-4 mr-2" />
             Edit Profile
@@ -295,6 +301,16 @@ export default function StaffProfile() {
         staffId={id || ""}
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
+        onSuccess={fetchStaffData}
+      />
+
+      <EvaluateStaffDialog
+        open={evaluateDialogOpen}
+        onOpenChange={setEvaluateDialogOpen}
+        staffId={id || ""}
+        staffName={staff?.name || ""}
+        staffRole={staff?.role || ""}
+        staffType={staff?.staff_type || null}
         onSuccess={fetchStaffData}
       />
     </div>
