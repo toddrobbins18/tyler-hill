@@ -68,6 +68,9 @@ export function usePermissions() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || !currentCompany) return false;
 
+      // Super admins bypass all permission checks
+      if (isSuperAdmin) return true;
+
       const { data } = await supabase
         .from('role_permissions')
         .select('can_access')
