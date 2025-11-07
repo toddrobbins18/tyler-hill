@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useCompany } from '@/contexts/CompanyContext';
 
 export type AppRole = 'admin' | 'staff' | 'division_leader' | 'specialist' | 'viewer' | 'super_admin';
 
@@ -8,6 +9,7 @@ export function usePermissions() {
   const [userDivisions, setUserDivisions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const { currentCompany } = useCompany();
 
   useEffect(() => {
     fetchUserPermissions();
@@ -64,11 +66,12 @@ export function usePermissions() {
   const canAccessPage = async (pageName: string): Promise<boolean> => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return false;
+      if (!user || !currentCompany) return false;
 
       const { data } = await supabase
         .from('role_permissions')
         .select('can_access')
+        .eq('company_id', currentCompany.id)
         .eq('role', userRole)
         .eq('menu_item', pageName)
         .maybeSingle();

@@ -60,10 +60,10 @@ export function AppSidebar() {
   }, []);
 
   useEffect(() => {
-    if (!permissionsLoading && userRole) {
+    if (!permissionsLoading && userRole && currentCompany) {
       filterMenuItems();
     }
-  }, [userRole, permissionsLoading]);
+  }, [userRole, permissionsLoading, currentCompany]);
 
   const checkAdminStatus = async () => {
     const { data: { user } } = await supabase.auth.getUser();
