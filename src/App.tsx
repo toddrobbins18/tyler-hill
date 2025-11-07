@@ -30,6 +30,10 @@ import ActivitiesFieldTrips from "./pages/ActivitiesFieldTrips";
 import SpecialEventsActivities from "./pages/SpecialEventsActivities";
 import TutoringTherapy from "./pages/TutoringTherapy";
 import UserApprovals from "./pages/UserApprovals";
+import Awards from "./pages/Awards";
+import IncidentReports from "./pages/IncidentReports";
+import Nurse from "./pages/Nurse";
+import SportsAcademy from "./pages/SportsAcademy";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 
@@ -77,6 +81,10 @@ function AppContent() {
                                 <Route path="/child/:id" element={<ChildProfile />} />
                                 <Route path="/admin" element={<Admin />} />
                                 <Route path="/user-approvals" element={<UserApprovals />} />
+                                <Route path="/awards" element={<Awards />} />
+                                <Route path="/incidents" element={<IncidentReports />} />
+                                <Route path="/nurse" element={<Nurse />} />
+                                <Route path="/sports-academy" element={<SportsAcademy />} />
                                 <Route path="*" element={<NotFound />} />
                               </Routes>
                             </main>

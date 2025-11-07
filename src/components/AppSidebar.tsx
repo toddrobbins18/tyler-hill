@@ -23,22 +23,36 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 // Items that need conditional rendering will be handled in the component
-const getMenuItems = (companySlug?: string) => [
-  { title: "Activities & Field Trips", url: "/activities", icon: Palmtree, menuId: "activities" },
-  { title: companySlug === 'timber-lake-west' ? "Athletics" : "Sports Calendar", url: "/athletics", icon: Trophy, menuId: "athletics" },
-  { title: "Camper", url: "/roster", icon: Users, menuId: "roster" },
-  { title: "Dashboard", url: "/", icon: Home, menuId: "dashboard" },
-  { title: "Daily Wolf", url: "/notes", icon: FileText, menuId: "notes" },
-  { title: "Master Calendar", url: "/calendar", icon: Calendar, menuId: "calendar" },
-  { title: "Menu", url: "/menu", icon: Utensils, menuId: "menu" },
-  { title: "Messages", url: "/messages", icon: Mail, menuId: "messages" },
-  { title: "Rainy Day Schedule", url: "/rainy-day", icon: CloudRain, menuId: "rainy-day" },
-  { title: "Special Events & Evening Activities", url: "/special-events", icon: Calendar, menuId: "special-events" },
-  { title: "Special Meals", url: "/special-meals", icon: Utensils, menuId: "special-meals" },
-  { title: "Staff", url: "/staff", icon: UserCog, menuId: "staff" },
-  { title: "Transportation", url: "/transportation", icon: Truck, menuId: "transportation" },
-  { title: "Tutoring & Therapy", url: "/tutoring-therapy", icon: BookOpen, menuId: "tutoring-therapy" },
-];
+const getMenuItems = (companySlug?: string) => {
+  const baseItems = [
+    { title: "Activities & Field Trips", url: "/activities", icon: Palmtree, menuId: "activities" },
+    { title: companySlug === 'timber-lake-west' ? "Athletics" : "Sports Calendar", url: "/athletics", icon: Trophy, menuId: "athletics" },
+    { title: "Camper", url: "/roster", icon: Users, menuId: "roster" },
+    { title: "Dashboard", url: "/", icon: Home, menuId: "dashboard" },
+    { title: companySlug === 'timber-lake-west' ? "Daily Wolf" : "Daily News", url: "/notes", icon: FileText, menuId: "notes" },
+    { title: "Master Calendar", url: "/calendar", icon: Calendar, menuId: "calendar" },
+    { title: "Menu", url: "/menu", icon: Utensils, menuId: "menu" },
+    { title: "Messages", url: "/messages", icon: Mail, menuId: "messages" },
+    { title: "Rainy Day Schedule", url: "/rainy-day", icon: CloudRain, menuId: "rainy-day" },
+    { title: "Special Events & Evening Activities", url: "/special-events", icon: Calendar, menuId: "special-events" },
+    { title: "Special Meals", url: "/special-meals", icon: Utensils, menuId: "special-meals" },
+    { title: "Staff", url: "/staff", icon: UserCog, menuId: "staff" },
+    { title: "Transportation", url: "/transportation", icon: Truck, menuId: "transportation" },
+    { title: "Tutoring & Therapy", url: "/tutoring-therapy", icon: BookOpen, menuId: "tutoring-therapy" },
+  ];
+
+  // Add these items for all companies EXCEPT Timber Lake West
+  if (companySlug !== 'timber-lake-west') {
+    baseItems.push(
+      { title: "Awards", url: "/awards", icon: Award, menuId: "awards" },
+      { title: "Incident Reports", url: "/incidents", icon: AlertTriangle, menuId: "incidents" },
+      { title: "Nurse", url: "/nurse", icon: Pill, menuId: "nurse" },
+      { title: "Sports Academy", url: "/sports-academy", icon: Trophy, menuId: "sports-academy" },
+    );
+  }
+
+  return baseItems.sort((a, b) => a.title.localeCompare(b.title));
+};
 
 export function AppSidebar() {
   const navigate = useNavigate();
