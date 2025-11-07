@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCompany } from "@/contexts/CompanyContext";
 import { Shield } from "lucide-react";
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -11,6 +12,7 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   const [approved, setApproved] = useState(true);
   const [hasPageAccess, setHasPageAccess] = useState(true);
   const { canAccessPage, loading: permissionsLoading } = usePermissions();
+  const { loading: companyLoading } = useCompany();
 
   useEffect(() => {
     checkAuth();
@@ -29,10 +31,10 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   }, [navigate]);
 
   useEffect(() => {
-    if (approved && !permissionsLoading) {
+    if (approved && !permissionsLoading && !companyLoading) {
       checkPageAccess();
     }
-  }, [location.pathname, approved, permissionsLoading]);
+  }, [location.pathname, approved, permissionsLoading, companyLoading]);
 
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -79,7 +81,7 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     setHasPageAccess(hasAccess);
   };
 
-  if (loading) {
+  if (loading || companyLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
