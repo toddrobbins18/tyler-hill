@@ -30,7 +30,6 @@ import ActivitiesFieldTrips from "./pages/ActivitiesFieldTrips";
 import SpecialEventsActivities from "./pages/SpecialEventsActivities";
 import TutoringTherapy from "./pages/TutoringTherapy";
 import UserApprovals from "./pages/UserApprovals";
-import DailyWolf from "./pages/DailyWolf";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 
@@ -74,7 +73,6 @@ function AppContent() {
                                 <Route path="/activities" element={<ActivitiesFieldTrips />} />
                                 <Route path="/special-events" element={<SpecialEventsActivities />} />
                                 <Route path="/tutoring-therapy" element={<TutoringTherapy />} />
-                                <Route path="/daily-wolf" element={<DailyWolf />} />
                                 <Route path="/messages" element={<Messages />} />
                                 <Route path="/child/:id" element={<ChildProfile />} />
                                 <Route path="/admin" element={<Admin />} />

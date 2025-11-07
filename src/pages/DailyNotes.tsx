@@ -209,7 +209,7 @@ export default function DailyNotes() {
       `}</style>
       
       <div className="flex justify-between items-center mb-6 no-print">
-        <h1 className="text-3xl font-bold">Daily News</h1>
+        <h1 className="text-3xl font-bold">Daily Wolf</h1>
         <Button onClick={handlePrint} variant="outline">
           <Printer className="h-4 w-4 mr-2" />
           Print
@@ -219,7 +219,7 @@ export default function DailyNotes() {
       <div className="print-content">
         {/* Newspaper Header */}
         <div className="newspaper-header">
-          <div className="newspaper-title">TYLER HILL DAILY NEWS</div>
+          <div className="newspaper-title">THE DAILY WOLF</div>
           <div className="newspaper-tagline">LIVE THIS MOMENT | HOME OF THE BEARS</div>
           <div className="newspaper-date">{today}</div>
         </div>
