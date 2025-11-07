@@ -66,10 +66,12 @@ export function usePermissions() {
   const canAccessPage = async (pageName: string): Promise<boolean> => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !currentCompany) return false;
+      if (!user) return false;
 
       // Super admins bypass all permission checks
       if (isSuperAdmin) return true;
+      
+      if (!currentCompany) return false;
 
       const { data } = await supabase
         .from('role_permissions')
