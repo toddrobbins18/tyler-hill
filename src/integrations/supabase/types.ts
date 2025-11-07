@@ -457,6 +457,47 @@ export type Database = {
           },
         ]
       }
+      daily_wolf_content: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          date: string
+          id: string
+          notes: string | null
+          quote_of_the_day: string | null
+          season: string
+          updated_at: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          date: string
+          id?: string
+          notes?: string | null
+          quote_of_the_day?: string | null
+          season?: string
+          updated_at?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          date?: string
+          id?: string
+          notes?: string | null
+          quote_of_the_day?: string | null
+          season?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_wolf_content_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_wolf_documents: {
         Row: {
           company_id: string

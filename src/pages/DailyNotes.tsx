@@ -6,104 +6,186 @@ import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 
-interface ScheduleEvent {
+interface BirthdayChild {
   id: string;
-  time: string;
+  name: string;
+  date_of_birth: string;
+}
+
+interface MealData {
+  id: string;
+  meal_type: string;
+  items: string;
+  allergens?: string;
+}
+
+interface DivisionGame {
+  id: string;
   title: string;
-  location: string;
-  type: 'sports' | 'activity';
-  isFeatured?: boolean;
+  time?: string;
+  location?: string;
   opponent?: string;
-  meal_options?: string[];
-  meal_notes?: string;
+  sport_type: string;
+  divisions?: { name: string };
+}
+
+interface SportsEvent {
+  id: string;
+  title: string;
+  time?: string;
+  location?: string;
+  opponent?: string;
   description?: string;
 }
 
+interface EveningActivity {
+  id: string;
+  title: string;
+  time_slot: string;
+  location?: string;
+}
+
+interface DailyContent {
+  quote_of_the_day?: string;
+  notes?: string;
+}
+
 export default function DailyNotes() {
-  const [scheduleEvents, setScheduleEvents] = useState<ScheduleEvent[]>([]);
-  const [featuredEvent, setFeaturedEvent] = useState<ScheduleEvent | null>(null);
+  const [birthdayChildren, setBirthdayChildren] = useState<BirthdayChild[]>([]);
+  const [meals, setMeals] = useState<MealData[]>([]);
+  const [divisionGames, setDivisionGames] = useState<DivisionGame[]>([]);
+  const [sportsEvents, setSportsEvents] = useState<SportsEvent[]>([]);
+  const [eveningActivities, setEveningActivities] = useState<EveningActivity[]>([]);
+  const [dailyContent, setDailyContent] = useState<DailyContent>({});
   const [loading, setLoading] = useState(true);
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
 
+  // ONLY show for Timber Lake West
+  if (currentCompany?.slug !== 'timber-lake-west') {
+    return (
+      <div className="container mx-auto p-4">
+        <h1 className="text-2xl font-bold mb-4">Daily Wolf</h1>
+        <p>This feature is only available for Timber Lake West.</p>
+      </div>
+    );
+  }
+
   useEffect(() => {
     if (!currentCompany?.id) return;
-    fetchSchedule();
+    fetchAllData();
 
-    const sportsChannel = supabase
-      .channel('sports-calendar-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sports_calendar' }, fetchSchedule)
-      .subscribe();
-
-    const eventsChannel = supabase
-      .channel('special-events-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'special_events_activities' }, fetchSchedule)
-      .subscribe();
+    // Set up realtime subscriptions
+    const channels = [
+      supabase.channel('children-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'children' }, fetchAllData)
+        .subscribe(),
+      supabase.channel('meals-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'special_meals' }, fetchAllData)
+        .subscribe(),
+      supabase.channel('sports-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'sports_calendar' }, fetchAllData)
+        .subscribe(),
+      supabase.channel('activities-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'special_events_activities' }, fetchAllData)
+        .subscribe(),
+      supabase.channel('content-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_wolf_content' }, fetchAllData)
+        .subscribe()
+    ];
 
     return () => {
-      supabase.removeChannel(sportsChannel);
-      supabase.removeChannel(eventsChannel);
+      channels.forEach(channel => supabase.removeChannel(channel));
     };
-  }, [currentSeason]);
+  }, [currentCompany?.id, currentSeason]);
 
-  const fetchSchedule = async () => {
+  const fetchAllData = async () => {
     try {
       setLoading(true);
       const today = new Date().toISOString().split('T')[0];
+      const todayDate = new Date();
 
-      // Fetch sports calendar events
+      // Fetch birthday children
+      const { data: childrenData } = await supabase
+        .from('children')
+        .select('id, name, date_of_birth')
+        .eq('company_id', currentCompany.id)
+        .eq('season', currentSeason)
+        .eq('status', 'active')
+        .not('date_of_birth', 'is', null);
+
+      const todaysBirthdays = childrenData?.filter(child => {
+        const birthday = new Date(child.date_of_birth);
+        return birthday.getMonth() === todayDate.getMonth() && 
+               birthday.getDate() === todayDate.getDate();
+      }) || [];
+      setBirthdayChildren(todaysBirthdays);
+
+      // Fetch meals
+      const { data: mealsData } = await supabase
+        .from('special_meals')
+        .select('*')
+        .eq('company_id', currentCompany.id)
+        .eq('date', today)
+        .eq('season', currentSeason)
+        .order('meal_type');
+      setMeals(mealsData || []);
+
+      // Fetch division games with division info
       const { data: sportsData } = await supabase
         .from('sports_calendar')
-        .select('*')
-        .eq('event_date', today)
+        .select(`
+          *,
+          sports_calendar_divisions!inner(
+            division_id,
+            divisions(name)
+          )
+        `)
         .eq('company_id', currentCompany.id)
+        .eq('event_date', today)
         .eq('season', currentSeason)
         .order('time');
 
-      // Fetch evening/night activities
+      // Transform to flat structure with division name
+      const gamesWithDivisions = sportsData?.map(game => ({
+        ...game,
+        divisions: game.sports_calendar_divisions?.[0]?.divisions
+      })) || [];
+      setDivisionGames(gamesWithDivisions);
+
+      // Fetch all sports events for athletics section
+      const { data: allSportsData } = await supabase
+        .from('sports_calendar')
+        .select('id, title, time, location, opponent, description')
+        .eq('company_id', currentCompany.id)
+        .eq('event_date', today)
+        .eq('season', currentSeason)
+        .order('time');
+      setSportsEvents(allSportsData || []);
+
+      // Fetch evening activities
       const { data: activitiesData } = await supabase
         .from('special_events_activities')
-        .select('*')
-        .eq('event_date', today)
+        .select('id, title, time_slot, location')
         .eq('company_id', currentCompany.id)
+        .eq('event_date', today)
         .eq('season', currentSeason)
         .in('time_slot', ['Evening (5-9 PM)', 'Night (9 PM+)'])
         .order('time_slot');
+      setEveningActivities(activitiesData || []);
 
-      const events: ScheduleEvent[] = [
-        ...(sportsData || []).map(event => ({
-          id: event.id,
-          type: 'sports' as const,
-          time: event.time || '',
-          title: event.title,
-          location: event.location || '',
-          opponent: event.opponent,
-          meal_options: event.meal_options,
-          meal_notes: event.meal_notes,
-          description: event.description,
-          isFeatured: false,
-        })),
-        ...(activitiesData || []).map(activity => ({
-          id: activity.id,
-          type: 'activity' as const,
-          time: activity.time_slot === 'Evening (5-9 PM)' ? '7:00 PM' : '9:00 PM',
-          title: activity.title,
-          location: activity.location || '',
-          description: activity.description,
-          isFeatured: false,
-        }))
-      ];
+      // Fetch daily wolf content
+      const { data: contentData } = await supabase
+        .from('daily_wolf_content')
+        .select('quote_of_the_day, notes')
+        .eq('company_id', currentCompany.id)
+        .eq('date', today)
+        .eq('season', currentSeason)
+        .maybeSingle();
+      setDailyContent(contentData || {});
 
-      // Mark first sports event as featured if exists
-      const firstSportsEvent = events.find(e => e.type === 'sports');
-      if (firstSportsEvent) {
-        firstSportsEvent.isFeatured = true;
-        setFeaturedEvent(firstSportsEvent);
-      }
-
-      setScheduleEvents(events);
     } catch (error) {
-      console.error('Error fetching schedule:', error);
+      console.error('Error fetching Daily Wolf data:', error);
     } finally {
       setLoading(false);
     }
@@ -138,30 +220,21 @@ export default function DailyNotes() {
           .newspaper-header {
             border-bottom: 4px double #000;
             padding-bottom: 12px;
-            margin-bottom: 16px;
+            margin-bottom: 20px;
           }
           .newspaper-title {
             font-family: Georgia, serif;
-            font-size: 48px;
+            font-size: 52px;
             font-weight: bold;
             text-align: center;
-            letter-spacing: 2px;
-            margin-bottom: 8px;
-          }
-          .newspaper-tagline {
-            text-align: center;
-            font-size: 12px;
             letter-spacing: 3px;
-            border-top: 1px solid #000;
-            border-bottom: 1px solid #000;
-            padding: 4px 0;
-            margin-bottom: 4px;
+            margin-bottom: 8px;
           }
           .newspaper-date {
             text-align: center;
             font-size: 14px;
             font-weight: bold;
-            margin-bottom: 16px;
+            margin-top: 8px;
           }
           .section-title {
             font-family: Georgia, serif;
@@ -170,37 +243,101 @@ export default function DailyNotes() {
             text-transform: uppercase;
             border-bottom: 2px solid #000;
             margin-bottom: 12px;
+            margin-top: 20px;
             padding-bottom: 4px;
           }
-          .schedule-item {
+          .birthday-section {
+            margin-bottom: 20px;
+            font-size: 14px;
+          }
+          .birthday-list {
+            font-weight: bold;
+            font-size: 15px;
+            margin-top: 8px;
+          }
+          .division-games-section {
+            margin-bottom: 20px;
+          }
+          .game-item {
             display: flex;
-            gap: 16px;
+            padding: 8px 0;
+            border-bottom: 1px solid #ddd;
+            font-size: 13px;
+          }
+          .division-name {
+            font-weight: bold;
+            min-width: 140px;
+          }
+          .game-details {
+            flex: 1;
+          }
+          .menu-section {
+            page-break-inside: avoid;
+            margin-bottom: 20px;
+          }
+          .meal-item {
+            margin-bottom: 16px;
+            font-size: 13px;
+          }
+          .meal-item strong {
+            font-size: 15px;
+            display: block;
+            margin-bottom: 4px;
+          }
+          .allergen-info {
+            font-style: italic;
+            color: #666;
+            margin-top: 4px;
+            font-size: 12px;
+          }
+          .athletics-section {
+            margin-bottom: 20px;
+          }
+          .sport-event {
+            display: flex;
+            gap: 12px;
             padding: 8px 0;
             border-bottom: 1px dotted #ccc;
             font-size: 13px;
           }
-          .schedule-time {
+          .event-time {
             font-weight: bold;
             min-width: 80px;
+          }
+          .quote-section {
+            font-style: italic;
+            text-align: center;
+            padding: 20px;
+            margin: 20px 0;
+            border: 2px solid #000;
+            page-break-inside: avoid;
+          }
+          .quote-text {
+            font-size: 16px;
+            line-height: 1.6;
+          }
+          .evening-section {
+            margin-bottom: 20px;
+          }
+          .evening-item {
+            padding: 6px 0;
+            font-size: 13px;
+          }
+          .notes-section {
+            border: 2px solid #000;
+            padding: 16px;
+            margin-top: 20px;
+            page-break-inside: avoid;
+          }
+          .notes-content {
+            font-size: 13px;
+            line-height: 1.6;
           }
           .boxed-section {
             border: 2px solid #000;
             padding: 16px;
             margin-bottom: 16px;
             background: white;
-          }
-          .featured-title {
-            font-family: Georgia, serif;
-            font-size: 24px;
-            font-weight: bold;
-            margin-bottom: 12px;
-            text-align: center;
-          }
-          .two-column-layout {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-top: 16px;
           }
           @page {
             margin: 0.5in;
@@ -209,9 +346,7 @@ export default function DailyNotes() {
       `}</style>
       
       <div className="flex justify-between items-center mb-6 no-print">
-        <h1 className="text-3xl font-bold">
-          {currentCompany?.slug === 'timber-lake-west' ? 'Daily Wolf' : 'Daily News'}
-        </h1>
+        <h1 className="text-3xl font-bold">Daily Wolf</h1>
         <Button onClick={handlePrint} variant="outline">
           <Printer className="h-4 w-4 mr-2" />
           Print
@@ -221,12 +356,7 @@ export default function DailyNotes() {
       <div className="print-content">
         {/* Newspaper Header */}
         <div className="newspaper-header">
-          <div className="newspaper-title">
-            {currentCompany?.slug === 'timber-lake-west' ? 'THE DAILY WOLF' : 'TYLER HILL DAILY NEWS'}
-          </div>
-          {currentCompany?.slug === 'default' && (
-            <div className="newspaper-tagline">LIVE THIS MOMENT | HOME OF THE BEARS</div>
-          )}
+          <div className="newspaper-title">THE DAILY WOLF</div>
           <div className="newspaper-date">{today}</div>
         </div>
 
@@ -234,85 +364,102 @@ export default function DailyNotes() {
           <div className="text-center py-8">Loading...</div>
         ) : (
           <>
-            {/* Schedule Section */}
-            <div className="mb-6">
-              <div className="section-title">Today's Schedule</div>
-              {scheduleEvents.filter(e => !e.isFeatured).length > 0 ? (
-                <div>
-                  {scheduleEvents.filter(e => !e.isFeatured).map((event) => (
-                    <div key={event.id} className="schedule-item">
-                      <div className="schedule-time">{event.time}</div>
-                      <div className="flex-1">
-                        <strong>{event.title}</strong>
-                        {event.location && ` - ${event.location}`}
-                        {event.opponent && ` vs ${event.opponent}`}
-                      </div>
-                    </div>
-                  ))}
+            {/* Birthday Wishes */}
+            <div className="birthday-section">
+              <div className="section-title">Birthday Wishes</div>
+              {birthdayChildren.length > 0 ? (
+                <div className="birthday-list">
+                  {birthdayChildren.map(child => child.name).join(', ')}
                 </div>
               ) : (
-                <div className="text-center py-4 text-muted-foreground">
-                  No additional events scheduled
-                </div>
+                <div>No birthdays today</div>
               )}
             </div>
 
-            {/* Two Column Layout */}
-            <div className="two-column-layout">
-              {/* Featured Event */}
-              {featuredEvent ? (
-                <div className="boxed-section">
-                  <div className="section-title" style={{ fontSize: '16px' }}>Featured Event</div>
-                  <div className="featured-title">{featuredEvent.title}</div>
-                  <div style={{ fontSize: '14px', lineHeight: '1.6' }}>
-                    {featuredEvent.time && (
-                      <div><strong>Time:</strong> {featuredEvent.time}</div>
-                    )}
-                    {featuredEvent.location && (
-                      <div><strong>Location:</strong> {featuredEvent.location}</div>
-                    )}
-                    {featuredEvent.opponent && (
-                      <div><strong>Opponent:</strong> {featuredEvent.opponent}</div>
-                    )}
-                    {featuredEvent.meal_options && featuredEvent.meal_options.length > 0 && (
-                      <div><strong>Meal:</strong> {featuredEvent.meal_options.join(', ')}</div>
-                    )}
-                    {featuredEvent.meal_notes && (
-                      <div><strong>Notes:</strong> {featuredEvent.meal_notes}</div>
-                    )}
-                    {featuredEvent.description && (
-                      <div style={{ marginTop: '8px' }}>{featuredEvent.description}</div>
-                    )}
+            {/* Division Line-Up Games */}
+            <div className="division-games-section">
+              <div className="section-title">Division Line-Up Games</div>
+              {divisionGames.length > 0 ? (
+                divisionGames.map(game => (
+                  <div key={game.id} className="game-item">
+                    <div className="division-name">{game.divisions?.name || 'General'}</div>
+                    <div className="game-details">
+                      {game.time && `${game.time} - `}
+                      {game.sport_type}
+                      {game.opponent && ` vs ${game.opponent}`}
+                      {game.location && ` @ ${game.location}`}
+                    </div>
                   </div>
-                </div>
+                ))
               ) : (
-                <div className="boxed-section">
-                  <div className="section-title" style={{ fontSize: '16px' }}>Featured Event</div>
-                  <div className="text-center py-8 text-muted-foreground">
-                    No featured event today
-                  </div>
-                </div>
+                <div>No division games scheduled</div>
               )}
+            </div>
 
-              {/* Meal Schedule */}
-              <div className="boxed-section">
-                <div className="section-title" style={{ fontSize: '16px' }}>
-                  {currentCompany?.slug === 'timber-lake-west' ? 'Meal Schedule' : "Da Bears' Buffet"}
-                </div>
-                <div style={{ fontSize: '14px', lineHeight: '1.8' }}>
-                  <div style={{ marginBottom: '12px' }}>
-                    <strong style={{ fontSize: '15px' }}>Breakfast</strong>
-                    <div style={{ marginLeft: '12px', color: '#666' }}>7:30 AM - 8:30 AM</div>
+            {/* Menu */}
+            <div className="menu-section boxed-section">
+              <div className="section-title">Menu</div>
+              {['Breakfast', 'Lunch', 'Dinner'].map(mealType => {
+                const meal = meals.find(m => m.meal_type === mealType);
+                return (
+                  <div key={mealType} className="meal-item">
+                    <strong>{mealType}</strong>
+                    <div>{meal?.items || 'TBD'}</div>
+                    {meal?.allergens && (
+                      <div className="allergen-info">Allergens: {meal.allergens}</div>
+                    )}
                   </div>
-                  <div style={{ marginBottom: '12px' }}>
-                    <strong style={{ fontSize: '15px' }}>Lunch</strong>
-                    <div style={{ marginLeft: '12px', color: '#666' }}>12:30 PM - 1:30 PM</div>
+                );
+              })}
+            </div>
+
+            {/* Athletics */}
+            <div className="athletics-section">
+              <div className="section-title">Athletics</div>
+              {sportsEvents.length > 0 ? (
+                sportsEvents.map(event => (
+                  <div key={event.id} className="sport-event">
+                    <div className="event-time">{event.time || 'TBD'}</div>
+                    <div className="flex-1">
+                      {event.title}
+                      {event.opponent && ` vs ${event.opponent}`}
+                      {event.location && ` - ${event.location}`}
+                    </div>
                   </div>
-                  <div>
-                    <strong style={{ fontSize: '15px' }}>Dinner</strong>
-                    <div style={{ marginLeft: '12px', color: '#666' }}>6:00 PM - 7:00 PM</div>
+                ))
+              ) : (
+                <div>No athletic events scheduled</div>
+              )}
+            </div>
+
+            {/* Quote of the Day */}
+            <div className="quote-section boxed-section">
+              <div className="section-title">Quote of the Day</div>
+              <div className="quote-text">
+                {dailyContent.quote_of_the_day || '"Make today amazing!"'}
+              </div>
+            </div>
+
+            {/* Evening Activities */}
+            <div className="evening-section">
+              <div className="section-title">Evening Activities</div>
+              {eveningActivities.length > 0 ? (
+                eveningActivities.map(activity => (
+                  <div key={activity.id} className="evening-item">
+                    {activity.time_slot === 'Evening (5-9 PM)' ? '7:00 PM' : '9:00 PM'} - {activity.title}
+                    {activity.location && ` @ ${activity.location}`}
                   </div>
-                </div>
+                ))
+              ) : (
+                <div>No evening activities scheduled</div>
+              )}
+            </div>
+
+            {/* Notes */}
+            <div className="notes-section">
+              <div className="section-title">Notes</div>
+              <div className="notes-content">
+                {dailyContent.notes || 'Have a great day at Timber Lake West!'}
               </div>
             </div>
           </>
