@@ -68,8 +68,25 @@ export default function DailyWolf() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Here you would upload to storage bucket if configured
-      // For now, we'll store the file reference
+      // Upload file to storage
+      const timestamp = Date.now();
+      const filePath = `${currentCompany.id}/${selectedSeason}/${selectedDate}-${timestamp}-${selectedFile.name}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from("daily-wolf-documents")
+        .upload(filePath, selectedFile, {
+          contentType: "application/pdf",
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from("daily-wolf-documents")
+        .getPublicUrl(filePath);
+
+      // Save document reference in database
       const { error } = await supabase
         .from("daily_wolf_documents")
         .insert({
@@ -77,7 +94,7 @@ export default function DailyWolf() {
           season: selectedSeason,
           date: selectedDate,
           file_name: selectedFile.name,
-          file_url: "", // Would be storage URL
+          file_url: publicUrl,
           uploaded_by: user.id,
         });
 
@@ -94,19 +111,40 @@ export default function DailyWolf() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleViewPDF = (fileUrl: string) => {
+    window.open(fileUrl, '_blank');
+  };
+
+  const handleDelete = async (id: string, fileUrl: string) => {
     if (!confirm("Are you sure you want to delete this document?")) return;
 
-    const { error } = await supabase
-      .from("daily_wolf_documents")
-      .delete()
-      .eq("id", id);
+    try {
+      // Extract file path from URL
+      const urlParts = fileUrl.split('/daily-wolf-documents/');
+      if (urlParts.length > 1) {
+        const filePath = urlParts[1].split('?')[0];
+        
+        // Delete file from storage
+        const { error: storageError } = await supabase.storage
+          .from("daily-wolf-documents")
+          .remove([filePath]);
 
-    if (error) {
-      toast.error("Failed to delete document");
-    } else {
+        if (storageError) console.error("Storage delete error:", storageError);
+      }
+
+      // Delete database record
+      const { error } = await supabase
+        .from("daily_wolf_documents")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+
       toast.success("Document deleted");
       fetchDocuments();
+    } catch (error) {
+      console.error("Delete error:", error);
+      toast.error("Failed to delete document");
     }
   };
 
@@ -182,14 +220,18 @@ export default function DailyWolf() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => handleViewPDF(doc.file_url)}
+                  >
                     <Eye className="h-4 w-4 mr-2" />
                     View PDF
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleDelete(doc.id)}
+                    onClick={() => handleDelete(doc.id, doc.file_url)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
