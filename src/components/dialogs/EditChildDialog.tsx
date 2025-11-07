@@ -192,20 +192,22 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
               <Label htmlFor="season">Season (Year)</Label>
               <Input id="season" name="season" defaultValue={child.season || ""} placeholder="e.g., 2024" maxLength={4} />
             </div>
-            <div>
-              <Label>Session</Label>
-              <Select value={session} onValueChange={setSession}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select session" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Not Specified</SelectItem>
-                  <SelectItem value="session_1">Session 1</SelectItem>
-                  <SelectItem value="session_2">Session 2</SelectItem>
-                  <SelectItem value="both">Both Sessions</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {currentCompany?.slug === 'timber-lake-west' && (
+              <div>
+                <Label>Session</Label>
+                <Select value={session} onValueChange={setSession}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select session" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Not Specified</SelectItem>
+                    <SelectItem value="session_1">Session 1</SelectItem>
+                    <SelectItem value="session_2">Session 2</SelectItem>
+                    <SelectItem value="both">Both Sessions</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="col-span-2">
               <Label>Assigned Leader</Label>
               <Select value={leaderId} onValueChange={setLeaderId}>

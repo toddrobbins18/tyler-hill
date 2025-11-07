@@ -22,9 +22,10 @@ import {
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
-const items = [
+// Items that need conditional rendering will be handled in the component
+const getMenuItems = (companySlug?: string) => [
   { title: "Activities & Field Trips", url: "/activities", icon: Palmtree, menuId: "activities" },
-  { title: "Athletics", url: "/athletics", icon: Trophy, menuId: "athletics" },
+  { title: companySlug === 'timber-lake-west' ? "Athletics" : "Sports Calendar", url: "/athletics", icon: Trophy, menuId: "athletics" },
   { title: "Camper", url: "/roster", icon: Users, menuId: "roster" },
   { title: "Dashboard", url: "/", icon: Home, menuId: "dashboard" },
   { title: "Daily Wolf", url: "/notes", icon: FileText, menuId: "notes" },
@@ -44,9 +45,11 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
   const [isAdmin, setIsAdmin] = useState(false);
-  const [visibleItems, setVisibleItems] = useState(items);
   const { userRole, canAccessPage, loading: permissionsLoading } = usePermissions();
   const { currentCompany, availableCompanies, switchCompany, loading: companyLoading, isSuperAdmin } = useCompany();
+  
+  const items = getMenuItems(currentCompany?.slug);
+  const [visibleItems, setVisibleItems] = useState(items);
 
   useEffect(() => {
     checkAdminStatus();
@@ -62,7 +65,7 @@ export function AppSidebar() {
     if (!permissionsLoading && userRole && currentCompany) {
       filterMenuItems();
     }
-  }, [userRole, permissionsLoading, currentCompany]);
+  }, [userRole, permissionsLoading, currentCompany, items]);
 
   const checkAdminStatus = async () => {
     const { data: { user } } = await supabase.auth.getUser();

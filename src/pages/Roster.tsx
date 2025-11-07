@@ -238,16 +238,18 @@ export default function Roster() {
             </option>
           ))}
         </select>
-        <select
-          value={selectedSession}
-          onChange={(e) => setSelectedSession(e.target.value)}
-          className="px-4 py-2 border rounded-md bg-background"
-        >
-          <option value="all">All Sessions</option>
-          <option value="session_1">Session 1</option>
-          <option value="session_2">Session 2</option>
-          <option value="both">Both Sessions</option>
-        </select>
+        {currentCompany?.slug === 'timber-lake-west' && (
+          <select
+            value={selectedSession}
+            onChange={(e) => setSelectedSession(e.target.value)}
+            className="px-4 py-2 border rounded-md bg-background"
+          >
+            <option value="all">All Sessions</option>
+            <option value="session_1">Session 1</option>
+            <option value="session_2">Session 2</option>
+            <option value="both">Both Sessions</option>
+          </select>
+        )}
         <Button
           variant="outline"
           onClick={() => setSortBy(sortBy === "name" ? "division" : "name")}

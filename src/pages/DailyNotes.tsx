@@ -219,7 +219,12 @@ export default function DailyNotes() {
       <div className="print-content">
         {/* Newspaper Header */}
         <div className="newspaper-header">
-          <div className="newspaper-title">THE DAILY WOLF</div>
+          <div className="newspaper-title">
+            {currentCompany?.slug === 'timber-lake-west' ? 'THE DAILY WOLF' : 'TYLER HILL DAILY NEWS'}
+          </div>
+          {currentCompany?.slug === 'default' && (
+            <div className="newspaper-tagline">LIVE THIS MOMENT | HOME OF THE BEARS</div>
+          )}
           <div className="newspaper-date">{today}</div>
         </div>
 
@@ -289,7 +294,9 @@ export default function DailyNotes() {
 
               {/* Meal Schedule */}
               <div className="boxed-section">
-                <div className="section-title" style={{ fontSize: '16px' }}>Meal Schedule</div>
+                <div className="section-title" style={{ fontSize: '16px' }}>
+                  {currentCompany?.slug === 'timber-lake-west' ? 'Meal Schedule' : "Da Bears' Buffet"}
+                </div>
                 <div style={{ fontSize: '14px', lineHeight: '1.8' }}>
                   <div style={{ marginBottom: '12px' }}>
                     <strong style={{ fontSize: '15px' }}>Breakfast</strong>

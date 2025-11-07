@@ -149,20 +149,22 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
             <Label htmlFor="season">Season (Year)</Label>
             <Input id="season" name="season" defaultValue={staff.season || ""} placeholder="e.g., 2024" maxLength={4} />
           </div>
-          <div>
-            <Label>Session</Label>
-            <Select value={session || "none"} onValueChange={(val) => setSession(val === "none" ? "" : val)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select session" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Not Specified</SelectItem>
-                <SelectItem value="session_1">Session 1</SelectItem>
-                <SelectItem value="session_2">Session 2</SelectItem>
-                <SelectItem value="both">Both Sessions</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {currentCompany?.slug === 'timber-lake-west' && (
+            <div>
+              <Label>Session</Label>
+              <Select value={session || "none"} onValueChange={(val) => setSession(val === "none" ? "" : val)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select session" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not Specified</SelectItem>
+                  <SelectItem value="session_1">Session 1</SelectItem>
+                  <SelectItem value="session_2">Session 2</SelectItem>
+                  <SelectItem value="both">Both Sessions</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div>
             <Label>Staff Type</Label>
             <Select value={staffType || "none"} onValueChange={(val) => setStaffType(val === "none" ? "" : val)}>
