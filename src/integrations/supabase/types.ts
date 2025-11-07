@@ -281,6 +281,7 @@ export type Database = {
           name: string
           person_id: string | null
           season: string | null
+          session: string | null
           status: string | null
           updated_at: string | null
         }
@@ -304,6 +305,7 @@ export type Database = {
           name: string
           person_id?: string | null
           season?: string | null
+          session?: string | null
           status?: string | null
           updated_at?: string | null
         }
@@ -327,6 +329,7 @@ export type Database = {
           name?: string
           person_id?: string | null
           season?: string | null
+          session?: string | null
           status?: string | null
           updated_at?: string | null
         }
@@ -453,6 +456,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      daily_wolf_documents: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          date: string
+          file_name: string
+          file_url: string
+          id: string
+          season: string
+          updated_at: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          date: string
+          file_name: string
+          file_url: string
+          id?: string
+          season?: string
+          updated_at?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          date?: string
+          file_name?: string
+          file_url?: string
+          id?: string
+          season?: string
+          updated_at?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: []
       }
       division_permissions: {
         Row: {
@@ -1210,6 +1249,42 @@ export type Database = {
           },
         ]
       }
+      rainy_day_documents: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          date: string
+          file_name: string
+          file_url: string
+          id: string
+          season: string
+          updated_at: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          date: string
+          file_name: string
+          file_url: string
+          id?: string
+          season?: string
+          updated_at?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          date?: string
+          file_name?: string
+          file_url?: string
+          id?: string
+          season?: string
+          updated_at?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
       rainy_day_schedule: {
         Row: {
           activity_type: string
@@ -1837,6 +1912,7 @@ export type Database = {
           phone: string | null
           role: string
           season: string | null
+          session: string | null
           staff_type: string | null
           status: string | null
           updated_at: string | null
@@ -1854,6 +1930,7 @@ export type Database = {
           phone?: string | null
           role: string
           season?: string | null
+          session?: string | null
           staff_type?: string | null
           status?: string | null
           updated_at?: string | null
@@ -1871,6 +1948,7 @@ export type Database = {
           phone?: string | null
           role?: string
           season?: string | null
+          session?: string | null
           staff_type?: string | null
           status?: string | null
           updated_at?: string | null

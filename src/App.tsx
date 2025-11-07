@@ -15,25 +15,22 @@ import Staff from "./pages/Staff";
 import StaffProfile from "./pages/StaffProfile";
 import Transportation from "./pages/Transportation";
 import DailyNotes from "./pages/DailyNotes";
-import Awards from "./pages/Awards";
 import ChildProfile from "./pages/ChildProfile";
 import Messages from "./pages/Messages";
 import Admin from "./pages/Admin";
-import Nurse from "./pages/Nurse";
 import Menu from "./pages/Menu";
 import SpecialMeals from "./pages/SpecialMeals";
 import RainyDaySchedule from "./pages/RainyDaySchedule";
 import EvaluationQuestions from "./pages/EvaluationQuestions";
 import RolePermissions from "./pages/RolePermissions";
 import DivisionPermissions from "./pages/DivisionPermissions";
-import IncidentReports from "./pages/IncidentReports";
 import MasterCalendar from "./pages/MasterCalendar";
 import SportsCalendar from "./pages/SportsCalendar";
 import ActivitiesFieldTrips from "./pages/ActivitiesFieldTrips";
 import SpecialEventsActivities from "./pages/SpecialEventsActivities";
-import SportsAcademy from "./pages/SportsAcademy";
 import TutoringTherapy from "./pages/TutoringTherapy";
 import UserApprovals from "./pages/UserApprovals";
+import DailyWolf from "./pages/DailyWolf";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 
@@ -64,7 +61,6 @@ function AppContent() {
                                 <Route path="/roster" element={<Roster />} />
                                 <Route path="/staff" element={<Staff />} />
                                 <Route path="/staff/:id" element={<StaffProfile />} />
-                                <Route path="/nurse" element={<Nurse />} />
                                 <Route path="/menu" element={<Menu />} />
                                 <Route path="/special-meals" element={<SpecialMeals />} />
                                 <Route path="/rainy-day" element={<RainyDaySchedule />} />
@@ -73,14 +69,12 @@ function AppContent() {
                                 <Route path="/division-permissions" element={<DivisionPermissions />} />
                                 <Route path="/transportation" element={<Transportation />} />
                                 <Route path="/notes" element={<DailyNotes />} />
-                                <Route path="/awards" element={<Awards />} />
-                                <Route path="/incidents" element={<IncidentReports />} />
                                 <Route path="/calendar" element={<MasterCalendar />} />
-                                <Route path="/sports-calendar" element={<SportsCalendar />} />
+                                <Route path="/athletics" element={<SportsCalendar />} />
                                 <Route path="/activities" element={<ActivitiesFieldTrips />} />
                                 <Route path="/special-events" element={<SpecialEventsActivities />} />
-                                <Route path="/sports-academy" element={<SportsAcademy />} />
                                 <Route path="/tutoring-therapy" element={<TutoringTherapy />} />
+                                <Route path="/daily-wolf" element={<DailyWolf />} />
                                 <Route path="/messages" element={<Messages />} />
                                 <Route path="/child/:id" element={<ChildProfile />} />
                                 <Route path="/admin" element={<Admin />} />
