@@ -41,6 +41,7 @@ export default function Roster() {
   const [children, setChildren] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
   const [selectedDivision, setSelectedDivision] = useState<string>("all");
+  const [selectedSession, setSelectedSession] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"name" | "division">("name");
   const [loading, setLoading] = useState(true);
   const [editingChild, setEditingChild] = useState<string | null>(null);
@@ -116,7 +117,7 @@ export default function Roster() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedDivision, currentSeason, sortBy]);
+  }, [searchTerm, selectedDivision, selectedSession, currentSeason, sortBy]);
 
   const filteredChildren = children
     .filter((child) => {
@@ -128,10 +129,16 @@ export default function Roster() {
       const matchesDivision = 
         selectedDivision === "all" || child.division_id === selectedDivision;
       
+      const matchesSession = 
+        selectedSession === "all" || 
+        child.session === selectedSession || 
+        child.session === "both" ||
+        !child.session;
+      
       const matchesSeason = 
         child.season === currentSeason;
       
-      return matchesSearch && matchesDivision && matchesSeason;
+      return matchesSearch && matchesDivision && matchesSession && matchesSeason;
     })
     .sort((a, b) => {
       if (sortBy === "division") {
@@ -230,6 +237,16 @@ export default function Roster() {
               {div.name}
             </option>
           ))}
+        </select>
+        <select
+          value={selectedSession}
+          onChange={(e) => setSelectedSession(e.target.value)}
+          className="px-4 py-2 border rounded-md bg-background"
+        >
+          <option value="all">All Sessions</option>
+          <option value="session_1">Session 1</option>
+          <option value="session_2">Session 2</option>
+          <option value="both">Both Sessions</option>
         </select>
         <Button
           variant="outline"

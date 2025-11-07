@@ -17,6 +17,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
   const [supervisors, setSupervisors] = useState<any[]>([]);
   const [leaderId, setLeaderId] = useState("");
   const [staffType, setStaffType] = useState<string>("");
+  const [session, setSession] = useState<string>("");
   const { currentCompany } = useCompany();
 
   useEffect(() => {
@@ -51,6 +52,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
         phone: formData.get("phone") as string || null,
         hire_date: formData.get("hire_date") as string || null,
         season: formData.get("season") as string || null,
+        session: session || null,
         leader_id: leaderId || null,
         staff_type: staffType || null,
       };
@@ -78,6 +80,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
         setOpen(false);
         setLeaderId("");
         setStaffType("");
+        setSession("");
         onSuccess?.();
       }
     } catch (error) {
@@ -132,6 +135,20 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
           <div>
             <Label htmlFor="season">Season (Year)</Label>
             <Input id="season" name="season" placeholder="e.g., 2024" maxLength={4} />
+          </div>
+          <div>
+            <Label>Session</Label>
+            <Select value={session || "none"} onValueChange={(val) => setSession(val === "none" ? "" : val)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select session" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Not Specified</SelectItem>
+                <SelectItem value="session_1">Session 1</SelectItem>
+                <SelectItem value="session_2">Session 2</SelectItem>
+                <SelectItem value="both">Both Sessions</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label>Staff Type</Label>

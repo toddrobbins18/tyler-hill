@@ -24,6 +24,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
   const [supervisors, setSupervisors] = useState<any[]>([]);
   const [leaderId, setLeaderId] = useState("");
   const [staffType, setStaffType] = useState<string>("");
+  const [session, setSession] = useState<string>("");
 
   useEffect(() => {
     if (open && staffId) {
@@ -43,6 +44,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
       setStaff(data);
       setLeaderId(data.leader_id || "");
       setStaffType(data.staff_type || "");
+      setSession(data.session || "");
     }
   };
 
@@ -74,6 +76,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
         hire_date: formData.get("hire_date") as string || null,
         date_of_birth: formData.get("date_of_birth") as string || null,
         season: formData.get("season") as string || null,
+        session: session || null,
         leader_id: leaderId || null,
         staff_type: staffType || null,
       };
@@ -145,6 +148,20 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
           <div>
             <Label htmlFor="season">Season (Year)</Label>
             <Input id="season" name="season" defaultValue={staff.season || ""} placeholder="e.g., 2024" maxLength={4} />
+          </div>
+          <div>
+            <Label>Session</Label>
+            <Select value={session || "none"} onValueChange={(val) => setSession(val === "none" ? "" : val)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select session" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Not Specified</SelectItem>
+                <SelectItem value="session_1">Session 1</SelectItem>
+                <SelectItem value="session_2">Session 2</SelectItem>
+                <SelectItem value="both">Both Sessions</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label>Staff Type</Label>

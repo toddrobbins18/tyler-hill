@@ -29,6 +29,7 @@ import {
 export default function Staff() {
   const [searchTerm, setSearchTerm] = useState("");
   const [staff, setStaff] = useState<any[]>([]);
+  const [selectedSession, setSelectedSession] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [editingStaff, setEditingStaff] = useState<string | null>(null);
   const [deletingStaff, setDeletingStaff] = useState<string | null>(null);
@@ -93,9 +94,15 @@ export default function Staff() {
       (member.role?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
       (member.department?.toLowerCase() || "").includes(searchTerm.toLowerCase());
     
+    const matchesSession = 
+      selectedSession === "all" || 
+      member.session === selectedSession || 
+      member.session === "both" ||
+      !member.session;
+    
     const matchesSeason = member.season === currentSeason || member.season === null;
     
-    return matchesSearch && matchesSeason;
+    return matchesSearch && matchesSession && matchesSeason;
   });
 
   const getInitials = (name: string) => {
@@ -132,14 +139,26 @@ export default function Staff() {
         </div>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search staff by name, role, or department..."
-          className="pl-10"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+      <div className="flex gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search staff by name, role, or department..."
+            className="pl-10"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <select
+          value={selectedSession}
+          onChange={(e) => setSelectedSession(e.target.value)}
+          className="px-4 py-2 border rounded-md bg-background"
+        >
+          <option value="all">All Sessions</option>
+          <option value="session_1">Session 1</option>
+          <option value="session_2">Session 2</option>
+          <option value="both">Both Sessions</option>
+        </select>
       </div>
 
       {loading ? (
