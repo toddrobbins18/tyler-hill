@@ -40,11 +40,22 @@ const getMenuItems = (companySlug?: string) => {
     { title: "Tutoring & Therapy", url: "/tutoring-therapy", icon: BookOpen, menuId: "tutoring-therapy" },
   ];
 
-  // Add Daily Wolf ONLY for Timber Lake West
+  // Add Daily Notes/News for ALL camps
+  baseItems.push({
+    title: companySlug === 'tyler-hill-camp' ? "Daily News" : "Daily Notes",
+    url: "/notes",
+    icon: FileText,
+    menuId: "notes"
+  });
+
+  // Add Daily Wolf Printable ONLY for Timber Lake West
   if (companySlug === 'timber-lake-west') {
-    baseItems.push(
-      { title: "Daily Wolf", url: "/notes", icon: FileText, menuId: "notes" }
-    );
+    baseItems.push({
+      title: "Daily Wolf Printable",
+      url: "/daily-wolf-printable",
+      icon: FileText,
+      menuId: "daily-wolf-printable"
+    });
   }
 
   // Add these items for all companies EXCEPT Timber Lake West
