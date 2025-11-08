@@ -14,6 +14,7 @@ import { useSeasonContext } from '@/contexts/SeasonContext';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import CSVUploader from '@/components/CSVUploader';
+import { validateAndRefreshSession } from '@/lib/sessionUtils';
 
 interface DailyWolfContent {
   id?: string;
@@ -124,6 +125,12 @@ export default function DailyWolfManagement() {
   const saveField = async (field: keyof DailyWolfContent, value: string) => {
     if (!currentCompany) return;
 
+    // Validate session before database call
+    const isSessionValid = await validateAndRefreshSession();
+    if (!isSessionValid) {
+      return;
+    }
+
     try {
       setSaving(true);
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
@@ -187,6 +194,12 @@ export default function DailyWolfManagement() {
 
   const createTodaysEntry = async () => {
     if (!currentCompany) return;
+
+    // Validate session before database call
+    const isSessionValid = await validateAndRefreshSession();
+    if (!isSessionValid) {
+      return;
+    }
 
     try {
       setSaving(true);
