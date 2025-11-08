@@ -159,6 +159,15 @@ export function AppSidebar() {
           </h1>
         </div>
         
+        {/* Debug Info */}
+        {!isCollapsed && (
+          <div className="px-4 pb-2 text-xs text-muted-foreground space-y-1">
+            <div>Super Admin: {isSuperAdmin ? '✅' : '❌'}</div>
+            <div>Companies: {availableCompanies.length}</div>
+            <div>Current: {currentCompany?.name || 'None'}</div>
+          </div>
+        )}
+        
         {isSuperAdmin && (
           isCollapsed ? (
             <div className="px-2 pb-4">
