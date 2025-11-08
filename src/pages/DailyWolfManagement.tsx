@@ -13,6 +13,7 @@ import { useCompany } from '@/contexts/CompanyContext';
 import { useSeasonContext } from '@/contexts/SeasonContext';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import CSVUploader from '@/components/CSVUploader';
 
 interface DailyWolfContent {
   id?: string;
@@ -80,7 +81,15 @@ export default function DailyWolfManagement() {
         .eq('season', currentSeason)
         .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching content:', error);
+        toast({
+          title: 'Error',
+          description: `Failed to load content: ${error.message}`,
+          variant: 'destructive',
+        });
+        throw error;
+      }
 
       if (data) {
         setContent({
@@ -100,11 +109,11 @@ export default function DailyWolfManagement() {
           notes: '',
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching content:', error);
       toast({
         title: 'Error',
-        description: 'Failed to load content',
+        description: error?.message || 'Failed to load content',
         variant: 'destructive',
       });
     } finally {
@@ -126,7 +135,10 @@ export default function DailyWolfManagement() {
           .update({ [field]: value })
           .eq('id', content.id);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Update error:', error);
+          throw error;
+        }
       } else {
         // Create new record
         const { data, error } = await supabase
@@ -140,7 +152,10 @@ export default function DailyWolfManagement() {
           .select()
           .single();
 
-        if (error) throw error;
+        if (error) {
+          console.error('Insert error:', error);
+          throw error;
+        }
         if (data) {
           setContent((prev) => ({ ...prev, id: data.id }));
         }
@@ -150,11 +165,11 @@ export default function DailyWolfManagement() {
         title: 'Saved',
         description: 'Content updated successfully',
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving content:', error);
       toast({
         title: 'Error',
-        description: 'Failed to save content',
+        description: error?.message || 'Failed to save content. Please check your permissions.',
         variant: 'destructive',
       });
     } finally {
@@ -192,7 +207,10 @@ export default function DailyWolfManagement() {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Create entry error:', error);
+        throw error;
+      }
       if (data) {
         setContent({
           id: data.id,
@@ -206,13 +224,13 @@ export default function DailyWolfManagement() {
 
       toast({
         title: 'Created',
-        description: 'New entry created',
+        description: 'New entry created successfully',
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating entry:', error);
       toast({
         title: 'Error',
-        description: 'Failed to create entry',
+        description: error?.message || 'Failed to create entry. Please check your permissions.',
         variant: 'destructive',
       });
     } finally {
@@ -229,30 +247,33 @@ export default function DailyWolfManagement() {
         </p>
       </div>
 
-      <div className="mb-6">
-        <Label>Select Date</Label>
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              className={cn(
-                'w-[280px] justify-start text-left font-normal mt-2',
-                !selectedDate && 'text-muted-foreground'
-              )}
-            >
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {selectedDate ? format(selectedDate, 'PPP') : <span>Pick a date</span>}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0">
-            <Calendar
-              mode="single"
-              selected={selectedDate}
-              onSelect={(date) => date && setSelectedDate(date)}
-              initialFocus
-            />
-          </PopoverContent>
-        </Popover>
+      <div className="mb-6 flex items-end justify-between gap-4">
+        <div>
+          <Label>Select Date</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  'w-[280px] justify-start text-left font-normal mt-2',
+                  !selectedDate && 'text-muted-foreground'
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {selectedDate ? format(selectedDate, 'PPP') : <span>Pick a date</span>}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={(date) => date && setSelectedDate(date)}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+        <CSVUploader tableName="daily_wolf_content" onUploadComplete={fetchContent} />
       </div>
 
       {loading ? (

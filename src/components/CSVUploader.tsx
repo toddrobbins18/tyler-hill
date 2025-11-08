@@ -8,9 +8,9 @@ import CSVFormatGuide from "./dialogs/CSVFormatGuide";
 import { useCompany } from "@/contexts/CompanyContext";
 import { 
   childSchema, staffSchema, awardSchema, dailyNoteSchema, tripSchema, menuItemSchema,
-  incidentReportSchema, medicationSchema, calendarEventSchema, sportsCalendarSchema,
+  incidentReportSchema, medicationSchema, calendarEventSchema, sportsCalendarSchema, dailyWolfContentSchema,
   parseChildRow, parseStaffRow, parseAwardRow, parseDailyNoteRow, parseTripRow, parseMenuItemRow,
-  parseIncidentReportRow, parseMedicationRow, parseCalendarEventRow, parseSportsCalendarRow
+  parseIncidentReportRow, parseMedicationRow, parseCalendarEventRow, parseSportsCalendarRow, parseDailyWolfContentRow
 } from "@/lib/validationSchemas";
 import { z } from "zod";
 
@@ -96,6 +96,9 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
       } else if (tableName === 'sports_calendar') {
         schema = sportsCalendarSchema;
         parser = parseSportsCalendarRow;
+      } else if (tableName === 'daily_wolf_content') {
+        schema = dailyWolfContentSchema;
+        parser = parseDailyWolfContentRow;
       } else {
         toast.error(`Unsupported table: ${tableName}`);
         setUploading(false);
@@ -126,10 +129,12 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
         return;
       }
 
-      // Add company_id to each row
+      // Add company_id and season to each row if needed
       const rowsWithCompany = validatedRows.map(row => ({
         ...row,
-        company_id: currentCompany?.id
+        company_id: currentCompany?.id,
+        // Add season if table supports it and not already provided
+        ...(tableName === 'daily_wolf_content' && !row.season ? { season: new Date().getFullYear().toString() } : {})
       }));
 
       const { error } = await supabase.from(tableName as any).insert(rowsWithCompany as any);

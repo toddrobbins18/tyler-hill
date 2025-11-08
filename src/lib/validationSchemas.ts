@@ -127,6 +127,17 @@ export const sportsCalendarSchema = z.object({
   opponent: z.string().optional(),
 });
 
+// Daily Wolf Content validation schema
+export const dailyWolfContentSchema = z.object({
+  date: z.string().min(1, "Date is required"),
+  officer_of_day: z.string().max(500, "OD must be less than 500 characters").optional(),
+  laundry_info: z.string().max(1000, "Laundry info must be less than 1000 characters").optional(),
+  phone_calls_info: z.string().max(1000, "Phone calls info must be less than 1000 characters").optional(),
+  quote_of_the_day: z.string().max(500, "Quote must be less than 500 characters").optional(),
+  notes: z.string().max(2000, "Notes must be less than 2000 characters").optional(),
+  season: z.string().optional(),
+});
+
 // Convert CSV row to typed object for children
 export function parseChildRow(row: Record<string, any>) {
   // Construct full name from first and last name
@@ -253,5 +264,17 @@ export function parseSportsCalendarRow(row: Record<string, any>) {
     location: String(row.location || row.Location || ''),
     team: String(row.team || row.Team || ''),
     opponent: String(row.opponent || row.Opponent || ''),
+  };
+}
+
+export function parseDailyWolfContentRow(row: Record<string, any>) {
+  return {
+    date: String(row.date || row.Date || ''),
+    officer_of_day: String(row.officer_of_day || row['Officer of Day'] || row.OD || row.od || '') || undefined,
+    laundry_info: String(row.laundry_info || row['Laundry Info'] || row.Laundry || '') || undefined,
+    phone_calls_info: String(row.phone_calls_info || row['Phone Calls Info'] || row['Phone Calls'] || '') || undefined,
+    quote_of_the_day: String(row.quote_of_the_day || row['Quote of the Day'] || row.Quote || '') || undefined,
+    notes: String(row.notes || row.Notes || '') || undefined,
+    season: String(row.season || row.Season || '') || undefined,
   };
 }
