@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSessionRefresh } from "@/hooks/useSessionRefresh";
 import { Shield } from "lucide-react";
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -13,6 +14,7 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   const [hasPageAccess, setHasPageAccess] = useState(true);
   const { canAccessPage, loading: permissionsLoading } = usePermissions();
   const { loading: companyLoading } = useCompany();
+  const { isSessionValid } = useSessionRefresh();
 
   useEffect(() => {
     checkAuth();
