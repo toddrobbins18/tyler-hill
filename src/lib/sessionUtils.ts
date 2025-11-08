@@ -29,6 +29,21 @@ export async function validateAndRefreshSession(): Promise<boolean> {
       return false;
     }
 
+    // CRITICAL: Explicitly set the session on the client
+    // This ensures the JWT token is attached to subsequent requests
+    const { error: setError } = await supabase.auth.setSession({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+    });
+
+    if (setError) {
+      console.error("Failed to set session:", setError);
+      toast.error("Authentication error. Please log in again.");
+      await supabase.auth.signOut();
+      window.location.href = "/auth";
+      return false;
+    }
+
     // Refresh session if it's close to expiring (within 5 minutes)
     const expiresAt = session.expires_at;
     if (expiresAt) {
@@ -50,6 +65,7 @@ export async function validateAndRefreshSession(): Promise<boolean> {
       }
     }
 
+    console.log("Session validated and set successfully");
     return true;
   } catch (error) {
     console.error("Unexpected error during session validation:", error);

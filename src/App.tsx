@@ -9,6 +9,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SeasonProvider } from "@/contexts/SeasonContext";
 import { CompanyProvider } from "@/contexts/CompanyContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { useSessionInitialization } from "@/hooks/useSessionInitialization";
 import Dashboard from "./pages/Dashboard";
 import Roster from "./pages/Roster";
 import Staff from "./pages/Staff";
@@ -42,6 +43,8 @@ import Auth from "./pages/Auth";
 const queryClient = new QueryClient();
 
 function AppContent() {
+  useSessionInitialization();
+  
   return (
     <>
       <Toaster />

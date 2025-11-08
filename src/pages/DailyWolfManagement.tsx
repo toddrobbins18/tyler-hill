@@ -125,6 +125,15 @@ export default function DailyWolfManagement() {
   const saveField = async (field: keyof DailyWolfContent, value: string) => {
     if (!currentCompany) return;
 
+    // Log current session state for debugging
+    const { data: { session } } = await supabase.auth.getSession();
+    console.log('Session before saveField:', {
+      hasSession: !!session,
+      hasAccessToken: !!session?.access_token,
+      expiresAt: session?.expires_at,
+      userId: session?.user?.id,
+    });
+
     // Validate session before database call
     const isSessionValid = await validateAndRefreshSession();
     if (!isSessionValid) {
@@ -194,6 +203,15 @@ export default function DailyWolfManagement() {
 
   const createTodaysEntry = async () => {
     if (!currentCompany) return;
+
+    // Log current session state for debugging
+    const { data: { session } } = await supabase.auth.getSession();
+    console.log('Session before createTodaysEntry:', {
+      hasSession: !!session,
+      hasAccessToken: !!session?.access_token,
+      expiresAt: session?.expires_at,
+      userId: session?.user?.id,
+    });
 
     // Validate session before database call
     const isSessionValid = await validateAndRefreshSession();
