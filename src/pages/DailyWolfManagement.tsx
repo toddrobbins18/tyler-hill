@@ -15,6 +15,7 @@ import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import CSVUploader from '@/components/CSVUploader';
 import { validateAndRefreshSession } from '@/lib/sessionUtils';
+import { getAuthenticatedSupabaseClient } from '@/lib/authenticatedSupabaseClient';
 
 interface DailyWolfContent {
   id?: string;
@@ -125,28 +126,16 @@ export default function DailyWolfManagement() {
   const saveField = async (field: keyof DailyWolfContent, value: string) => {
     if (!currentCompany) return;
 
-    // Log current session state for debugging
-    const { data: { session } } = await supabase.auth.getSession();
-    console.log('Session before saveField:', {
-      hasSession: !!session,
-      hasAccessToken: !!session?.access_token,
-      expiresAt: session?.expires_at,
-      userId: session?.user?.id,
-    });
-
-    // Validate session before database call
-    const isSessionValid = await validateAndRefreshSession();
-    if (!isSessionValid) {
-      return;
-    }
-
     try {
       setSaving(true);
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
 
+      // Create authenticated client with explicit JWT token
+      const authenticatedClient = await getAuthenticatedSupabaseClient();
+
       if (content.id) {
         // Update existing record
-        const { error } = await supabase
+        const { error } = await authenticatedClient
           .from('daily_wolf_content')
           .update({ [field]: value })
           .eq('id', content.id);
@@ -157,7 +146,7 @@ export default function DailyWolfManagement() {
         }
       } else {
         // Create new record
-        const { data, error } = await supabase
+        const { data, error } = await authenticatedClient
           .from('daily_wolf_content')
           .insert({
             company_id: currentCompany.id,
@@ -204,26 +193,14 @@ export default function DailyWolfManagement() {
   const createTodaysEntry = async () => {
     if (!currentCompany) return;
 
-    // Log current session state for debugging
-    const { data: { session } } = await supabase.auth.getSession();
-    console.log('Session before createTodaysEntry:', {
-      hasSession: !!session,
-      hasAccessToken: !!session?.access_token,
-      expiresAt: session?.expires_at,
-      userId: session?.user?.id,
-    });
-
-    // Validate session before database call
-    const isSessionValid = await validateAndRefreshSession();
-    if (!isSessionValid) {
-      return;
-    }
-
     try {
       setSaving(true);
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
 
-      const { data, error } = await supabase
+      // Create authenticated client with explicit JWT token
+      const authenticatedClient = await getAuthenticatedSupabaseClient();
+
+      const { data, error } = await authenticatedClient
         .from('daily_wolf_content')
         .insert({
           company_id: currentCompany.id,
