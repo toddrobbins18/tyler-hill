@@ -463,7 +463,10 @@ export type Database = {
           created_at: string | null
           date: string
           id: string
+          laundry_info: string | null
           notes: string | null
+          officer_of_day: string | null
+          phone_calls_info: string | null
           quote_of_the_day: string | null
           season: string
           updated_at: string | null
@@ -473,7 +476,10 @@ export type Database = {
           created_at?: string | null
           date: string
           id?: string
+          laundry_info?: string | null
           notes?: string | null
+          officer_of_day?: string | null
+          phone_calls_info?: string | null
           quote_of_the_day?: string | null
           season?: string
           updated_at?: string | null
@@ -483,7 +489,10 @@ export type Database = {
           created_at?: string | null
           date?: string
           id?: string
+          laundry_info?: string | null
           notes?: string | null
+          officer_of_day?: string | null
+          phone_calls_info?: string | null
           quote_of_the_day?: string | null
           season?: string
           updated_at?: string | null

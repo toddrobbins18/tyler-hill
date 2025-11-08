@@ -48,6 +48,9 @@ interface EveningActivity {
 interface DailyContent {
   quote_of_the_day?: string;
   notes?: string;
+  officer_of_day?: string;
+  laundry_info?: string;
+  phone_calls_info?: string;
 }
 
 export default function DailyWolfPrintable() {
@@ -167,7 +170,7 @@ export default function DailyWolfPrintable() {
       // Fetch daily wolf content
       const { data: contentData } = await supabase
         .from('daily_wolf_content')
-        .select('quote_of_the_day, notes')
+        .select('quote_of_the_day, notes, officer_of_day, laundry_info, phone_calls_info')
         .eq('company_id', currentCompany.id)
         .eq('date', today)
         .eq('season', currentSeason)
@@ -329,6 +332,15 @@ export default function DailyWolfPrintable() {
             margin-bottom: 16px;
             background: white;
           }
+          .od-section, .laundry-section, .phone-calls-section {
+            margin-bottom: 20px;
+            font-size: 14px;
+          }
+          .od-content, .laundry-content, .phone-calls-content {
+            padding: 12px;
+            background: #f9f9f9;
+            border-left: 4px solid #000;
+          }
           @page {
             margin: 0.5in;
           }
@@ -366,6 +378,16 @@ export default function DailyWolfPrintable() {
               )}
             </div>
 
+            {/* OD */}
+            {dailyContent.officer_of_day && (
+              <div className="od-section">
+                <div className="section-title">OD</div>
+                <div className="od-content">
+                  <p>{dailyContent.officer_of_day}</p>
+                </div>
+              </div>
+            )}
+
             {/* Division Line-Up Games */}
             <div className="division-games-section">
               <div className="section-title">Division Line-Up Games</div>
@@ -402,6 +424,26 @@ export default function DailyWolfPrintable() {
                 );
               })}
             </div>
+
+            {/* Laundry Schedule */}
+            {dailyContent.laundry_info && (
+              <div className="laundry-section">
+                <div className="section-title">Laundry Schedule</div>
+                <div className="laundry-content">
+                  <p style={{ whiteSpace: 'pre-wrap' }}>{dailyContent.laundry_info}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Phone Calls */}
+            {dailyContent.phone_calls_info && (
+              <div className="phone-calls-section">
+                <div className="section-title">Phone Calls</div>
+                <div className="phone-calls-content">
+                  <p style={{ whiteSpace: 'pre-wrap' }}>{dailyContent.phone_calls_info}</p>
+                </div>
+              </div>
+            )}
 
             {/* Athletics */}
             <div className="athletics-section">

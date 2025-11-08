@@ -16,6 +16,7 @@ import StaffProfile from "./pages/StaffProfile";
 import Transportation from "./pages/Transportation";
 import DailyNotes from "./pages/DailyNotes";
 import DailyWolfPrintable from "./pages/DailyWolfPrintable";
+import DailyWolfManagement from "./pages/DailyWolfManagement";
 import ChildProfile from "./pages/ChildProfile";
 import Messages from "./pages/Messages";
 import Admin from "./pages/Admin";
@@ -74,6 +75,7 @@ function AppContent() {
                                 <Route path="/transportation" element={<Transportation />} />
                                 <Route path="/notes" element={<DailyNotes />} />
                                 <Route path="/daily-wolf-printable" element={<DailyWolfPrintable />} />
+                                <Route path="/daily-wolf-management" element={<DailyWolfManagement />} />
                                 <Route path="/calendar" element={<MasterCalendar />} />
                                 <Route path="/athletics" element={<SportsCalendar />} />
                                 <Route path="/activities" element={<ActivitiesFieldTrips />} />

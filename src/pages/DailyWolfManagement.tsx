@@ -1,0 +1,360 @@
+import { useState, useEffect } from 'react';
+import { format } from 'date-fns';
+import { Calendar } from '@/components/ui/calendar';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { CalendarIcon, Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useCompany } from '@/contexts/CompanyContext';
+import { useSeasonContext } from '@/contexts/SeasonContext';
+import { toast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+
+interface DailyWolfContent {
+  id?: string;
+  officer_of_day: string;
+  laundry_info: string;
+  phone_calls_info: string;
+  quote_of_the_day: string;
+  notes: string;
+}
+
+export default function DailyWolfManagement() {
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [content, setContent] = useState<DailyWolfContent>({
+    officer_of_day: '',
+    laundry_info: '',
+    phone_calls_info: '',
+    quote_of_the_day: '',
+    notes: '',
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
+
+  useEffect(() => {
+    fetchContent();
+  }, [selectedDate, currentCompany, currentSeason]);
+
+  useEffect(() => {
+    if (!currentCompany) return;
+
+    const channel = supabase
+      .channel('daily_wolf_content_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'daily_wolf_content',
+          filter: `company_id=eq.${currentCompany.id}`,
+        },
+        () => {
+          fetchContent();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentCompany, selectedDate, currentSeason]);
+
+  const fetchContent = async () => {
+    if (!currentCompany) return;
+
+    try {
+      setLoading(true);
+      const dateStr = format(selectedDate, 'yyyy-MM-dd');
+
+      const { data, error } = await supabase
+        .from('daily_wolf_content')
+        .select('*')
+        .eq('company_id', currentCompany.id)
+        .eq('date', dateStr)
+        .eq('season', currentSeason)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        setContent({
+          id: data.id,
+          officer_of_day: data.officer_of_day || '',
+          laundry_info: data.laundry_info || '',
+          phone_calls_info: data.phone_calls_info || '',
+          quote_of_the_day: data.quote_of_the_day || '',
+          notes: data.notes || '',
+        });
+      } else {
+        setContent({
+          officer_of_day: '',
+          laundry_info: '',
+          phone_calls_info: '',
+          quote_of_the_day: '',
+          notes: '',
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching content:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load content',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveField = async (field: keyof DailyWolfContent, value: string) => {
+    if (!currentCompany) return;
+
+    try {
+      setSaving(true);
+      const dateStr = format(selectedDate, 'yyyy-MM-dd');
+
+      if (content.id) {
+        // Update existing record
+        const { error } = await supabase
+          .from('daily_wolf_content')
+          .update({ [field]: value })
+          .eq('id', content.id);
+
+        if (error) throw error;
+      } else {
+        // Create new record
+        const { data, error } = await supabase
+          .from('daily_wolf_content')
+          .insert({
+            company_id: currentCompany.id,
+            date: dateStr,
+            season: currentSeason,
+            [field]: value,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        if (data) {
+          setContent((prev) => ({ ...prev, id: data.id }));
+        }
+      }
+
+      toast({
+        title: 'Saved',
+        description: 'Content updated successfully',
+      });
+    } catch (error) {
+      console.error('Error saving content:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to save content',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleFieldChange = (field: keyof DailyWolfContent, value: string) => {
+    setContent((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleFieldBlur = (field: keyof DailyWolfContent, value: string) => {
+    saveField(field, value);
+  };
+
+  const createTodaysEntry = async () => {
+    if (!currentCompany) return;
+
+    try {
+      setSaving(true);
+      const dateStr = format(selectedDate, 'yyyy-MM-dd');
+
+      const { data, error } = await supabase
+        .from('daily_wolf_content')
+        .insert({
+          company_id: currentCompany.id,
+          date: dateStr,
+          season: currentSeason,
+          officer_of_day: '',
+          laundry_info: '',
+          phone_calls_info: '',
+          quote_of_the_day: '',
+          notes: '',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      if (data) {
+        setContent({
+          id: data.id,
+          officer_of_day: '',
+          laundry_info: '',
+          phone_calls_info: '',
+          quote_of_the_day: '',
+          notes: '',
+        });
+      }
+
+      toast({
+        title: 'Created',
+        description: 'New entry created',
+      });
+    } catch (error) {
+      console.error('Error creating entry:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to create entry',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="container mx-auto p-6">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-foreground">Daily Wolf Management</h1>
+        <p className="text-muted-foreground mt-2">
+          Manage daily content for The Daily Wolf
+        </p>
+      </div>
+
+      <div className="mb-6">
+        <Label>Select Date</Label>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                'w-[280px] justify-start text-left font-normal mt-2',
+                !selectedDate && 'text-muted-foreground'
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {selectedDate ? format(selectedDate, 'PPP') : <span>Pick a date</span>}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={(date) => date && setSelectedDate(date)}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : !content.id ? (
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-muted-foreground mb-4">No content exists for this date.</p>
+            <Button onClick={createTodaysEntry} disabled={saving}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Create Entry
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-6 md:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>OD</CardTitle>
+              <CardDescription>Officer of the Day information</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Input
+                value={content.officer_of_day}
+                onChange={(e) => handleFieldChange('officer_of_day', e.target.value)}
+                onBlur={(e) => handleFieldBlur('officer_of_day', e.target.value)}
+                placeholder="Enter OD name/details"
+                disabled={saving}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Quote of the Day</CardTitle>
+              <CardDescription>Daily inspirational quote</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Input
+                value={content.quote_of_the_day}
+                onChange={(e) => handleFieldChange('quote_of_the_day', e.target.value)}
+                onBlur={(e) => handleFieldBlur('quote_of_the_day', e.target.value)}
+                placeholder="Enter quote"
+                disabled={saving}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Laundry Schedule</CardTitle>
+              <CardDescription>Laundry times and information</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={content.laundry_info}
+                onChange={(e) => handleFieldChange('laundry_info', e.target.value)}
+                onBlur={(e) => handleFieldBlur('laundry_info', e.target.value)}
+                placeholder="Enter laundry schedule"
+                rows={4}
+                disabled={saving}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Phone Calls</CardTitle>
+              <CardDescription>Phone call schedule and notes</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={content.phone_calls_info}
+                onChange={(e) => handleFieldChange('phone_calls_info', e.target.value)}
+                onBlur={(e) => handleFieldBlur('phone_calls_info', e.target.value)}
+                placeholder="Enter phone call information"
+                rows={4}
+                disabled={saving}
+              />
+            </CardContent>
+          </Card>
+
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <CardTitle>General Notes</CardTitle>
+              <CardDescription>Additional daily notes and announcements</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={content.notes}
+                onChange={(e) => handleFieldChange('notes', e.target.value)}
+                onBlur={(e) => handleFieldBlur('notes', e.target.value)}
+                placeholder="Enter general notes"
+                rows={6}
+                disabled={saving}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
