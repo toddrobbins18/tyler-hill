@@ -40,13 +40,15 @@ const getMenuItems = (companySlug?: string) => {
     { title: "Tutoring & Therapy", url: "/tutoring-therapy", icon: BookOpen, menuId: "tutoring-therapy" },
   ];
 
-  // Add Daily Notes/News for ALL camps
-  baseItems.push({
-    title: companySlug === 'tyler-hill-camp' ? "Daily News" : "Daily Notes",
-    url: "/notes",
-    icon: FileText,
-    menuId: "notes"
-  });
+  // Add Daily Notes/News for all camps EXCEPT Timber Lake West
+  if (companySlug !== 'timber-lake-west') {
+    baseItems.push({
+      title: companySlug === 'tyler-hill-camp' ? "Daily News" : "Daily Notes",
+      url: "/notes",
+      icon: FileText,
+      menuId: "notes"
+    });
+  }
 
   // Add Daily Wolf items ONLY for Timber Lake West
   if (companySlug === 'timber-lake-west') {
