@@ -29,7 +29,6 @@ const getMenuItems = (companySlug?: string) => {
     { title: companySlug === 'timber-lake-west' ? "Athletics" : "Sports Calendar", url: "/athletics", icon: Trophy, menuId: "athletics" },
     { title: "Camper", url: "/roster", icon: Users, menuId: "roster" },
     { title: "Dashboard", url: "/", icon: Home, menuId: "dashboard" },
-    { title: companySlug === 'timber-lake-west' ? "Daily Wolf" : "Daily News", url: "/notes", icon: FileText, menuId: "notes" },
     { title: "Master Calendar", url: "/calendar", icon: Calendar, menuId: "calendar" },
     { title: "Menu", url: "/menu", icon: Utensils, menuId: "menu" },
     { title: "Messages", url: "/messages", icon: Mail, menuId: "messages" },
@@ -40,6 +39,13 @@ const getMenuItems = (companySlug?: string) => {
     { title: "Transportation", url: "/transportation", icon: Truck, menuId: "transportation" },
     { title: "Tutoring & Therapy", url: "/tutoring-therapy", icon: BookOpen, menuId: "tutoring-therapy" },
   ];
+
+  // Add Daily Wolf ONLY for Timber Lake West
+  if (companySlug === 'timber-lake-west') {
+    baseItems.push(
+      { title: "Daily Wolf", url: "/notes", icon: FileText, menuId: "notes" }
+    );
+  }
 
   // Add these items for all companies EXCEPT Timber Lake West
   if (companySlug !== 'timber-lake-west') {
