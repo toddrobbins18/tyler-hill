@@ -9,34 +9,52 @@ import { Shield, Users, Eye, UserCog, Trophy, Building2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
-const menuItems = [
-  // Main Navigation Items
-  { id: "dashboard", label: "Dashboard", icon: "📊" },
-  { id: "roster", label: "Camper", icon: "👥" },
-  { id: "staff", label: "Staff", icon: "👤" },
-  { id: "notes", label: "Daily News", icon: "📝" },
-  { id: "awards", label: "Awards", icon: "🏆" },
-  { id: "transportation", label: "Transportation", icon: "🚌" },
-  { id: "menu", label: "Menu", icon: "🍽️" },
-  { id: "nurse", label: "Nurse Dashboard", icon: "💊" },
-  { id: "messages", label: "Messages", icon: "💬" },
-  { id: "activities", label: "Activities & Field Trips", icon: "🌴" },
-  { id: "incidents", label: "Incident Reports", icon: "⚠️" },
-  { id: "calendar", label: "Master Calendar", icon: "📅" },
-  { id: "rainy-day", label: "Rainy Day Schedule", icon: "🌧️" },
-  { id: "special-events", label: "Special Events & Evening Activities", icon: "🎉" },
-  { id: "special-meals", label: "Special Meals", icon: "🍽️" },
-  { id: "sports-academy", label: "Sports Academy", icon: "⚽" },
-  { id: "sports-calendar", label: "Sports Calendar", icon: "🏅" },
-  { id: "tutoring-therapy", label: "Tutoring & Therapy", icon: "📖" },
-  
-  // Admin Items
-  { id: "admin", label: "Admin Panel", icon: "⚙️" },
-  { id: "evaluation-questions", label: "Evaluation Questions", icon: "📋" },
-  { id: "role-permissions", label: "Role Permissions", icon: "🔒" },
-  { id: "division-permissions", label: "Division Permissions", icon: "🔐" },
-  { id: "user-approvals", label: "User Approvals", icon: "✅" },
-];
+const getCompanyMenuItems = (companySlug?: string) => {
+  const baseItems = [
+    { id: "dashboard", label: "Dashboard", icon: "📊" },
+    { id: "roster", label: "Camper", icon: "👥" },
+    { id: "staff", label: "Staff", icon: "👤" },
+    { id: "messages", label: "Messages", icon: "💬" },
+    { id: "activities", label: "Activities & Field Trips", icon: "🌴" },
+    { id: "calendar", label: "Master Calendar", icon: "📅" },
+    { id: "menu", label: "Menu", icon: "🍽️" },
+    { id: "rainy-day", label: "Rainy Day Schedule", icon: "🌧️" },
+    { id: "special-events", label: "Special Events & Evening Activities", icon: "🎉" },
+    { id: "special-meals", label: "Special Meals", icon: "🍽️" },
+    { id: "transportation", label: "Transportation", icon: "🚌" },
+    { id: "tutoring-therapy", label: "Tutoring & Therapy", icon: "📖" },
+  ];
+
+  // Timber Lake West specific
+  if (companySlug === 'timber-lake-west') {
+    baseItems.push(
+      { id: "athletics", label: "Athletics", icon: "🏅" },
+      { id: "daily-wolf-printable", label: "Daily Wolf Printable", icon: "📰" },
+      { id: "daily-wolf-management", label: "Daily Wolf Management", icon: "✏️" }
+    );
+  } else {
+    // Tyler Hill & Timber Lake Camp
+    baseItems.push(
+      { id: "notes", label: companySlug === 'tyler-hill-camp' ? "Daily News" : "Daily Notes", icon: "📝" },
+      { id: "awards", label: "Awards", icon: "🏆" },
+      { id: "incidents", label: "Incident Reports", icon: "⚠️" },
+      { id: "nurse", label: "Nurse Dashboard", icon: "💊" },
+      { id: "sports-academy", label: "Sports Academy", icon: "⚽" },
+      { id: "sports-calendar", label: "Sports Calendar", icon: "🏅" }
+    );
+  }
+
+  // Admin items (all companies)
+  baseItems.push(
+    { id: "admin", label: "Admin Panel", icon: "⚙️" },
+    { id: "evaluation-questions", label: "Evaluation Questions", icon: "📋" },
+    { id: "role-permissions", label: "Role Permissions", icon: "🔒" },
+    { id: "division-permissions", label: "Division Permissions", icon: "🔐" },
+    { id: "user-approvals", label: "User Approvals", icon: "✅" }
+  );
+
+  return baseItems.sort((a, b) => a.label.localeCompare(b.label));
+};
 
 const roles = [
   { id: "admin", label: "Administrator", icon: Shield, description: "Full system access" },
@@ -49,12 +67,16 @@ const roles = [
 export default function RolePermissions() {
   const [permissions, setPermissions] = useState<Record<string, Record<string, boolean>>>({});
   const [loading, setLoading] = useState(true);
+  const [menuItems, setMenuItems] = useState<Array<{ id: string; label: string; icon: string }>>([]);
   const { toast } = useToast();
   const { isSuperAdmin } = usePermissions();
   const { currentCompany } = useCompany();
 
   useEffect(() => {
-    fetchPermissions();
+    if (currentCompany) {
+      setMenuItems(getCompanyMenuItems(currentCompany.slug));
+      fetchPermissions();
+    }
 
     const channel = supabase
       .channel('role-permissions-changes')
@@ -64,7 +86,7 @@ export default function RolePermissions() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [currentCompany]);
 
   const fetchPermissions = async () => {
     const { data, error } = await supabase
