@@ -32,7 +32,6 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
   const [session, setSession] = useState("");
   const [birthdayPartyType, setBirthdayPartyType] = useState("");
   const [birthdayCakeMeal, setBirthdayCakeMeal] = useState("");
-  const [birthdayGroup, setBirthdayGroup] = useState("");
   const [birthdayCakeType, setBirthdayCakeType] = useState("");
   const [birthdayFrostingColors, setBirthdayFrostingColors] = useState<string[]>([]);
   const [birthdayToppings, setBirthdayToppings] = useState<string[]>([]);
@@ -59,10 +58,9 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
       setSession(data.session || "");
       setLeaderId(data.leader_id || "");
       setDivisionId(data.division_id || "");
-      setBirthdayPartyType(data.birthday_party_type || "");
-      setBirthdayCakeMeal(data.birthday_cake_meal || "");
-      setBirthdayGroup(data.birthday_group || "");
-      setBirthdayCakeType(data.birthday_cake_type || "");
+        setBirthdayPartyType(data.birthday_party_type || "");
+        setBirthdayCakeMeal(data.birthday_cake_meal || "");
+        setBirthdayCakeType(data.birthday_cake_type || "");
       setBirthdayFrostingColors(data.birthday_frosting_colors || []);
       setBirthdayToppings(data.birthday_toppings || []);
       setBirthdayCakeAllergies(data.birthday_cake_allergies || []);
@@ -114,11 +112,10 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
         emergency_contact: formData.get("emergency_contact") as string || null,
         allergies: formData.get("allergies") as string || null,
         medical_notes: formData.get("medical_notes") as string || null,
-        birthday_party_type: birthdayPartyType || null,
-        birthday_cake_meal: birthdayCakeMeal || null,
-        birthday_party_comments: formData.get("birthday_party_comments") as string || null,
-        birthday_group: birthdayGroup || null,
-        birthday_cake_type: birthdayCakeType || null,
+      birthday_party_type: birthdayPartyType || null,
+      birthday_cake_meal: birthdayCakeMeal || null,
+      birthday_party_comments: formData.get("birthday_party_comments") as string || null,
+      birthday_cake_type: birthdayCakeType || null,
         birthday_frosting_colors: birthdayFrostingColors.length > 0 ? birthdayFrostingColors : null,
         birthday_toppings: birthdayToppings.length > 0 ? birthdayToppings : null,
         birthday_cake_allergies: birthdayCakeAllergies.length > 0 ? birthdayCakeAllergies : null,
@@ -292,15 +289,11 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
                   <RadioGroupItem value="cookies_movie" id="party-movie" />
                   <Label htmlFor="party-movie" className="font-normal cursor-pointer">Reggies Cookies and Bunk Movie</Label>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="campfire_smores" id="party-campfire" />
-                  <Label htmlFor="party-campfire" className="font-normal cursor-pointer">Campfire and S'mores</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="staff_member" id="party-staff" />
-                  <Label htmlFor="party-staff" className="font-normal cursor-pointer">I'm a Staff Member</Label>
-                </div>
-              </RadioGroup>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="campfire_smores" id="party-campfire" />
+                    <Label htmlFor="party-campfire" className="font-normal cursor-pointer">Campfire and S'mores</Label>
+                  </div>
+                </RadioGroup>
             </div>
 
             <div>
@@ -328,32 +321,6 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="dinner" id="cake-dinner" />
                   <Label htmlFor="cake-dinner" className="font-normal cursor-pointer">Dinner</Label>
-                </div>
-              </RadioGroup>
-            </div>
-
-            <div className="space-y-3">
-              <Label>What group are they in?</Label>
-              <RadioGroup value={birthdayGroup} onValueChange={setBirthdayGroup}>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="lower_camp" id="group-lower" />
-                  <Label htmlFor="group-lower" className="font-normal cursor-pointer">Lower Camp</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="middle_camp" id="group-middle" />
-                  <Label htmlFor="group-middle" className="font-normal cursor-pointer">Middle Camp</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="upper_camp" id="group-upper" />
-                  <Label htmlFor="group-upper" className="font-normal cursor-pointer">Upper Camp</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="support_staff" id="group-support" />
-                  <Label htmlFor="group-support" className="font-normal cursor-pointer">Support Staff</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="upper_staff" id="group-staff" />
-                  <Label htmlFor="group-staff" className="font-normal cursor-pointer">Upper Staff</Label>
                 </div>
               </RadioGroup>
             </div>

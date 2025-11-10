@@ -388,7 +388,7 @@ export default function ChildProfile() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {child.birthday_party_type || child.birthday_cake_meal || child.birthday_group ? (
+                  {child.birthday_party_type || child.birthday_cake_meal ? (
                     <>
                       <div className="grid gap-4 md:grid-cols-2">
                         {child.birthday_party_type && (
@@ -396,14 +396,6 @@ export default function ChildProfile() {
                             <p className="text-sm text-muted-foreground mb-2">Party Type</p>
                             <Badge variant="secondary" className="text-sm">
                               {child.birthday_party_type.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
-                            </Badge>
-                          </div>
-                        )}
-                        {child.birthday_group && (
-                          <div className="p-4 rounded-lg bg-muted/50">
-                            <p className="text-sm text-muted-foreground mb-2">Group</p>
-                            <Badge variant="outline" className="text-sm">
-                              {child.birthday_group.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
                             </Badge>
                           </div>
                         )}
