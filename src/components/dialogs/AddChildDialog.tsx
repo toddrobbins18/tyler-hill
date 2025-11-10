@@ -252,7 +252,7 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
                   <FormItem>
                     <FormLabel>Season (Year)</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., 2024" maxLength={4} {...field} value={field.value ?? ""} />
+                      <Input placeholder="e.g., 2024" maxLength={4} {...field} value={field.value || currentSeason} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
