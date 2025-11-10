@@ -21,7 +21,7 @@ import { useCompany } from "@/contexts/CompanyContext";
 // Helper to check if we should show limited features for Timber Lake
 const useTimberLakeMode = () => {
   const { currentCompany } = useCompany();
-  return currentCompany?.slug === 'timber-lake-west';
+  return currentCompany?.slug === 'timber-lake-camp';
 };
 
 export default function Nurse() {

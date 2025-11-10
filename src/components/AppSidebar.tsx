@@ -36,8 +36,8 @@ const getMenuItems = (companySlug?: string) => {
     { title: "Tutoring & Therapy", url: "/tutoring-therapy", icon: BookOpen, menuId: "tutoring-therapy" },
   ];
 
-  // Add items ONLY for companies OTHER THAN Timber Lake West
-  if (companySlug !== 'timber-lake-west') {
+  // Add items ONLY for companies OTHER THAN Timber Lake Camp
+  if (companySlug !== 'timber-lake-camp') {
     baseItems.push(
       { title: "Activities & Field Trips", url: "/activities", icon: Palmtree, menuId: "activities" },
       { title: "Messages", url: "/messages", icon: Mail, menuId: "messages" },
@@ -46,8 +46,8 @@ const getMenuItems = (companySlug?: string) => {
     );
   }
 
-  // Add Daily Notes/News for all camps EXCEPT Timber Lake West
-  if (companySlug !== 'timber-lake-west') {
+  // Add Daily Notes/News for all camps EXCEPT Timber Lake Camp
+  if (companySlug !== 'timber-lake-camp') {
     baseItems.push({
       title: companySlug === 'tyler-hill-camp' ? "Daily News" : "Daily Notes",
       url: "/notes",
@@ -77,8 +77,8 @@ const getMenuItems = (companySlug?: string) => {
   // Add Nurse for Timber Lake West (limited features) and all other companies
   baseItems.push({ title: "Nurse", url: "/nurse", icon: Pill, menuId: "nurse" });
 
-  // Add these items for all companies EXCEPT Timber Lake West
-  if (companySlug !== 'timber-lake-west') {
+  // Add these items for all companies EXCEPT Timber Lake Camp
+  if (companySlug !== 'timber-lake-camp') {
     baseItems.push(
       { title: "Awards", url: "/awards", icon: Award, menuId: "awards" },
       { title: "Incident Reports", url: "/incidents", icon: AlertTriangle, menuId: "incidents" },

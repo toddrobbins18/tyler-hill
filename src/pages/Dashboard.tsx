@@ -155,20 +155,31 @@ export default function Dashboard() {
     const menu = menuResult.data;
 
     // Fetch special events for today
-    const specialEventsQuery: any = await supabase
-      .from('special_events_activities')
-      .select('id, title, type, time_slot, location')
-      .eq('date', today)
-      .eq('company_id', currentCompany.id);
-    const specialEventsData = specialEventsQuery.data || [];
+    let specialEventsData: any[] = [];
+    try {
+      // @ts-expect-error - Supabase type inference issue with deep nesting
+      const result = await supabase
+        .from('special_events_activities')
+        .select('*')
+        .eq('date', today)
+        .eq('company_id', currentCompany.id);
+      specialEventsData = result.data || [];
+    } catch (error) {
+      console.error('Error fetching special events:', error);
+    }
 
     // Fetch sports calendar events for today
-    const sportsQuery: any = await supabase
-      .from('sports_calendar')
-      .select('id, title, sport_type, time, location')
-      .eq('event_date', today)
-      .eq('company_id', currentCompany.id);
-    const sportsData = sportsQuery.data || [];
+    let sportsData: any[] = [];
+    try {
+      const result = await supabase
+        .from('sports_calendar')
+        .select('*')
+        .eq('event_date', today)
+        .eq('company_id', currentCompany.id);
+      sportsData = result.data || [];
+    } catch (error) {
+      console.error('Error fetching sports events:', error);
+    }
 
     // Fetch birthdays for today (matching month and day)
     const { data: staffData } = await supabase
@@ -196,8 +207,8 @@ export default function Dashboard() {
     });
 
     setRecentNotes(notes || []);
-    setSpecialEvents(specialEventsData);
-    setSportsEvents(sportsData);
+    setSpecialEvents(specialEventsData || []);
+    setSportsEvents(sportsData || []);
     setTodaysBirthdays(birthdaysToday);
     
     const eventsData = trips?.map(trip => ({
@@ -222,8 +233,8 @@ export default function Dashboard() {
     }
   };
 
-  const isTimberLake = currentCompany?.slug === 'timber-lake-west';
-  const dashboardTitle = isTimberLake ? "Tiger Times" : "Dashboard";
+  const isTimberLakeCamp = currentCompany?.slug === 'timber-lake-camp';
+  const dashboardTitle = isTimberLakeCamp ? "Tiger Times" : "Dashboard";
 
   return (
     <div className="space-y-8">
