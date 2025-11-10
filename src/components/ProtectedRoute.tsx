@@ -14,6 +14,16 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   const { canAccessPage, loading: permissionsLoading } = usePermissions();
   const { loading: companyLoading } = useCompany();
 
+  // Map route paths to their menu item names for permission checks
+  const getMenuItemFromPath = (path: string): string => {
+    const routeToMenuMap: Record<string, string> = {
+      'athletics': 'sports-calendar',
+      // Add more mappings here if needed in the future
+    };
+    
+    return routeToMenuMap[path] || path;
+  };
+
   useEffect(() => {
     checkAuth();
 
@@ -76,8 +86,11 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     // Remove any child route params (e.g., /child/123 -> child)
     pageName = pageName.split('/')[0];
     
+    // Map route path to menu item name
+    const menuItem = getMenuItemFromPath(pageName);
+    
     // Check if user has access to this page
-    const hasAccess = await canAccessPage(pageName);
+    const hasAccess = await canAccessPage(menuItem);
     setHasPageAccess(hasAccess);
   };
 
