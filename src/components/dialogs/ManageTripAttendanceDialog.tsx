@@ -8,6 +8,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { useConflictDetection, Conflict } from "@/hooks/useConflictDetection";
+import ConflictWarningDialog from "./ConflictWarningDialog";
 
 interface ManageTripAttendanceDialogProps {
   tripId: string | null;

@@ -260,6 +260,111 @@ export type Database = {
           },
         ]
       }
+      camper_evaluation_questions: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          options: Json | null
+          question_text: string
+          question_type: string
+          report_type: string
+          sort_order: number
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          options?: Json | null
+          question_text: string
+          question_type: string
+          report_type: string
+          sort_order: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          options?: Json | null
+          question_text?: string
+          question_type?: string
+          report_type?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "camper_evaluation_questions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      camper_reports: {
+        Row: {
+          child_id: string
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          report_data: Json | null
+          report_date: string
+          report_type: string
+          season: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          child_id: string
+          company_id: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          report_data?: Json | null
+          report_date: string
+          report_type: string
+          season?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          child_id?: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          report_data?: Json | null
+          report_date?: string
+          report_type?: string
+          season?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "camper_reports_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "camper_reports_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "camper_reports_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       children: {
         Row: {
           age: number | null
@@ -1512,6 +1617,99 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      schedule_conflicts: {
+        Row: {
+          company_id: string
+          conflict_type: string
+          created_at: string | null
+          detected_at: string | null
+          entity_id: string
+          entity_name: string
+          entity_type: string
+          event1_date: string
+          event1_id: string
+          event1_name: string
+          event1_time: string | null
+          event1_type: string
+          event2_date: string
+          event2_id: string
+          event2_name: string
+          event2_time: string | null
+          event2_type: string
+          id: string
+          override_reason: string | null
+          resolved: boolean | null
+          resolved_at: string | null
+          resolved_by: string | null
+          season: string | null
+        }
+        Insert: {
+          company_id: string
+          conflict_type: string
+          created_at?: string | null
+          detected_at?: string | null
+          entity_id: string
+          entity_name: string
+          entity_type: string
+          event1_date: string
+          event1_id: string
+          event1_name: string
+          event1_time?: string | null
+          event1_type: string
+          event2_date: string
+          event2_id: string
+          event2_name: string
+          event2_time?: string | null
+          event2_type: string
+          id?: string
+          override_reason?: string | null
+          resolved?: boolean | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          season?: string | null
+        }
+        Update: {
+          company_id?: string
+          conflict_type?: string
+          created_at?: string | null
+          detected_at?: string | null
+          entity_id?: string
+          entity_name?: string
+          entity_type?: string
+          event1_date?: string
+          event1_id?: string
+          event1_name?: string
+          event1_time?: string | null
+          event1_type?: string
+          event2_date?: string
+          event2_id?: string
+          event2_name?: string
+          event2_time?: string | null
+          event2_type?: string
+          id?: string
+          override_reason?: string | null
+          resolved?: boolean | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          season?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedule_conflicts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "schedule_conflicts_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]

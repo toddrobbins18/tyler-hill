@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import EditChildDialog from "@/components/dialogs/EditChildDialog";
 import { toast as sonnerToast } from "sonner";
 import { useCompany } from "@/contexts/CompanyContext";
+import CamperReportsTab from "@/components/CamperReportsTab";
 
 export default function ChildProfile() {
   const { id } = useParams();
@@ -213,6 +214,12 @@ export default function ChildProfile() {
           <TabsTrigger value="activities">Activities</TabsTrigger>
           <TabsTrigger value="sports-academy">Sports Academy</TabsTrigger>
           <TabsTrigger value="incidents">Incident Reports</TabsTrigger>
+          {currentCompany?.slug === 'timber-lake-camp' && (
+            <>
+              <TabsTrigger value="10-day-report">10-Day Report</TabsTrigger>
+              <TabsTrigger value="end-of-summer">End of Summer Report</TabsTrigger>
+            </>
+          )}
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -668,6 +675,17 @@ export default function ChildProfile() {
             </div>
           )}
         </TabsContent>
+
+        {currentCompany?.slug === 'timber-lake-camp' && (
+          <>
+            <TabsContent value="10-day-report">
+              <CamperReportsTab childId={id || ''} reportType="10_day" />
+            </TabsContent>
+            <TabsContent value="end-of-summer">
+              <CamperReportsTab childId={id || ''} reportType="end_of_summer" />
+            </TabsContent>
+          </>
+        )}
       </Tabs>
 
       <EditChildDialog

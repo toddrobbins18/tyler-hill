@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Shield, Users, Database, FileText, Tag, Mail, Building2 } from "lucide-react";
+import { Shield, Users, Database, FileText, Tag, Mail, Building2, BarChart3 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -12,6 +12,7 @@ import AuditLog from "@/components/admin/AuditLog";
 import UserTagManagement from "@/components/admin/UserTagManagement";
 import AutomatedEmailConfig from "@/components/admin/AutomatedEmailConfig";
 import CompanyManagement from "@/pages/admin/CompanyManagement";
+import ReportingCenter from "@/components/admin/ReportingCenter";
 
 export default function Admin() {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -91,7 +92,7 @@ export default function Admin() {
       )}
 
       <Tabs defaultValue="users" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6 lg:w-auto">
+        <TabsList className="grid w-full grid-cols-7 lg:w-auto">
           <TabsTrigger value="users" className="gap-2">
             <Users className="h-4 w-4" />
             User Management
@@ -103,6 +104,10 @@ export default function Admin() {
           <TabsTrigger value="email" className="gap-2">
             <Mail className="h-4 w-4" />
             Email Automation
+          </TabsTrigger>
+          <TabsTrigger value="reports" className="gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Reports
           </TabsTrigger>
           {isSuperAdmin && (
             <TabsTrigger value="companies" className="gap-2">
@@ -130,6 +135,10 @@ export default function Admin() {
 
         <TabsContent value="email" className="space-y-6">
           <AutomatedEmailConfig />
+        </TabsContent>
+
+        <TabsContent value="reports" className="space-y-6">
+          <ReportingCenter />
         </TabsContent>
 
         {isSuperAdmin && (

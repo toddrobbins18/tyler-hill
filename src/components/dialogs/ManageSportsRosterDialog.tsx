@@ -13,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { useConflictDetection, Conflict } from "@/hooks/useConflictDetection";
+import ConflictWarningDialog from "./ConflictWarningDialog";
 
 interface ManageSportsRosterDialogProps {
   eventId: string;

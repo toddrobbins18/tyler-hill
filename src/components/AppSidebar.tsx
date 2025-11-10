@@ -77,14 +77,12 @@ const getMenuItems = (companySlug?: string) => {
   // Add Nurse for Timber Lake West (limited features) and all other companies
   baseItems.push({ title: "Nurse", url: "/nurse", icon: Pill, menuId: "nurse" });
 
-  // Add these items for all companies EXCEPT Timber Lake Camp
-  if (companySlug !== 'timber-lake-camp') {
-    baseItems.push(
-      { title: "Awards", url: "/awards", icon: Award, menuId: "awards" },
-      { title: "Incident Reports", url: "/incidents", icon: AlertTriangle, menuId: "incidents" },
-      { title: "Sports Academy", url: "/sports-academy", icon: Trophy, menuId: "sports-academy" }
-    );
-  }
+  // Add these items for all companies
+  baseItems.push(
+    { title: "Awards", url: "/awards", icon: Award, menuId: "awards" },
+    { title: "Incident Reports", url: "/incidents", icon: AlertTriangle, menuId: "incidents" },
+    { title: "Sports Academy", url: "/sports-academy", icon: Trophy, menuId: "sports-academy" }
+  );
 
   return baseItems.sort((a, b) => a.title.localeCompare(b.title));
 };
