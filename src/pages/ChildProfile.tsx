@@ -324,46 +324,177 @@ export default function ChildProfile() {
         </TabsContent>
 
         <TabsContent value="birthday" className="space-y-4">
-          <Card className="shadow-card">
-            <CardHeader>
-              <CardTitle>Birthday Information</CardTitle>
-              <CardDescription>Date of birth and age details</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {child.date_of_birth ? (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
-                    <div className="flex items-center gap-3">
-                      <Calendar className="h-8 w-8 text-primary" />
-                      <div>
-                        <p className="text-sm text-muted-foreground">Date of Birth</p>
-                        <p className="text-2xl font-bold text-primary">
-                          {new Date(child.date_of_birth).toLocaleDateString('en-US', { 
-                            weekday: 'long', 
-                            year: 'numeric', 
-                            month: 'long', 
-                            day: 'numeric' 
-                          })}
-                        </p>
+          <Tabs defaultValue="info" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="info">Birthday Info</TabsTrigger>
+              <TabsTrigger value="party">Party Preferences</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="info">
+              <Card className="shadow-card">
+                <CardHeader>
+                  <CardTitle>Birthday Information</CardTitle>
+                  <CardDescription>Date of birth and age details</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {child.date_of_birth ? (
+                    <div className="space-y-4">
+                      <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+                        <div className="flex items-center gap-3">
+                          <Calendar className="h-8 w-8 text-primary" />
+                          <div>
+                            <p className="text-sm text-muted-foreground">Date of Birth</p>
+                            <p className="text-2xl font-bold text-primary">
+                              {new Date(child.date_of_birth).toLocaleDateString('en-US', { 
+                                weekday: 'long', 
+                                year: 'numeric', 
+                                month: 'long', 
+                                day: 'numeric' 
+                              })}
+                            </p>
+                          </div>
+                        </div>
                       </div>
+                      {child.age && (
+                        <div className="p-4 rounded-lg bg-muted/50">
+                          <p className="text-sm text-muted-foreground">Current Age</p>
+                          <p className="text-xl font-semibold">{child.age} years old</p>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  {child.age && (
-                    <div className="p-4 rounded-lg bg-muted/50">
-                      <p className="text-sm text-muted-foreground">Current Age</p>
-                      <p className="text-xl font-semibold">{child.age} years old</p>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>No birthday information available</p>
+                      <p className="text-sm mt-1">Click "Edit Profile" to add date of birth</p>
                     </div>
                   )}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                  <p>No birthday information available</p>
-                  <p className="text-sm mt-1">Click "Edit Profile" to add date of birth</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="party">
+              <Card className="shadow-card">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Birthday Party Preferences</CardTitle>
+                      <CardDescription>Celebration and cake customization details</CardDescription>
+                    </div>
+                    <Button onClick={() => setEditDialogOpen(true)} size="sm">
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Edit
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {child.birthday_party_type || child.birthday_cake_meal || child.birthday_group ? (
+                    <>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        {child.birthday_party_type && (
+                          <div className="p-4 rounded-lg bg-muted/50">
+                            <p className="text-sm text-muted-foreground mb-2">Party Type</p>
+                            <Badge variant="secondary" className="text-sm">
+                              {child.birthday_party_type.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                            </Badge>
+                          </div>
+                        )}
+                        {child.birthday_group && (
+                          <div className="p-4 rounded-lg bg-muted/50">
+                            <p className="text-sm text-muted-foreground mb-2">Group</p>
+                            <Badge variant="outline" className="text-sm">
+                              {child.birthday_group.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                            </Badge>
+                          </div>
+                        )}
+                        {child.birthday_cake_meal && (
+                          <div className="p-4 rounded-lg bg-muted/50">
+                            <p className="text-sm text-muted-foreground mb-2">Cake Served At</p>
+                            <Badge variant="outline" className="text-sm capitalize">
+                              {child.birthday_cake_meal}
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+
+                      {child.birthday_party_comments && (
+                        <div className="p-4 rounded-lg bg-muted/50">
+                          <p className="text-sm text-muted-foreground mb-2">Special Requests</p>
+                          <p className="text-sm">{child.birthday_party_comments}</p>
+                        </div>
+                      )}
+
+                      {(child.birthday_cake_type || child.birthday_frosting_colors?.length > 0 || child.birthday_toppings?.length > 0 || child.birthday_cake_allergies?.length > 0 || child.birthday_cake_message) && (
+                        <div className="border-t pt-4 space-y-4">
+                          <h4 className="font-semibold">Cake Details</h4>
+                          
+                          {child.birthday_cake_type && (
+                            <div className="p-4 rounded-lg bg-muted/50">
+                              <p className="text-sm text-muted-foreground mb-2">Cake Type</p>
+                              <p className="font-medium">
+                                {child.birthday_cake_type.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                              </p>
+                            </div>
+                          )}
+
+                          {child.birthday_frosting_colors && child.birthday_frosting_colors.length > 0 && (
+                            <div>
+                              <p className="text-sm text-muted-foreground mb-2">Frosting Colors</p>
+                              <div className="flex flex-wrap gap-2">
+                                {child.birthday_frosting_colors.map((color: string) => (
+                                  <Badge key={color} variant="secondary" className="capitalize">
+                                    {color.replace(/_/g, ' ')}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {child.birthday_toppings && child.birthday_toppings.length > 0 && (
+                            <div>
+                              <p className="text-sm text-muted-foreground mb-2">Toppings</p>
+                              <div className="flex flex-wrap gap-2">
+                                {child.birthday_toppings.map((topping: string) => (
+                                  <Badge key={topping} variant="outline" className="capitalize">
+                                    {topping.replace(/_/g, ' ')}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {child.birthday_cake_allergies && child.birthday_cake_allergies.length > 0 && (
+                            <div>
+                              <p className="text-sm text-muted-foreground mb-2">Allergies/Dietary Restrictions</p>
+                              <div className="flex flex-wrap gap-2">
+                                {child.birthday_cake_allergies.map((allergy: string) => (
+                                  <Badge key={allergy} variant="destructive" className="capitalize">
+                                    {allergy}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {child.birthday_cake_message && (
+                            <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
+                              <p className="text-sm text-muted-foreground mb-2">Cake Message</p>
+                              <p className="text-lg italic font-medium">"{child.birthday_cake_message}"</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p>No party preferences set</p>
+                      <p className="text-sm mt-1">Click "Edit" to add birthday party details</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         <TabsContent value="allergies" className="space-y-4">

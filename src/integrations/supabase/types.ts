@@ -369,8 +369,15 @@ export type Database = {
         Row: {
           age: number | null
           allergies: string | null
+          birthday_cake_allergies: string[] | null
           birthday_cake_meal: string | null
+          birthday_cake_message: string | null
+          birthday_cake_type: string | null
+          birthday_frosting_colors: string[] | null
+          birthday_group: string | null
+          birthday_party_comments: string | null
           birthday_party_type: string | null
+          birthday_toppings: string[] | null
           category: string | null
           company_id: string | null
           created_at: string | null
@@ -395,8 +402,15 @@ export type Database = {
         Insert: {
           age?: number | null
           allergies?: string | null
+          birthday_cake_allergies?: string[] | null
           birthday_cake_meal?: string | null
+          birthday_cake_message?: string | null
+          birthday_cake_type?: string | null
+          birthday_frosting_colors?: string[] | null
+          birthday_group?: string | null
+          birthday_party_comments?: string | null
           birthday_party_type?: string | null
+          birthday_toppings?: string[] | null
           category?: string | null
           company_id?: string | null
           created_at?: string | null
@@ -421,8 +435,15 @@ export type Database = {
         Update: {
           age?: number | null
           allergies?: string | null
+          birthday_cake_allergies?: string[] | null
           birthday_cake_meal?: string | null
+          birthday_cake_message?: string | null
+          birthday_cake_type?: string | null
+          birthday_frosting_colors?: string[] | null
+          birthday_group?: string | null
+          birthday_party_comments?: string | null
           birthday_party_type?: string | null
+          birthday_toppings?: string[] | null
           category?: string | null
           company_id?: string | null
           created_at?: string | null

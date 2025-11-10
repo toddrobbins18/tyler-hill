@@ -19,6 +19,17 @@ export const childSchema = z.object({
   leader_id: z.string().uuid().nullable().optional(),
   season: z.string().nullable().optional(),
   status: z.string().nullable().optional(),
+  date_of_birth: z.string().nullable().optional(),
+  session: z.string().nullable().optional(),
+  birthday_party_type: z.string().nullable().optional(),
+  birthday_cake_meal: z.string().nullable().optional(),
+  birthday_party_comments: z.string().nullable().optional(),
+  birthday_group: z.string().nullable().optional(),
+  birthday_cake_type: z.string().nullable().optional(),
+  birthday_frosting_colors: z.array(z.string()).nullable().optional(),
+  birthday_toppings: z.array(z.string()).nullable().optional(),
+  birthday_cake_allergies: z.array(z.string()).nullable().optional(),
+  birthday_cake_message: z.string().nullable().optional(),
 });
 
 // Staff validation schema
