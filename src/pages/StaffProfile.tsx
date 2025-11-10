@@ -346,6 +346,17 @@ export default function StaffProfile() {
             <p className="text-sm text-muted-foreground">
               {evaluations.length} total evaluations
             </p>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className={evaluations.some(e => e.evaluation_round === 1) ? "bg-success/10 text-success border-success/20" : ""}>
+                Round 1 {evaluations.some(e => e.evaluation_round === 1) && "✓"}
+              </Badge>
+              <Badge variant="outline" className={evaluations.some(e => e.evaluation_round === 2) ? "bg-success/10 text-success border-success/20" : ""}>
+                Round 2 {evaluations.some(e => e.evaluation_round === 2) && "✓"}
+              </Badge>
+              <Badge variant="outline" className={evaluations.some(e => e.evaluation_round === 3) ? "bg-success/10 text-success border-success/20" : ""}>
+                Round 3 {evaluations.some(e => e.evaluation_round === 3) && "✓"}
+              </Badge>
+            </div>
           </div>
 
           {evaluations.length === 0 ? (
@@ -362,6 +373,9 @@ export default function StaffProfile() {
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
+                          <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                            Round {evaluation.evaluation_round || 1}
+                          </Badge>
                           {evaluation.category && (
                             <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
                               {evaluation.category}

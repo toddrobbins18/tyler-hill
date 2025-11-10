@@ -264,6 +264,8 @@ export type Database = {
         Row: {
           age: number | null
           allergies: string | null
+          birthday_cake_meal: string | null
+          birthday_party_type: string | null
           category: string | null
           company_id: string | null
           created_at: string | null
@@ -288,6 +290,8 @@ export type Database = {
         Insert: {
           age?: number | null
           allergies?: string | null
+          birthday_cake_meal?: string | null
+          birthday_party_type?: string | null
           category?: string | null
           company_id?: string | null
           created_at?: string | null
@@ -312,6 +316,8 @@ export type Database = {
         Update: {
           age?: number | null
           allergies?: string | null
+          birthday_cake_meal?: string | null
+          birthday_party_type?: string | null
           category?: string | null
           company_id?: string | null
           created_at?: string | null
@@ -2027,6 +2033,7 @@ export type Database = {
           company_id: string | null
           created_at: string | null
           date: string
+          evaluation_round: number | null
           evaluator: string | null
           id: string
           rating: number | null
@@ -2040,6 +2047,7 @@ export type Database = {
           company_id?: string | null
           created_at?: string | null
           date: string
+          evaluation_round?: number | null
           evaluator?: string | null
           id?: string
           rating?: number | null
@@ -2053,6 +2061,7 @@ export type Database = {
           company_id?: string | null
           created_at?: string | null
           date?: string
+          evaluation_round?: number | null
           evaluator?: string | null
           id?: string
           rating?: number | null

@@ -235,46 +235,60 @@ export default function Dashboard() {
 
   const isTimberLakeCamp = currentCompany?.slug === 'timber-lake-camp';
   const dashboardTitle = isTimberLakeCamp ? "Tiger Times" : "Dashboard";
+  
+  const today = new Date();
+  const formattedDate = today.toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    month: 'long', 
+    day: 'numeric', 
+    year: 'numeric' 
+  });
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold text-foreground mb-2">{dashboardTitle}</h1>
-        <p className="text-muted-foreground">Welcome back! Here's what's happening today.</p>
+        {isTimberLakeCamp ? (
+          <p className="text-muted-foreground">{formattedDate}</p>
+        ) : (
+          <p className="text-muted-foreground">Welcome back! Here's what's happening today.</p>
+        )}
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Total Children"
-          value={stats.totalChildren}
-          icon={Users}
-          trend="+12 this month"
-          variant="default"
-        />
-        <StatCard
-          title="Today's Transportation"
-          value={stats.activeRoutes}
-          icon={Truck}
-          trend="All on schedule"
-          variant="success"
-        />
-        <StatCard
-          title="Today's Notes"
-          value={stats.todayNotes}
-          icon={FileText}
-          trend="3 pending review"
-          variant="info"
-        />
-        <StatCard
-          title="Achievements"
-          value={stats.weekAwards}
-          icon={Award}
-          trend="This week"
-          variant="warning"
-        />
-      </div>
+      {!isTimberLakeCamp && (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            title="Total Children"
+            value={stats.totalChildren}
+            icon={Users}
+            trend="+12 this month"
+            variant="default"
+          />
+          <StatCard
+            title="Today's Transportation"
+            value={stats.activeRoutes}
+            icon={Truck}
+            trend="All on schedule"
+            variant="success"
+          />
+          <StatCard
+            title="Today's Notes"
+            value={stats.todayNotes}
+            icon={FileText}
+            trend="3 pending review"
+            variant="info"
+          />
+          <StatCard
+            title="Achievements"
+            value={stats.weekAwards}
+            icon={Award}
+            trend="This week"
+            variant="warning"
+          />
+        </div>
+      )}
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className={`grid gap-6 ${isTimberLakeCamp ? 'md:grid-cols-2' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
         <Card className="shadow-card">
           <CardHeader>
             <div className="flex items-center gap-2">
@@ -308,29 +322,31 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="shadow-card">
-          <CardHeader>
-            <CardTitle>Recent Notes</CardTitle>
-            <CardDescription>Latest updates from your team</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {recentNotes.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No recent notes</p>
-            ) : (
-              recentNotes.map((note) => (
-                <div key={note.id} className="flex items-start justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer" onClick={() => navigate('/notes')}>
-                  <div className="space-y-1">
-                    <p className="font-medium text-sm">{note.children?.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(note.created_at).toLocaleString()}
-                    </p>
+        {!isTimberLakeCamp && (
+          <Card className="shadow-card">
+            <CardHeader>
+              <CardTitle>Recent Notes</CardTitle>
+              <CardDescription>Latest updates from your team</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {recentNotes.length === 0 ? (
+                <p className="text-muted-foreground text-sm">No recent notes</p>
+              ) : (
+                recentNotes.map((note) => (
+                  <div key={note.id} className="flex items-start justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer" onClick={() => navigate('/notes')}>
+                    <div className="space-y-1">
+                      <p className="font-medium text-sm">{note.children?.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(note.created_at).toLocaleString()}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))
-            )}
-            <Button variant="outline" className="w-full" onClick={() => navigate('/notes')}>View All Notes</Button>
-          </CardContent>
-        </Card>
+                ))
+              )}
+              <Button variant="outline" className="w-full" onClick={() => navigate('/notes')}>View All Notes</Button>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="shadow-card">
           <CardHeader>

@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
@@ -50,6 +51,7 @@ export function EvaluateStaffDialog({
   const [responses, setResponses] = useState<Record<string, QuestionResponse>>({});
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [evaluator, setEvaluator] = useState("");
+  const [evaluationRound, setEvaluationRound] = useState<number>(1);
   const [overallComments, setOverallComments] = useState("");
   const [loading, setLoading] = useState(false);
   const [expandedGuidance, setExpandedGuidance] = useState<Record<string, boolean>>({});
@@ -142,6 +144,7 @@ export function EvaluateStaffDialog({
         evaluator,
         comments: overallComments,
         rating: averageRating,
+        evaluation_round: evaluationRound,
         company_id: currentCompany.id,
         season: selectedSeason,
       })
@@ -191,6 +194,7 @@ export function EvaluateStaffDialog({
     
     // Reset form
     setEvaluator("");
+    setEvaluationRound(1);
     setOverallComments("");
     setDate(new Date().toISOString().split("T")[0]);
   };
@@ -252,7 +256,7 @@ export function EvaluateStaffDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Evaluate Staff Member</DialogTitle>
+          <DialogTitle>Evaluate Staff Member - Round {evaluationRound}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -262,7 +266,23 @@ export function EvaluateStaffDialog({
             <Badge>{getStaffTypeBadge()}</Badge>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="evaluation_round">Evaluation Round *</Label>
+              <Select 
+                value={evaluationRound.toString()} 
+                onValueChange={(value) => setEvaluationRound(parseInt(value))}
+              >
+                <SelectTrigger id="evaluation_round">
+                  <SelectValue placeholder="Select round" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">Evaluation 1</SelectItem>
+                  <SelectItem value="2">Evaluation 2</SelectItem>
+                  <SelectItem value="3">Evaluation 3</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="date">Evaluation Date</Label>
               <Input

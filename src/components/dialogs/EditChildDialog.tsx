@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,6 +29,8 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
   const [divisionId, setDivisionId] = useState("");
   const [gender, setGender] = useState("");
   const [session, setSession] = useState("");
+  const [birthdayPartyType, setBirthdayPartyType] = useState("");
+  const [birthdayCakeMeal, setBirthdayCakeMeal] = useState("");
 
   useEffect(() => {
     if (open && childId) {
@@ -50,6 +53,8 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
       setSession(data.session || "");
       setLeaderId(data.leader_id || "");
       setDivisionId(data.division_id || "");
+      setBirthdayPartyType(data.birthday_party_type || "");
+      setBirthdayCakeMeal(data.birthday_cake_meal || "");
     }
   };
 
@@ -98,6 +103,8 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
         emergency_contact: formData.get("emergency_contact") as string || null,
         allergies: formData.get("allergies") as string || null,
         medical_notes: formData.get("medical_notes") as string || null,
+        birthday_party_type: birthdayPartyType || null,
+        birthday_cake_meal: birthdayCakeMeal || null,
       };
 
       const validatedData = childSchema.parse(data);
@@ -244,6 +251,55 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
             <Label htmlFor="medical_notes">Medical Notes</Label>
             <Textarea id="medical_notes" name="medical_notes" defaultValue={child.medical_notes || ""} />
           </div>
+          
+          <div className="border-t pt-4 space-y-4">
+            <h3 className="font-semibold text-lg">Birthday Preferences</h3>
+            
+            <div className="space-y-3">
+              <Label>Birthday Party Type</Label>
+              <RadioGroup value={birthdayPartyType} onValueChange={setBirthdayPartyType}>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="" id="party-none" />
+                  <Label htmlFor="party-none" className="font-normal cursor-pointer">None</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="pizza" id="party-pizza" />
+                  <Label htmlFor="party-pizza" className="font-normal cursor-pointer">Pizza Party</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="campfire" id="party-campfire" />
+                  <Label htmlFor="party-campfire" className="font-normal cursor-pointer">Campfire Party</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="movie" id="party-movie" />
+                  <Label htmlFor="party-movie" className="font-normal cursor-pointer">Movie Party</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="ice_cream_sundae" id="party-icecream" />
+                  <Label htmlFor="party-icecream" className="font-normal cursor-pointer">Ice Cream Sundae Party</Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            <div className="space-y-3">
+              <Label>Birthday Cake at Meal</Label>
+              <RadioGroup value={birthdayCakeMeal} onValueChange={setBirthdayCakeMeal}>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="" id="cake-none" />
+                  <Label htmlFor="cake-none" className="font-normal cursor-pointer">None</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="lunch" id="cake-lunch" />
+                  <Label htmlFor="cake-lunch" className="font-normal cursor-pointer">Lunch</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="dinner" id="cake-dinner" />
+                  <Label htmlFor="cake-dinner" className="font-normal cursor-pointer">Dinner</Label>
+                </div>
+              </RadioGroup>
+            </div>
+          </div>
+          
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
