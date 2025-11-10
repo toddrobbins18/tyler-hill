@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { childSchema } from "@/lib/validationSchemas";
 import { z } from "zod";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
@@ -20,6 +21,7 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
   const [staff, setStaff] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
 
   const form = useForm<z.infer<typeof childSchema>>({
     resolver: zodResolver(childSchema),
@@ -31,7 +33,7 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
       category: null,
       grade: null,
       group_name: null,
-      season: null,
+      season: currentSeason,
       division_id: null,
       leader_id: null,
       guardian_email: null,

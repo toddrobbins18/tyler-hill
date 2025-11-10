@@ -9,6 +9,7 @@ import { Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 
 interface AddNoteDialogProps {
   onSuccess: () => void;
@@ -16,6 +17,7 @@ interface AddNoteDialogProps {
 
 export default function AddNoteDialog({ onSuccess }: AddNoteDialogProps) {
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [children, setChildren] = useState<any[]>([]);
@@ -55,7 +57,7 @@ export default function AddNoteDialog({ onSuccess }: AddNoteDialogProps) {
 
     const { error } = await supabase
       .from("daily_notes")
-      .insert([{ ...formData, created_by: user?.id, company_id: currentCompany?.id }]);
+      .insert([{ ...formData, created_by: user?.id, company_id: currentCompany?.id, season: currentSeason }]);
 
     if (error) {
       toast.error("Failed to add note");

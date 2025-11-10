@@ -7,6 +7,7 @@ import { Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { tripSchema } from "@/lib/validationSchemas";
@@ -19,6 +20,7 @@ interface AddTripDialogProps {
 
 export default function AddTripDialog({ onSuccess }: AddTripDialogProps) {
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const [open, setOpen] = useState(false);
 
   const form = useForm<z.infer<typeof tripSchema>>({
@@ -49,6 +51,7 @@ export default function AddTripDialog({ onSuccess }: AddTripDialogProps) {
         capacity: values.capacity ?? null,
         status: values.status ?? "pending",
         company_id: currentCompany?.id,
+        season: currentSeason,
       };
 
       const { error } = await supabase

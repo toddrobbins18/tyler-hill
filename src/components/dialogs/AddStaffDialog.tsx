@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { staffSchema } from "@/lib/validationSchemas";
 import { z } from "zod";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 
 export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }) {
   const [open, setOpen] = useState(false);
@@ -19,6 +20,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
   const [staffType, setStaffType] = useState<string>("");
   const [session, setSession] = useState<string>("");
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
 
   useEffect(() => {
     if (open) {
@@ -134,7 +136,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
           </div>
           <div>
             <Label htmlFor="season">Season (Year)</Label>
-            <Input id="season" name="season" placeholder="e.g., 2024" maxLength={4} />
+            <Input id="season" name="season" placeholder="e.g., 2024" maxLength={4} defaultValue={currentSeason} />
           </div>
           {currentCompany?.slug === 'timber-lake-west' && (
             <div>

@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 
 interface AddIncidentDialogProps {
   open: boolean;
@@ -17,6 +18,7 @@ interface AddIncidentDialogProps {
 
 export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: AddIncidentDialogProps) {
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const [children, setChildren] = useState<any[]>([]);
   const [staff, setStaff] = useState<any[]>([]);
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
@@ -78,7 +80,7 @@ export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: Add
 
     const { data: incident, error: incidentError } = await supabase
       .from("incident_reports")
-      .insert({ ...formData, tags, company_id: currentCompany?.id })
+      .insert({ ...formData, tags, company_id: currentCompany?.id, season: currentSeason })
       .select()
       .single();
 

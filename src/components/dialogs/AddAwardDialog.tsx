@@ -9,6 +9,7 @@ import { Award } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 
 interface AddAwardDialogProps {
   onSuccess: () => void;
@@ -18,6 +19,7 @@ interface AddAwardDialogProps {
 
 export default function AddAwardDialog({ onSuccess, open, onOpenChange }: AddAwardDialogProps) {
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const [loading, setLoading] = useState(false);
   const [children, setChildren] = useState<any[]>([]);
   const [formData, setFormData] = useState({
@@ -52,7 +54,7 @@ export default function AddAwardDialog({ onSuccess, open, onOpenChange }: AddAwa
 
     const { error } = await supabase
       .from("awards")
-      .insert([{ ...formData, company_id: currentCompany?.id }]);
+      .insert([{ ...formData, company_id: currentCompany?.id, season: currentSeason }]);
 
     if (error) {
       toast.error("Failed to add award");
