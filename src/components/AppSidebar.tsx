@@ -103,7 +103,7 @@ export function AppSidebar() {
   const { currentCompany, availableCompanies, switchCompany, loading: companyLoading, isSuperAdmin } = useCompany();
   
   const items = getMenuItems(currentCompany?.slug);
-  const [visibleItems, setVisibleItems] = useState(items);
+  const [visibleItems, setVisibleItems] = useState<typeof items>([]);
 
   useEffect(() => {
     checkAdminStatus();

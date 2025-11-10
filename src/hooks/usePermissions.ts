@@ -6,6 +6,7 @@ export type AppRole = 'admin' | 'staff' | 'division_leader' | 'specialist' | 'vi
 
 export function usePermissions() {
   const [userRole, setUserRole] = useState<AppRole | null>(null);
+  const [userRoles, setUserRoles] = useState<AppRole[]>([]);
   const [userDivisions, setUserDivisions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
@@ -40,6 +41,7 @@ export function usePermissions() {
                               roles.includes('admin') ? 'admin' : roles[0];
         
         setUserRole(effectiveRole);
+        setUserRoles(roles);
         setIsSuperAdmin(isSuperAdminUser);
       }
 
@@ -71,17 +73,32 @@ export function usePermissions() {
       // Super admins bypass all permission checks
       if (isSuperAdmin) return true;
       
-      if (!currentCompany) return false;
+      if (!currentCompany) {
+        console.warn('[usePermissions] No currentCompany for permission check');
+        return false;
+      }
 
-      const { data } = await supabase
+      // Check if ANY of the user's roles grant access to this page
+      const rolesToCheck = userRoles.length > 0 ? userRoles : (userRole ? [userRole] : []);
+      
+      if (rolesToCheck.length === 0) return false;
+
+      const { data, error } = await supabase
         .from('role_permissions')
         .select('can_access')
         .eq('company_id', currentCompany.id)
-        .eq('role', userRole)
+        .in('role', rolesToCheck)
         .eq('menu_item', pageName)
-        .maybeSingle();
+        .eq('can_access', true)
+        .limit(1);
 
-      return data?.can_access ?? false;
+      if (error) {
+        console.error('[usePermissions] Error checking page access:', error);
+        return false;
+      }
+
+      const hasAccess = data && data.length > 0;
+      return hasAccess;
     } catch (error) {
       console.error('Error checking page access:', error);
       return false;
@@ -112,6 +129,7 @@ export function usePermissions() {
 
   return {
     userRole,
+    userRoles,
     userDivisions,
     loading,
     canAccessPage,
