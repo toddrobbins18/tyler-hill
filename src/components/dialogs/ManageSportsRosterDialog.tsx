@@ -49,6 +49,11 @@ export default function ManageSportsRosterDialog({
   const [templateName, setTemplateName] = useState("");
   const [templateDescription, setTemplateDescription] = useState("");
   const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null);
+  const { checkConflict } = useConflictDetection();
+  const [detectedConflicts, setDetectedConflicts] = useState<Conflict[]>([]);
+  const [showConflictDialog, setShowConflictDialog] = useState(false);
+  const [originalRoster, setOriginalRoster] = useState<Set<string>>(new Set());
+  const [eventDetails, setEventDetails] = useState<any>(null);
 
   useEffect(() => {
     if (open) {
@@ -100,7 +105,9 @@ export default function ManageSportsRosterDialog({
 
     setChildren(childrenData || []);
     setStaff(staffData || []);
-    setRoster(new Set(rosterData?.map(r => r.child_id) || []));
+    const rosterSet = new Set(rosterData?.map(r => r.child_id) || []);
+    setRoster(rosterSet);
+    setOriginalRoster(new Set(rosterSet));
     setAssignedCoaches(staffAssignments?.filter(s => s.role === "coach").map(s => s.staff_id) || []);
     setAssignedRefs(staffAssignments?.filter(s => s.role === "ref").map(s => s.staff_id) || []);
     setTemplates(templatesData || []);
@@ -119,32 +126,108 @@ export default function ManageSportsRosterDialog({
 
   const handleSave = async () => {
     setSaving(true);
+    try {
+      const { data: event } = await supabase.from('sports_calendar').select('*').eq('id', eventId).single();
+      
+      if (!event) {
+        toast.error("Event not found");
+        setSaving(false);
+        return;
+      }
 
-    // Save campers
-    await supabase.from("sports_event_roster").delete().eq("event_id", eventId);
-    if (roster.size > 0) {
-      const rosterEntries = Array.from(roster).map(childId => ({
-        event_id: eventId,
-        child_id: childId,
-        confirmed: true,
-        company_id: currentCompany?.id,
-      }));
-      await supabase.from("sports_event_roster").insert(rosterEntries);
+      setEventDetails(event);
+      const newChildren = Array.from(roster).filter(childId => !originalRoster.has(childId));
+      const allConflicts: Conflict[] = [];
+      
+      for (const childId of newChildren) {
+        const child = children.find(c => c.id === childId);
+        const conflicts = await checkConflict({
+          entityType: 'child',
+          entityId: childId,
+          eventType: 'Sports Event',
+          eventId: eventId,
+          eventDate: event.event_date,
+          eventTime: event.time,
+          companyId: currentCompany?.id || ''
+        });
+        
+        if (conflicts.length > 0) {
+          allConflicts.push(...conflicts.map(c => ({ ...c, entity_name: child?.name || 'Unknown', event1_name: event.title })));
+        }
+      }
+      
+      if (allConflicts.length > 0) {
+        setDetectedConflicts(allConflicts);
+        setShowConflictDialog(true);
+        setSaving(false);
+        return;
+      }
+      
+      await performSave();
+    } catch (error) {
+      console.error("Error saving roster:", error);
+      toast.error("Failed to save roster");
+      setSaving(false);
     }
+  };
 
-    // Save staff assignments
-    await supabase.from("sports_event_staff").delete().eq("event_id", eventId);
-    const staffEntries = [
-      ...assignedCoaches.map(staffId => ({ event_id: eventId, staff_id: staffId, role: "coach", company_id: currentCompany?.id })),
-      ...assignedRefs.map(staffId => ({ event_id: eventId, staff_id: staffId, role: "ref", company_id: currentCompany?.id })),
-    ];
-    if (staffEntries.length > 0) {
-      await supabase.from("sports_event_staff").insert(staffEntries);
+  const performSave = async (overrideReason?: string) => {
+    try {
+      if (overrideReason && detectedConflicts.length > 0) {
+        const newChildren = Array.from(roster).filter(childId => !originalRoster.has(childId));
+        for (const childId of newChildren) {
+          const conflictsForChild = detectedConflicts.filter(c => c.entity_name === children.find(ch => ch.id === childId)?.name);
+          for (const conflict of conflictsForChild) {
+            await supabase.from('schedule_conflicts').insert({
+              entity_id: childId,
+              entity_name: conflict.entity_name,
+              entity_type: 'child',
+              conflict_type: conflict.conflict_type,
+              event1_type: conflict.event1_type,
+              event1_id: conflict.event1_id,
+              event1_name: conflict.event1_name,
+              event1_date: conflict.event1_date,
+              event1_time: conflict.event1_time,
+              event2_type: conflict.event2_type,
+              event2_id: conflict.event2_id,
+              event2_name: conflict.event2_name,
+              event2_date: conflict.event2_date,
+              event2_time: conflict.event2_time,
+              override_reason: overrideReason,
+              company_id: currentCompany?.id || ''
+            });
+          }
+        }
+      }
+
+      await supabase.from("sports_event_roster").delete().eq("event_id", eventId);
+      if (roster.size > 0) {
+        const rosterEntries = Array.from(roster).map(childId => ({
+          event_id: eventId,
+          child_id: childId,
+          confirmed: true,
+          company_id: currentCompany?.id,
+        }));
+        await supabase.from("sports_event_roster").insert(rosterEntries);
+      }
+
+      await supabase.from("sports_event_staff").delete().eq("event_id", eventId);
+      const staffEntries = [
+        ...assignedCoaches.map(staffId => ({ event_id: eventId, staff_id: staffId, role: "coach", company_id: currentCompany?.id })),
+        ...assignedRefs.map(staffId => ({ event_id: eventId, staff_id: staffId, role: "ref", company_id: currentCompany?.id })),
+      ];
+      if (staffEntries.length > 0) {
+        await supabase.from("sports_event_staff").insert(staffEntries);
+      }
+
+      toast.success(`Roster updated: ${roster.size} campers, ${assignedCoaches.length} coaches, ${assignedRefs.length} refs`);
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Error saving roster:", error);
+      toast.error("Failed to save roster");
+    } finally {
+      setSaving(false);
     }
-
-    toast.success(`Roster updated: ${roster.size} campers, ${assignedCoaches.length} coaches, ${assignedRefs.length} refs`);
-    setSaving(false);
-    onOpenChange(false);
   };
 
   const handleSaveTemplate = async () => {
@@ -564,6 +647,21 @@ export default function ManageSportsRosterDialog({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ConflictWarningDialog
+        open={showConflictDialog}
+        onOpenChange={setShowConflictDialog}
+        conflicts={detectedConflicts}
+        entityName={detectedConflicts[0]?.entity_name || ''}
+        onCancel={() => {
+          setShowConflictDialog(false);
+          setSaving(false);
+        }}
+        onProceed={async (reason) => {
+          await performSave(reason);
+          setShowConflictDialog(false);
+        }}
+      />
     </>
   );
 }

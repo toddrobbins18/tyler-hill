@@ -37,6 +37,7 @@ import Awards from "./pages/Awards";
 import IncidentReports from "./pages/IncidentReports";
 import Nurse from "./pages/Nurse";
 import SportsAcademy from "./pages/SportsAcademy";
+import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 
@@ -92,6 +93,7 @@ function AppContent() {
                                 <Route path="/incidents" element={<IncidentReports />} />
                                 <Route path="/nurse" element={<Nurse />} />
                                 <Route path="/sports-academy" element={<SportsAcademy />} />
+                                <Route path="/reports" element={<Reports />} />
                                 <Route path="*" element={<NotFound />} />
                               </Routes>
                             </main>

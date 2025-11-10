@@ -13,6 +13,7 @@ import EditStaffDialog from "@/components/dialogs/EditStaffDialog";
 import { EvaluateStaffDialog } from "@/components/dialogs/EvaluateStaffDialog";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
+import ConflictIndicator from "@/components/ConflictIndicator";
 
 export default function StaffProfile() {
   const { id } = useParams();
@@ -26,6 +27,7 @@ export default function StaffProfile() {
   const [loading, setLoading] = useState(true);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [evaluateDialogOpen, setEvaluateDialogOpen] = useState(false);
+  const [conflicts, setConflicts] = useState<any[]>([]);
 
   useEffect(() => {
     if (id) {
@@ -68,6 +70,17 @@ export default function StaffProfile() {
     if (!notesError && notesData) {
       setStaffNotes(notesData);
     }
+
+    // Fetch unresolved conflicts
+    const { data: conflictsData } = await supabase
+      .from("schedule_conflicts")
+      .select("*")
+      .eq("entity_id", id)
+      .eq("entity_type", "staff")
+      .eq("resolved", false)
+      .eq("company_id", currentCompany?.id || '');
+
+    setConflicts(conflictsData || []);
 
     if (!evalsError && evalsData) {
       const averageRating = evalsData.length
@@ -159,6 +172,9 @@ export default function StaffProfile() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {conflicts.length > 0 && (
+            <ConflictIndicator count={conflicts.length} />
+          )}
           <Button onClick={() => setEvaluateDialogOpen(true)}>
             <ClipboardCheck className="h-4 w-4 mr-2" />
             Evaluate Staff

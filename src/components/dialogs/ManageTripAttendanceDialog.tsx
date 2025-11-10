@@ -25,11 +25,16 @@ export default function ManageTripAttendanceDialog({
   onOpenChange,
 }: ManageTripAttendanceDialogProps) {
   const { currentCompany } = useCompany();
+  const { checkConflict } = useConflictDetection();
   const [children, setChildren] = useState<any[]>([]);
   const [attendees, setAttendees] = useState<Set<string>>(new Set());
   const [selectedDivision, setSelectedDivision] = useState<string>("all");
   const [divisions, setDivisions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [detectedConflicts, setDetectedConflicts] = useState<Conflict[]>([]);
+  const [showConflictDialog, setShowConflictDialog] = useState(false);
+  const [originalAttendees, setOriginalAttendees] = useState<Set<string>>(new Set());
+  const [tripDetails, setTripDetails] = useState<any>(null);
 
   useEffect(() => {
     if (open && tripId) {
@@ -66,7 +71,9 @@ export default function ManageTripAttendanceDialog({
       .eq("trip_id", tripId);
 
     if (data) {
-      setAttendees(new Set(data.map((a) => a.child_id)));
+      const attendeeSet = new Set(data.map((a) => a.child_id));
+      setAttendees(attendeeSet);
+      setOriginalAttendees(new Set(attendeeSet));
     }
   };
 
@@ -85,13 +92,83 @@ export default function ManageTripAttendanceDialog({
     setLoading(true);
 
     try {
-      // Delete all existing attendees for this trip
-      await supabase
-        .from("trip_attendees")
-        .delete()
-        .eq("trip_id", tripId);
+      const { data: trip } = await supabase.from('trips').select('*').eq('id', tripId).single();
+      
+      if (!trip) {
+        toast.error("Trip not found");
+        setLoading(false);
+        return;
+      }
 
-      // Insert new attendees
+      setTripDetails(trip);
+      const newChildren = Array.from(attendees).filter(childId => !originalAttendees.has(childId));
+      const allConflicts: Conflict[] = [];
+      
+      for (const childId of newChildren) {
+        const child = children.find(c => c.id === childId);
+        const conflicts = await checkConflict({
+          entityType: 'child',
+          entityId: childId,
+          eventType: 'Trip',
+          eventId: tripId,
+          eventDate: trip.date,
+          eventTime: trip.departure_time,
+          companyId: currentCompany?.id || ''
+        });
+        
+        if (conflicts.length > 0) {
+          allConflicts.push(...conflicts.map(c => ({ ...c, entity_name: child?.name || 'Unknown', event1_name: trip.name })));
+        }
+      }
+      
+      if (allConflicts.length > 0) {
+        setDetectedConflicts(allConflicts);
+        setShowConflictDialog(true);
+        setLoading(false);
+        return;
+      }
+      
+      await performSave();
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to update roster");
+      setLoading(false);
+    }
+  };
+
+  const performSave = async (overrideReason?: string) => {
+    if (!tripId) return;
+    
+    try {
+      if (overrideReason && detectedConflicts.length > 0) {
+        const newChildren = Array.from(attendees).filter(childId => !originalAttendees.has(childId));
+        for (const childId of newChildren) {
+          const conflictsForChild = detectedConflicts.filter(c => c.entity_name === children.find(ch => ch.id === childId)?.name);
+          for (const conflict of conflictsForChild) {
+            await supabase.from('schedule_conflicts').insert({
+              entity_id: childId,
+              entity_name: conflict.entity_name,
+              entity_type: 'child',
+              conflict_type: conflict.conflict_type,
+              event1_type: conflict.event1_type,
+              event1_id: conflict.event1_id,
+              event1_name: conflict.event1_name,
+              event1_date: conflict.event1_date,
+              event1_time: conflict.event1_time,
+              event2_type: conflict.event2_type,
+              event2_id: conflict.event2_id,
+              event2_name: conflict.event2_name,
+              event2_date: conflict.event2_date,
+              event2_time: conflict.event2_time,
+              override_reason: overrideReason,
+              company_id: currentCompany?.id || ''
+            });
+          }
+        }
+      }
+
+      await supabase.from("trip_attendees").delete().eq("trip_id", tripId);
+
       if (attendees.size > 0) {
         const attendeesData = Array.from(attendees).map((childId) => ({
           trip_id: tripId,
@@ -100,10 +177,7 @@ export default function ManageTripAttendanceDialog({
           company_id: currentCompany?.id,
         }));
 
-        const { error } = await supabase
-          .from("trip_attendees")
-          .insert(attendeesData);
-
+        const { error } = await supabase.from("trip_attendees").insert(attendeesData);
         if (error) throw error;
       }
 
@@ -228,6 +302,21 @@ export default function ManageTripAttendanceDialog({
           </div>
         </div>
       </DialogContent>
+
+      <ConflictWarningDialog
+        open={showConflictDialog}
+        onOpenChange={setShowConflictDialog}
+        conflicts={detectedConflicts}
+        entityName={detectedConflicts[0]?.entity_name || ''}
+        onCancel={() => {
+          setShowConflictDialog(false);
+          setLoading(false);
+        }}
+        onProceed={async (reason) => {
+          await performSave(reason);
+          setShowConflictDialog(false);
+        }}
+      />
     </Dialog>
   );
 }

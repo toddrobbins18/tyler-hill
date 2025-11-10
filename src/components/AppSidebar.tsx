@@ -1,4 +1,4 @@
-import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, ClipboardEdit, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree, BookOpen, Building2, LogOut } from "lucide-react";
+import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, ClipboardEdit, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree, BookOpen, Building2, LogOut, BarChart3 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -73,6 +73,13 @@ const getMenuItems = (companySlug?: string) => {
       }
     );
   }
+
+  baseItems.push({
+    title: "Reports",
+    url: "/reports",
+    icon: BarChart3,
+    menuId: "reports"
+  });
 
   // Add Nurse for Timber Lake West (limited features) and all other companies
   baseItems.push({ title: "Nurse", url: "/nurse", icon: Pill, menuId: "nurse" });

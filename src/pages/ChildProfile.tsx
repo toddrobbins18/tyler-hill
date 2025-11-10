@@ -12,6 +12,7 @@ import EditChildDialog from "@/components/dialogs/EditChildDialog";
 import { toast as sonnerToast } from "sonner";
 import { useCompany } from "@/contexts/CompanyContext";
 import CamperReportsTab from "@/components/CamperReportsTab";
+import ConflictIndicator from "@/components/ConflictIndicator";
 
 export default function ChildProfile() {
   const { id } = useParams();
@@ -28,6 +29,7 @@ export default function ChildProfile() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [allergyText, setAllergyText] = useState("");
   const [savingAllergies, setSavingAllergies] = useState(false);
+  const [conflicts, setConflicts] = useState<any[]>([]);
 
   useEffect(() => {
     if (id) {
@@ -135,6 +137,17 @@ export default function ChildProfile() {
         .order("sport_name", { ascending: true });
 
       setSportsAcademy(academyData || []);
+
+      // Fetch unresolved conflicts
+      const { data: conflictsData } = await supabase
+        .from("schedule_conflicts")
+        .select("*")
+        .eq("entity_id", id)
+        .eq("entity_type", "child")
+        .eq("resolved", false)
+        .eq("company_id", currentCompany?.id || '');
+
+      setConflicts(conflictsData || []);
     } catch (error) {
       console.error("Error fetching child data:", error);
       toast({ title: "Error loading child profile", variant: "destructive" });
@@ -195,6 +208,9 @@ export default function ChildProfile() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {conflicts.length > 0 && (
+            <ConflictIndicator count={conflicts.length} />
+          )}
           <Button onClick={() => setEditDialogOpen(true)}>
             <Pencil className="h-4 w-4 mr-2" />
             Edit Profile
