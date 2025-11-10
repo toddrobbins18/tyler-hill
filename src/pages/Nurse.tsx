@@ -18,7 +18,14 @@ import { format, isBefore, startOfDay, isToday } from "date-fns";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 
+// Helper to check if we should show limited features for Timber Lake
+const useTimberLakeMode = () => {
+  const { currentCompany } = useCompany();
+  return currentCompany?.slug === 'timber-lake-west';
+};
+
 export default function Nurse() {
+  const isTimberLake = useTimberLakeMode();
   const { currentSeason } = useSeasonContext();
   const { currentCompany } = useCompany();
   const [children, setChildren] = useState<any[]>([]);

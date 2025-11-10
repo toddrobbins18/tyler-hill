@@ -2084,6 +2084,44 @@ export type Database = {
           },
         ]
       }
+      staff_notes: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          note: string
+          season: string | null
+          staff_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          note: string
+          season?: string | null
+          staff_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          note?: string
+          season?: string | null
+          staff_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_staff"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_attendees: {
         Row: {
           child_id: string

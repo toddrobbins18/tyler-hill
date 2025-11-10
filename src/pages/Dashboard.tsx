@@ -1,4 +1,4 @@
-import { Users, Truck, FileText, Award, Utensils, Calendar as CalendarIcon, MapPin } from "lucide-react";
+import { Users, Truck, FileText, Award, Utensils, Calendar as CalendarIcon, MapPin, Cake, Trophy } from "lucide-react";
 import { StatCard } from "@/components/StatCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,9 @@ export default function Dashboard() {
   });
   const [recentNotes, setRecentNotes] = useState<any[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
+  const [specialEvents, setSpecialEvents] = useState<any[]>([]);
+  const [sportsEvents, setSportsEvents] = useState<any[]>([]);
+  const [todaysBirthdays, setTodaysBirthdays] = useState<any[]>([]);
   const [todaysMenu, setTodaysMenu] = useState<any>({
     breakfast: "",
     lunch: "",
@@ -60,12 +63,24 @@ export default function Dashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, fetchDashboardData)
       .subscribe();
 
+    const specialEventsChannel = supabase
+      .channel('dashboard-special-events')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'special_events_activities' }, fetchDashboardData)
+      .subscribe();
+
+    const sportsChannel = supabase
+      .channel('dashboard-sports')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sports_calendar' }, fetchDashboardData)
+      .subscribe();
+
     return () => {
       supabase.removeChannel(childrenChannel);
       supabase.removeChannel(notesChannel);
       supabase.removeChannel(awardsChannel);
       supabase.removeChannel(tripsChannel);
       supabase.removeChannel(menuChannel);
+      supabase.removeChannel(specialEventsChannel);
+      supabase.removeChannel(sportsChannel);
     };
   }, [currentCompany?.id]);
 
@@ -132,11 +147,46 @@ export default function Dashboard() {
       .limit(5);
 
     // Fetch today's menu
-    const { data: menu } = await supabase
+    const menuResult = await supabase
       .from('menu_items')
       .select('*')
       .eq('date', today)
       .eq('company_id', currentCompany.id);
+    const menu = menuResult.data;
+
+    // Fetch special events for today
+    const specialEventsQuery: any = await supabase
+      .from('special_events_activities')
+      .select('id, title, type, time_slot, location')
+      .eq('date', today)
+      .eq('company_id', currentCompany.id);
+    const specialEventsData = specialEventsQuery.data || [];
+
+    // Fetch sports calendar events for today
+    const sportsQuery: any = await supabase
+      .from('sports_calendar')
+      .select('id, title, sport_type, time, location')
+      .eq('event_date', today)
+      .eq('company_id', currentCompany.id);
+    const sportsData = sportsQuery.data || [];
+
+    // Fetch birthdays for today (matching month and day)
+    const { data: staffData } = await supabase
+      .from('children')
+      .select('id, name, date_of_birth')
+      .eq('status', 'active')
+      .eq('company_id', currentCompany.id)
+      .not('date_of_birth', 'is', null);
+
+    const todayDate = new Date();
+    const todayMonth = todayDate.getMonth() + 1;
+    const todayDay = todayDate.getDate();
+
+    const birthdaysToday = (staffData || []).filter((child: any) => {
+      if (!child.date_of_birth) return false;
+      const birthDate = new Date(child.date_of_birth);
+      return (birthDate.getMonth() + 1) === todayMonth && birthDate.getDate() === todayDay;
+    });
 
     setStats({
       totalChildren: childrenCount || 0,
@@ -146,6 +196,9 @@ export default function Dashboard() {
     });
 
     setRecentNotes(notes || []);
+    setSpecialEvents(specialEventsData);
+    setSportsEvents(sportsData);
+    setTodaysBirthdays(birthdaysToday);
     
     const eventsData = trips?.map(trip => ({
       id: trip.id,
@@ -169,10 +222,13 @@ export default function Dashboard() {
     }
   };
 
+  const isTimberLake = currentCompany?.slug === 'timber-lake-west';
+  const dashboardTitle = isTimberLake ? "Tiger Times" : "Dashboard";
+
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-foreground mb-2">Dashboard</h1>
+        <h1 className="text-3xl font-bold text-foreground mb-2">{dashboardTitle}</h1>
         <p className="text-muted-foreground">Welcome back! Here's what's happening today.</p>
       </div>
 
@@ -272,29 +328,97 @@ export default function Dashboard() {
                 <CalendarIcon className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <CardTitle>Upcoming Events</CardTitle>
-                <CardDescription>Calendar & schedule</CardDescription>
+                <CardTitle>Special Events & Activities</CardTitle>
+                <CardDescription>Today's schedule</CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            {upcomingEvents.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No upcoming events</p>
+            {specialEvents.length === 0 ? (
+              <p className="text-muted-foreground text-sm">No special events today</p>
             ) : (
-              upcomingEvents.map((event) => (
-                <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer" onClick={() => navigate('/transportation')}>
+              specialEvents.map((event) => (
+                <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer" onClick={() => navigate('/special-events')}>
                   <div className="flex-1">
                     <p className="font-medium text-sm mb-1">{event.title}</p>
-                    <span className="text-xs text-muted-foreground">{event.date}</span>
+                    <span className="text-xs text-muted-foreground">{event.time_slot || 'All day'}</span>
                   </div>
-                  <Badge variant="outline" className="text-xs">
-                    {event.type === "trip" && <MapPin className="h-3 w-3 mr-1" />}
-                    {event.type}
-                  </Badge>
+                  <Badge variant="outline" className="text-xs">{event.type}</Badge>
                 </div>
               ))
             )}
-            <Button variant="outline" className="w-full" onClick={() => navigate('/transportation')}>View Full Calendar</Button>
+            <Button variant="outline" className="w-full" onClick={() => navigate('/special-events')}>View All Events</Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card className="shadow-card">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-warning/10">
+                <Trophy className="h-5 w-5 text-warning" />
+              </div>
+              <div>
+                <CardTitle>Athletics Schedule</CardTitle>
+                <CardDescription>Today's sports events</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {sportsEvents.length === 0 ? (
+              <p className="text-muted-foreground text-sm">No sports events today</p>
+            ) : (
+              sportsEvents.map((event) => (
+                <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer" onClick={() => navigate('/athletics')}>
+                  <div className="flex-1">
+                    <p className="font-medium text-sm mb-1">{event.title}</p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span>{event.time || 'TBD'}</span>
+                      {event.location && (
+                        <>
+                          <span>•</span>
+                          <span>{event.location}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="text-xs">{event.sport_type}</Badge>
+                </div>
+              ))
+            )}
+            <Button variant="outline" className="w-full" onClick={() => navigate('/athletics')}>View Full Schedule</Button>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-card">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-success/10">
+                <Cake className="h-5 w-5 text-success" />
+              </div>
+              <div>
+                <CardTitle>Today's Birthdays</CardTitle>
+                <CardDescription>Celebrate with them!</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {todaysBirthdays.length === 0 ? (
+              <p className="text-muted-foreground text-sm">No birthdays today</p>
+            ) : (
+              todaysBirthdays.map((child: any) => (
+                <div key={child.id} className="flex items-center gap-3 p-3 rounded-lg bg-success/10 border border-success/20">
+                  <Cake className="h-5 w-5 text-success" />
+                  <div>
+                    <p className="font-medium text-sm">{child.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Born {new Date(child.date_of_birth).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
       </div>

@@ -1,23 +1,28 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Star, Calendar, TrendingUp, Award, Pencil, ClipboardCheck } from "lucide-react";
+import { ArrowLeft, Star, Calendar, TrendingUp, Award, Pencil, ClipboardCheck, FileText, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import EditStaffDialog from "@/components/dialogs/EditStaffDialog";
 import { EvaluateStaffDialog } from "@/components/dialogs/EvaluateStaffDialog";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 
 export default function StaffProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const [staff, setStaff] = useState<any>(null);
   const [evaluations, setEvaluations] = useState<any[]>([]);
+  const [staffNotes, setStaffNotes] = useState<any[]>([]);
+  const [newNote, setNewNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [evaluateDialogOpen, setEvaluateDialogOpen] = useState(false);
@@ -52,6 +57,18 @@ export default function StaffProfile() {
       .eq("company_id", currentCompany?.id || '')
       .order("date", { ascending: false });
 
+    // Fetch staff notes
+    const { data: notesData, error: notesError } = await supabase
+      .from("staff_notes")
+      .select("*")
+      .eq("staff_id", id)
+      .eq("company_id", currentCompany?.id || '')
+      .order("created_at", { ascending: false });
+
+    if (!notesError && notesData) {
+      setStaffNotes(notesData);
+    }
+
     if (!evalsError && evalsData) {
       const averageRating = evalsData.length
         ? evalsData.reduce((sum, e) => sum + (Number(e.rating) || 0), 0) / evalsData.length
@@ -67,6 +84,35 @@ export default function StaffProfile() {
     }
 
     setLoading(false);
+  };
+
+  const handleAddNote = async () => {
+    if (!newNote.trim()) {
+      toast.error("Please enter a note");
+      return;
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase
+      .from("staff_notes")
+      .insert({
+        staff_id: id,
+        note: newNote.trim(),
+        created_by: user.id,
+        company_id: currentCompany?.id || '',
+        season: currentSeason
+      });
+
+    if (error) {
+      toast.error("Failed to add note");
+      return;
+    }
+
+    toast.success("Note added successfully");
+    setNewNote("");
+    fetchStaffData();
   };
 
   const getInitials = (name: string) => {
@@ -138,6 +184,7 @@ export default function StaffProfile() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="birthday">Birthday</TabsTrigger>
+          <TabsTrigger value="notes">Notes</TabsTrigger>
           <TabsTrigger value="evaluations">Evaluations</TabsTrigger>
           <TabsTrigger value="achievements">Achievements</TabsTrigger>
         </TabsList>
@@ -234,6 +281,64 @@ export default function StaffProfile() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="notes" className="space-y-4">
+          <Card className="shadow-card">
+            <CardHeader>
+              <CardTitle>Add New Note</CardTitle>
+              <CardDescription>Document observations and important information</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Textarea
+                placeholder="Enter note details..."
+                value={newNote}
+                onChange={(e) => setNewNote(e.target.value)}
+                className="min-h-[100px]"
+              />
+              <Button onClick={handleAddNote} className="w-full">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Note
+              </Button>
+            </CardContent>
+          </Card>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                {staffNotes.length} total notes
+              </p>
+            </div>
+
+            {staffNotes.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">No notes yet</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4">
+                {staffNotes.map((note) => (
+                  <Card key={note.id} className="shadow-card">
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between mb-3">
+                        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                          <FileText className="h-3 w-3 mr-1" />
+                          Staff Note
+                        </Badge>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Calendar className="h-3 w-3" />
+                          <span>{new Date(note.created_at).toLocaleString()}</span>
+                        </div>
+                      </div>
+                      <p className="text-sm whitespace-pre-wrap">{note.note}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
         </TabsContent>
 
         <TabsContent value="evaluations" className="space-y-4">

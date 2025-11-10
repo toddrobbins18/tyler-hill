@@ -25,20 +25,26 @@ import { toast } from "sonner";
 // Items that need conditional rendering will be handled in the component
 const getMenuItems = (companySlug?: string) => {
   const baseItems = [
-    { title: "Activities & Field Trips", url: "/activities", icon: Palmtree, menuId: "activities" },
     { title: companySlug === 'timber-lake-west' ? "Athletics" : "Sports Calendar", url: "/athletics", icon: Trophy, menuId: "athletics" },
     { title: "Camper", url: "/roster", icon: Users, menuId: "roster" },
-    { title: "Dashboard", url: "/", icon: Home, menuId: "dashboard" },
+    { title: companySlug === 'timber-lake-west' ? "Tiger Times" : "Dashboard", url: "/", icon: Home, menuId: "dashboard" },
     { title: "Master Calendar", url: "/calendar", icon: Calendar, menuId: "calendar" },
     { title: "Menu", url: "/menu", icon: Utensils, menuId: "menu" },
-    { title: "Messages", url: "/messages", icon: Mail, menuId: "messages" },
     { title: "Rainy Day Schedule", url: "/rainy-day", icon: CloudRain, menuId: "rainy-day" },
     { title: "Special Events & Evening Activities", url: "/special-events", icon: Calendar, menuId: "special-events" },
-    { title: "Special Meals", url: "/special-meals", icon: Utensils, menuId: "special-meals" },
     { title: "Staff", url: "/staff", icon: UserCog, menuId: "staff" },
-    { title: "Transportation", url: "/transportation", icon: Truck, menuId: "transportation" },
     { title: "Tutoring & Therapy", url: "/tutoring-therapy", icon: BookOpen, menuId: "tutoring-therapy" },
   ];
+
+  // Add items ONLY for companies OTHER THAN Timber Lake West
+  if (companySlug !== 'timber-lake-west') {
+    baseItems.push(
+      { title: "Activities & Field Trips", url: "/activities", icon: Palmtree, menuId: "activities" },
+      { title: "Messages", url: "/messages", icon: Mail, menuId: "messages" },
+      { title: "Special Meals", url: "/special-meals", icon: Utensils, menuId: "special-meals" },
+      { title: "Transportation", url: "/transportation", icon: Truck, menuId: "transportation" }
+    );
+  }
 
   // Add Daily Notes/News for all camps EXCEPT Timber Lake West
   if (companySlug !== 'timber-lake-west') {
@@ -68,13 +74,15 @@ const getMenuItems = (companySlug?: string) => {
     );
   }
 
+  // Add Nurse for Timber Lake West (limited features) and all other companies
+  baseItems.push({ title: "Nurse", url: "/nurse", icon: Pill, menuId: "nurse" });
+
   // Add these items for all companies EXCEPT Timber Lake West
   if (companySlug !== 'timber-lake-west') {
     baseItems.push(
       { title: "Awards", url: "/awards", icon: Award, menuId: "awards" },
       { title: "Incident Reports", url: "/incidents", icon: AlertTriangle, menuId: "incidents" },
-      { title: "Nurse", url: "/nurse", icon: Pill, menuId: "nurse" },
-      { title: "Sports Academy", url: "/sports-academy", icon: Trophy, menuId: "sports-academy" },
+      { title: "Sports Academy", url: "/sports-academy", icon: Trophy, menuId: "sports-academy" }
     );
   }
 
