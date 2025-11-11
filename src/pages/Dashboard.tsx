@@ -20,7 +20,6 @@ export default function Dashboard() {
     todayNotes: 0,
     weekAwards: 0,
   });
-  const [recentNotes, setRecentNotes] = useState<any[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
   const [specialEvents, setSpecialEvents] = useState<any[]>([]);
   const [sportsEvents, setSportsEvents] = useState<any[]>([]);
@@ -128,16 +127,6 @@ export default function Dashboard() {
       .eq('company_id', currentCompany.id)
       .gte('date', weekStart.toISOString().split('T')[0]);
 
-    // Fetch recent notes with division filtering
-    let notesQuery = supabase
-      .from('daily_notes')
-      .select('*, children(name, division_id)')
-      .eq('company_id', currentCompany.id)
-      .order('created_at', { ascending: false })
-      .limit(3);
-    
-    const { data: notes } = await notesQuery;
-
     // Fetch upcoming trips and events
     const { data: trips } = await supabase
       .from('trips')
@@ -158,11 +147,10 @@ export default function Dashboard() {
     // Fetch special events for today
     let specialEventsData: any[] = [];
     try {
-      // @ts-expect-error - Supabase type inference issue with deep nesting
       const result = await supabase
         .from('special_events_activities')
         .select('*')
-        .eq('date', today)
+        .eq('event_date', today)
         .eq('company_id', currentCompany.id);
       specialEventsData = result.data || [];
     } catch (error) {
@@ -228,7 +216,6 @@ export default function Dashboard() {
       weekAwards: awardsCount || 0,
     });
 
-    setRecentNotes(notes || []);
     setSpecialEvents(specialEventsData || []);
     setSportsEvents(sportsData || []);
     setThreeDayOutlook(threeDayData || []);
