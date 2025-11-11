@@ -21,6 +21,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { formatTime12Hour } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useCompany } from "@/contexts/CompanyContext";
+import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -181,8 +182,8 @@ export default function MasterCalendar() {
       setDivisions([]);
       return;
     }
-    const { data } = await supabase.from("divisions").select("*").eq('company_id', currentCompany.id).order("sort_order");
-    if (data) setDivisions(data);
+    const { data } = await supabase.from("divisions").select("*").eq('company_id', currentCompany.id);
+    if (data) setDivisions(sortDivisionsGirlsFirst(data));
   };
 
   const fetchChildren = async () => {
@@ -268,9 +269,22 @@ export default function MasterCalendar() {
     })
     .sort((a, b) => {
       if (sortBy === "division") {
-        const divA = a.division?.sort_order || 999;
-        const divB = b.division?.sort_order || 999;
-        if (divA !== divB) return divA - divB;
+        const divA = a.division;
+        const divB = b.division;
+        
+        if (!divA && !divB) return 0;
+        if (!divA) return 1;
+        if (!divB) return -1;
+        
+        // Sort by gender first (girls before boys)
+        const genderOrder = { female: 0, male: 1 };
+        const genderA = genderOrder[divA.gender?.toLowerCase() as keyof typeof genderOrder] ?? 2;
+        const genderB = genderOrder[divB.gender?.toLowerCase() as keyof typeof genderOrder] ?? 2;
+        
+        if (genderA !== genderB) return genderA - genderB;
+        
+        // Within same gender, sort by sort_order
+        return (divA.sort_order || 999) - (divB.sort_order || 999);
       } else if (sortBy === "source") {
         return a.source.localeCompare(b.source);
       }

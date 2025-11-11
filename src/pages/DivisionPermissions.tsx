@@ -8,6 +8,7 @@ import { Users, Shield, Building2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 
 export default function DivisionPermissions() {
   const [divisions, setDivisions] = useState<any[]>([]);
@@ -39,8 +40,7 @@ export default function DivisionPermissions() {
     const { data: divisionsData } = await supabase
       .from("divisions")
       .select("*")
-      .eq("company_id", currentCompany!.id)
-      .order("sort_order");
+      .eq("company_id", currentCompany!.id);
 
     // Fetch approved users
     const { data: usersData } = await supabase
@@ -93,7 +93,7 @@ export default function DivisionPermissions() {
       role: rolesMap[user.id] || 'viewer'
     }));
 
-    setDivisions(divisionsData || []);
+    setDivisions(sortDivisionsGirlsFirst(divisionsData || []));
     setUsers(usersWithRoles);
     setPermissions(permissionMap);
     setLoading(false);

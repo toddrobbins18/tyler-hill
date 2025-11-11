@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { formatTime12Hour } from "@/lib/utils";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
+import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 
 export default function SpecialEventsActivities() {
   const { currentCompany } = useCompany();
@@ -125,11 +126,10 @@ export default function SpecialEventsActivities() {
     const { data } = await supabase
       .from("divisions")
       .select("*")
-      .eq('company_id', currentCompany.id)
-      .order("sort_order");
+      .eq('company_id', currentCompany.id);
     
     if (data) {
-      setDivisions(data);
+      setDivisions(sortDivisionsGirlsFirst(data));
     }
   };
 

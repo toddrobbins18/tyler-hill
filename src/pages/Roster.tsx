@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCompany } from "@/contexts/CompanyContext";
+import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -100,11 +101,10 @@ export default function Roster() {
     const { data } = await supabase
       .from("divisions")
       .select("*")
-      .eq('company_id', currentCompany.id)
-      .order("sort_order");
+      .eq('company_id', currentCompany.id);
     
     if (data) {
-      setDivisions(data);
+      setDivisions(sortDivisionsGirlsFirst(data));
     }
   };
 

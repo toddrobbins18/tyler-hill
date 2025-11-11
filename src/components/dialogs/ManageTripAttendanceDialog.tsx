@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useConflictDetection, Conflict } from "@/hooks/useConflictDetection";
 import ConflictWarningDialog from "./ConflictWarningDialog";
+import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 
 interface ManageTripAttendanceDialogProps {
   tripId: string | null;
@@ -48,8 +49,7 @@ export default function ManageTripAttendanceDialog({
     const { data: divisionsData } = await supabase
       .from("divisions")
       .select("*")
-      .eq("company_id", currentCompany.id)
-      .order("sort_order");
+      .eq("company_id", currentCompany.id);
 
     const { data: childrenData } = await supabase
       .from("children")
@@ -58,7 +58,7 @@ export default function ManageTripAttendanceDialog({
       .eq("company_id", currentCompany.id)
       .order("name");
 
-    if (divisionsData) setDivisions(divisionsData);
+    if (divisionsData) setDivisions(sortDivisionsGirlsFirst(divisionsData));
     if (childrenData) setChildren(childrenData);
   };
 

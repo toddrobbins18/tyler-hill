@@ -17,6 +17,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { format, isBefore, startOfDay, isToday } from "date-fns";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
+import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 
 // Helper to check if we should show limited features for Timber Lake
 const useTimberLakeMode = () => {
@@ -118,14 +119,13 @@ export default function Nurse() {
     const { data, error } = await supabase
       .from("divisions")
       .select("*")
-      .eq('company_id', currentCompany.id)
-      .order("sort_order");
+      .eq('company_id', currentCompany.id);
 
     if (error) {
       toast({ title: "Error fetching divisions", variant: "destructive" });
       return;
     }
-    setDivisions(data || []);
+    setDivisions(sortDivisionsGirlsFirst(data || []));
   };
 
   const fetchMedications = async (date?: Date) => {

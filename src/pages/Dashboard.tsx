@@ -24,6 +24,7 @@ export default function Dashboard() {
   const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
   const [specialEvents, setSpecialEvents] = useState<any[]>([]);
   const [sportsEvents, setSportsEvents] = useState<any[]>([]);
+  const [threeDayOutlook, setThreeDayOutlook] = useState<any[]>([]);
   const [todaysBirthdays, setTodaysBirthdays] = useState<any[]>([]);
   const [todaysMenu, setTodaysMenu] = useState<any>({
     breakfast: "",
@@ -181,6 +182,27 @@ export default function Dashboard() {
       console.error('Error fetching sports events:', error);
     }
 
+    // Fetch sports calendar events for the next 3 days (for Tyler Hill Camp)
+    let threeDayData: any[] = [];
+    if (currentCompany?.slug === 'tyler-hill-camp') {
+      try {
+        const threeDaysFromNow = new Date();
+        threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
+        const threeDaysFromNowStr = threeDaysFromNow.toISOString().split('T')[0];
+        
+        const result = await supabase
+          .from('sports_calendar')
+          .select('*')
+          .eq('company_id', currentCompany.id)
+          .gt('event_date', today)
+          .lte('event_date', threeDaysFromNowStr)
+          .order('event_date', { ascending: true });
+        threeDayData = result.data || [];
+      } catch (error) {
+        console.error('Error fetching three day outlook:', error);
+      }
+    }
+
     // Fetch birthdays for today (matching month and day)
     const { data: staffData } = await supabase
       .from('children')
@@ -209,6 +231,7 @@ export default function Dashboard() {
     setRecentNotes(notes || []);
     setSpecialEvents(specialEventsData || []);
     setSportsEvents(sportsData || []);
+    setThreeDayOutlook(threeDayData || []);
     setTodaysBirthdays(birthdaysToday);
     
     const eventsData = trips?.map(trip => ({
@@ -234,6 +257,7 @@ export default function Dashboard() {
   };
 
   const isTimberLakeCamp = currentCompany?.slug === 'timber-lake-camp';
+  const isTylerHillCamp = currentCompany?.slug === 'tyler-hill-camp';
   const dashboardTitle = isTimberLakeCamp ? "Tiger Times" : "Dashboard";
   
   const today = new Date();
@@ -288,65 +312,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className={`grid gap-6 ${isTimberLakeCamp ? 'md:grid-cols-2' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
-        <Card className="shadow-card">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-accent/10">
-                <Utensils className="h-5 w-5 text-accent" />
-              </div>
-              <div>
-                <CardTitle>Today's Menu</CardTitle>
-                <CardDescription>What's being served today</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-2">
-              <div className="p-3 rounded-lg bg-muted/50">
-                <p className="text-xs font-medium text-muted-foreground mb-1">Breakfast</p>
-                <p className="text-sm">{todaysMenu.breakfast}</p>
-              </div>
-              <div className="p-3 rounded-lg bg-muted/50">
-                <p className="text-xs font-medium text-muted-foreground mb-1">Lunch</p>
-                <p className="text-sm">{todaysMenu.lunch}</p>
-              </div>
-              <div className="p-3 rounded-lg bg-muted/50">
-                <p className="text-xs font-medium text-muted-foreground mb-1">Snack</p>
-                <p className="text-sm">{todaysMenu.snack}</p>
-              </div>
-            </div>
-            <div className="p-2 rounded bg-info/10 border border-info/20">
-              <p className="text-xs text-info-foreground">{todaysMenu.specialNotes}</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {!isTimberLakeCamp && (
-          <Card className="shadow-card">
-            <CardHeader>
-              <CardTitle>Recent Notes</CardTitle>
-              <CardDescription>Latest updates from your team</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {recentNotes.length === 0 ? (
-                <p className="text-muted-foreground text-sm">No recent notes</p>
-              ) : (
-                recentNotes.map((note) => (
-                  <div key={note.id} className="flex items-start justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer" onClick={() => navigate('/notes')}>
-                    <div className="space-y-1">
-                      <p className="font-medium text-sm">{note.children?.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(note.created_at).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              )}
-              <Button variant="outline" className="w-full" onClick={() => navigate('/notes')}>View All Notes</Button>
-            </CardContent>
-          </Card>
-        )}
+      <div className={`grid gap-6 ${isTimberLakeCamp || isTylerHillCamp ? 'md:grid-cols-2' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
 
         <Card className="shadow-card">
           <CardHeader>
@@ -388,32 +354,65 @@ export default function Dashboard() {
               </div>
               <div>
                 <CardTitle>Athletics Schedule</CardTitle>
-                <CardDescription>Today's sports events</CardDescription>
+                <CardDescription>{isTylerHillCamp ? "Today & upcoming events" : "Today's sports events"}</CardDescription>
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {sportsEvents.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No sports events today</p>
-            ) : (
-              sportsEvents.map((event) => (
-                <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer" onClick={() => navigate('/athletics')}>
-                  <div className="flex-1">
-                    <p className="font-medium text-sm mb-1">{event.title}</p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{event.time || 'TBD'}</span>
-                      {event.location && (
-                        <>
-                          <span>•</span>
-                          <span>{event.location}</span>
-                        </>
-                      )}
+          <CardContent className="space-y-4">
+            {/* Today's Events */}
+            <div className="space-y-3">
+              {sportsEvents.length === 0 ? (
+                <p className="text-muted-foreground text-sm">No sports events today</p>
+              ) : (
+                <>
+                  {isTylerHillCamp && <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Today</p>}
+                  {sportsEvents.map((event) => (
+                    <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer" onClick={() => navigate('/athletics')}>
+                      <div className="flex-1">
+                        <p className="font-medium text-sm mb-1">{event.title}</p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>{event.time || 'TBD'}</span>
+                          {event.location && (
+                            <>
+                              <span>•</span>
+                              <span>{event.location}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="text-xs">{event.sport_type}</Badge>
                     </div>
+                  ))}
+                </>
+              )}
+            </div>
+
+            {/* Three Day Outlook - Tyler Hill Camp only */}
+            {isTylerHillCamp && threeDayOutlook.length > 0 && (
+              <div className="space-y-3 pt-3 border-t">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Three Day Outlook</p>
+                {threeDayOutlook.map((event) => (
+                  <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer" onClick={() => navigate('/athletics')}>
+                    <div className="flex-1">
+                      <p className="font-medium text-sm mb-1">{event.title}</p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{new Date(event.event_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                        <span>•</span>
+                        <span>{event.time || 'TBD'}</span>
+                        {event.location && (
+                          <>
+                            <span>•</span>
+                            <span>{event.location}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-xs">{event.sport_type}</Badge>
                   </div>
-                  <Badge variant="outline" className="text-xs">{event.sport_type}</Badge>
-                </div>
-              ))
+                ))}
+              </div>
             )}
+
             <Button variant="outline" className="w-full" onClick={() => navigate('/athletics')}>View Full Schedule</Button>
           </CardContent>
         </Card>

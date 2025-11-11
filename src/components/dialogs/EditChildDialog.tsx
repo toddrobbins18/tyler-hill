@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { childSchema } from "@/lib/validationSchemas";
 import { z } from "zod";
 import { useCompany } from "@/contexts/CompanyContext";
+import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 
 interface EditChildDialogProps {
   childId: string;
@@ -83,9 +84,8 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
     const { data } = await supabase
       .from("divisions")
       .select("*")
-      .eq("company_id", currentCompany.id)
-      .order("sort_order");
-    setDivisions(data || []);
+      .eq("company_id", currentCompany.id);
+    setDivisions(sortDivisionsGirlsFirst(data || []));
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {

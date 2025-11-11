@@ -20,6 +20,7 @@ import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useCompany } from "@/contexts/CompanyContext";
+import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -136,11 +137,10 @@ export default function ActivitiesFieldTrips() {
     const { data } = await supabase
       .from("divisions")
       .select("*")
-      .eq('company_id', currentCompany.id)
-      .order("sort_order");
+      .eq('company_id', currentCompany.id);
     
     if (data) {
-      setDivisions(data);
+      setDivisions(sortDivisionsGirlsFirst(data));
     }
   };
 
@@ -325,9 +325,22 @@ export default function ActivitiesFieldTrips() {
     })
     .sort((a, b) => {
       if (sortBy === "division") {
-        const divA = a.divisions?.[0]?.sort_order || 999;
-        const divB = b.divisions?.[0]?.sort_order || 999;
-        if (divA !== divB) return divA - divB;
+        const divA = a.divisions?.[0];
+        const divB = b.divisions?.[0];
+        
+        if (!divA && !divB) return 0;
+        if (!divA) return 1;
+        if (!divB) return -1;
+        
+        // Sort by gender first (girls before boys)
+        const genderOrder = { female: 0, male: 1 };
+        const genderA = genderOrder[divA.gender?.toLowerCase() as keyof typeof genderOrder] ?? 2;
+        const genderB = genderOrder[divB.gender?.toLowerCase() as keyof typeof genderOrder] ?? 2;
+        
+        if (genderA !== genderB) return genderA - genderB;
+        
+        // Within same gender, sort by sort_order
+        return (divA.sort_order || 999) - (divB.sort_order || 999);
       }
       return new Date(a.event_date).getTime() - new Date(b.event_date).getTime();
     });

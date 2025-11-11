@@ -15,6 +15,7 @@ import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
+import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 
 export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }) {
   const [open, setOpen] = useState(false);
@@ -67,9 +68,8 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
     const { data } = await supabase
       .from("divisions")
       .select("*")
-      .eq("company_id", currentCompany.id)
-      .order("sort_order");
-    setDivisions(data || []);
+      .eq("company_id", currentCompany.id);
+    setDivisions(sortDivisionsGirlsFirst(data || []));
   };
 
   const onSubmit = async (values: z.infer<typeof childSchema>) => {
