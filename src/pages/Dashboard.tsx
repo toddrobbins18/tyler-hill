@@ -1,4 +1,4 @@
-import { Users, Truck, FileText, Award, Utensils, Calendar as CalendarIcon, MapPin, Cake, Trophy } from "lucide-react";
+import { Users, Truck, FileText, Award, Utensils, Calendar as CalendarIcon, CalendarDays, MapPin, Cake, Trophy } from "lucide-react";
 import { StatCard } from "@/components/StatCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -347,14 +347,19 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Today's Events */}
-            <div className="space-y-3">
+            <div className="space-y-3 p-3 rounded-lg bg-info/5 dark:bg-info/10 border-l-4 border-info">
               {sportsEvents.length === 0 ? (
                 <p className="text-muted-foreground text-sm">No sports events today</p>
               ) : (
                 <>
-                  {isTylerHillCamp && <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Today</p>}
+                  {isTylerHillCamp && (
+                    <div className="flex items-center gap-2 mb-2">
+                      <CalendarIcon className="h-4 w-4 text-info" />
+                      <p className="text-sm font-semibold text-info uppercase tracking-wide">Today</p>
+                    </div>
+                  )}
                   {sportsEvents.map((event) => (
-                    <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer" onClick={() => navigate('/athletics')}>
+                    <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-card hover:bg-muted/50 transition-colors cursor-pointer" onClick={() => navigate('/athletics')}>
                       <div className="flex-1">
                         <p className="font-medium text-sm mb-1">{event.title}</p>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -376,10 +381,13 @@ export default function Dashboard() {
 
             {/* Three Day Outlook - Tyler Hill Camp only */}
             {isTylerHillCamp && threeDayOutlook.length > 0 && (
-              <div className="space-y-3 pt-3 border-t">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Three Day Outlook</p>
+              <div className="space-y-3 p-3 rounded-lg bg-warning/5 dark:bg-warning/10 border-l-4 border-warning">
+                <div className="flex items-center gap-2 mb-2">
+                  <CalendarDays className="h-4 w-4 text-warning" />
+                  <p className="text-sm font-semibold text-warning uppercase tracking-wide">Three Day Outlook</p>
+                </div>
                 {threeDayOutlook.map((event) => (
-                  <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer" onClick={() => navigate('/athletics')}>
+                  <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-card hover:bg-muted/50 transition-colors cursor-pointer" onClick={() => navigate('/athletics')}>
                     <div className="flex-1">
                       <p className="font-medium text-sm mb-1">{event.title}</p>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
