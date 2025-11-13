@@ -761,21 +761,34 @@ export default function SportsCalendar() {
                   <p className="text-2xl font-bold">{getRosterCount(showRosterPopup.id)}</p>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="space-y-2">
                 <Button 
                   onClick={() => {
                     setManagingRoster({ id: showRosterPopup.id, title: showRosterPopup.title });
                     setShowRosterPopup(null);
                   }}
-                  className="flex-1"
+                  className="w-full"
                 >
                   <UserCheck className="h-4 w-4 mr-2" />
                   Manage Roster
                 </Button>
-                <Button variant="outline" onClick={() => handleEdit(showRosterPopup)}>
-                  <Pencil className="h-4 w-4 mr-2" />
-                  Edit Event
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => handleEdit(showRosterPopup)} className="flex-1">
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Edit Event
+                  </Button>
+                  <Button 
+                    variant="destructive" 
+                    onClick={() => {
+                      setShowRosterPopup(null);
+                      setDeletingId(showRosterPopup.id);
+                    }}
+                    className="flex-1"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Event
+                  </Button>
+                </div>
               </div>
             </div>
           </DialogContent>
