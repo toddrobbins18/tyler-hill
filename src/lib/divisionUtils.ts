@@ -17,10 +17,16 @@ export interface Division {
  */
 export const sortDivisionsGirlsFirst = (divisions: Division[]): Division[] => {
   return [...divisions].sort((a, b) => {
-    // First sort by gender - girls (female) come before boys (male)
-    const genderOrder = { female: 0, male: 1 };
-    const genderA = genderOrder[a.gender.toLowerCase() as keyof typeof genderOrder] ?? 2;
-    const genderB = genderOrder[b.gender.toLowerCase() as keyof typeof genderOrder] ?? 2;
+    // First sort by gender - girls/female come before boys/male
+    const getGenderOrder = (gender: string): number => {
+      const normalized = gender.toLowerCase();
+      if (normalized === 'girls' || normalized === 'female') return 0;
+      if (normalized === 'boys' || normalized === 'male') return 1;
+      return 2; // fallback for any other values
+    };
+    
+    const genderA = getGenderOrder(a.gender);
+    const genderB = getGenderOrder(b.gender);
     
     if (genderA !== genderB) {
       return genderA - genderB;
@@ -45,10 +51,16 @@ export const sortByDivisionGirlsFirst = <T extends { division?: Division | null;
     if (!divA) return 1;
     if (!divB) return -1;
     
-    // First sort by gender
-    const genderOrder = { female: 0, male: 1 };
-    const genderA = genderOrder[divA.gender.toLowerCase() as keyof typeof genderOrder] ?? 2;
-    const genderB = genderOrder[divB.gender.toLowerCase() as keyof typeof genderOrder] ?? 2;
+    // First sort by gender - girls/female come before boys/male
+    const getGenderOrder = (gender: string): number => {
+      const normalized = gender.toLowerCase();
+      if (normalized === 'girls' || normalized === 'female') return 0;
+      if (normalized === 'boys' || normalized === 'male') return 1;
+      return 2; // fallback for any other values
+    };
+    
+    const genderA = getGenderOrder(divA.gender);
+    const genderB = getGenderOrder(divB.gender);
     
     if (genderA !== genderB) {
       return genderA - genderB;

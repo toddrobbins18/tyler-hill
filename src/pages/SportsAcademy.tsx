@@ -17,6 +17,7 @@ import { format, isSameDay, parseISO } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
+import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 
 export default function SportsAcademy() {
   const { currentCompany } = useCompany();
@@ -133,7 +134,7 @@ export default function SportsAcademy() {
       .order("sort_order");
     
     if (data) {
-      setDivisions(data);
+      setDivisions(sortDivisionsGirlsFirst(data));
     }
   };
 
