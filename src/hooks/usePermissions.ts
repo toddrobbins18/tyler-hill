@@ -65,13 +65,16 @@ export function usePermissions() {
   };
 
   // Check if user can access a page
-  const canAccessPage = async (pageName: string): Promise<boolean> => {
+  const canAccessPage = async (
+    pageName: string,
+    options?: { respectPermissions?: boolean }
+  ): Promise<boolean> => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return false;
 
-      // Super admins bypass all permission checks
-      if (isSuperAdmin) return true;
+      // Super admins bypass all permission checks UNLESS we're filtering menus
+      if (isSuperAdmin && !options?.respectPermissions) return true;
       
       if (!currentCompany) {
         console.warn('[usePermissions] No currentCompany for permission check');

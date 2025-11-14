@@ -27,7 +27,7 @@ const getMenuItems = (companySlug?: string) => {
   const baseItems = [
     { title: companySlug === 'timber-lake-west' ? "Athletics" : "Sports Calendar", url: "/athletics", icon: Trophy, menuId: "sports-calendar" },
     { title: "Camper", url: "/roster", icon: Users, menuId: "roster" },
-    { title: companySlug === 'timber-lake-west' ? "Tiger Times" : "Dashboard", url: "/", icon: Home, menuId: "dashboard" },
+    { title: "Dashboard", url: "/", icon: Home, menuId: "dashboard" },
     { title: "Master Calendar", url: "/calendar", icon: Calendar, menuId: "calendar" },
     { title: "Menu", url: "/menu", icon: Utensils, menuId: "menu" },
     { title: "Rainy Day Schedule", url: "/rainy-day", icon: CloudRain, menuId: "rainy-day" },
@@ -36,13 +36,19 @@ const getMenuItems = (companySlug?: string) => {
     { title: "Tutoring & Therapy", url: "/tutoring-therapy", icon: BookOpen, menuId: "tutoring-therapy" },
   ];
 
-  // Add items ONLY for companies OTHER THAN Timber Lake Camp
+  // Add items for specific companies
   if (companySlug !== 'timber-lake-camp') {
     baseItems.push(
       { title: "Activities & Field Trips", url: "/activities", icon: Palmtree, menuId: "activities" },
       { title: "Messages", url: "/messages", icon: Mail, menuId: "messages" },
-      { title: "Special Meals", url: "/special-meals", icon: Utensils, menuId: "special-meals" },
       { title: "Transportation", url: "/transportation", icon: Truck, menuId: "transportation" }
+    );
+  }
+
+  // Special Meals only for Tyler Hill Camp
+  if (companySlug === 'tyler-hill-camp') {
+    baseItems.push(
+      { title: "Special Meals", url: "/special-meals", icon: Utensils, menuId: "special-meals" }
     );
   }
 
@@ -141,7 +147,7 @@ export function AppSidebar() {
   const filterMenuItems = async () => {
     const filtered = [];
     for (const item of items) {
-      const hasAccess = await canAccessPage(item.menuId);
+      const hasAccess = await canAccessPage(item.menuId, { respectPermissions: true });
       if (hasAccess) {
         filtered.push(item);
       }
