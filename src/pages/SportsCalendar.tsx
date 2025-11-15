@@ -1003,45 +1003,47 @@ export default function SportsCalendar() {
               )}
             </div>
 
-            <div className="space-y-3 border-t pt-4">
-              <Label className="text-base font-semibold">Staff Assignment</Label>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="division-coach"
-                  checked={formData.division_provides_coach}
-                  onCheckedChange={(checked) =>
-                    setFormData({
-                      ...formData,
-                      division_provides_coach: checked as boolean,
-                    })
-                  }
-                />
-                <label
-                  htmlFor="division-coach"
-                  className="text-sm cursor-pointer"
-                >
-                  Division will provide coach
-                </label>
+            {editingEvent && (
+              <div className="space-y-3 border-t pt-4">
+                <Label className="text-base font-semibold">Staff Assignment</Label>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="division-coach"
+                    checked={formData.division_provides_coach}
+                    onCheckedChange={(checked) =>
+                      setFormData({
+                        ...formData,
+                        division_provides_coach: checked as boolean,
+                      })
+                    }
+                  />
+                  <label
+                    htmlFor="division-coach"
+                    className="text-sm cursor-pointer"
+                  >
+                    Division will provide coach
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="division-ref"
+                    checked={formData.division_provides_ref}
+                    onCheckedChange={(checked) =>
+                      setFormData({
+                        ...formData,
+                        division_provides_ref: checked as boolean,
+                      })
+                    }
+                  />
+                  <label
+                    htmlFor="division-ref"
+                    className="text-sm cursor-pointer"
+                  >
+                    Division will provide ref
+                  </label>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="division-ref"
-                  checked={formData.division_provides_ref}
-                  onCheckedChange={(checked) =>
-                    setFormData({
-                      ...formData,
-                      division_provides_ref: checked as boolean,
-                    })
-                  }
-                />
-                <label
-                  htmlFor="division-ref"
-                  className="text-sm cursor-pointer"
-                >
-                  Division will provide ref
-                </label>
-              </div>
-            </div>
+            )}
 
             <div className="flex gap-2 justify-end">
               <Button type="button" variant="outline" onClick={() => { setShowDialog(false); resetForm(); }}>
