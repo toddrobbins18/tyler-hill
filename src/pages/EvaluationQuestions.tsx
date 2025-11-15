@@ -54,6 +54,7 @@ export default function EvaluationQuestions() {
       .from("evaluation_questions")
       .select("*")
       .eq("is_active", true)
+      .eq("company_id", currentCompany?.id)
       .order("staff_type, category, display_order, created_at");
 
     if (error) {
