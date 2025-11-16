@@ -266,6 +266,7 @@ export type Database = {
           created_at: string | null
           id: string
           is_active: boolean | null
+          max_rating: number | null
           options: Json | null
           question_text: string
           question_type: string
@@ -277,6 +278,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           is_active?: boolean | null
+          max_rating?: number | null
           options?: Json | null
           question_text: string
           question_type: string
@@ -288,6 +290,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           is_active?: boolean | null
+          max_rating?: number | null
           options?: Json | null
           question_text?: string
           question_type?: string
