@@ -4,6 +4,25 @@ import { useCompany } from '@/contexts/CompanyContext';
 
 export type AppRole = 'admin' | 'staff' | 'division_leader' | 'specialist' | 'viewer' | 'super_admin';
 
+/**
+ * Division Access Control Model:
+ * 
+ * - super_admin: ALL divisions, ALL companies
+ * - admin: ALL divisions in their company
+ * - staff: ALL divisions in their company
+ * - specialist: ALL divisions in their company
+ * - division_leader: ONLY assigned divisions (via division_permissions)
+ * - viewer: ONLY assigned divisions (via division_permissions)
+ * 
+ * Database Level (RLS Policies):
+ * - Policies automatically filter data based on user's accessible divisions
+ * - Uses get_user_divisions() function to retrieve assigned divisions
+ * 
+ * Client Level (UI Filtering):
+ * - Use getDivisionFilter() to filter queries
+ * - Returns null for users with full access (admin, staff, specialist)
+ * - Returns array of division IDs for division_leader and viewer roles
+ */
 export function usePermissions() {
   const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [userRoles, setUserRoles] = useState<AppRole[]>([]);

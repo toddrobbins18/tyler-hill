@@ -18,6 +18,7 @@ import { format, isBefore, startOfDay, isToday } from "date-fns";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import { usePermissions } from "@/hooks/usePermissions";
 
 // Helper to check if we should show limited features for Timber Lake
 const useTimberLakeMode = () => {
@@ -86,13 +87,18 @@ export default function Nurse() {
     };
   }, [selectedDate, currentSeason]);
 
+  const { getDivisionFilter } = usePermissions();
+
   const fetchChildren = async () => {
     if (!currentCompany?.id) {
       setChildren([]);
       setLoading(false);
       return;
     }
-    const { data, error } = await supabase
+    
+    const divisionFilter = getDivisionFilter();
+    
+    let query = supabase
       .from("children")
       .select(`
         *,
@@ -100,14 +106,21 @@ export default function Nurse() {
       `)
       .eq("status", "active")
       .eq("season", currentSeason)
-      .eq('company_id', currentCompany.id)
-      .order("name");
+      .eq('company_id', currentCompany.id);
+    
+    // Apply division filter if user has limited access
+    if (divisionFilter !== null && divisionFilter.length > 0) {
+      query = query.in('division_id', divisionFilter);
+    }
+    
+    const { data, error } = await query.order("name");
 
     if (error) {
+      console.error("Error fetching children:", error);
       toast({ title: "Error fetching children", variant: "destructive" });
-      return;
+    } else {
+      setChildren(data || []);
     }
-    setChildren(data || []);
     setLoading(false);
   };
 

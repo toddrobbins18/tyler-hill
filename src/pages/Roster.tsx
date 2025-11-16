@@ -51,6 +51,8 @@ export default function Roster() {
   const itemsPerPage = 50;
   const navigate = useNavigate();
 
+  const { getDivisionFilter } = usePermissions();
+
   const fetchChildren = async () => {
     setLoading(true);
     
@@ -60,25 +62,41 @@ export default function Roster() {
       return;
     }
     
-    // Fetch first batch (0-999)
-    const { data: batch1, error: error1 } = await supabase
+    const divisionFilter = getDivisionFilter();
+    
+    // Build base query for first batch
+    let query1 = supabase
       .from("children")
       .select(`
         *,
         division:divisions(id, name, gender, sort_order)
       `)
-      .eq('company_id', currentCompany.id)
+      .eq('company_id', currentCompany.id);
+    
+    // Apply division filter if user has limited access
+    if (divisionFilter !== null && divisionFilter.length > 0) {
+      query1 = query1.in('division_id', divisionFilter);
+    }
+    
+    const { data: batch1, error: error1 } = await query1
       .order("name")
       .range(0, 999);
 
-    // Fetch second batch (1000-1999)
-    const { data: batch2, error: error2 } = await supabase
+    // Build base query for second batch
+    let query2 = supabase
       .from("children")
       .select(`
         *,
         division:divisions(id, name, gender, sort_order)
       `)
-      .eq('company_id', currentCompany.id)
+      .eq('company_id', currentCompany.id);
+    
+    // Apply division filter if user has limited access
+    if (divisionFilter !== null && divisionFilter.length > 0) {
+      query2 = query2.in('division_id', divisionFilter);
+    }
+    
+    const { data: batch2, error: error2 } = await query2
       .order("name")
       .range(1000, 1999);
     

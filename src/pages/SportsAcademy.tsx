@@ -18,10 +18,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function SportsAcademy() {
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
+  const { getDivisionFilter } = usePermissions();
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [children, setChildren] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
@@ -110,12 +112,21 @@ export default function SportsAcademy() {
       setChildren([]);
       return;
     }
-    const { data } = await supabase
+    
+    const divisionFilter = getDivisionFilter();
+    
+    let query = supabase
       .from("children")
       .select("id, name, age, gender, division_id")
       .eq("status", "active")
-      .eq('company_id', currentCompany.id)
-      .order("name");
+      .eq('company_id', currentCompany.id);
+    
+    // Apply division filter if user has limited access
+    if (divisionFilter !== null && divisionFilter.length > 0) {
+      query = query.in('division_id', divisionFilter);
+    }
+    
+    const { data } = await query.order("name");
     
     if (data) {
       setChildren(data);
