@@ -157,7 +157,7 @@ export default function EvaluateCamperDialog({
         return (
           <div className="space-y-2">
             <div className="flex gap-2">
-              {[1, 2, 3, 4, 5].map((rating) => (
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => (
                 <Button
                   key={rating}
                   type="button"
