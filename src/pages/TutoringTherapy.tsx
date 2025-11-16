@@ -17,6 +17,7 @@ import { Calendar as CalendarIcon, Plus, Pencil, Trash2, Search, X, Filter } fro
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface Enrollment {
   id: string;
@@ -47,6 +48,7 @@ interface Division {
 const TutoringTherapy = () => {
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
+  const { getDivisionFilter } = usePermissions();
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [children, setChildren] = useState<Child[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
@@ -117,7 +119,20 @@ const TutoringTherapy = () => {
       return;
     }
     try {
-      const { data, error } = await supabase.from("children").select("*").eq('company_id', currentCompany.id).order("name");
+      const divisionFilter = getDivisionFilter();
+      
+      let query = supabase
+        .from("children")
+        .select("*")
+        .eq('company_id', currentCompany.id);
+      
+      // Apply division filter if user has limited access
+      if (divisionFilter !== null && divisionFilter.length > 0) {
+        query = query.in('division_id', divisionFilter);
+      }
+      
+      const { data, error } = await query.order("name");
+      
       if (error) throw error;
       setChildren(data || []);
     } catch (error) {

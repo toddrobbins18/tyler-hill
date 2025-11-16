@@ -5,6 +5,7 @@ import { useSeasonContext } from '@/contexts/SeasonContext';
 import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
+import { usePermissions } from '@/hooks/usePermissions';
 
 interface BirthdayChild {
   id: string;
@@ -92,20 +93,30 @@ export default function DailyWolfPrintable() {
     };
   }, [currentCompany?.id, currentSeason]);
 
+  const { getDivisionFilter } = usePermissions();
+
   const fetchAllData = async () => {
     try {
       setLoading(true);
       const today = new Date().toISOString().split('T')[0];
       const todayDate = new Date();
+      const divisionFilter = getDivisionFilter();
 
-      // Fetch birthday children
-      const { data: childrenData } = await supabase
+      // Fetch birthday children with division filtering
+      let childrenQuery = supabase
         .from('children')
-        .select('id, name, date_of_birth')
+        .select('id, name, date_of_birth, division_id')
         .eq('company_id', currentCompany.id)
         .eq('season', currentSeason)
         .eq('status', 'active')
         .not('date_of_birth', 'is', null);
+      
+      // Apply division filter if user has limited access
+      if (divisionFilter !== null && divisionFilter.length > 0) {
+        childrenQuery = childrenQuery.in('division_id', divisionFilter);
+      }
+
+      const { data: childrenData } = await childrenQuery;
 
       const todaysBirthdays = childrenData?.filter(child => {
         const birthday = new Date(child.date_of_birth);
