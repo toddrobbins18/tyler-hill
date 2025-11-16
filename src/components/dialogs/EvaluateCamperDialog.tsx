@@ -22,6 +22,7 @@ interface Question {
   question_type: 'rating' | 'text' | 'multiple_choice';
   options?: string[];
   sort_order: number;
+  max_rating?: number;
 }
 
 interface EvaluateCamperDialogProps {
@@ -85,6 +86,7 @@ export default function EvaluateCamperDialog({
         question_type: q.question_type as 'rating' | 'text' | 'multiple_choice',
         options: typeof q.options === 'string' ? JSON.parse(q.options) : q.options,
         sort_order: q.sort_order,
+        max_rating: q.max_rating || 10,
       }));
 
       setQuestions(parsedQuestions);
@@ -154,10 +156,11 @@ export default function EvaluateCamperDialog({
   const renderQuestion = (question: Question) => {
     switch (question.question_type) {
       case 'rating':
+        const maxRating = question.max_rating || 10;
         return (
           <div className="space-y-2">
             <div className="flex gap-2">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => (
+              {Array.from({ length: maxRating }, (_, i) => i + 1).map((rating) => (
                 <Button
                   key={rating}
                   type="button"
