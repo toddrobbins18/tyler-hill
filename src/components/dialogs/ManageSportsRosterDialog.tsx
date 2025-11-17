@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -34,6 +35,7 @@ export default function ManageSportsRosterDialog({
   divisionProvidesRef = false,
 }: ManageSportsRosterDialogProps) {
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const [children, setChildren] = useState<any[]>([]);
   const [staff, setStaff] = useState<any[]>([]);
   const [roster, setRoster] = useState<Set<string>>(new Set());
@@ -59,7 +61,7 @@ export default function ManageSportsRosterDialog({
     if (open) {
       fetchData();
     }
-  }, [open, eventId]);
+  }, [open, eventId, currentSeason]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -67,20 +69,22 @@ export default function ManageSportsRosterDialog({
     if (!currentCompany?.id) return;
     
     // Fetch all active children
-    const { data: childrenData } = await supabase
-      .from("children")
-      .select("*")
-      .eq("status", "active")
-      .eq("company_id", currentCompany.id)
-      .order("name");
+      const { data: childrenData } = await supabase
+        .from("children")
+        .select("*")
+        .eq("status", "active")
+        .eq("company_id", currentCompany.id)
+        .eq("season", currentSeason)
+        .order("name");
 
     // Fetch all active staff
-    const { data: staffData } = await supabase
-      .from("staff")
-      .select("*")
-      .eq("status", "active")
-      .eq("company_id", currentCompany.id)
-      .order("name");
+      const { data: staffData } = await supabase
+        .from("staff")
+        .select("*")
+        .eq("status", "active")
+        .eq("company_id", currentCompany.id)
+        .eq("season", currentSeason)
+        .order("name");
 
     // Fetch existing roster
     const { data: rosterData } = await supabase
