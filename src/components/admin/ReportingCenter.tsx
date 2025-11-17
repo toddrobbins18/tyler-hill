@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
-import { Download, FileText, Calendar } from "lucide-react";
+import { Download, FileText, Calendar, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { exportToCSV, exportToPDF } from "@/lib/reportExports";
 import { format } from "date-fns";
 
@@ -21,6 +21,8 @@ export default function ReportingCenter() {
   const [reportData, setReportData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<Record<string, any>>({});
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const { toast } = useToast();
   const { currentCompany } = useCompany();
   const { selectedSeason } = useSeason();
@@ -321,6 +323,60 @@ export default function ReportingCenter() {
     }
   }, [reportType, currentCompany, selectedSeason]);
 
+  useEffect(() => {
+    setSortColumn(null);
+    setSortDirection('asc');
+  }, [reportData]);
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      if (sortDirection === 'asc') {
+        setSortDirection('desc');
+      } else {
+        setSortColumn(null);
+        setSortDirection('asc');
+      }
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortedData = useMemo(() => {
+    if (!sortColumn || reportData.length === 0) return reportData;
+    
+    return [...reportData].sort((a, b) => {
+      const aVal = a[sortColumn];
+      const bVal = b[sortColumn];
+      
+      // Handle null/undefined
+      if (aVal == null) return 1;
+      if (bVal == null) return -1;
+      
+      // Detect and handle dates (YYYY-MM-DD format)
+      const isDate = /^\d{4}-\d{2}-\d{2}/.test(String(aVal));
+      if (isDate) {
+        const dateA = new Date(aVal).getTime();
+        const dateB = new Date(bVal).getTime();
+        return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+      }
+      
+      // Handle numbers
+      const numA = Number(aVal);
+      const numB = Number(bVal);
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return sortDirection === 'asc' ? numA - numB : numB - numA;
+      }
+      
+      // Handle strings (case-insensitive)
+      const strA = String(aVal).toLowerCase();
+      const strB = String(bVal).toLowerCase();
+      if (strA < strB) return sortDirection === 'asc' ? -1 : 1;
+      if (strA > strB) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [reportData, sortColumn, sortDirection]);
+
   const handleExportCSV = () => {
     const filename = `${reportType}_report`;
     exportToCSV(reportData, filename);
@@ -450,14 +506,29 @@ export default function ReportingCenter() {
                     <thead className="bg-muted">
                       <tr>
                         {Object.keys(reportData[0]).map((header) => (
-                          <th key={header} className="px-4 py-3 text-left text-sm font-medium">
-                            {header}
+                          <th 
+                            key={header} 
+                            className="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-muted/80 transition-colors select-none"
+                            onClick={() => handleSort(header)}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span>{header}</span>
+                              {sortColumn === header ? (
+                                sortDirection === 'asc' ? (
+                                  <ArrowUp className="h-4 w-4 text-primary" />
+                                ) : (
+                                  <ArrowDown className="h-4 w-4 text-primary" />
+                                )
+                              ) : (
+                                <ArrowUpDown className="h-4 w-4 text-muted-foreground/50" />
+                              )}
+                            </div>
                           </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {reportData.map((row, index) => (
+                      {sortedData.map((row, index) => (
                         <tr key={index} className="hover:bg-muted/50">
                           {Object.values(row).map((value: any, cellIndex) => (
                             <td key={cellIndex} className="px-4 py-3 text-sm">
