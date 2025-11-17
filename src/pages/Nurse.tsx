@@ -337,6 +337,7 @@ export default function Nurse() {
         reason,
         notes,
         season: currentSeason,
+        company_id: currentCompany.id,
       });
 
     if (error) {
