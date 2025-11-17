@@ -1187,7 +1187,7 @@ export type Database = {
           is_recurring: boolean | null
           late_notes: string | null
           late_notes_timestamp: string | null
-          meal_time: string | null
+          meal_time: string[] | null
           medication_name: string
           notes: string | null
           scheduled_time: string | null
@@ -1211,7 +1211,7 @@ export type Database = {
           is_recurring?: boolean | null
           late_notes?: string | null
           late_notes_timestamp?: string | null
-          meal_time?: string | null
+          meal_time?: string[] | null
           medication_name: string
           notes?: string | null
           scheduled_time?: string | null
@@ -1235,7 +1235,7 @@ export type Database = {
           is_recurring?: boolean | null
           late_notes?: string | null
           late_notes_timestamp?: string | null
-          meal_time?: string | null
+          meal_time?: string[] | null
           medication_name?: string
           notes?: string | null
           scheduled_time?: string | null

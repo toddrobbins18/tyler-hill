@@ -325,6 +325,56 @@ export default function ManageSportsRosterDialog({
             </DialogTitle>
           </DialogHeader>
 
+          {/* Allergy Alert Summary */}
+          {(() => {
+            const campersWithAllergies = Array.from(roster)
+              .map(childId => children.find(c => c.id === childId))
+              .filter(child => child?.allergies);
+            
+            const staffWithAllergies = [...assignedCoaches, ...assignedRefs]
+              .map(staffId => staff.find(s => s.id === staffId))
+              .filter(staffMember => staffMember?.allergies);
+            
+            const totalAllergies = campersWithAllergies.length + staffWithAllergies.length;
+            
+            if (totalAllergies === 0) return null;
+            
+            return (
+              <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 mb-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">⚠️</span>
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-destructive mb-1">
+                      ALLERGY ALERT: {totalAllergies} individual{totalAllergies > 1 ? 's' : ''} with documented allergies
+                    </h4>
+                    <p className="text-sm text-destructive/80">
+                      {campersWithAllergies.length > 0 && `${campersWithAllergies.length} camper${campersWithAllergies.length > 1 ? 's' : ''}`}
+                      {campersWithAllergies.length > 0 && staffWithAllergies.length > 0 && ' and '}
+                      {staffWithAllergies.length > 0 && `${staffWithAllergies.length} staff member${staffWithAllergies.length > 1 ? 's' : ''}`}
+                    </p>
+                    <details className="mt-2">
+                      <summary className="text-xs cursor-pointer text-destructive/80 hover:text-destructive">
+                        View allergy details
+                      </summary>
+                      <div className="mt-2 space-y-1 text-xs">
+                        {campersWithAllergies.map(child => (
+                          <div key={child!.id} className="pl-4">
+                            <span className="font-medium">{child!.name} (Camper):</span> {child!.allergies}
+                          </div>
+                        ))}
+                        {staffWithAllergies.map(staffMember => (
+                          <div key={staffMember!.id} className="pl-4">
+                            <span className="font-medium">{staffMember!.name} (Staff):</span> {staffMember!.allergies}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="campers">Select Campers</TabsTrigger>
@@ -382,7 +432,14 @@ export default function ManageSportsRosterDialog({
                         htmlFor={child.id}
                         className="flex-1 cursor-pointer flex items-center justify-between"
                       >
-                        <span className="font-medium">{child.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{child.name}</span>
+                          {child.allergies && (
+                            <Badge variant="destructive" className="text-xs">
+                              ⚠️ Allergies
+                            </Badge>
+                          )}
+                        </div>
                         <div className="flex gap-4 text-sm text-muted-foreground">
                           {child.age && <span>Age: {child.age}</span>}
                           {child.grade && <span>Grade: {child.grade}</span>}
@@ -445,19 +502,29 @@ export default function ManageSportsRosterDialog({
                       </Select>
 
                       <div className="space-y-2">
-                        {assignedCoaches.map(coachId => (
-                          <div key={coachId} className="flex items-center justify-between p-2 bg-muted rounded">
-                            <span className="text-sm font-medium">{getStaffName(coachId)}</span>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-6 w-6"
-                              onClick={() => setAssignedCoaches(assignedCoaches.filter(id => id !== coachId))}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        ))}
+                        {assignedCoaches.map(coachId => {
+                          const coach = staff.find(s => s.id === coachId);
+                          return (
+                            <div key={coachId} className="flex items-center justify-between p-2 bg-muted rounded">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium">{coach?.name || "Unknown"}</span>
+                                {coach?.allergies && (
+                                  <Badge variant="destructive" className="text-xs">
+                                    ⚠️ Allergies: {coach.allergies}
+                                  </Badge>
+                                )}
+                              </div>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6"
+                                onClick={() => setAssignedCoaches(assignedCoaches.filter(id => id !== coachId))}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          );
+                        })}
                         {assignedCoaches.length === 0 && (
                           <p className="text-sm text-muted-foreground">No coaches assigned</p>
                         )}
@@ -504,19 +571,29 @@ export default function ManageSportsRosterDialog({
                       </Select>
 
                       <div className="space-y-2">
-                        {assignedRefs.map(refId => (
-                          <div key={refId} className="flex items-center justify-between p-2 bg-muted rounded">
-                            <span className="text-sm font-medium">{getStaffName(refId)}</span>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-6 w-6"
-                              onClick={() => setAssignedRefs(assignedRefs.filter(id => id !== refId))}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        ))}
+                        {assignedRefs.map(refId => {
+                          const ref = staff.find(s => s.id === refId);
+                          return (
+                            <div key={refId} className="flex items-center justify-between p-2 bg-muted rounded">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium">{ref?.name || "Unknown"}</span>
+                                {ref?.allergies && (
+                                  <Badge variant="destructive" className="text-xs">
+                                    ⚠️ Allergies: {ref.allergies}
+                                  </Badge>
+                                )}
+                              </div>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6"
+                                onClick={() => setAssignedRefs(assignedRefs.filter(id => id !== refId))}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          );
+                        })}
                         {assignedRefs.length === 0 && (
                           <p className="text-sm text-muted-foreground">No referees assigned</p>
                         )}
