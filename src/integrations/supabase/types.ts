@@ -525,6 +525,68 @@ export type Database = {
         }
         Relationships: []
       }
+      company_email_config: {
+        Row: {
+          company_id: string
+          configured_at: string | null
+          configured_by: string | null
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          is_configured: boolean | null
+          last_test_status: string | null
+          last_tested_at: string | null
+          m365_client_id: string | null
+          m365_client_secret_encrypted: string | null
+          m365_sender_email: string | null
+          m365_sender_name: string | null
+          m365_tenant_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          company_id: string
+          configured_at?: string | null
+          configured_by?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_configured?: boolean | null
+          last_test_status?: string | null
+          last_tested_at?: string | null
+          m365_client_id?: string | null
+          m365_client_secret_encrypted?: string | null
+          m365_sender_email?: string | null
+          m365_sender_name?: string | null
+          m365_tenant_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          company_id?: string
+          configured_at?: string | null
+          configured_by?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_configured?: boolean | null
+          last_test_status?: string | null
+          last_tested_at?: string | null
+          m365_client_id?: string | null
+          m365_client_secret_encrypted?: string | null
+          m365_sender_email?: string | null
+          m365_sender_name?: string | null
+          m365_tenant_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_email_config_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_notes: {
         Row: {
           activities: string | null
@@ -2638,6 +2700,8 @@ export type Database = {
         Args: { _page_name: string; _user_id: string }
         Returns: boolean
       }
+      decrypt_secret: { Args: { encrypted: string }; Returns: string }
+      encrypt_secret: { Args: { secret: string }; Returns: string }
       get_user_company: { Args: { _user_id: string }; Returns: string }
       get_user_divisions: { Args: { _user_id: string }; Returns: string[] }
       has_role: {

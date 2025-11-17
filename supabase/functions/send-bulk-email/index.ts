@@ -53,6 +53,33 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error("Unauthorized");
     }
 
+    // Get sender's company
+    const { data: senderProfile, error: profileError } = await supabase
+      .from('profiles')
+      .select('company_id, companies!inner(name)')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || !senderProfile?.company_id) {
+      throw new Error("User has no company associated");
+    }
+
+    const companyName = (senderProfile.companies as any)?.name || 'Unknown';
+    console.log(`📧 Sending from company: ${companyName}`);
+
+    // Get company's M365 configuration
+    const { data: emailConfig, error: configError } = await supabase
+      .from('company_email_config')
+      .select('*')
+      .eq('company_id', senderProfile.company_id)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (!emailConfig || !emailConfig.is_configured) {
+      console.warn("⚠️ Email not configured for this company");
+      // Continue - will skip email sending but still send in-app
+    }
+
     // Fetch recipients by tags
     let recipientsByTag: any[] = [];
     if (recipientTags && recipientTags.length > 0) {
@@ -141,48 +168,110 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Send email notifications if selected
     if (deliveryMethods.email) {
-      console.log("=== EMAIL SENDING PLACEHOLDER ===");
-      console.log(`Would send email to ${recipients.length} recipients`);
-      console.log(`Subject: ${subject}`);
-      console.log(`Message preview: ${message.substring(0, 100)}...`);
-      console.log(`Recipients: ${emails.join(", ")}`);
-      console.log("================================");
-      
-      // ============================================================
-      // TODO: MICROSOFT 365 EMAIL INTEGRATION
-      // ============================================================
-      // You'll need to add these secrets to Lovable Cloud:
-      // - MICROSOFT_TENANT_ID
-      // - MICROSOFT_CLIENT_ID
-      // - MICROSOFT_CLIENT_SECRET
-      // 
-      // Then implement Microsoft Graph API integration here:
-      // 
-      // 1. Get access token:
-      //    POST https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token
-      //    body: {
-      //      client_id: MICROSOFT_CLIENT_ID,
-      //      client_secret: MICROSOFT_CLIENT_SECRET,
-      //      scope: "https://graph.microsoft.com/.default",
-      //      grant_type: "client_credentials"
-      //    }
-      //
-      // 2. Send emails via Microsoft Graph API:
-      //    POST https://graph.microsoft.com/v1.0/users/{sender-email}/sendMail
-      //    headers: { Authorization: `Bearer ${accessToken}` }
-      //    body: {
-      //      message: {
-      //        subject: subject,
-      //        body: { contentType: "Text", content: message },
-      //        toRecipients: emails.map(email => ({ emailAddress: { address: email } }))
-      //      }
-      //    }
-      //
-      // Documentation:
-      // https://learn.microsoft.com/en-us/graph/api/user-sendmail
-      // ============================================================
-      
-      deliveryMethodsUsed.push("email");
+      if (!emailConfig || !emailConfig.is_configured) {
+        console.warn("⚠️ Email sending requested but not configured for this company");
+        deliveryMethodsUsed.push("email_not_configured");
+      } else {
+        try {
+          console.log("📤 Sending emails via Microsoft 365");
+
+          // Decrypt the client secret
+          const { data: decryptedSecret, error: decryptError } = await supabase.rpc(
+            "decrypt_secret",
+            { encrypted: emailConfig.m365_client_secret_encrypted }
+          );
+
+          if (decryptError) {
+            console.error("Failed to decrypt secret:", decryptError);
+            throw new Error("Failed to decrypt credentials");
+          }
+
+          // Get access token
+          const tokenResponse = await fetch(
+            `https://login.microsoftonline.com/${emailConfig.m365_tenant_id}/oauth2/v2.0/token`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({
+                client_id: emailConfig.m365_client_id,
+                client_secret: decryptedSecret,
+                scope: "https://graph.microsoft.com/.default",
+                grant_type: "client_credentials",
+              }),
+            }
+          );
+
+          const tokenData = await tokenResponse.json();
+
+          if (!tokenResponse.ok) {
+            console.error("Failed to get access token:", tokenData);
+            throw new Error("Failed to authenticate with Microsoft 365");
+          }
+
+          const accessToken = tokenData.access_token;
+          let successCount = 0;
+          let failCount = 0;
+
+          // Send emails via Microsoft Graph API
+          for (const recipient of recipients) {
+            try {
+              const emailPayload = {
+                message: {
+                  subject: subject,
+                  body: {
+                    contentType: "HTML",
+                    content: message.replace(/\n/g, "<br>"),
+                  },
+                  from: {
+                    emailAddress: {
+                      address: emailConfig.m365_sender_email,
+                      name: emailConfig.m365_sender_name || companyName,
+                    },
+                  },
+                  toRecipients: [
+                    {
+                      emailAddress: {
+                        address: recipient.email,
+                        name: recipient.full_name,
+                      },
+                    },
+                  ],
+                },
+              };
+
+              const sendResponse = await fetch(
+                `https://graph.microsoft.com/v1.0/users/${emailConfig.m365_sender_email}/sendMail`,
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify(emailPayload),
+                }
+              );
+
+              if (sendResponse.ok) {
+                successCount++;
+                console.log(`✓ Email sent to ${recipient.email}`);
+              } else {
+                failCount++;
+                const errorData = await sendResponse.text();
+                console.error(`✗ Failed to send email to ${recipient.email}:`, errorData);
+              }
+            } catch (emailError) {
+              failCount++;
+              console.error(`✗ Error sending email to ${recipient.email}:`, emailError);
+            }
+          }
+
+          console.log(`📧 Email sending complete: ${successCount} success, ${failCount} failed`);
+          deliveryMethodsUsed.push("email");
+        } catch (error) {
+          console.error("Email sending error:", error);
+          deliveryMethodsUsed.push("email_failed");
+        }
+      }
     }
 
     // Log notification attempt to database
@@ -205,15 +294,21 @@ const handler = async (req: Request): Promise<Response> => {
       m === 'in_app' ? 'in-app notification' : 'email'
     ).join(' and ');
 
+    const responseNote = deliveryMethodsUsed.includes("email_not_configured")
+      ? "In-app notifications sent. Email not configured for your company."
+      : deliveryMethodsUsed.includes("email_failed")
+      ? "In-app notifications sent. Email sending failed - check configuration."
+      : deliveryMethodsUsed.includes("email")
+      ? "Notifications sent via in-app and email."
+      : "In-app notifications sent successfully.";
+
     return new Response(
       JSON.stringify({
         success: true,
         recipient_count: recipients.length,
         recipients: emails,
         delivery_methods: deliveryMethodsUsed,
-        note: deliveryMethods.email 
-          ? "In-app notifications sent. Email integration pending."
-          : "In-app notifications sent successfully."
+        note: responseNote
       }),
       {
         status: 200,
