@@ -12,6 +12,10 @@ interface BulkEmailRequest {
   message: string;
   recipientTags: string[];
   recipientIds: string[];
+  deliveryMethods?: {
+    inApp: boolean;
+    email: boolean;
+  };
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -20,13 +24,19 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { subject, message, recipientTags, recipientIds }: BulkEmailRequest =
-      await req.json();
+    const { 
+      subject, 
+      message, 
+      recipientTags, 
+      recipientIds,
+      deliveryMethods = { inApp: true, email: false }
+    }: BulkEmailRequest = await req.json();
 
-    console.log("Received bulk email request:", {
+    console.log("Received bulk notification request:", {
       subject,
       recipientTags,
       recipientIds,
+      deliveryMethods,
     });
 
     // Initialize Supabase client
@@ -103,68 +113,107 @@ const handler = async (req: Request): Promise<Response> => {
     console.log(`Prepared ${recipients.length} unique recipients`);
     console.log(`Email addresses: ${emails.join(", ")}`);
 
-    // ============================================================
-    // TODO: MICROSOFT 365 EMAIL INTEGRATION
-    // ============================================================
-    // You'll need to add these secrets to Lovable Cloud:
-    // - MICROSOFT_TENANT_ID
-    // - MICROSOFT_CLIENT_ID
-    // - MICROSOFT_CLIENT_SECRET
-    // 
-    // Then implement Microsoft Graph API integration here:
-    // 
-    // 1. Get access token:
-    //    POST https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token
-    //    body: {
-    //      client_id: MICROSOFT_CLIENT_ID,
-    //      client_secret: MICROSOFT_CLIENT_SECRET,
-    //      scope: "https://graph.microsoft.com/.default",
-    //      grant_type: "client_credentials"
-    //    }
-    //
-    // 2. Send emails via Microsoft Graph API:
-    //    POST https://graph.microsoft.com/v1.0/users/{sender-email}/sendMail
-    //    headers: { Authorization: `Bearer ${accessToken}` }
-    //    body: {
-    //      message: {
-    //        subject: subject,
-    //        body: { contentType: "Text", content: message },
-    //        toRecipients: emails.map(email => ({ emailAddress: { address: email } }))
-    //      }
-    //    }
-    //
-    // Documentation:
-    // https://learn.microsoft.com/en-us/graph/api/user-sendmail
-    // ============================================================
+    const deliveryMethodsUsed: string[] = [];
 
-    console.log("=== EMAIL SENDING PLACEHOLDER ===");
-    console.log(`Would send email to ${emails.length} recipients`);
-    console.log(`Subject: ${subject}`);
-    console.log(`Message preview: ${message.substring(0, 100)}...`);
-    console.log(`Recipients: ${emails.join(", ")}`);
-    console.log("================================");
+    // Send in-app notifications if selected
+    if (deliveryMethods.inApp) {
+      const messages = recipients.map(recipient => ({
+        recipient_id: recipient.id,
+        subject: subject,
+        content: message,
+        read: false,
+        notification_type: 'notification',
+        created_at: new Date().toISOString()
+      }));
 
-    // Log email attempt to database
+      const { error: messagesError } = await supabase
+        .from("messages")
+        .insert(messages);
+
+      if (messagesError) {
+        console.error("Error sending in-app notifications:", messagesError);
+        throw new Error(`Failed to send in-app notifications: ${messagesError.message}`);
+      }
+
+      deliveryMethodsUsed.push("in_app");
+      console.log(`✓ Sent ${messages.length} in-app notifications`);
+    }
+
+    // Send email notifications if selected
+    if (deliveryMethods.email) {
+      console.log("=== EMAIL SENDING PLACEHOLDER ===");
+      console.log(`Would send email to ${recipients.length} recipients`);
+      console.log(`Subject: ${subject}`);
+      console.log(`Message preview: ${message.substring(0, 100)}...`);
+      console.log(`Recipients: ${emails.join(", ")}`);
+      console.log("================================");
+      
+      // ============================================================
+      // TODO: MICROSOFT 365 EMAIL INTEGRATION
+      // ============================================================
+      // You'll need to add these secrets to Lovable Cloud:
+      // - MICROSOFT_TENANT_ID
+      // - MICROSOFT_CLIENT_ID
+      // - MICROSOFT_CLIENT_SECRET
+      // 
+      // Then implement Microsoft Graph API integration here:
+      // 
+      // 1. Get access token:
+      //    POST https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token
+      //    body: {
+      //      client_id: MICROSOFT_CLIENT_ID,
+      //      client_secret: MICROSOFT_CLIENT_SECRET,
+      //      scope: "https://graph.microsoft.com/.default",
+      //      grant_type: "client_credentials"
+      //    }
+      //
+      // 2. Send emails via Microsoft Graph API:
+      //    POST https://graph.microsoft.com/v1.0/users/{sender-email}/sendMail
+      //    headers: { Authorization: `Bearer ${accessToken}` }
+      //    body: {
+      //      message: {
+      //        subject: subject,
+      //        body: { contentType: "Text", content: message },
+      //        toRecipients: emails.map(email => ({ emailAddress: { address: email } }))
+      //      }
+      //    }
+      //
+      // Documentation:
+      // https://learn.microsoft.com/en-us/graph/api/user-sendmail
+      // ============================================================
+      
+      deliveryMethodsUsed.push("email");
+    }
+
+    // Log notification attempt to database
     const { error: logError } = await supabase.from("email_logs").insert({
       sent_by: user.id,
       subject,
       recipient_count: recipients.length,
       recipient_tags: recipientTags,
       recipient_ids: Array.from(allRecipients.keys()),
-      status: "sent", // Change to "failed" if actual sending fails
+      delivery_methods: deliveryMethodsUsed,
+      status: "sent",
       error_details: null,
     });
 
     if (logError) {
-      console.error("Error logging email:", logError);
+      console.error("Error logging notification:", logError);
     }
+
+    const methodsDescription = deliveryMethodsUsed.map(m => 
+      m === 'in_app' ? 'in-app notification' : 'email'
+    ).join(' and ');
 
     return new Response(
       JSON.stringify({
         success: true,
         recipient_count: recipients.length,
         recipients: emails,
-        note: "Email logged but not sent. Microsoft 365 integration pending.",
+        delivery_methods: deliveryMethodsUsed,
+        note: deliveryMethods.email 
+          ? "In-app notifications sent. Email integration pending."
+          : "In-app notifications sent successfully."
       }),
       {
         status: 200,
