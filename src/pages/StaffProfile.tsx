@@ -200,6 +200,7 @@ export default function StaffProfile() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="birthday">Birthday</TabsTrigger>
+          <TabsTrigger value="allergies">Allergies</TabsTrigger>
           <TabsTrigger value="notes">Notes</TabsTrigger>
           <TabsTrigger value="evaluations">Evaluations</TabsTrigger>
           <TabsTrigger value="achievements">Achievements</TabsTrigger>
@@ -293,6 +294,36 @@ export default function StaffProfile() {
                   <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
                   <p>No birthday information available</p>
                   <p className="text-sm mt-1">Click "Edit Profile" to add date of birth</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="allergies" className="space-y-4">
+          <Card className="shadow-card">
+            <CardHeader>
+              <CardTitle>Allergy Information</CardTitle>
+              <CardDescription>Medical allergies and restrictions</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {staff.allergies ? (
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-warning/10 border border-warning/20">
+                    <div className="flex-shrink-0 p-2 rounded-full bg-warning/20">
+                      <span className="text-2xl">⚠️</span>
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-warning mb-1">Allergy Alert</p>
+                      <p className="text-sm whitespace-pre-wrap">{staff.allergies}</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <span className="text-4xl mb-3 block">✓</span>
+                  <p>No allergies recorded</p>
+                  <p className="text-sm mt-1">Click "Edit Profile" to add allergy information</p>
                 </div>
               )}
             </CardContent>

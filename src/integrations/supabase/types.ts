@@ -942,13 +942,14 @@ export type Database = {
           admitted_by: string | null
           checked_out_at: string | null
           checked_out_by: string | null
-          child_id: string
+          child_id: string | null
           company_id: string | null
           created_at: string
           id: string
           notes: string | null
           reason: string | null
           season: string
+          staff_id: string | null
           updated_at: string
         }
         Insert: {
@@ -956,13 +957,14 @@ export type Database = {
           admitted_by?: string | null
           checked_out_at?: string | null
           checked_out_by?: string | null
-          child_id: string
+          child_id?: string | null
           company_id?: string | null
           created_at?: string
           id?: string
           notes?: string | null
           reason?: string | null
           season?: string
+          staff_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -970,13 +972,14 @@ export type Database = {
           admitted_by?: string | null
           checked_out_at?: string | null
           checked_out_by?: string | null
-          child_id?: string
+          child_id?: string | null
           company_id?: string | null
           created_at?: string
           id?: string
           notes?: string | null
           reason?: string | null
           season?: string
+          staff_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -999,6 +1002,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "health_center_admissions_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
             referencedColumns: ["id"]
           },
         ]
@@ -2178,6 +2188,7 @@ export type Database = {
       }
       staff: {
         Row: {
+          allergies: string | null
           company_id: string | null
           created_at: string | null
           date_of_birth: string | null
@@ -2196,6 +2207,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          allergies?: string | null
           company_id?: string | null
           created_at?: string | null
           date_of_birth?: string | null
@@ -2214,6 +2226,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          allergies?: string | null
           company_id?: string | null
           created_at?: string | null
           date_of_birth?: string | null

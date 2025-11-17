@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { staffSchema } from "@/lib/validationSchemas";
@@ -79,6 +80,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
         session: session || null,
         leader_id: leaderId || null,
         staff_type: staffType || null,
+        allergies: formData.get("allergies") as string || null,
       };
 
       const validatedData = staffSchema.parse(data);
@@ -178,6 +180,16 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
                 <SelectItem value="both">Both</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div>
+            <Label htmlFor="allergies">Allergies</Label>
+            <Textarea 
+              id="allergies" 
+              name="allergies" 
+              placeholder="List any allergies (optional)"
+              defaultValue={staff.allergies || ""}
+              className="min-h-[80px]"
+            />
           </div>
           <div>
             <Label>Reports To (Supervisor)</Label>

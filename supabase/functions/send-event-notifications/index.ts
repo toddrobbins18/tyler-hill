@@ -52,6 +52,14 @@ serve(async (req) => {
               name,
               allergies
             )
+          ),
+          sports_event_staff (
+            role,
+            staff (
+              name,
+              role,
+              allergies
+            )
           )
         `)
         .eq('id', event_id)
@@ -79,14 +87,37 @@ serve(async (req) => {
         .filter(Boolean)
         .join(', ') || 'No roster yet';
 
-      // Check for allergies
-      const allergies = event.sports_event_roster
-        ?.map((r: any) => r.child?.allergies)
-        .filter(Boolean);
+      // Check for allergies in both campers and staff
+      const childAllergies = event.sports_event_roster
+        ?.map((r: any) => r.child)
+        .filter((c: any) => c?.allergies)
+        .map((c: any) => ({ name: c.name, allergies: c.allergies })) || [];
       
-      const allergyWarning = allergies?.length 
-        ? `\n\n⚠️ **ALLERGY ALERT:** ${allergies.length} child(ren) on roster have allergies. Please review individual profiles.`
-        : '';
+      const staffAllergies = event.sports_event_staff
+        ?.map((s: any) => s.staff)
+        .filter((s: any) => s?.allergies)
+        .map((s: any) => ({ name: s.name, role: s.role, allergies: s.allergies })) || [];
+      
+      const totalAllergies = childAllergies.length + staffAllergies.length;
+      
+      let allergyWarning = '';
+      if (totalAllergies > 0) {
+        allergyWarning = `\n\n⚠️ **ALLERGY ALERT:** ${totalAllergies} individual(s) have documented allergies.\n\n`;
+        
+        if (childAllergies.length > 0) {
+          allergyWarning += `**Campers with Allergies:**\n`;
+          childAllergies.forEach((c: any) => {
+            allergyWarning += `- ${c.name}: ${c.allergies}\n`;
+          });
+        }
+        
+        if (staffAllergies.length > 0) {
+          allergyWarning += `\n**Staff with Allergies:**\n`;
+          staffAllergies.forEach((s: any) => {
+            allergyWarning += `- ${s.name} (${s.role}): ${s.allergies}\n`;
+          });
+        }
+      }
 
       subject = action === 'created' 
         ? `New Sports Event: ${event.title}`

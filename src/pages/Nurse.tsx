@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList, Hospital, Clock, UserCheck, Search, ArrowUpDown } from "lucide-react";
+import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList, Hospital, Clock, UserCheck, Search, ArrowUpDown, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CSVUploader } from "@/components/CSVUploader";
 import { JSONUploader } from "@/components/JSONUploader";
@@ -31,6 +31,7 @@ export default function Nurse() {
   const { currentSeason } = useSeasonContext();
   const { currentCompany } = useCompany();
   const [children, setChildren] = useState<any[]>([]);
+  const [staff, setStaff] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
   const [medications, setMedications] = useState<any[]>([]);
   const [admissions, setAdmissions] = useState<any[]>([]);
@@ -38,6 +39,8 @@ export default function Nurse() {
   const [showHistory, setShowHistory] = useState(true);
   const [selectedChildForHistory, setSelectedChildForHistory] = useState<string | null>(null);
   const [selectedChild, setSelectedChild] = useState("");
+  const [selectedStaff, setSelectedStaff] = useState("");
+  const [admissionType, setAdmissionType] = useState<'camper' | 'staff'>('camper');
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -59,6 +62,7 @@ export default function Nurse() {
 
   useEffect(() => {
     fetchChildren();
+    fetchStaff();
     fetchDivisions();
     fetchMedications(selectedDate);
     fetchAdmissions();
@@ -122,6 +126,24 @@ export default function Nurse() {
       setChildren(data || []);
     }
     setLoading(false);
+  };
+
+  const fetchStaff = async () => {
+    if (!currentCompany?.id) {
+      setStaff([]);
+      return;
+    }
+    
+    const { data, error } = await supabase
+      .from("staff")
+      .select("*")
+      .eq("status", "active")
+      .eq("company_id", currentCompany.id)
+      .order("name");
+
+    if (!error && data) {
+      setStaff(data);
+    }
   };
 
   const fetchDivisions = async () => {
@@ -272,6 +294,12 @@ export default function Nurse() {
           division:division_id (
             name
           )
+        ),
+        staff (
+          id,
+          name,
+          role,
+          allergies
         )
       `)
       .eq("season", currentSeason)
@@ -313,39 +341,47 @@ export default function Nurse() {
     }
   };
 
-  const handleAdmit = async (childId: string, reason: string, notes: string) => {
+  const handleAdmit = async (entityId: string, entityType: 'child' | 'staff', reason: string, notes: string) => {
     const { data: { user } } = await supabase.auth.getUser();
     
-    // Check if child is already admitted
+    const checkColumn = entityType === 'child' ? 'child_id' : 'staff_id';
     const { data: existing } = await supabase
       .from("health_center_admissions")
       .select("id")
-      .eq("child_id", childId)
+      .eq(checkColumn, entityId)
       .is("checked_out_at", null)
       .maybeSingle();
 
     if (existing) {
-      toast({ title: "Child is already admitted", variant: "destructive" });
+      toast({ title: `${entityType === 'child' ? 'Child' : 'Staff member'} is already admitted`, variant: "destructive" });
       return;
+    }
+
+    const insertData: any = {
+      admitted_by: user?.id,
+      reason,
+      notes,
+      season: currentSeason,
+      company_id: currentCompany.id,
+    };
+
+    if (entityType === 'child') {
+      insertData.child_id = entityId;
+    } else {
+      insertData.staff_id = entityId;
     }
 
     const { error } = await supabase
       .from("health_center_admissions")
-      .insert({
-        child_id: childId,
-        admitted_by: user?.id,
-        reason,
-        notes,
-        season: currentSeason,
-        company_id: currentCompany.id,
-      });
+      .insert(insertData);
 
     if (error) {
-      toast({ title: "Error admitting child", variant: "destructive" });
+      toast({ title: "Error admitting to Health Center", variant: "destructive" });
+      console.error(error);
       return;
     }
 
-    toast({ title: "Child admitted to Health Center" });
+    toast({ title: `${entityType === 'child' ? 'Child' : 'Staff member'} admitted to Health Center` });
     fetchAdmissions();
   };
 
@@ -835,7 +871,7 @@ export default function Nurse() {
                               const reason = prompt("Reason for admission (optional):");
                               const notes = prompt("Additional notes (optional):");
                               if (reason !== null) {
-                                handleAdmit(child.id, reason || "", notes || "");
+                                handleAdmit(child.id, 'child', reason || "", notes || "");
                               }
                             }}
                           >
