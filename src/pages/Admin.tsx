@@ -11,6 +11,7 @@ import DataManagement from "@/components/admin/DataManagement";
 import AuditLog from "@/components/admin/AuditLog";
 import UserTagManagement from "@/components/admin/UserTagManagement";
 import AutomatedEmailConfig from "@/components/admin/AutomatedEmailConfig";
+import CompanyEmailConfig from "@/components/admin/CompanyEmailConfig";
 import CompanyManagement from "@/pages/admin/CompanyManagement";
 
 export default function Admin() {
@@ -104,6 +105,10 @@ export default function Admin() {
             <Mail className="h-4 w-4" />
             Email Automation
           </TabsTrigger>
+          <TabsTrigger value="email-config" className="gap-2">
+            <Mail className="h-4 w-4" />
+            Email Config
+          </TabsTrigger>
           {isSuperAdmin && (
             <TabsTrigger value="companies" className="gap-2">
               <Building2 className="h-4 w-4" />
@@ -130,6 +135,10 @@ export default function Admin() {
 
         <TabsContent value="email" className="space-y-6">
           <AutomatedEmailConfig />
+        </TabsContent>
+
+        <TabsContent value="email-config" className="space-y-6">
+          <CompanyEmailConfig />
         </TabsContent>
 
         {isSuperAdmin && (

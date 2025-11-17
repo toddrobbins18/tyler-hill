@@ -21,6 +21,9 @@ verify_jwt = false
 [functions.send-bulk-email]
 verify_jwt = true
 
+[functions.test-m365-connection]
+verify_jwt = true
+
 [functions.send-incident-notification]
 verify_jwt = false
 

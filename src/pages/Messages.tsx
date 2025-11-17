@@ -77,6 +77,7 @@ export default function Messages() {
     inApp: true,
     email: false
   });
+  const [emailConfig, setEmailConfig] = useState<any>(null);
   const { currentCompany } = useCompany();
 
   useEffect(() => {
@@ -84,6 +85,7 @@ export default function Messages() {
     fetchTagGroups();
     fetchAllUsers();
     fetchMessages();
+    fetchEmailConfig();
 
     const channel = supabase
       .channel('messages-changes')
@@ -160,6 +162,23 @@ export default function Messages() {
 
     setTagGroups(groups);
     setLoading(false);
+  };
+
+  const fetchEmailConfig = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("company_email_config")
+        .select("is_configured, is_active")
+        .eq("company_id", currentCompany?.id)
+        .maybeSingle();
+
+      if (error && error.code !== "PGRST116") {
+        console.error("Error fetching email config:", error);
+      }
+      setEmailConfig(data);
+    } catch (error) {
+      console.error("Error fetching email config:", error);
+    }
   };
 
   const fetchAllUsers = async () => {
@@ -438,9 +457,15 @@ export default function Messages() {
                   <label htmlFor="email" className="flex items-center gap-2 cursor-pointer">
                     <Mail className="h-4 w-4 text-green-500" />
                     <span>Email Notification</span>
-                    <Badge variant="outline" className="text-xs">
-                      Configuration Required
-                    </Badge>
+                    {emailConfig?.is_configured && emailConfig?.is_active ? (
+                      <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
+                        Ready
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-xs text-amber-600">
+                        Not Configured
+                      </Badge>
+                    )}
                   </label>
                 </div>
                 
