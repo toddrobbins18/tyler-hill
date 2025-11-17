@@ -1,4 +1,4 @@
-import { Users, Truck, FileText, Award, Utensils, Calendar as CalendarIcon, CalendarDays, MapPin, Cake, Trophy } from "lucide-react";
+import { Users, Truck, FileText, Award, Utensils, Calendar as CalendarIcon, CalendarDays, MapPin, Cake, Trophy, Activity } from "lucide-react";
 import { StatCard } from "@/components/StatCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { getDivisionFilter } = usePermissions();
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const [stats, setStats] = useState({
     totalChildren: 0,
     activeRoutes: 0,
@@ -25,6 +26,7 @@ export default function Dashboard() {
   const [sportsEvents, setSportsEvents] = useState<any[]>([]);
   const [threeDayOutlook, setThreeDayOutlook] = useState<any[]>([]);
   const [todaysBirthdays, setTodaysBirthdays] = useState<any[]>([]);
+  const [healthCenterAdmissions, setHealthCenterAdmissions] = useState<any[]>([]);
   const [todaysMenu, setTodaysMenu] = useState<any>({
     breakfast: "",
     lunch: "",
@@ -73,6 +75,11 @@ export default function Dashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sports_calendar' }, fetchDashboardData)
       .subscribe();
 
+    const healthCenterChannel = supabase
+      .channel('dashboard-health-center')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'health_center_admissions' }, fetchDashboardData)
+      .subscribe();
+
     return () => {
       supabase.removeChannel(childrenChannel);
       supabase.removeChannel(notesChannel);
@@ -81,6 +88,7 @@ export default function Dashboard() {
       supabase.removeChannel(menuChannel);
       supabase.removeChannel(specialEventsChannel);
       supabase.removeChannel(sportsChannel);
+      supabase.removeChannel(healthCenterChannel);
     };
   }, [currentCompany?.id]);
 
@@ -209,6 +217,21 @@ export default function Dashboard() {
       return (birthDate.getMonth() + 1) === todayMonth && birthDate.getDate() === todayDay;
     });
 
+    // Fetch health center admissions (not yet checked out) with division filtering
+    let healthCenterQuery = supabase
+      .from('health_center_admissions')
+      .select('*, children:child_id(id, name, division_id)')
+      .eq('company_id', currentCompany.id)
+      .eq('season', currentSeason)
+      .is('checked_out_at', null)
+      .order('admitted_at', { ascending: false });
+
+    if (divisionFilter !== null && divisionFilter.length > 0) {
+      healthCenterQuery = healthCenterQuery.in('children.division_id', divisionFilter);
+    }
+
+    const { data: healthCenterData } = await healthCenterQuery;
+
     setStats({
       totalChildren: childrenCount || 0,
       activeRoutes: tripsCount || 0,
@@ -220,6 +243,7 @@ export default function Dashboard() {
     setSportsEvents(sportsData || []);
     setThreeDayOutlook(threeDayData || []);
     setTodaysBirthdays(birthdaysToday);
+    setHealthCenterAdmissions(healthCenterData || []);
     
     const eventsData = trips?.map(trip => ({
       id: trip.id,
@@ -300,6 +324,50 @@ export default function Dashboard() {
       )}
 
       <div className={`grid gap-6 ${isTimberLakeCamp || isTylerHillCamp ? 'md:grid-cols-2' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
+
+        {isTimberLakeCamp && healthCenterAdmissions.length > 0 && (
+          <Card className="shadow-card">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-destructive/10">
+                  <Activity className="h-5 w-5 text-destructive" />
+                </div>
+                <div>
+                  <CardTitle>Health Center</CardTitle>
+                  <CardDescription>Current admissions</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {healthCenterAdmissions.length === 0 ? (
+                <p className="text-muted-foreground text-sm">No current admissions</p>
+              ) : (
+                <div className="space-y-3">
+                  {healthCenterAdmissions.map((admission: any) => (
+                    <div key={admission.id} className="flex items-start justify-between p-3 rounded-lg bg-accent/50 border border-border">
+                      <div className="flex-1">
+                        <div className="font-medium text-foreground">
+                          {admission.children?.name || 'Unknown'}
+                        </div>
+                        {admission.reason && (
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {admission.reason}
+                          </p>
+                        )}
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Admitted: {new Date(admission.admitted_at).toLocaleTimeString('en-US', { 
+                            hour: 'numeric', 
+                            minute: '2-digit' 
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="shadow-card">
           <CardHeader>

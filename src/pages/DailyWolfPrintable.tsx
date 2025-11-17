@@ -390,14 +390,12 @@ export default function DailyWolfPrintable() {
             </div>
 
             {/* OD */}
-            {dailyContent.officer_of_day && (
-              <div className="od-section">
-                <div className="section-title">OD</div>
-                <div className="od-content">
-                  <p>{dailyContent.officer_of_day}</p>
-                </div>
+            <div className="od-section">
+              <div className="section-title">OD</div>
+              <div className="od-content">
+                <p>{dailyContent.officer_of_day || 'TBD'}</p>
               </div>
-            )}
+            </div>
 
             {/* Division Line-Up Games */}
             <div className="division-games-section">
@@ -437,24 +435,20 @@ export default function DailyWolfPrintable() {
             </div>
 
             {/* Laundry Schedule */}
-            {dailyContent.laundry_info && (
-              <div className="laundry-section">
-                <div className="section-title">Laundry Schedule</div>
-                <div className="laundry-content">
-                  <p style={{ whiteSpace: 'pre-wrap' }}>{dailyContent.laundry_info}</p>
-                </div>
+            <div className="laundry-section">
+              <div className="section-title">Laundry Schedule</div>
+              <div className="laundry-content">
+                <p style={{ whiteSpace: 'pre-wrap' }}>{dailyContent.laundry_info || 'TBD'}</p>
               </div>
-            )}
+            </div>
 
             {/* Phone Calls */}
-            {dailyContent.phone_calls_info && (
-              <div className="phone-calls-section">
-                <div className="section-title">Phone Calls</div>
-                <div className="phone-calls-content">
-                  <p style={{ whiteSpace: 'pre-wrap' }}>{dailyContent.phone_calls_info}</p>
-                </div>
+            <div className="phone-calls-section">
+              <div className="section-title">Phone Calls</div>
+              <div className="phone-calls-content">
+                <p style={{ whiteSpace: 'pre-wrap' }}>{dailyContent.phone_calls_info || 'TBD'}</p>
               </div>
-            )}
+            </div>
 
             {/* Athletics */}
             <div className="athletics-section">
