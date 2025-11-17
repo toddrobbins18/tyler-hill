@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList, Hospital, Clock, UserCheck, Search, ArrowUpDown, Users } from "lucide-react";
+import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList, Hospital, Clock, UserCheck, Search, ArrowUpDown, Users, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CSVUploader } from "@/components/CSVUploader";
 import { JSONUploader } from "@/components/JSONUploader";
@@ -42,6 +42,7 @@ export default function Nurse() {
   const [selectedStaff, setSelectedStaff] = useState("");
   const [admissionType, setAdmissionType] = useState<'camper' | 'staff'>('camper');
   const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [searchQuery, setSearchQuery] = useState("");
@@ -182,13 +183,17 @@ export default function Nurse() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
+    
     if (!selectedChild) {
       toast({ title: "Please select a child", variant: "destructive" });
+      setIsSubmitting(false);
       return;
     }
 
     if (formData.meal_times.length === 0) {
       toast({ title: "Please select at least one meal time", variant: "destructive" });
+      setIsSubmitting(false);
       return;
     }
 
@@ -215,6 +220,7 @@ export default function Nurse() {
     if (error) {
       console.error("Medication insert error:", error);
       toast({ title: "Error adding medication", variant: "destructive" });
+      setIsSubmitting(false);
       return;
     }
 
@@ -230,6 +236,7 @@ export default function Nurse() {
       end_date: "",
     });
     setSelectedChild("");
+    setIsSubmitting(false);
     fetchMedications(selectedDate);
   };
 
@@ -748,17 +755,27 @@ export default function Nurse() {
                             {med.meal_time}
                           </p>
                         </div>
-                        {med.administered ? (
-                          <Badge variant="outline" className="flex items-center gap-1">
-                            <CheckCircle2 className="h-3 w-3" />
-                            Given
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="flex items-center gap-1">
-                            <AlertCircle className="h-3 w-3 text-warning" />
-                            Pending
-                          </Badge>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {med.administered ? (
+                            <Badge variant="outline" className="flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3" />
+                              Given
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="flex items-center gap-1">
+                              <AlertCircle className="h-3 w-3 text-warning" />
+                              Pending
+                            </Badge>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDelete(med.id)}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                       {!med.administered && (
                         <Button
@@ -1202,7 +1219,16 @@ export default function Nurse() {
                   </>
                 )}
 
-                <Button type="submit" className="w-full">Add Medication</Button>
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Adding...
+                    </>
+                  ) : (
+                    "Add Medication"
+                  )}
+                </Button>
               </form>
             </CardContent>
           </Card>
