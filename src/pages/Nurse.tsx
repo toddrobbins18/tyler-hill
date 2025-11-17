@@ -52,7 +52,7 @@ export default function Nurse() {
   const [formData, setFormData] = useState({
     medication_name: "",
     dosage: "",
-    meal_time: "Before Breakfast",
+    meal_times: [] as string[],
     notes: "",
     is_recurring: false,
     frequency: "daily",
@@ -187,13 +187,20 @@ export default function Nurse() {
       return;
     }
 
+    if (formData.meal_times.length === 0) {
+      toast({ title: "Please select at least one meal time", variant: "destructive" });
+      return;
+    }
+
     const today = new Date().toISOString().split('T')[0];
-    const { error } = await supabase.from("medication_logs").insert({
+    
+    // Create one medication log entry for each selected meal time
+    const inserts = formData.meal_times.map(mealTime => ({
       child_id: selectedChild,
       date: today,
       medication_name: formData.medication_name,
       dosage: formData.dosage,
-      meal_time: formData.meal_time,
+      meal_time: [mealTime],
       notes: formData.notes,
       is_recurring: formData.is_recurring,
       frequency: formData.frequency,
@@ -201,7 +208,9 @@ export default function Nurse() {
       end_date: formData.end_date || null,
       company_id: currentCompany?.id,
       season: currentSeason,
-    });
+    }));
+
+    const { error } = await supabase.from("medication_logs").insert(inserts);
 
     if (error) {
       console.error("Medication insert error:", error);
@@ -209,11 +218,11 @@ export default function Nurse() {
       return;
     }
 
-    toast({ title: "Medication added successfully" });
+    toast({ title: `Medication added successfully for ${formData.meal_times.length} time(s)` });
     setFormData({ 
       medication_name: "", 
       dosage: "", 
-      meal_time: "Before Breakfast", 
+      meal_times: [], 
       notes: "",
       is_recurring: false,
       frequency: "daily",
@@ -801,36 +810,59 @@ export default function Nurse() {
                     Currently Admitted ({admissions.length})
                   </h3>
                   <div className="grid gap-3">
-                    {admissions.map((admission) => (
-                      <div key={admission.id} className="border rounded-lg p-4 bg-destructive/5">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1">
-                            <h4 className="font-semibold text-lg">{admission.children?.name}</h4>
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                              <Clock className="h-4 w-4" />
-                              <span>Admitted {format(new Date(admission.admitted_at), 'MMM d, h:mm a')}</span>
-                              <Badge variant="outline" className="ml-2">
-                                {getAdmissionDuration(admission.admitted_at)}
-                              </Badge>
+                    {admissions.map((admission) => {
+                      const child = admission.children;
+                      const staffMember = admission.staff;
+                      const entity = child || staffMember;
+                      const entityType = child ? 'Camper' : 'Staff';
+                      
+                      return (
+                        <div key={admission.id} className="border rounded-lg p-4 bg-destructive/5">
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h4 className="font-semibold text-lg">{entity?.name || 'Unknown'}</h4>
+                                <Badge variant={child ? "outline" : "secondary"} className="text-xs">
+                                  {entityType}
+                                </Badge>
+                                {entity?.allergies && (
+                                  <Badge variant="destructive" className="text-xs">
+                                    ⚠️ Allergies
+                                  </Badge>
+                                )}
+                              </div>
+                              {entity?.allergies && (
+                                <div className="p-2 bg-destructive/10 border border-destructive/20 rounded mb-2">
+                                  <span className="font-medium text-destructive text-sm">⚠️ Allergies: </span>
+                                  <span className="text-destructive text-sm">{entity.allergies}</span>
+                                </div>
+                              )}
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                                <Clock className="h-4 w-4" />
+                                <span>Admitted {format(new Date(admission.admitted_at), 'MMM d, h:mm a')}</span>
+                                <Badge variant="outline" className="ml-2">
+                                  {getAdmissionDuration(admission.admitted_at)}
+                                </Badge>
+                              </div>
+                              {admission.reason && (
+                                <p className="text-sm mt-2"><strong>Reason:</strong> {admission.reason}</p>
+                              )}
+                              {admission.notes && (
+                                <p className="text-sm text-muted-foreground mt-1">{admission.notes}</p>
+                              )}
                             </div>
-                            {admission.reason && (
-                              <p className="text-sm mt-2"><strong>Reason:</strong> {admission.reason}</p>
-                            )}
-                            {admission.notes && (
-                              <p className="text-sm text-muted-foreground mt-1">{admission.notes}</p>
-                            )}
+                            <Button
+                              size="sm"
+                              onClick={() => handleCheckout(admission.id)}
+                              className="shrink-0"
+                            >
+                              <UserCheck className="h-4 w-4 mr-2" />
+                              Check Out
+                            </Button>
                           </div>
-                          <Button
-                            size="sm"
-                            onClick={() => handleCheckout(admission.id)}
-                            className="shrink-0"
-                          >
-                            <UserCheck className="h-4 w-4 mr-2" />
-                            Check Out
-                          </Button>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -906,29 +938,40 @@ export default function Nurse() {
                 ) : (
                   <div className="grid gap-4">
                     {Object.values(groupedHistory).map((group: any) => {
-                      const child = group.child;
-                      const childAdmissions = group.admissions;
-                      const isExpanded = selectedChildForHistory === child.id;
+                      const entity = group.child || group.staff;
+                      const entityType = group.child ? 'Camper' : 'Staff';
+                      const entityAdmissions = group.admissions;
+                      const isExpanded = selectedChildForHistory === entity.id;
                       
                       return (
-                        <Card key={child.id} className="overflow-hidden">
-                          <CardHeader className="cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setSelectedChildForHistory(isExpanded ? null : child.id)}>
+                        <Card key={entity.id} className="overflow-hidden">
+                          <CardHeader className="cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setSelectedChildForHistory(isExpanded ? null : entity.id)}>
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
                                 <div>
-                                  <CardTitle className="text-base">{child.name}</CardTitle>
+                                  <div className="flex items-center gap-2">
+                                    <CardTitle className="text-base">{entity.name}</CardTitle>
+                                    <Badge variant={entityType === 'Camper' ? "outline" : "secondary"} className="text-xs">
+                                      {entityType}
+                                    </Badge>
+                                    {entity.allergies && (
+                                      <Badge variant="destructive" className="text-xs">
+                                        ⚠️ Allergies
+                                      </Badge>
+                                    )}
+                                  </div>
                                   <CardDescription className="text-sm">
-                                    {child.division?.name || "No Division"}
+                                    {group.child?.division?.name || entity.role || "No Division"}
                                   </CardDescription>
                                 </div>
                               </div>
                               <div className="flex items-center gap-4">
                                 <div className="text-right">
                                   <Badge variant="secondary" className="mb-1">
-                                    {childAdmissions.length} {childAdmissions.length === 1 ? 'admission' : 'admissions'}
+                                    {entityAdmissions.length} {entityAdmissions.length === 1 ? 'admission' : 'admissions'}
                                   </Badge>
                                   <p className="text-xs text-muted-foreground">
-                                    Last: {format(new Date(childAdmissions[0].admitted_at), "MMM d, h:mm a")}
+                                    Last: {format(new Date(entityAdmissions[0].admitted_at), "MMM d, h:mm a")}
                                   </p>
                                 </div>
                                 <Button variant="ghost" size="sm">
@@ -940,13 +983,19 @@ export default function Nurse() {
 
                           {isExpanded && (
                             <CardContent className="pt-0">
+                              {entity.allergies && (
+                                <div className="mb-3 p-2 bg-destructive/10 border border-destructive/20 rounded">
+                                  <span className="font-medium text-destructive text-sm">⚠️ Allergies: </span>
+                                  <span className="text-destructive text-sm">{entity.allergies}</span>
+                                </div>
+                              )}
                               <div className="space-y-3">
-                                {childAdmissions.map((admission: any, index: number) => (
+                                {entityAdmissions.map((admission: any, index: number) => (
                                   <div key={admission.id} className="border-l-2 border-primary/30 pl-4 py-2">
                                     <div className="flex items-start justify-between mb-2">
                                       <div>
                                         <p className="font-medium text-sm">
-                                          Admission #{childAdmissions.length - index}
+                                          Admission #{entityAdmissions.length - index}
                                         </p>
                                         <p className="text-xs text-muted-foreground">
                                           {format(new Date(admission.admitted_at), "MMM d, yyyy • h:mm a")} - {format(new Date(admission.checked_out_at), "h:mm a")}
@@ -1059,8 +1108,13 @@ export default function Nurse() {
                       <div key={mealTime} className="flex items-center space-x-2">
                         <Checkbox
                           id={mealTime}
-                          checked={formData.meal_time === mealTime}
-                          onCheckedChange={() => setFormData({ ...formData, meal_time: mealTime })}
+                          checked={formData.meal_times.includes(mealTime)}
+                          onCheckedChange={(checked) => {
+                            const newTimes = checked
+                              ? [...formData.meal_times, mealTime]
+                              : formData.meal_times.filter(t => t !== mealTime);
+                            setFormData({ ...formData, meal_times: newTimes });
+                          }}
                         />
                         <Label 
                           htmlFor={mealTime} 
