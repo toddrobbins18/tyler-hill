@@ -12,7 +12,7 @@ import { Download, FileText, Calendar } from "lucide-react";
 import { exportToCSV, exportToPDF } from "@/lib/reportExports";
 import { format } from "date-fns";
 
-type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'conflicts';
+type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'conflicts' | 'medications' | 'allergies';
 
 export default function ReportingCenter() {
   const [reportType, setReportType] = useState<ReportType>('incidents');
@@ -220,6 +220,89 @@ export default function ReportingCenter() {
             'Resolved': conflicts?.filter(c => c.resolved).length || 0,
           };
           break;
+
+        case 'medications':
+          const { data: meds } = await supabase
+            .from('medication_logs')
+            .select(`
+              *,
+              children (
+                name,
+                division_id,
+                divisions (name)
+              )
+            `)
+            .eq('company_id', currentCompany.id)
+            .eq('season', selectedSeason)
+            .gte('date', startDate || '1900-01-01')
+            .lte('date', endDate || '2100-12-31')
+            .order('date', { ascending: false });
+          
+          data = meds?.map(m => ({
+            Date: m.date,
+            Child: m.children?.name || 'Unknown',
+            Division: m.children?.divisions?.name || 'N/A',
+            Medication: m.medication_name,
+            Dosage: m.dosage || 'N/A',
+            'Meal Time': Array.isArray(m.meal_time) ? m.meal_time.join(', ') : m.meal_time || 'N/A',
+            'Scheduled Time': m.scheduled_time || 'N/A',
+            Administered: m.administered ? 'Yes' : 'No',
+            Notes: m.notes || '',
+          })) || [];
+          
+          const uniqueChildren = new Set(meds?.map(m => m.child_id));
+          const uniqueMedications = new Set(meds?.map(m => m.medication_name));
+          const administeredCount = meds?.filter(m => m.administered).length || 0;
+          const pendingCount = meds?.filter(m => !m.administered).length || 0;
+          
+          summaryData = {
+            'Total Medication Entries': meds?.length || 0,
+            'Unique Children': uniqueChildren.size,
+            'Different Medications': uniqueMedications.size,
+            'Administered': administeredCount,
+            'Pending': pendingCount,
+          };
+          break;
+
+        case 'allergies':
+          const { data: allergicChildren } = await supabase
+            .from('children')
+            .select(`
+              name,
+              allergies,
+              medical_notes,
+              status,
+              divisions (name)
+            `)
+            .eq('company_id', currentCompany.id)
+            .eq('season', selectedSeason)
+            .not('allergies', 'is', null)
+            .neq('allergies', '')
+            .order('name');
+          
+          data = allergicChildren?.map(c => ({
+            Child: c.name,
+            Division: c.divisions?.name || 'No Division',
+            Allergies: c.allergies,
+            'Medical Notes': c.medical_notes || 'None',
+            Status: c.status || 'active',
+          })) || [];
+          
+          const totalWithAllergies = allergicChildren?.length || 0;
+          const activeWithAllergies = allergicChildren?.filter(c => c.status === 'active').length || 0;
+          const byDivision: Record<string, number> = {};
+          
+          allergicChildren?.forEach(c => {
+            const divName = c.divisions?.name || 'No Division';
+            byDivision[divName] = (byDivision[divName] || 0) + 1;
+          });
+          
+          summaryData = {
+            'Total Children with Allergies': totalWithAllergies,
+            'Active with Allergies': activeWithAllergies,
+            'Most Affected Division': Object.entries(byDivision).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A',
+          };
+          break;
       }
 
       setReportData(data);
@@ -246,7 +329,21 @@ export default function ReportingCenter() {
 
   const handleExportPDF = () => {
     const filename = `${reportType}_report`;
-    const title = `${reportType.replace('_', ' ').toUpperCase()} Report`;
+    
+    const titleMap: Record<ReportType, string> = {
+      incidents: 'INCIDENT REPORTS',
+      staff_evaluations: 'STAFF EVALUATIONS',
+      camper_reports: 'CAMPER REPORTS',
+      awards: 'AWARDS',
+      sports_events: 'SPORTS EVENTS',
+      trips: 'TRIPS',
+      activities: 'ACTIVITIES & FIELD TRIPS',
+      conflicts: 'SCHEDULE CONFLICTS',
+      medications: 'MEDICATION SCHEDULE',
+      allergies: 'ALLERGY REPORT',
+    };
+    
+    const title = titleMap[reportType] || reportType.replace('_', ' ').toUpperCase();
     const dateRange = startDate && endDate ? `${startDate} to ${endDate}` : 'All Dates';
     
     exportToPDF(reportData, filename, title, currentCompany?.name, dateRange, summary);
@@ -261,6 +358,8 @@ export default function ReportingCenter() {
     { value: 'trips', label: 'Trips' },
     { value: 'activities', label: 'Activities & Field Trips' },
     { value: 'conflicts', label: 'Schedule Conflicts' },
+    { value: 'medications', label: 'Medication Schedule' },
+    { value: 'allergies', label: 'Allergy Report' },
   ];
 
   return (
