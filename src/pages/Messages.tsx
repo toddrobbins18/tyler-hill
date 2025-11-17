@@ -73,6 +73,10 @@ export default function Messages() {
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showRecipientPreview, setShowRecipientPreview] = useState(false);
+  const [deliveryMethods, setDeliveryMethods] = useState({
+    inApp: true,
+    email: false
+  });
   const { currentCompany } = useCompany();
 
   useEffect(() => {
@@ -223,6 +227,11 @@ export default function Messages() {
       return;
     }
 
+    if (!deliveryMethods.inApp && !deliveryMethods.email) {
+      toast.error("Please select at least one delivery method");
+      return;
+    }
+
     if (uniqueRecipients.length === 0) {
       toast.error("Please select at least one recipient");
       return;
@@ -237,19 +246,28 @@ export default function Messages() {
           message,
           recipientTags: selectedTags,
           recipientIds: selectedUserIds,
+          deliveryMethods: {
+            inApp: deliveryMethods.inApp,
+            email: deliveryMethods.email
+          }
         },
       });
 
       if (error) throw error;
 
-      toast.success(`Email queued for ${uniqueRecipients.length} recipient(s)`);
+      const methodsUsed = [];
+      if (deliveryMethods.inApp) methodsUsed.push("in-app notification");
+      if (deliveryMethods.email) methodsUsed.push("email");
+
+      toast.success(`${methodsUsed.join(" and ")} sent to ${uniqueRecipients.length} recipient(s)!`);
       
       setSubject("");
       setMessage("");
       setSelectedTags([]);
       setSelectedUserIds([]);
+      setDeliveryMethods({ inApp: true, email: false });
     } catch (error: any) {
-      toast.error(error.message || "Failed to send email");
+      toast.error(error.message || "Failed to send notification");
       console.error(error);
     } finally {
       setSending(false);
@@ -261,10 +279,10 @@ export default function Messages() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground mb-2 flex items-center gap-2">
-            <Mail className="h-8 w-8" />
-            Messages
+            <Bell className="h-8 w-8" />
+            Notifications & Messages
           </h1>
-          <p className="text-muted-foreground">View notifications and compose messages</p>
+          <p className="text-muted-foreground">Send notifications and view messages</p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -367,12 +385,79 @@ export default function Messages() {
         </div>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
-          <Card>
-            <CardHeader>
-              <CardTitle>Compose Message</CardTitle>
-              <CardDescription>Create and send messages to selected recipients</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <div className="space-y-4">
+            <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+              <div className="flex items-start gap-3">
+                <Bell className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                <div>
+                  <h4 className="font-medium text-blue-900 dark:text-blue-100">
+                    Multi-Channel Notifications
+                  </h4>
+                  <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                    Send notifications via in-app push alerts and/or email. In-app notifications are delivered instantly.
+                    <span className="block mt-1 text-amber-600 dark:text-amber-400">
+                      ⚠️ Email integration requires configuration (Microsoft 365 or Resend)
+                    </span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Bell className="h-5 w-5" />
+                  Delivery Method
+                </CardTitle>
+                <CardDescription>Choose how to deliver this notification</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="in-app"
+                    checked={deliveryMethods.inApp}
+                    onCheckedChange={(checked) =>
+                      setDeliveryMethods(prev => ({ ...prev, inApp: !!checked }))
+                    }
+                  />
+                  <label htmlFor="in-app" className="flex items-center gap-2 cursor-pointer">
+                    <Bell className="h-4 w-4 text-blue-500" />
+                    <span>In-App Notification (Push)</span>
+                    <Badge variant="secondary">Instant</Badge>
+                  </label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="email"
+                    checked={deliveryMethods.email}
+                    onCheckedChange={(checked) =>
+                      setDeliveryMethods(prev => ({ ...prev, email: !!checked }))
+                    }
+                  />
+                  <label htmlFor="email" className="flex items-center gap-2 cursor-pointer">
+                    <Mail className="h-4 w-4 text-green-500" />
+                    <span>Email Notification</span>
+                    <Badge variant="outline" className="text-xs">
+                      Configuration Required
+                    </Badge>
+                  </label>
+                </div>
+                
+                {!deliveryMethods.inApp && !deliveryMethods.email && (
+                  <p className="text-sm text-destructive">
+                    ⚠️ Please select at least one delivery method
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Compose Notification</CardTitle>
+                <CardDescription>Create and send notifications to selected recipients</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
               <div>
                 <label className="text-sm font-medium mb-2 block">Subject</label>
                 <Input
@@ -404,11 +489,12 @@ export default function Messages() {
                 </Button>
                 <Button onClick={handleSend} disabled={sending}>
                   <Send className="h-4 w-4 mr-2" />
-                  {sending ? "Sending..." : "Send Message"}
+                  {sending ? "Sending..." : "Send Notification"}
                 </Button>
               </div>
             </CardContent>
           </Card>
+          </div>
 
           <div className="space-y-4">
             <Card>

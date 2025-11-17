@@ -758,6 +758,7 @@ export type Database = {
       email_logs: {
         Row: {
           created_at: string | null
+          delivery_methods: Json | null
           error_details: Json | null
           id: string
           recipient_count: number
@@ -770,6 +771,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          delivery_methods?: Json | null
           error_details?: Json | null
           id?: string
           recipient_count: number
@@ -782,6 +784,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          delivery_methods?: Json | null
           error_details?: Json | null
           id?: string
           recipient_count?: number
@@ -1312,6 +1315,7 @@ export type Database = {
           content: string
           created_at: string | null
           id: string
+          notification_type: string | null
           read: boolean | null
           recipient_id: string | null
           sender_id: string | null
@@ -1321,6 +1325,7 @@ export type Database = {
           content: string
           created_at?: string | null
           id?: string
+          notification_type?: string | null
           read?: boolean | null
           recipient_id?: string | null
           sender_id?: string | null
@@ -1330,6 +1335,7 @@ export type Database = {
           content?: string
           created_at?: string | null
           id?: string
+          notification_type?: string | null
           read?: boolean | null
           recipient_id?: string | null
           sender_id?: string | null
