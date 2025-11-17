@@ -216,144 +216,151 @@ export default function DailyWolfPrintable() {
             left: 0;
             top: 0;
             width: 100%;
-            padding: 20px;
+            padding: 12px;
           }
           .no-print {
             display: none !important;
           }
           .newspaper-header {
-            border-bottom: 4px double #000;
-            padding-bottom: 12px;
-            margin-bottom: 20px;
+            border-bottom: 3px double #000;
+            padding-bottom: 8px;
+            margin-bottom: 10px;
           }
           .newspaper-title {
             font-family: Georgia, serif;
-            font-size: 52px;
+            font-size: 36px;
             font-weight: bold;
             text-align: center;
-            letter-spacing: 3px;
-            margin-bottom: 8px;
+            letter-spacing: 2px;
+            margin-bottom: 4px;
           }
           .newspaper-date {
             text-align: center;
-            font-size: 14px;
+            font-size: 11px;
             font-weight: bold;
-            margin-top: 8px;
+            margin-top: 4px;
           }
           .section-title {
             font-family: Georgia, serif;
-            font-size: 20px;
+            font-size: 14px;
             font-weight: bold;
             text-transform: uppercase;
-            border-bottom: 2px solid #000;
-            margin-bottom: 12px;
-            margin-top: 20px;
-            padding-bottom: 4px;
+            border-bottom: 1px solid #000;
+            margin-bottom: 6px;
+            margin-top: 8px;
+            padding-bottom: 2px;
           }
           .birthday-section {
-            margin-bottom: 20px;
-            font-size: 14px;
+            margin-bottom: 8px;
+            font-size: 10px;
           }
           .birthday-list {
             font-weight: bold;
-            font-size: 15px;
-            margin-top: 8px;
+            font-size: 11px;
+            margin-top: 4px;
           }
           .division-games-section {
-            margin-bottom: 20px;
+            margin-bottom: 8px;
           }
           .game-item {
             display: flex;
-            padding: 8px 0;
+            padding: 4px 0;
             border-bottom: 1px solid #ddd;
-            font-size: 13px;
+            font-size: 10px;
           }
           .division-name {
             font-weight: bold;
-            min-width: 140px;
+            min-width: 120px;
           }
           .game-details {
             flex: 1;
           }
           .menu-section {
             page-break-inside: avoid;
-            margin-bottom: 20px;
+            margin-bottom: 8px;
           }
           .meal-item {
-            margin-bottom: 16px;
-            font-size: 13px;
+            margin-bottom: 8px;
+            font-size: 10px;
           }
           .meal-item strong {
-            font-size: 15px;
+            font-size: 12px;
             display: block;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
           }
           .allergen-info {
             font-style: italic;
             color: #666;
-            margin-top: 4px;
-            font-size: 12px;
+            margin-top: 2px;
+            font-size: 9px;
           }
           .athletics-section {
-            margin-bottom: 20px;
+            margin-bottom: 8px;
           }
           .sport-event {
             display: flex;
-            gap: 12px;
-            padding: 8px 0;
+            gap: 6px;
+            padding: 4px 0;
             border-bottom: 1px dotted #ccc;
-            font-size: 13px;
+            font-size: 10px;
           }
           .event-time {
             font-weight: bold;
-            min-width: 80px;
+            min-width: 70px;
           }
           .quote-section {
             font-style: italic;
             text-align: center;
-            padding: 20px;
-            margin: 20px 0;
-            border: 2px solid #000;
+            padding: 12px;
+            margin: 8px 0;
+            border: 1px solid #000;
             page-break-inside: avoid;
           }
           .quote-text {
-            font-size: 16px;
-            line-height: 1.6;
+            font-size: 11px;
+            line-height: 1.3;
           }
           .evening-section {
-            margin-bottom: 20px;
+            margin-bottom: 8px;
           }
           .evening-item {
-            padding: 6px 0;
-            font-size: 13px;
+            padding: 4px 0;
+            font-size: 10px;
           }
           .notes-section {
-            border: 2px solid #000;
-            padding: 16px;
-            margin-top: 20px;
+            border: 1px solid #000;
+            padding: 8px;
+            margin-top: 8px;
             page-break-inside: avoid;
           }
           .notes-content {
-            font-size: 13px;
-            line-height: 1.6;
+            font-size: 10px;
+            line-height: 1.3;
           }
           .boxed-section {
-            border: 2px solid #000;
-            padding: 16px;
-            margin-bottom: 16px;
+            border: 1px solid #000;
+            padding: 8px;
+            margin-bottom: 8px;
             background: white;
           }
           .od-section, .laundry-section, .phone-calls-section {
-            margin-bottom: 20px;
-            font-size: 14px;
+            margin-bottom: 8px;
+            font-size: 10px;
           }
           .od-content, .laundry-content, .phone-calls-content {
-            padding: 12px;
+            padding: 6px;
             background: #f9f9f9;
-            border-left: 4px solid #000;
+            border-left: 2px solid #000;
+          }
+          .admin-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 8px;
           }
           @page {
-            margin: 0.5in;
+            margin: 0.3in;
+            size: letter;
           }
         }
       `}</style>
@@ -389,64 +396,30 @@ export default function DailyWolfPrintable() {
               )}
             </div>
 
-            {/* OD */}
-            <div className="od-section">
-              <div className="section-title">OD</div>
-              <div className="od-content">
-                <p>{dailyContent.officer_of_day || 'TBD'}</p>
+            {/* Administrative Info - 3 Column Layout */}
+            <div className="admin-grid">
+              {/* OD */}
+              <div className="od-section">
+                <div className="section-title">OD</div>
+                <div className="od-content">
+                  <p>{dailyContent.officer_of_day || 'TBD'}</p>
+                </div>
               </div>
-            </div>
 
-            {/* Division Line-Up Games */}
-            <div className="division-games-section">
-              <div className="section-title">Division Line-Up Games</div>
-              {divisionGames.length > 0 ? (
-                divisionGames.map(game => (
-                  <div key={game.id} className="game-item">
-                    <div className="division-name">{game.divisions?.name || 'General'}</div>
-                    <div className="game-details">
-                      {game.time && `${game.time} - `}
-                      {game.sport_type}
-                      {game.opponent && ` vs ${game.opponent}`}
-                      {game.location && ` @ ${game.location}`}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div>No division games scheduled</div>
-              )}
-            </div>
-
-            {/* Menu */}
-            <div className="menu-section boxed-section">
-              <div className="section-title">Menu</div>
-              {['Breakfast', 'Lunch', 'Dinner'].map(mealType => {
-                const meal = meals.find(m => m.meal_type === mealType);
-                return (
-                  <div key={mealType} className="meal-item">
-                    <strong>{mealType}</strong>
-                    <div>{meal?.items || 'TBD'}</div>
-                    {meal?.allergens && (
-                      <div className="allergen-info">Allergens: {meal.allergens}</div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Laundry Schedule */}
-            <div className="laundry-section">
-              <div className="section-title">Laundry Schedule</div>
-              <div className="laundry-content">
-                <p style={{ whiteSpace: 'pre-wrap' }}>{dailyContent.laundry_info || 'TBD'}</p>
+              {/* Laundry Schedule */}
+              <div className="laundry-section">
+                <div className="section-title">Laundry</div>
+                <div className="laundry-content">
+                  <p style={{ whiteSpace: 'pre-wrap' }}>{dailyContent.laundry_info || 'TBD'}</p>
+                </div>
               </div>
-            </div>
 
-            {/* Phone Calls */}
-            <div className="phone-calls-section">
-              <div className="section-title">Phone Calls</div>
-              <div className="phone-calls-content">
-                <p style={{ whiteSpace: 'pre-wrap' }}>{dailyContent.phone_calls_info || 'TBD'}</p>
+              {/* Phone Calls */}
+              <div className="phone-calls-section">
+                <div className="section-title">Phone Calls</div>
+                <div className="phone-calls-content">
+                  <p style={{ whiteSpace: 'pre-wrap' }}>{dailyContent.phone_calls_info || 'TBD'}</p>
+                </div>
               </div>
             </div>
 
