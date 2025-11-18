@@ -7,10 +7,10 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { toast } from "sonner";
-import { Shield, UserCog, Eye, Trophy, Users, Trash2 } from "lucide-react";
+import { Shield, UserCog, Eye, Trophy, Users, Trash2, Heart } from "lucide-react";
 import AddUserDialog from "./AddUserDialog";
 
-type UserRole = "super_admin" | "admin" | "staff" | "viewer" | "division_leader" | "specialist";
+type UserRole = "super_admin" | "admin" | "staff" | "viewer" | "division_leader" | "specialist" | "health_center";
 
 interface UserWithRole {
   id: string;
@@ -55,6 +55,7 @@ export default function UserRoleManagement() {
           else if (roles.includes("division_leader")) displayRole = "division_leader";
           else if (roles.includes("staff")) displayRole = "staff";
           else if (roles.includes("specialist")) displayRole = "specialist";
+          else if (roles.includes("health_center")) displayRole = "health_center";
 
           return {
             ...profile,
@@ -180,7 +181,8 @@ export default function UserRoleManagement() {
                   {getRoleIcon(user.role)}
                   {user.role === 'super_admin' ? 'Super Admin' :
                    user.role === 'division_leader' ? 'Division Leader' : 
-                   user.role === 'specialist' ? 'Specialist' : 
+                   user.role === 'specialist' ? 'Specialist' :
+                   user.role === 'health_center' ? 'Health Center' :
                    user.role.charAt(0).toUpperCase() + user.role.slice(1)}
                 </Badge>
                 <Select
@@ -195,6 +197,7 @@ export default function UserRoleManagement() {
                     <SelectItem value="staff">Staff</SelectItem>
                     <SelectItem value="division_leader">Division Leader</SelectItem>
                     <SelectItem value="specialist">Specialist</SelectItem>
+                    <SelectItem value="health_center">Health Center</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
                     <SelectItem value="super_admin">Super Admin</SelectItem>
                   </SelectContent>

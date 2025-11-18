@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCompany } from "@/contexts/CompanyContext";
-import { Shield, Users, Eye, UserCog, Trophy, Building2 } from "lucide-react";
+import { Shield, Users, Eye, UserCog, Trophy, Building2, Heart } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
@@ -61,6 +61,7 @@ const roles = [
   { id: "staff", label: "Staff", icon: Users, description: "Standard staff access" },
   { id: "division_leader", label: "Division Leader", icon: UserCog, description: "Full access to assigned division(s)" },
   { id: "specialist", label: "Specialist", icon: Trophy, description: "Cross-division access to specialized features (e.g., sports)" },
+  { id: "health_center", label: "Health Center", icon: Heart, description: "Access to health, medical, and incident reports" },
   { id: "viewer", label: "Viewer", icon: Eye, description: "Read-only access" },
 ];
 

@@ -2728,6 +2728,7 @@ export type Database = {
         | "division_leader"
         | "specialist"
         | "super_admin"
+        | "health_center"
       tag_type:
         | "nurse"
         | "transportation"
@@ -2873,6 +2874,7 @@ export const Constants = {
         "division_leader",
         "specialist",
         "super_admin",
+        "health_center",
       ],
       tag_type: [
         "nurse",
