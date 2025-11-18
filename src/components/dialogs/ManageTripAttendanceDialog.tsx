@@ -136,6 +136,48 @@ export default function ManageTripAttendanceDialog({
     }
   };
 
+  const notifyDivisionLeaders = async (conflicts: Conflict[], overrideReason: string, affectedChildIds: string[]) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      const { data: childrenData } = await supabase
+        .from('children')
+        .select('id, name, leader_id')
+        .in('id', affectedChildIds);
+      
+      for (const child of childrenData || []) {
+        if (!child.leader_id) continue;
+        
+        const childConflicts = conflicts.filter(c => c.entity_name === child.name);
+        if (childConflicts.length === 0) continue;
+        
+        const subject = `⚠️ Schedule Conflict Override - ${child.name}`;
+        const message = `A schedule conflict was detected and overridden for ${child.name}.
+
+**Conflicts:**
+${childConflicts.map(c => `• ${c.event1_name} (${c.event1_date}${c.event1_time ? ' ' + c.event1_time : ''})
+  vs ${c.event2_name} (${c.event2_date}${c.event2_time ? ' ' + c.event2_time : ''})`).join('\n')}
+
+**Override Reason:** ${overrideReason}
+
+**Assigned by:** ${user?.email || 'Unknown'}
+**Time:** ${new Date().toLocaleString()}
+
+Please review this conflict and take appropriate action.`;
+        
+        await supabase.from('messages').insert({
+          recipient_id: child.leader_id,
+          subject,
+          content: message,
+          notification_type: 'alert',
+          read: false
+        });
+      }
+    } catch (error) {
+      console.error('Error notifying division leaders:', error);
+    }
+  };
+
   const performSave = async (overrideReason?: string) => {
     if (!tripId) return;
     
@@ -165,6 +207,8 @@ export default function ManageTripAttendanceDialog({
             });
           }
         }
+        
+        await notifyDivisionLeaders(detectedConflicts, overrideReason, newChildren);
       }
 
       await supabase.from("trip_attendees").delete().eq("trip_id", tripId);
