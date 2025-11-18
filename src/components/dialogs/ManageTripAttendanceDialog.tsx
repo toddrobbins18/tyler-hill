@@ -170,7 +170,8 @@ Please review this conflict and take appropriate action.`;
           subject,
           content: message,
           notification_type: 'alert',
-          read: false
+          read: false,
+          company_id: currentCompany?.id
         });
       }
     } catch (error) {

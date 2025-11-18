@@ -23,12 +23,12 @@ export default function AddUserDialog({ onUserAdded }: AddUserDialogProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState<"admin" | "staff" | "viewer">("staff");
+  const [role, setRole] = useState<"admin" | "staff" | "division_leader" | "specialist" | "health_center" | "viewer">("staff");
   
   // Invitation form
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteFullName, setInviteFullName] = useState("");
-  const [inviteRole, setInviteRole] = useState<"admin" | "staff" | "viewer">("staff");
+  const [inviteRole, setInviteRole] = useState<"admin" | "staff" | "division_leader" | "specialist" | "health_center" | "viewer">("staff");
 
   const handleCreateUser = async () => {
     if (!email || !password || !fullName) {
@@ -147,6 +147,9 @@ export default function AddUserDialog({ onUserAdded }: AddUserDialogProps) {
                 <SelectContent>
                   <SelectItem value="viewer">Viewer</SelectItem>
                   <SelectItem value="staff">Staff</SelectItem>
+                  <SelectItem value="division_leader">Division Leader</SelectItem>
+                  <SelectItem value="specialist">Specialist</SelectItem>
+                  <SelectItem value="health_center">Health Center</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
               </Select>
@@ -185,6 +188,9 @@ export default function AddUserDialog({ onUserAdded }: AddUserDialogProps) {
                 <SelectContent>
                   <SelectItem value="viewer">Viewer</SelectItem>
                   <SelectItem value="staff">Staff</SelectItem>
+                  <SelectItem value="division_leader">Division Leader</SelectItem>
+                  <SelectItem value="specialist">Specialist</SelectItem>
+                  <SelectItem value="health_center">Health Center</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
               </Select>
