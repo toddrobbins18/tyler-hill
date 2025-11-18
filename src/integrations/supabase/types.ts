@@ -397,6 +397,7 @@ export type Database = {
           medical_notes: string | null
           name: string
           person_id: string | null
+          rfid: string | null
           season: string | null
           session: string | null
           status: string | null
@@ -430,6 +431,7 @@ export type Database = {
           medical_notes?: string | null
           name: string
           person_id?: string | null
+          rfid?: string | null
           season?: string | null
           session?: string | null
           status?: string | null
@@ -463,6 +465,7 @@ export type Database = {
           medical_notes?: string | null
           name?: string
           person_id?: string | null
+          rfid?: string | null
           season?: string | null
           session?: string | null
           status?: string | null
