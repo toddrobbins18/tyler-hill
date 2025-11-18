@@ -348,6 +348,22 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
             />
             <FormField
               control={form.control}
+              name="rfid"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>RFID Bracelet</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Scan or enter RFID" {...field} value={field.value ?? ""} />
+                  </FormControl>
+                  <FormDescription>
+                    Scan the camper's RFID bracelet for quick medication check-in
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
               name="allergies"
               render={({ field }) => (
                 <FormItem>

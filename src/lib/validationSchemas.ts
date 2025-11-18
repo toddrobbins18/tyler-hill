@@ -30,6 +30,7 @@ export const childSchema = z.object({
   birthday_toppings: z.array(z.string()).nullable().optional(),
   birthday_cake_allergies: z.array(z.string()).nullable().optional(),
   birthday_cake_message: z.string().nullable().optional(),
+  rfid: z.string().nullable().optional(),
 });
 
 // Staff validation schema

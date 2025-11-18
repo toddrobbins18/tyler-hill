@@ -112,6 +112,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
         emergency_contact: formData.get("emergency_contact") as string || null,
         allergies: formData.get("allergies") as string || null,
         medical_notes: formData.get("medical_notes") as string || null,
+        rfid: formData.get("rfid") as string || null,
       birthday_party_type: birthdayPartyType || null,
       birthday_cake_meal: birthdayCakeMeal || null,
       birthday_party_comments: formData.get("birthday_party_comments") as string || null,
@@ -257,6 +258,13 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
           <div>
             <Label htmlFor="emergency_contact">Emergency Contact</Label>
             <Input id="emergency_contact" name="emergency_contact" defaultValue={child.emergency_contact || ""} />
+          </div>
+          <div>
+            <Label htmlFor="rfid">RFID Bracelet</Label>
+            <Input id="rfid" name="rfid" defaultValue={child.rfid || ""} placeholder="Scan or enter RFID" />
+            <p className="text-xs text-muted-foreground mt-1">
+              Scan the camper's RFID bracelet for quick medication check-in
+            </p>
           </div>
           <div>
             <Label htmlFor="allergies">Allergies</Label>

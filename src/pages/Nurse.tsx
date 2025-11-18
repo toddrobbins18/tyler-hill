@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList, Hospital, Clock, UserCheck, Search, ArrowUpDown, Users, Loader2 } from "lucide-react";
+import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList, Hospital, Clock, UserCheck, Search, ArrowUpDown, Users, Loader2, Scan } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CSVUploader } from "@/components/CSVUploader";
 import { JSONUploader } from "@/components/JSONUploader";
@@ -48,6 +48,9 @@ export default function Nurse() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDivision, setSelectedDivision] = useState("all");
   const [sortBy, setSortBy] = useState<'name' | 'division'>('name');
+  const [rfidInput, setRfidInput] = useState("");
+  const [scannedChild, setScannedChild] = useState<any>(null);
+  const [isScanning, setIsScanning] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -282,6 +285,110 @@ export default function Nurse() {
 
     toast({ title: "Medication marked as administered" });
     fetchMedications(selectedDate);
+  };
+
+  const handleRfidScan = async () => {
+    if (!rfidInput.trim()) {
+      toast({ 
+        title: "Please enter or scan an RFID", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    setIsScanning(true);
+    
+    try {
+      // Find child by RFID (with company and season filtering)
+      const { data: child, error } = await supabase
+        .from('children')
+        .select('*, division:divisions(name)')
+        .eq('rfid', rfidInput.trim())
+        .eq('company_id', currentCompany?.id)
+        .eq('season', currentSeason)
+        .single();
+
+      if (error || !child) {
+        toast({
+          title: "RFID Not Found",
+          description: "No camper found with this RFID bracelet",
+          variant: "destructive"
+        });
+        setRfidInput("");
+        setIsScanning(false);
+        return;
+      }
+
+      // Get current user (nurse/staff)
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: staffData } = await supabase
+        .from("staff")
+        .select("id, name")
+        .eq("email", user?.email)
+        .single();
+
+      // Find all unadministered medications for this child today
+      const todayMeds = medications.filter(
+        med => med.child_id === child.id && !med.administered
+      );
+
+      if (todayMeds.length === 0) {
+        toast({
+          title: "No Medications Pending",
+          description: `${child.name} has no medications to administer today`,
+        });
+        setScannedChild(child);
+        setRfidInput("");
+        setIsScanning(false);
+        return;
+      }
+
+      // Administer ALL pending medications
+      const updates = todayMeds.map(med => 
+        supabase
+          .from("medication_logs")
+          .update({
+            administered: true,
+            administered_by: staffData?.id,
+            administered_at: new Date().toISOString(),
+          })
+          .eq("id", med.id)
+      );
+
+      await Promise.all(updates);
+
+      // Success feedback
+      toast({
+        title: "✓ Medications Administered",
+        description: `${todayMeds.length} medication${todayMeds.length > 1 ? 's' : ''} marked as given for ${child.name}`,
+      });
+
+      // Update UI
+      setScannedChild(child);
+      fetchMedications(selectedDate); // Refresh the list
+      
+      // Clear input for next scan
+      setRfidInput("");
+      
+      // Auto-clear after 3 seconds
+      setTimeout(() => setScannedChild(null), 3000);
+
+    } catch (error) {
+      console.error('RFID scan error:', error);
+      toast({
+        title: "Scan Error",
+        description: "An error occurred while processing the RFID scan",
+        variant: "destructive"
+      });
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handleRfidKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleRfidScan();
+    }
   };
 
   const handleDelete = async (medId: string) => {
@@ -734,6 +841,77 @@ export default function Nurse() {
               <CardDescription>Track medication administration</CardDescription>
             </CardHeader>
             <CardContent>
+              {/* RFID Scanner Section */}
+              <Card className="mb-4 border-2 border-primary/20">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Scan className="h-5 w-5" />
+                    RFID Quick Check-In
+                  </CardTitle>
+                  <CardDescription>
+                    Scan camper's RFID bracelet to automatically administer their medications
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <Input
+                        placeholder="Scan or type RFID..."
+                        value={rfidInput}
+                        onChange={(e) => setRfidInput(e.target.value)}
+                        onKeyPress={handleRfidKeyPress}
+                        disabled={isScanning}
+                        autoFocus
+                        className="text-lg"
+                      />
+                    </div>
+                    <Button 
+                      onClick={handleRfidScan}
+                      disabled={isScanning || !rfidInput.trim()}
+                    >
+                      {isScanning ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Scanning...
+                        </>
+                      ) : (
+                        <>
+                          <Scan className="h-4 w-4 mr-2" />
+                          Scan
+                        </>
+                      )}
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      onClick={() => {
+                        setRfidInput("");
+                        setScannedChild(null);
+                      }}
+                      disabled={isScanning}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+
+                  {/* Success Confirmation */}
+                  {scannedChild && (
+                    <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                        <div>
+                          <p className="font-medium text-green-900 dark:text-green-100">
+                            {scannedChild.name}
+                          </p>
+                          <p className="text-sm text-green-700 dark:text-green-300">
+                            {scannedChild.division?.name} • RFID: {scannedChild.rfid}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
               {loading ? (
                 <p className="text-muted-foreground">Loading...</p>
               ) : medications.length === 0 ? (
