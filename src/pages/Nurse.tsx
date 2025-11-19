@@ -343,24 +343,42 @@ export default function Nurse() {
         return;
       }
 
-      // Administer ALL pending medications
-      const updates = todayMeds.map(med => 
-        supabase
-          .from("medication_logs")
-          .update({
-            administered: true,
-            administered_by: staffData?.id,
-            administered_at: new Date().toISOString(),
-          })
-          .eq("id", med.id)
-      );
+      // Sort by scheduled_time and only take the FIRST medication
+      const sortedMeds = todayMeds.sort((a, b) => {
+        if (!a.scheduled_time) return 1;
+        if (!b.scheduled_time) return -1;
+        return a.scheduled_time.localeCompare(b.scheduled_time);
+      });
 
-      await Promise.all(updates);
+      const nextMed = sortedMeds[0];
 
-      // Success feedback
+      // Administer only the FIRST/NEXT medication
+      const { error: updateError } = await supabase
+        .from("medication_logs")
+        .update({
+          administered: true,
+          administered_by: staffData?.id,
+          administered_at: new Date().toISOString(),
+        })
+        .eq("id", nextMed.id);
+
+      if (updateError) {
+        console.error('Error administering medication:', updateError);
+        toast({
+          title: "Error",
+          description: "Failed to mark medication as administered",
+          variant: "destructive"
+        });
+        setRfidInput("");
+        setIsScanning(false);
+        return;
+      }
+
+      // Success feedback with medication details
+      const remainingCount = todayMeds.length - 1;
       toast({
-        title: "✓ Medications Administered",
-        description: `${todayMeds.length} medication${todayMeds.length > 1 ? 's' : ''} marked as given for ${child.name}`,
+        title: "✓ Medication Administered",
+        description: `${nextMed.medication_name} marked as given for ${child.name}${remainingCount > 0 ? ` (${remainingCount} more pending)` : ''}`,
       });
 
       // Update UI
