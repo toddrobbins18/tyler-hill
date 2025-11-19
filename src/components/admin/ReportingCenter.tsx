@@ -406,17 +406,28 @@ export default function ReportingCenter() {
     toast({ title: "PDF exported successfully" });
   };
 
-  const reportTypeOptions = [
-    { value: 'incidents', label: 'Incident Reports' },
-    { value: 'staff_evaluations', label: 'Staff Evaluations' },
-    { value: 'awards', label: 'Awards' },
-    { value: 'sports_events', label: 'Sports Events' },
-    { value: 'trips', label: 'Trips' },
-    { value: 'activities', label: 'Activities & Field Trips' },
-    { value: 'conflicts', label: 'Schedule Conflicts' },
-    { value: 'medications', label: 'Medication Schedule' },
-    { value: 'allergies', label: 'Allergy Report' },
-  ];
+  // Get report options based on company's available pages
+  const reportTypeOptions = useMemo(() => {
+    const baseOptions = [
+      { value: 'incidents', label: 'Incident Reports' },
+      { value: 'staff_evaluations', label: 'Staff Evaluations' },
+      { value: 'awards', label: 'Awards' },
+      { value: 'sports_events', label: 'Sports Events' },
+      { value: 'conflicts', label: 'Schedule Conflicts' },
+      { value: 'medications', label: 'Medication Schedule' },
+      { value: 'allergies', label: 'Allergy Report' },
+    ];
+
+    // Only add these report types if the company has the corresponding pages
+    if (currentCompany?.slug !== 'timber-lake-camp') {
+      baseOptions.push(
+        { value: 'trips', label: 'Trips' },
+        { value: 'activities', label: 'Activities & Field Trips' }
+      );
+    }
+
+    return baseOptions;
+  }, [currentCompany?.slug]);
 
   return (
     <div className="space-y-6">
