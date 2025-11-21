@@ -9,6 +9,7 @@ interface Company {
   slug: string;
   logo_url: string | null;
   theme_color: string;
+  zip_code?: string | null;
 }
 
 interface CompanyContextType {

@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.send-user-approval-notification]
 verify_jwt = false
+
+[functions.get-weather]
+verify_jwt = false

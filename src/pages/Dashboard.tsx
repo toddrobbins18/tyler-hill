@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
+import { WeatherWidget } from "@/components/WeatherWidget";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -324,6 +325,11 @@ export default function Dashboard() {
       )}
 
       <div className={`grid gap-6 ${isTimberLakeCamp || isTylerHillCamp ? 'md:grid-cols-2' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
+
+        {/* Weather Widget */}
+        {currentCompany?.zip_code && (
+          <WeatherWidget zipCode={currentCompany.zip_code} />
+        )}
 
         {isTimberLakeCamp && healthCenterAdmissions.length > 0 && (
           <Card className="shadow-card">
