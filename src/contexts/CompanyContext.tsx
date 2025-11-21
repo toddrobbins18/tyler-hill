@@ -64,7 +64,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       // Get user's company
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('company_id, companies(id, name, slug, logo_url, theme_color)')
+        .select('company_id, companies(id, name, slug, logo_url, theme_color, zip_code)')
         .eq('id', user.id)
         .single();
 
@@ -112,6 +112,14 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
               applyThemeColor(viewingCompany.theme_color);
             } else {
               console.warn('⚠️ [CompanyContext] Saved company ID not found in companies list');
+            }
+          } else if (profile?.company_id) {
+            // No saved viewing company, set to user's primary company with full record including zip_code
+            const defaultCompany = companies.find(c => c.id === profile.company_id);
+            if (defaultCompany) {
+              console.log('✅ [CompanyContext] Setting default company with zip_code:', defaultCompany.name);
+              setCurrentCompany(defaultCompany);
+              applyThemeColor(defaultCompany.theme_color);
             }
           }
         } else {
