@@ -505,6 +505,7 @@ export type Database = {
           slug: string
           theme_color: string
           updated_at: string | null
+          zip_code: string | null
         }
         Insert: {
           created_at?: string | null
@@ -515,6 +516,7 @@ export type Database = {
           slug: string
           theme_color?: string
           updated_at?: string | null
+          zip_code?: string | null
         }
         Update: {
           created_at?: string | null
@@ -525,6 +527,7 @@ export type Database = {
           slug?: string
           theme_color?: string
           updated_at?: string | null
+          zip_code?: string | null
         }
         Relationships: []
       }
