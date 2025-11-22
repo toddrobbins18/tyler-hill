@@ -2276,6 +2276,7 @@ export type Database = {
           role: string
           season: string | null
           session: string | null
+          specialty_sports: string[] | null
           staff_type: string | null
           status: string | null
           updated_at: string | null
@@ -2295,6 +2296,7 @@ export type Database = {
           role: string
           season?: string | null
           session?: string | null
+          specialty_sports?: string[] | null
           staff_type?: string | null
           status?: string | null
           updated_at?: string | null
@@ -2314,6 +2316,7 @@ export type Database = {
           role?: string
           season?: string | null
           session?: string | null
+          specialty_sports?: string[] | null
           staff_type?: string | null
           status?: string | null
           updated_at?: string | null

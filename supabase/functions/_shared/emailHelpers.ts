@@ -1,22 +1,26 @@
-export async function getRecipientsForEmailType(
+/**
+ * Get recipients with optional division and sport filtering
+ * @param divisionIds - Filter division_leader tag to only these divisions
+ * @param sportType - Filter specialist tag to only this sport
+ */
+export async function getRecipientsForEmailTypeWithFilters(
   supabase: any,
   emailType: string,
-  companyId?: string
+  companyId: string,
+  filters?: {
+    divisionIds?: string[];
+    sportType?: string;
+  }
 ): Promise<any[]> {
-  console.log(`Getting recipients for email type: ${emailType}, company: ${companyId || 'all'}`);
+  console.log(`Getting recipients for ${emailType} with filters:`, filters);
   
-  // Build query for email config
-  let configQuery = supabase
+  // 1. Get email config
+  const { data: config, error: configError } = await supabase
     .from('automated_email_config')
     .select('recipient_tags, enabled')
-    .eq('email_type', emailType);
-    
-  // Filter by company if provided
-  if (companyId) {
-    configQuery = configQuery.eq('company_id', companyId);
-  }
-  
-  const { data: config, error: configError } = await configQuery.maybeSingle();
+    .eq('email_type', emailType)
+    .eq('company_id', companyId)
+    .maybeSingle();
   
   if (configError) {
     console.error('Error fetching email config:', configError);
@@ -28,54 +32,120 @@ export async function getRecipientsForEmailType(
     return [];
   }
   
-  console.log(`Config found. Recipient tags:`, config.recipient_tags);
+  const tags = config.recipient_tags;
+  let allRecipients: any[] = [];
   
-  // Build query for user tags
-  let tagsQuery = supabase
-    .from('user_tags')
-    .select('user_id')
-    .in('tag', config.recipient_tags);
-    
-  // Filter by company if provided
-  if (companyId) {
-    tagsQuery = tagsQuery.eq('company_id', companyId);
+  // 2. Process each tag with appropriate filtering
+  for (const tag of tags) {
+    if (tag === 'division_leader' && filters?.divisionIds?.length) {
+      // DIVISION-FILTERED: Only leaders with access to specified divisions
+      console.log(`Filtering division_leader tag by divisions:`, filters.divisionIds);
+      
+      const { data: leaders } = await supabase
+        .from('user_roles')
+        .select('user_id')
+        .eq('role', 'division_leader')
+        .eq('company_id', companyId);
+      
+      if (leaders?.length) {
+        for (const leader of leaders) {
+          // Check if leader has permission for any of the event divisions
+          const { data: permissions } = await supabase
+            .from('division_permissions')
+            .select('division_id')
+            .eq('user_id', leader.user_id)
+            .eq('can_access', true)
+            .in('division_id', filters.divisionIds);
+          
+          if (permissions?.length > 0) {
+            // Get profile for this leader
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('id, email, full_name')
+              .eq('id', leader.user_id)
+              .eq('company_id', companyId)
+              .maybeSingle();
+            
+            if (profile) {
+              allRecipients.push(profile);
+            }
+          }
+        }
+      }
+    } 
+    else if (tag === 'specialist' && filters?.sportType) {
+      // SPORT-FILTERED: Only specialists who teach this sport
+      console.log(`Filtering specialist tag by sport:`, filters.sportType);
+      
+      const { data: specialists } = await supabase
+        .from('staff')
+        .select('email, name')
+        .eq('company_id', companyId)
+        .eq('status', 'active')
+        .contains('specialty_sports', [filters.sportType]);
+      
+      if (specialists?.length) {
+        // Get profiles for these specialists
+        const staffEmails = specialists.map((s: any) => s.email).filter(Boolean);
+        
+        if (staffEmails.length) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, email, full_name')
+            .in('email', staffEmails)
+            .eq('company_id', companyId);
+          
+          if (profiles) {
+            allRecipients.push(...profiles);
+          }
+        }
+      }
+    }
+    else {
+      // UNFILTERED TAG: Get all users with this tag (nurses, directors, etc.)
+      console.log(`Getting all users with tag:`, tag);
+      
+      const { data: userTags } = await supabase
+        .from('user_tags')
+        .select('user_id')
+        .eq('tag', tag)
+        .eq('company_id', companyId);
+      
+      if (userTags?.length) {
+        const userIds = userTags.map((t: any) => t.user_id);
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, email, full_name')
+          .in('id', userIds)
+          .eq('company_id', companyId);
+        
+        if (profiles) {
+          allRecipients.push(...profiles);
+        }
+      }
+    }
   }
   
-  const { data: userTags, error: tagsError } = await tagsQuery;
+  // 3. Remove duplicates based on user ID
+  const uniqueRecipients = Array.from(
+    new Map(allRecipients.map(r => [r.id, r])).values()
+  );
   
-  if (tagsError) {
-    console.error('Error fetching user tags:', tagsError);
+  console.log(`Returning ${uniqueRecipients.length} unique recipients`);
+  return uniqueRecipients;
+}
+
+// Keep backward compatibility - use the new function without filters
+export async function getRecipientsForEmailType(
+  supabase: any,
+  emailType: string,
+  companyId?: string
+): Promise<any[]> {
+  if (!companyId) {
+    console.error('Company ID required for email recipients');
     return [];
   }
-  
-  if (!userTags?.length) {
-    console.log('No users found with specified tags');
-    return [];
-  }
-  
-  const userIds = [...new Set(userTags.map((t: any) => t.user_id))];
-  console.log(`Found ${userIds.length} unique users with tags`);
-  
-  // Build query for profiles
-  let profilesQuery = supabase
-    .from('profiles')
-    .select('id, email, full_name')
-    .in('id', userIds);
-    
-  // Filter by company if provided
-  if (companyId) {
-    profilesQuery = profilesQuery.eq('company_id', companyId);
-  }
-  
-  const { data: profiles, error: profilesError } = await profilesQuery;
-  
-  if (profilesError) {
-    console.error('Error fetching profiles:', profilesError);
-    return [];
-  }
-  
-  console.log(`Returning ${profiles?.length || 0} recipient profiles`);
-  return profiles || [];
+  return getRecipientsForEmailTypeWithFilters(supabase, emailType, companyId);
 }
 
 export async function sendEmailNotifications(

@@ -20,8 +20,15 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
   const [leaderId, setLeaderId] = useState("");
   const [staffType, setStaffType] = useState<string>("");
   const [session, setSession] = useState<string>("");
+  const [specialtySports, setSpecialtySports] = useState<string[]>([]);
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
+
+  const AVAILABLE_SPORTS = [
+    "Baseball", "Basketball", "Dance", "Football", "Golf", 
+    "Gymnastics", "Hockey", "Lacrosse", "Soccer", "Softball", 
+    "Tennis", "Volleyball", "Waterfront"
+  ];
 
   useEffect(() => {
     if (open) {
@@ -73,7 +80,9 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
 
       const { error } = await supabase.from("staff").insert([{
         ...validatedData,
-        company_id: currentCompany?.id
+        specialty_sports: specialtySports,
+        company_id: currentCompany?.id,
+        season: currentSeason
       }]);
 
       if (error) {
@@ -85,6 +94,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
         setLeaderId("");
         setStaffType("");
         setSession("");
+        setSpecialtySports([]);
         onSuccess?.();
       }
     } catch (error) {
@@ -179,6 +189,36 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
               className="min-h-[80px]"
             />
           </div>
+          {(staffType === 'specialist' || staffType === 'both') && (
+            <div className="space-y-3">
+              <Label>Specialty Sports</Label>
+              <p className="text-sm text-muted-foreground">
+                Select all sports this specialist teaches. They will receive notifications for events in these sports.
+              </p>
+              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
+                {AVAILABLE_SPORTS.map(sport => (
+                  <div key={sport} className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id={`sport-${sport}`}
+                      checked={specialtySports.includes(sport)}
+                      onChange={(e) => {
+                        setSpecialtySports(prev =>
+                          e.target.checked 
+                            ? [...prev, sport]
+                            : prev.filter(s => s !== sport)
+                        );
+                      }}
+                      className="rounded border-input"
+                    />
+                    <Label htmlFor={`sport-${sport}`} className="font-normal cursor-pointer">
+                      {sport}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div>
             <Label>Reports To (Supervisor)</Label>
             <Select value={leaderId || "none"} onValueChange={(val) => setLeaderId(val === "none" ? "" : val)}>

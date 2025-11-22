@@ -25,35 +25,47 @@ interface EmailConfig {
 const EMAIL_TYPE_LABELS: Record<string, { label: string; description: string }> = {
   incident_report: {
     label: "Incident Reports",
-    description: "When new incident reports are created or updated"
+    description: "Division leaders see only their divisions"
   },
   missed_medication: {
     label: "Missed Medication Alerts",
-    description: "When scheduled medications are not administered"
+    description: "When scheduled medications are not administered - division leaders see only their divisions"
   },
-  transportation_event: {
+  transportation_events: {
     label: "Transportation Events",
-    description: "When trips or field trips are created or updated"
+    description: "When transportation events are scheduled or updated"
   },
   health_center_admission: {
     label: "Health Center Admissions",
-    description: "When a child is admitted to the health center"
+    description: "Division leaders see only their divisions"
   },
   health_center_checkout: {
     label: "Health Center Checkouts",
-    description: "When a child checks out from the health center"
+    description: "Division leaders see only their divisions"
   },
-  sports_event_update: {
-    label: "Sports Event Updates",
-    description: "When sports events are created or updated"
+  sports_event_home: {
+    label: "Sports Events (Home)",
+    description: "Division leaders see only their divisions, specialists see only their sports"
+  },
+  sports_event_away: {
+    label: "Sports Events (Away)",
+    description: "Division leaders see only their divisions, specialists see only their sports"
   },
   trip_update: {
     label: "Trip Updates",
-    description: "When trips are created or updated"
+    description: "Division leaders see only their divisions"
+  },
+  tutoring_therapy: {
+    label: "Tutoring & Therapy",
+    description: "Division leaders see only their divisions"
+  },
+  sports_academy: {
+    label: "Sports Academy",
+    description: "Division leaders see only their divisions, specialists see only their sports"
   },
   user_approval_request: {
     label: "User Approval Requests",
-    description: "When new users request approval"
+    description: "When new users request access to the system"
   }
 };
 
