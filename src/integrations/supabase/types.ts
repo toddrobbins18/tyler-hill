@@ -1969,6 +1969,41 @@ export type Database = {
           },
         ]
       }
+      specialist_sport_assignments: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          id: string
+          sport: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          id?: string
+          sport: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          sport?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "specialist_sport_assignments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sports_academy: {
         Row: {
           child_id: string
