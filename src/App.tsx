@@ -27,6 +27,7 @@ import RainyDaySchedule from "./pages/RainyDaySchedule";
 import EvaluationQuestions from "./pages/EvaluationQuestions";
 import RolePermissions from "./pages/RolePermissions";
 import DivisionPermissions from "./pages/DivisionPermissions";
+import SpecialistSportAssignments from "./pages/SpecialistSportAssignments";
 import MasterCalendar from "./pages/MasterCalendar";
 import SportsCalendar from "./pages/SportsCalendar";
 import ActivitiesFieldTrips from "./pages/ActivitiesFieldTrips";
@@ -76,6 +77,7 @@ function AppContent() {
                                 <Route path="/evaluation-questions" element={<EvaluationQuestions />} />
                                 <Route path="/role-permissions" element={<RolePermissions />} />
                                 <Route path="/division-permissions" element={<DivisionPermissions />} />
+                                <Route path="/specialist-sport-assignments" element={<SpecialistSportAssignments />} />
                                 <Route path="/transportation" element={<Transportation />} />
                                 <Route path="/notes" element={<DailyNotes />} />
                                 <Route path="/daily-wolf-printable" element={<DailyWolfPrintable />} />

@@ -74,30 +74,26 @@ export async function getRecipientsForEmailTypeWithFilters(
       }
     } 
     else if (tag === 'specialist' && filters?.sportType) {
-      // SPORT-FILTERED: Only specialists who teach this sport
+      // SPORT-FILTERED: Only specialists assigned to this sport
       console.log(`Filtering specialist tag by sport:`, filters.sportType);
       
-      const { data: specialists } = await supabase
-        .from('staff')
-        .select('email, name')
+      const { data: assignments } = await supabase
+        .from('specialist_sport_assignments')
+        .select('user_id')
         .eq('company_id', companyId)
-        .eq('status', 'active')
-        .contains('specialty_sports', [filters.sportType]);
+        .eq('sport', filters.sportType);
       
-      if (specialists?.length) {
-        // Get profiles for these specialists
-        const staffEmails = specialists.map((s: any) => s.email).filter(Boolean);
+      if (assignments?.length) {
+        const userIds = assignments.map((a: any) => a.user_id);
         
-        if (staffEmails.length) {
-          const { data: profiles } = await supabase
-            .from('profiles')
-            .select('id, email, full_name')
-            .in('email', staffEmails)
-            .eq('company_id', companyId);
-          
-          if (profiles) {
-            allRecipients.push(...profiles);
-          }
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, email, full_name')
+          .in('id', userIds)
+          .eq('company_id', companyId);
+        
+        if (profiles) {
+          allRecipients.push(...profiles);
         }
       }
     }
