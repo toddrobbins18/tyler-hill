@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getRecipientsForEmailType, sendEmailNotifications } from "../_shared/emailHelpers.ts";
+import { getRecipientsForEmailTypeWithFilters, sendEmailNotifications } from "../_shared/emailHelpers.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -21,29 +21,19 @@ serve(async (req) => {
     const { event_id, trip_id, action } = await req.json();
     console.log(`Processing event notification: event=${event_id}, trip=${trip_id}, action=${action}`);
 
-    // Determine if this is a sports event update or trip update
-    const emailType = event_id ? 'sports_event_update' : 'trip_update';
-
-    // Get recipients based on configuration
-    const recipients = await getRecipientsForEmailType(supabase, emailType);
-
-    if (!recipients.length) {
-      console.log(`No recipients configured for ${emailType}`);
-      return new Response(
-        JSON.stringify({ message: 'No recipients configured' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      );
-    }
-
     let subject = '';
     let content = '';
+    let recipients: any[] = [];
+    let companyId = '';
+    let emailType = '';
 
     if (event_id) {
-      // Get sports event details
+      // Get sports event details with divisions
       const { data: event, error: eventError } = await supabase
         .from('sports_calendar')
         .select(`
           *,
+          sports_calendar_divisions(division_id),
           division:divisions (
             name
           ),
@@ -69,6 +59,32 @@ serve(async (req) => {
         console.error('Error fetching event:', eventError);
         throw eventError;
       }
+
+      companyId = event.company_id;
+
+      // Determine home/away email type
+      const isHome = event.home_away === 'home' || !event.home_away;
+      emailType = isHome ? 'sports_event_home' : 'sports_event_away';
+
+      // Get division IDs
+      const divisionIds = event.sports_calendar_divisions
+        ?.map((scd: any) => scd.division_id)
+        .filter(Boolean) || [];
+
+      // Get sport type (normalize custom sports)
+      const sportType = event.sport_type === 'custom' 
+        ? event.custom_sport_type 
+        : event.sport_type;
+
+      console.log(`Event: ${emailType}, Divisions: ${divisionIds.length}, Sport: ${sportType}`);
+
+      // Get recipients with BOTH division and sport filtering
+      recipients = await getRecipientsForEmailTypeWithFilters(
+        supabase,
+        emailType,
+        companyId,
+        { divisionIds, sportType }
+      );
 
       // Get trip details if associated
       let trip = null;
@@ -159,7 +175,8 @@ Please review the complete event details in the Sports Calendar.
           trip_attendees (
             child:children (
               name,
-              allergies
+              allergies,
+              division_id
             )
           )
         `)
@@ -170,6 +187,26 @@ Please review the complete event details in the Sports Calendar.
         console.error('Error fetching trip:', tripError);
         throw tripError;
       }
+
+      companyId = trip.company_id;
+      emailType = 'trip_update';
+
+      // Get division IDs from attendees
+      const divisionIds: string[] = Array.from(
+        new Set(
+          trip.trip_attendees
+            ?.map((a: any) => a.child?.division_id)
+            .filter((id: any): id is string => typeof id === 'string') || []
+        )
+      );
+
+      // Get recipients with division filtering
+      recipients = await getRecipientsForEmailTypeWithFilters(
+        supabase,
+        emailType,
+        companyId,
+        { divisionIds }
+      );
 
       // Build attendee list
       const attendees = trip.trip_attendees
@@ -211,8 +248,16 @@ Please review the complete trip details in the Transportation section.
       `.trim();
     }
 
+    if (!recipients.length) {
+      console.log(`No recipients configured for ${emailType}`);
+      return new Response(
+        JSON.stringify({ message: 'No recipients configured' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
+    }
+
     // Send notifications
-    await sendEmailNotifications(supabase, recipients, subject, content);
+    await sendEmailNotifications(supabase, recipients, subject, content, companyId);
 
     // Log notification
     await supabase.from('notification_logs').insert({
