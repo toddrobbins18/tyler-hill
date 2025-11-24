@@ -179,6 +179,7 @@ export type Database = {
           enabled: boolean | null
           id: string
           recipient_tags: string[]
+          send_timing: string[] | null
           updated_at: string | null
         }
         Insert: {
@@ -188,6 +189,7 @@ export type Database = {
           enabled?: boolean | null
           id?: string
           recipient_tags?: string[]
+          send_timing?: string[] | null
           updated_at?: string | null
         }
         Update: {
@@ -197,6 +199,7 @@ export type Database = {
           enabled?: boolean | null
           id?: string
           recipient_tags?: string[]
+          send_timing?: string[] | null
           updated_at?: string | null
         }
         Relationships: [
@@ -1818,6 +1821,65 @@ export type Database = {
             columns: ["resolved_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scheduled_notifications: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          email_type: string
+          error_message: string | null
+          event_data: Json | null
+          event_date: string
+          event_id: string | null
+          event_time: string | null
+          id: string
+          recipient_count: number | null
+          send_at: string
+          sent: boolean | null
+          sent_at: string | null
+          timing_type: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          email_type: string
+          error_message?: string | null
+          event_data?: Json | null
+          event_date: string
+          event_id?: string | null
+          event_time?: string | null
+          id?: string
+          recipient_count?: number | null
+          send_at: string
+          sent?: boolean | null
+          sent_at?: string | null
+          timing_type: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          email_type?: string
+          error_message?: string | null
+          event_data?: Json | null
+          event_date?: string
+          event_id?: string | null
+          event_time?: string | null
+          id?: string
+          recipient_count?: number | null
+          send_at?: string
+          sent?: boolean | null
+          sent_at?: string | null
+          timing_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_notifications_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]

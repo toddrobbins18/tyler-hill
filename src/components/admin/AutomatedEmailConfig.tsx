@@ -5,15 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import { Loader2, Mail } from "lucide-react";
+import { Loader2, Mail, Clock } from "lucide-react";
 import { useCompany } from "@/contexts/CompanyContext";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface EmailConfig {
   id: string;
@@ -21,6 +15,7 @@ interface EmailConfig {
   recipient_tags: string[];
   enabled: boolean;
   updated_at: string;
+  send_timing: string[];
 }
 
 const EMAIL_TYPE_LABELS: Record<string, { label: string; description: string }> = {
@@ -96,6 +91,56 @@ const TAG_COLORS: Record<string, string> = {
   head_of_boys_side: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200"
 };
 
+const TIMING_OPTIONS: Record<string, {
+  value: string;
+  label: string;
+  description: string;
+  applicableTo: string[];
+}> = {
+  on_create: {
+    value: 'on_create',
+    label: 'When Created',
+    description: 'Send immediately when record is created',
+    applicableTo: ['all']
+  },
+  on_update: {
+    value: 'on_update',
+    label: 'When Updated',
+    description: 'Send immediately when record is updated',
+    applicableTo: ['all']
+  },
+  day_before: {
+    value: 'day_before',
+    label: 'Day Before',
+    description: 'Send 24 hours before the event',
+    applicableTo: ['sports_event_home', 'sports_event_away', 'trip_update', 'transportation_events', 'tutoring_therapy', 'sports_academy']
+  },
+  morning_of: {
+    value: 'morning_of',
+    label: 'Morning Of (8 AM)',
+    description: 'Send at 8:00 AM on the event day',
+    applicableTo: ['sports_event_home', 'sports_event_away', 'trip_update']
+  },
+  '2_hours_before': {
+    value: '2_hours_before',
+    label: '2 Hours Before',
+    description: 'Send 2 hours before event time',
+    applicableTo: ['sports_event_home', 'sports_event_away', 'trip_update']
+  },
+  '4_hours_before': {
+    value: '4_hours_before',
+    label: '4 Hours Before',
+    description: 'Send 4 hours before event time',
+    applicableTo: ['sports_event_home', 'sports_event_away', 'trip_update']
+  },
+  '1_week_before': {
+    value: '1_week_before',
+    label: '1 Week Before',
+    description: 'Send 7 days before the event',
+    applicableTo: ['sports_event_home', 'sports_event_away', 'trip_update']
+  }
+};
+
 export default function AutomatedEmailConfig() {
   const { currentCompany, isSuperAdmin } = useCompany();
   const [configs, setConfigs] = useState<EmailConfig[]>([]);
@@ -155,6 +200,19 @@ export default function AutomatedEmailConfig() {
     updateConfig(configId, { recipient_tags: newTags });
   };
 
+  const toggleTiming = (configId: string, timing: string, currentTimings: string[]) => {
+    const newTimings = currentTimings.includes(timing)
+      ? currentTimings.filter(t => t !== timing)
+      : [...currentTimings, timing];
+    updateConfig(configId, { send_timing: newTimings });
+  };
+
+  const getApplicableTimings = (emailType: string) => {
+    return Object.values(TIMING_OPTIONS).filter(option => 
+      option.applicableTo.includes('all') || option.applicableTo.includes(emailType)
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
@@ -211,7 +269,7 @@ export default function AutomatedEmailConfig() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div>
                     <label className="text-sm font-medium text-foreground mb-2 block">
                       Recipient Tags
@@ -248,6 +306,55 @@ export default function AutomatedEmailConfig() {
                       ))}
                     </div>
                   )}
+
+                  <div className="pt-2 border-t">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <label className="text-sm font-medium text-foreground">
+                        Send Timing (select multiple)
+                      </label>
+                    </div>
+                    <div className="grid gap-3">
+                      {getApplicableTimings(config.email_type).map((timing) => {
+                        const isSelected = config.send_timing?.includes(timing.value) || false;
+                        return (
+                          <div key={timing.value} className="flex items-start space-x-3">
+                            <Checkbox
+                              id={`${config.id}-${timing.value}`}
+                              checked={isSelected}
+                              onCheckedChange={() => 
+                                toggleTiming(config.id, timing.value, config.send_timing || ['on_create'])
+                              }
+                              disabled={updating === config.id}
+                            />
+                            <div className="grid gap-1 leading-none">
+                              <label
+                                htmlFor={`${config.id}-${timing.value}`}
+                                className="text-sm font-medium leading-none cursor-pointer peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                              >
+                                {timing.label}
+                              </label>
+                              <p className="text-xs text-muted-foreground">
+                                {timing.description}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {config.send_timing && config.send_timing.length > 0 && (
+                      <div className="mt-3 pt-3 border-t">
+                        <p className="text-xs text-muted-foreground mb-2">Selected timings:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {config.send_timing.map((timing) => (
+                            <Badge key={timing} variant="outline" className="text-xs">
+                              {TIMING_OPTIONS[timing]?.label || timing}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   
                   <div className="text-xs text-muted-foreground pt-2 border-t">
                     Last updated: {new Date(config.updated_at).toLocaleString()}
