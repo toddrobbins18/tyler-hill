@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Loader2, Mail } from "lucide-react";
+import { useCompany } from "@/contexts/CompanyContext";
 import {
   Select,
   SelectContent,
@@ -96,19 +97,25 @@ const TAG_COLORS: Record<string, string> = {
 };
 
 export default function AutomatedEmailConfig() {
+  const { currentCompany, isSuperAdmin } = useCompany();
   const [configs, setConfigs] = useState<EmailConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchConfigs();
-  }, []);
+    if (currentCompany) {
+      fetchConfigs();
+    }
+  }, [currentCompany?.id]);
 
   const fetchConfigs = async () => {
+    if (!currentCompany) return;
+    
     try {
       const { data, error } = await supabase
         .from("automated_email_config")
         .select("*")
+        .eq("company_id", currentCompany.id)
         .order("email_type");
 
       if (error) throw error;
@@ -164,6 +171,19 @@ export default function AutomatedEmailConfig() {
           Configure which user tags receive automated email notifications for different events.
         </p>
       </div>
+
+      {isSuperAdmin && currentCompany && (
+        <Card className="bg-yellow-50 dark:bg-yellow-950 border-yellow-200">
+          <CardHeader>
+            <CardTitle className="text-sm">
+              👑 Super Admin View
+            </CardTitle>
+            <CardDescription>
+              Currently viewing email configurations for: <strong>{currentCompany.name}</strong>
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
 
       <div className="grid gap-4">
         {configs.map((config) => {
