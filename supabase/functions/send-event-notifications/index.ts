@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getRecipientsForEmailTypeWithFilters, sendEmailNotifications } from "../_shared/emailHelpers.ts";
+import { calculateSendTime } from "../_shared/timingHelpers.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -26,6 +27,7 @@ serve(async (req) => {
     let recipients: any[] = [];
     let companyId = '';
     let emailType = '';
+    let sendTimings: string[] = ['on_create'];
 
     if (event_id) {
       // Get sports event details with divisions
@@ -77,6 +79,19 @@ serve(async (req) => {
         : event.sport_type;
 
       console.log(`Event: ${emailType}, Divisions: ${divisionIds.length}, Sport: ${sportType}`);
+
+      // Check timing configuration
+      const { data: config } = await supabase
+        .from('automated_email_config')
+        .select('send_timing, enabled')
+        .eq('company_id', companyId)
+        .eq('email_type', emailType)
+        .maybeSingle();
+
+      const sendTimings = config?.send_timing || ['on_create'];
+      const shouldSendNow = sendTimings.includes(
+        action === 'created' ? 'on_create' : 'on_update'
+      );
 
       // Get recipients with BOTH division and sport filtering
       recipients = await getRecipientsForEmailTypeWithFilters(
@@ -166,6 +181,37 @@ ${event.meal_notes ? `**Meal Notes:** ${event.meal_notes}` : ''}
 Please review the complete event details in the Sports Calendar.
       `.trim();
 
+      // Queue scheduled notifications for future timings
+      const futureTimings = sendTimings.filter((t: string) => 
+        !['on_create', 'on_update'].includes(t)
+      );
+
+      if (futureTimings.length > 0 && event.event_date) {
+        console.log(`Queueing ${futureTimings.length} scheduled notifications`);
+        
+        const eventData = {
+          title: event.title,
+          content: content,
+          divisionIds: divisionIds,
+          sportType: sportType
+        };
+
+        for (const timing of futureTimings) {
+          const sendAt = calculateSendTime(event.event_date, event.time, timing);
+          
+          await supabase.from('scheduled_notifications').insert({
+            company_id: companyId,
+            email_type: emailType,
+            event_id: event_id,
+            event_date: event.event_date,
+            event_time: event.time,
+            send_at: sendAt,
+            timing_type: timing,
+            event_data: eventData
+          });
+        }
+      }
+
     } else if (trip_id) {
       // Get trip details only
       const { data: trip, error: tripError } = await supabase
@@ -190,6 +236,19 @@ Please review the complete event details in the Sports Calendar.
 
       companyId = trip.company_id;
       emailType = 'trip_update';
+
+      // Check timing configuration
+      const { data: config } = await supabase
+        .from('automated_email_config')
+        .select('send_timing, enabled')
+        .eq('company_id', companyId)
+        .eq('email_type', emailType)
+        .maybeSingle();
+
+      const sendTimings = config?.send_timing || ['on_create'];
+      const shouldSendNow = sendTimings.includes(
+        action === 'created' ? 'on_create' : 'on_update'
+      );
 
       // Get division IDs from attendees
       const divisionIds: string[] = Array.from(
@@ -246,18 +305,58 @@ ${trip.meal ? `**Meal:** ${trip.meal}` : ''}
 
 Please review the complete trip details in the Transportation section.
       `.trim();
-    }
 
-    if (!recipients.length) {
-      console.log(`No recipients configured for ${emailType}`);
-      return new Response(
-        JSON.stringify({ message: 'No recipients configured' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      // Queue scheduled notifications for future timings
+      const futureTimings = sendTimings.filter((t: string) => 
+        !['on_create', 'on_update'].includes(t)
       );
+
+      if (futureTimings.length > 0 && trip.date) {
+        console.log(`Queueing ${futureTimings.length} scheduled trip notifications`);
+        
+        const eventData = {
+          title: trip.name,
+          content: content,
+          divisionIds: divisionIds
+        };
+
+        for (const timing of futureTimings) {
+          const sendAt = calculateSendTime(trip.date, trip.departure_time, timing);
+          
+          await supabase.from('scheduled_notifications').insert({
+            company_id: companyId,
+            email_type: emailType,
+            event_id: trip_id,
+            event_date: trip.date,
+            event_time: trip.departure_time,
+            send_at: sendAt,
+            timing_type: timing,
+            event_data: eventData
+          });
+        }
+      }
     }
 
-    // Send notifications
-    await sendEmailNotifications(supabase, recipients, subject, content, companyId);
+    // Only send immediate notification if configured
+    const shouldSendNow = event_id 
+      ? (sendTimings.includes(action === 'created' ? 'on_create' : 'on_update'))
+      : (sendTimings.includes(action === 'created' ? 'on_create' : 'on_update'));
+
+    if (shouldSendNow) {
+      if (!recipients.length) {
+        console.log(`No recipients configured for ${emailType}`);
+        return new Response(
+          JSON.stringify({ message: 'No recipients configured' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
+      }
+
+      // Send immediate notifications
+      await sendEmailNotifications(supabase, recipients, subject, content, companyId);
+      console.log(`Sent immediate notifications to ${recipients.length} recipients`);
+    } else {
+      console.log(`Skipping immediate notification (not configured for ${action})`);
+    }
 
     // Log notification
     await supabase.from('notification_logs').insert({
