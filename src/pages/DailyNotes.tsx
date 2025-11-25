@@ -186,8 +186,8 @@ export default function DailyNotes() {
   };
 
   const today = format(new Date(), 'EEEE, MMMM d, yyyy');
-  const campName = currentCompany?.slug === 'default' ? 'Tyler Hill' : 'Timber Lake';
-  const campSubtitle = currentCompany?.slug === 'default' ? 'HOME OF THE BEARS' : '';
+  const campName = currentCompany?.slug === 'tyler-hill-camp' ? 'Tyler Hill' : 'Timber Lake';
+  const campSubtitle = currentCompany?.slug === 'tyler-hill-camp' ? 'HOME OF THE BEARS' : '';
 
   if (currentCompany?.slug === 'timber-lake-west') {
     return null; // Will redirect via useEffect
