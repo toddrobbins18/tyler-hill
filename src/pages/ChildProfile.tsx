@@ -50,15 +50,43 @@ export default function ChildProfile() {
       setChild(childData);
       setAllergyText(childData?.allergies || "");
 
-      // Fetch awards for this child
-      const { data: awardsData } = await supabase
-        .from("awards")
-        .select("*")
-        .eq("child_id", id)
-        .eq("company_id", currentCompany?.id || '')
-        .order("date", { ascending: false });
+      // Fetch awards for this child - including historical awards from previous seasons
+      let awardsData: any[] = [];
+      
+      if (childData?.person_id) {
+        // Get all child records with the same person_id (across all seasons)
+        const { data: allChildRecords } = await supabase
+          .from("children")
+          .select("id")
+          .eq("person_id", childData.person_id)
+          .eq("company_id", currentCompany?.id || '');
 
-      setAwards(awardsData || []);
+        if (allChildRecords && allChildRecords.length > 0) {
+          const childIds = allChildRecords.map(c => c.id);
+          
+          // Fetch awards for all child records (historical)
+          const { data: historicalAwards } = await supabase
+            .from("awards")
+            .select("*")
+            .in("child_id", childIds)
+            .eq("company_id", currentCompany?.id || '')
+            .order("date", { ascending: false });
+
+          awardsData = historicalAwards || [];
+        }
+      } else {
+        // Fallback: just fetch awards for current child_id
+        const { data: currentAwards } = await supabase
+          .from("awards")
+          .select("*")
+          .eq("child_id", id)
+          .eq("company_id", currentCompany?.id || '')
+          .order("date", { ascending: false });
+
+        awardsData = currentAwards || [];
+      }
+
+      setAwards(awardsData);
 
       // Fetch incident reports for this child through incident_children junction table
       const { data: incidentLinks } = await supabase
