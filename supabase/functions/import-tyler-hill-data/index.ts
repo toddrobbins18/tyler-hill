@@ -188,7 +188,7 @@ serve(async (req) => {
           let title = '';
           switch (awardDetails.type?.toLowerCase()) {
             case 'cw':
-              title = `Camper of the Week - ${awardDetails.description}`;
+              title = `Color War - ${awardDetails.description}`;
               break;
             case 'starfish':
               title = `Starfish Award - ${awardDetails.description}`;
