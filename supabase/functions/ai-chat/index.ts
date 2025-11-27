@@ -64,21 +64,81 @@ serve(async (req) => {
       throw new Error('User has no company assigned');
     }
 
+    console.log('User Context:', {
+      userId: userContext.userId,
+      companyId: userContext.companyId,
+      roles: userContext.roles,
+      isSuperAdmin: userContext.isSuperAdmin,
+      hasRestrictions: !!userContext.divisionIds,
+      allowedMenuItems: userContext.allowedMenuItems
+    });
+
     // Define tools for the AI
     const tools = [
       {
         type: "function",
         function: {
           name: "search_campers",
-          description: "Search for campers by name, division, or group",
+          description: "Search for campers by name, division, or group. If query is empty, lists recent campers.",
           parameters: {
             type: "object",
             properties: {
-              query: { type: "string", description: "Search term for camper name" },
+              query: { type: "string", description: "Optional search term for camper name. Leave empty to list campers." },
               division: { type: "string", description: "Optional division name filter" },
               group: { type: "string", description: "Optional group name filter" }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "list_all_campers",
+          description: "Get a sample list of all campers (limited to 20) for overview purposes",
+          parameters: {
+            type: "object",
+            properties: {
+              limit: { type: "number", description: "Number of campers to return (default 20, max 50)" }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_divisions",
+          description: "Get all available divisions in the camp",
+          parameters: {
+            type: "object",
+            properties: {}
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "list_campers_by_division",
+          description: "List all campers in a specific division",
+          parameters: {
+            type: "object",
+            properties: {
+              division: { type: "string", description: "Division name or ID" }
             },
-            required: ["query"]
+            required: ["division"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_campers_by_group",
+          description: "Get all campers in a specific group",
+          parameters: {
+            type: "object",
+            properties: {
+              group: { type: "string", description: "Group name" }
+            },
+            required: ["group"]
           }
         }
       },
@@ -86,15 +146,41 @@ serve(async (req) => {
         type: "function",
         function: {
           name: "search_staff",
-          description: "Search for staff members by name, role, or department",
+          description: "Search for staff members by name, role, or department. If query is empty, lists staff.",
           parameters: {
             type: "object",
             properties: {
-              query: { type: "string", description: "Search term for staff name" },
+              query: { type: "string", description: "Optional search term for staff name. Leave empty to list staff." },
               role: { type: "string", description: "Optional role filter" },
               department: { type: "string", description: "Optional department filter" }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "list_all_staff",
+          description: "Get a sample list of all staff members (limited to 20) for overview purposes",
+          parameters: {
+            type: "object",
+            properties: {
+              limit: { type: "number", description: "Number of staff to return (default 20, max 50)" }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_staff_by_department",
+          description: "Get all staff members in a specific department",
+          parameters: {
+            type: "object",
+            properties: {
+              department: { type: "string", description: "Department name" }
             },
-            required: ["query"]
+            required: ["department"]
           }
         }
       },
@@ -175,11 +261,19 @@ User's current access level:
 - Super Admin: ${userContext.isSuperAdmin ? 'Yes' : 'No'}
 ${userContext.divisionIds ? `- Restricted to divisions: ${userContext.divisionIds.join(', ')}` : '- Access to all divisions'}
 
-Important:
+Important guidelines:
 - Only search for and provide data that the user has permission to access
 - If the user asks for data they cannot access, politely explain the limitation
 - Be concise and helpful in your responses
-- Format data in a clear, easy-to-read way`;
+- Format data in a clear, easy-to-read way
+
+Tool usage tips:
+- When users ask to "show", "list", or "find" without specific names, use list_all_campers or list_all_staff
+- search_campers and search_staff can work without a query - they'll list recent records
+- Use get_divisions first if users ask about divisions or groups
+- For "all campers in [division]", use list_campers_by_division
+- For "all staff in [department]", use get_staff_by_department
+- Always check if you have permission before attempting to access data`;
 
     let conversationMessages = [
       { role: "system", content: systemPrompt },
@@ -227,17 +321,24 @@ Important:
 
       // Check if AI wants to use tools
       if (message.tool_calls && message.tool_calls.length > 0) {
+        console.log(`AI requested ${message.tool_calls.length} tool call(s)`);
+        
         // Execute all tool calls
         for (const toolCall of message.tool_calls) {
           const functionName = toolCall.function.name;
           const args = JSON.parse(toolCall.function.arguments);
 
-          console.log(`Executing tool: ${functionName} with args:`, args);
+          console.log(`Executing tool: ${functionName}`, { args, userContext: userContext.userId });
 
           let result;
           try {
             result = await executeToolCall(supabase, userContext, functionName, args);
+            console.log(`Tool ${functionName} completed:`, { 
+              success: !result.error, 
+              resultSize: JSON.stringify(result).length 
+            });
           } catch (error) {
+            console.error(`Tool ${functionName} failed:`, error);
             result = { error: error instanceof Error ? error.message : 'Unknown error' };
           }
 
@@ -249,6 +350,7 @@ Important:
         }
       } else {
         // No more tool calls, we have the final response
+        console.log('AI provided final response (no more tool calls)');
         shouldContinue = false;
       }
     }
@@ -366,11 +468,17 @@ async function executeToolCall(
         return { error: 'You do not have permission to access camper information.' };
       }
 
+      console.log(`search_campers: query="${args.query || ''}", division="${args.division || ''}", group="${args.group || ''}"`);
+
       let query = supabase
         .from('children')
         .select('id, name, age, gender, division_id, group_name, allergies, medical_notes')
-        .eq('company_id', userContext.companyId)
-        .ilike('name', `%${args.query}%`);
+        .eq('company_id', userContext.companyId);
+
+      // If no query provided, just list first 10 campers
+      if (args.query && args.query.trim() !== '') {
+        query = query.ilike('name', `%${args.query}%`);
+      }
 
       // Apply division filter if user is restricted
       if (userContext.divisionIds && userContext.divisionIds.length > 0) {
@@ -385,10 +493,128 @@ async function executeToolCall(
         query = query.ilike('group_name', `%${args.group}%`);
       }
 
-      const { data, error } = await query.limit(10);
+      const { data, error } = await query.order('name').limit(10);
 
-      if (error) throw error;
+      if (error) {
+        console.error('search_campers error:', error);
+        throw error;
+      }
+      
+      console.log(`search_campers: Found ${data?.length || 0} campers`);
       return { campers: data || [] };
+    }
+
+    case 'list_all_campers': {
+      if (!canAccessDataType(userContext, 'campers')) {
+        return { error: 'You do not have permission to access camper information.' };
+      }
+
+      const limit = Math.min(args.limit || 20, 50);
+      console.log(`list_all_campers: limit=${limit}`);
+
+      let query = supabase
+        .from('children')
+        .select('id, name, age, gender, division_id, group_name')
+        .eq('company_id', userContext.companyId);
+
+      if (userContext.divisionIds && userContext.divisionIds.length > 0) {
+        query = query.in('division_id', userContext.divisionIds);
+      }
+
+      const { data, error } = await query.order('name').limit(limit);
+
+      if (error) {
+        console.error('list_all_campers error:', error);
+        throw error;
+      }
+      
+      console.log(`list_all_campers: Found ${data?.length || 0} campers`);
+      return { campers: data || [], total: data?.length || 0 };
+    }
+
+    case 'get_divisions': {
+      if (!canAccessDataType(userContext, 'campers')) {
+        return { error: 'You do not have permission to access division information.' };
+      }
+
+      console.log('get_divisions: Fetching divisions');
+
+      let query = supabase
+        .from('divisions')
+        .select('id, name, gender, sort_order')
+        .eq('company_id', userContext.companyId);
+
+      if (userContext.divisionIds && userContext.divisionIds.length > 0) {
+        query = query.in('id', userContext.divisionIds);
+      }
+
+      const { data, error } = await query.order('sort_order');
+
+      if (error) {
+        console.error('get_divisions error:', error);
+        throw error;
+      }
+      
+      console.log(`get_divisions: Found ${data?.length || 0} divisions`);
+      return { divisions: data || [] };
+    }
+
+    case 'list_campers_by_division': {
+      if (!canAccessDataType(userContext, 'campers')) {
+        return { error: 'You do not have permission to access camper information.' };
+      }
+
+      console.log(`list_campers_by_division: division="${args.division}"`);
+
+      let query = supabase
+        .from('children')
+        .select('id, name, age, gender, division_id, group_name')
+        .eq('company_id', userContext.companyId);
+
+      // Try to match division by ID or name
+      query = query.or(`division_id.eq.${args.division},division_id.ilike.%${args.division}%`);
+
+      if (userContext.divisionIds && userContext.divisionIds.length > 0) {
+        query = query.in('division_id', userContext.divisionIds);
+      }
+
+      const { data, error } = await query.order('name').limit(30);
+
+      if (error) {
+        console.error('list_campers_by_division error:', error);
+        throw error;
+      }
+      
+      console.log(`list_campers_by_division: Found ${data?.length || 0} campers`);
+      return { campers: data || [], division: args.division };
+    }
+
+    case 'get_campers_by_group': {
+      if (!canAccessDataType(userContext, 'campers')) {
+        return { error: 'You do not have permission to access camper information.' };
+      }
+
+      console.log(`get_campers_by_group: group="${args.group}"`);
+
+      let query = supabase
+        .from('children')
+        .select('id, name, age, gender, division_id, group_name')
+        .eq('company_id', userContext.companyId)
+        .ilike('group_name', `%${args.group}%`);
+
+      if (userContext.divisionIds && userContext.divisionIds.length > 0) {
+        query = query.in('division_id', userContext.divisionIds);
+      }
+
+      const { data, error } = await query.order('name').limit(30);
+
+      if (error) {
+        console.error('get_campers_by_group error:', error);
+        throw error;
+      }
+      
+      console.log(`get_campers_by_group: Found ${data?.length || 0} campers`);
+      return { campers: data || [], group: args.group };
     }
 
     case 'search_staff': {
@@ -396,11 +622,17 @@ async function executeToolCall(
         return { error: 'You do not have permission to access staff information.' };
       }
 
+      console.log(`search_staff: query="${args.query || ''}", role="${args.role || ''}", department="${args.department || ''}"`);
+
       let query = supabase
         .from('staff')
         .select('id, name, role, department, email, phone')
-        .eq('company_id', userContext.companyId)
-        .ilike('name', `%${args.query}%`);
+        .eq('company_id', userContext.companyId);
+
+      // If no query provided, just list first 10 staff
+      if (args.query && args.query.trim() !== '') {
+        query = query.ilike('name', `%${args.query}%`);
+      }
 
       if (args.role) {
         query = query.ilike('role', `%${args.role}%`);
@@ -410,16 +642,71 @@ async function executeToolCall(
         query = query.ilike('department', `%${args.department}%`);
       }
 
-      const { data, error } = await query.limit(10);
+      const { data, error } = await query.order('name').limit(10);
 
-      if (error) throw error;
+      if (error) {
+        console.error('search_staff error:', error);
+        throw error;
+      }
+      
+      console.log(`search_staff: Found ${data?.length || 0} staff`);
       return { staff: data || [] };
+    }
+
+    case 'list_all_staff': {
+      if (!canAccessDataType(userContext, 'staff')) {
+        return { error: 'You do not have permission to access staff information.' };
+      }
+
+      const limit = Math.min(args.limit || 20, 50);
+      console.log(`list_all_staff: limit=${limit}`);
+
+      let query = supabase
+        .from('staff')
+        .select('id, name, role, department, email, phone')
+        .eq('company_id', userContext.companyId);
+
+      const { data, error } = await query.order('name').limit(limit);
+
+      if (error) {
+        console.error('list_all_staff error:', error);
+        throw error;
+      }
+      
+      console.log(`list_all_staff: Found ${data?.length || 0} staff`);
+      return { staff: data || [], total: data?.length || 0 };
+    }
+
+    case 'get_staff_by_department': {
+      if (!canAccessDataType(userContext, 'staff')) {
+        return { error: 'You do not have permission to access staff information.' };
+      }
+
+      console.log(`get_staff_by_department: department="${args.department}"`);
+
+      let query = supabase
+        .from('staff')
+        .select('id, name, role, department, email, phone')
+        .eq('company_id', userContext.companyId)
+        .ilike('department', `%${args.department}%`);
+
+      const { data, error } = await query.order('name').limit(30);
+
+      if (error) {
+        console.error('get_staff_by_department error:', error);
+        throw error;
+      }
+      
+      console.log(`get_staff_by_department: Found ${data?.length || 0} staff`);
+      return { staff: data || [], department: args.department };
     }
 
     case 'search_incidents': {
       if (!canAccessDataType(userContext, 'incidents')) {
         return { error: 'You do not have permission to access incident reports.' };
       }
+
+      console.log(`search_incidents: startDate="${args.startDate || ''}", endDate="${args.endDate || ''}", type="${args.type || ''}", severity="${args.severity || ''}"`);
 
       let query = supabase
         .from('incident_reports')
@@ -441,6 +728,7 @@ async function executeToolCall(
         if (incidentIds && incidentIds.length > 0) {
           query = query.in('id', incidentIds.map((i: any) => i.incident_id));
         } else {
+          console.log('search_incidents: No incidents found for user divisions');
           return { incidents: [] };
         }
       }
@@ -463,7 +751,12 @@ async function executeToolCall(
 
       const { data, error } = await query.order('date', { ascending: false }).limit(10);
 
-      if (error) throw error;
+      if (error) {
+        console.error('search_incidents error:', error);
+        throw error;
+      }
+      
+      console.log(`search_incidents: Found ${data?.length || 0} incidents`);
       return { incidents: data || [] };
     }
 
@@ -473,6 +766,7 @@ async function executeToolCall(
       }
 
       const targetDate = args.date || new Date().toISOString().split('T')[0];
+      console.log(`get_todays_events: date="${targetDate}"`);
 
       // Get activities
       let activitiesQuery = supabase
@@ -485,7 +779,11 @@ async function executeToolCall(
         activitiesQuery = activitiesQuery.in('division_id', userContext.divisionIds);
       }
 
-      const { data: activities } = await activitiesQuery;
+      const { data: activities, error: activitiesError } = await activitiesQuery;
+
+      if (activitiesError) {
+        console.error('get_todays_events activities error:', activitiesError);
+      }
 
       // Get sports events
       let sportsQuery = supabase
@@ -498,7 +796,13 @@ async function executeToolCall(
         sportsQuery = sportsQuery.in('division_id', userContext.divisionIds);
       }
 
-      const { data: sports } = await sportsQuery;
+      const { data: sports, error: sportsError } = await sportsQuery;
+
+      if (sportsError) {
+        console.error('get_todays_events sports error:', sportsError);
+      }
+
+      console.log(`get_todays_events: Found ${activities?.length || 0} activities, ${sports?.length || 0} sports events`);
 
       return {
         date: targetDate,
@@ -511,6 +815,8 @@ async function executeToolCall(
       if (!canAccessDataType(userContext, 'health')) {
         return { error: 'You do not have permission to access health center information.' };
       }
+
+      console.log(`get_health_admissions: startDate="${args.startDate || ''}", endDate="${args.endDate || ''}"`);
 
       let query = supabase
         .from('health_center_admissions')
@@ -527,6 +833,7 @@ async function executeToolCall(
         if (childIds && childIds.length > 0) {
           query = query.in('child_id', childIds.map((c: any) => c.id));
         } else {
+          console.log('get_health_admissions: No children found for user divisions');
           return { admissions: [] };
         }
       }
@@ -541,12 +848,18 @@ async function executeToolCall(
 
       const { data, error } = await query.order('admitted_at', { ascending: false }).limit(10);
 
-      if (error) throw error;
+      if (error) {
+        console.error('get_health_admissions error:', error);
+        throw error;
+      }
+      
+      console.log(`get_health_admissions: Found ${data?.length || 0} admissions`);
       return { admissions: data || [] };
     }
 
     case 'get_stats': {
       const { statsType } = args;
+      console.log(`get_stats: statsType="${statsType}"`);
 
       if (statsType === 'campers') {
         if (!canAccessDataType(userContext, 'campers')) {
@@ -562,7 +875,13 @@ async function executeToolCall(
           query = query.in('division_id', userContext.divisionIds);
         }
 
-        const { count } = await query;
+        const { count, error } = await query;
+        
+        if (error) {
+          console.error('get_stats campers error:', error);
+        }
+        
+        console.log(`get_stats: Total campers = ${count || 0}`);
         return { totalCampers: count || 0 };
       }
 
@@ -571,11 +890,16 @@ async function executeToolCall(
           return { error: 'You do not have permission to access staff statistics.' };
         }
 
-        const { count } = await supabase
+        const { count, error } = await supabase
           .from('staff')
           .select('id', { count: 'exact' })
           .eq('company_id', userContext.companyId);
 
+        if (error) {
+          console.error('get_stats staff error:', error);
+        }
+        
+        console.log(`get_stats: Total staff = ${count || 0}`);
         return { totalStaff: count || 0 };
       }
 
@@ -589,7 +913,13 @@ async function executeToolCall(
           .select('id', { count: 'exact' })
           .eq('company_id', userContext.companyId);
 
-        const { count } = await query;
+        const { count, error } = await query;
+        
+        if (error) {
+          console.error('get_stats incidents error:', error);
+        }
+        
+        console.log(`get_stats: Total incidents = ${count || 0}`);
         return { totalIncidents: count || 0 };
       }
 
@@ -597,6 +927,7 @@ async function executeToolCall(
     }
 
     default:
+      console.error(`Unknown function called: ${functionName}`);
       return { error: 'Unknown function' };
   }
 }
