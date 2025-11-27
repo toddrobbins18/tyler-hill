@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useCompany } from '@/contexts/CompanyContext';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -22,6 +23,7 @@ export function AIChatWidget() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const { currentCompany } = useCompany();
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -37,7 +39,8 @@ export function AIChatWidget() {
           messages: [...messages, userMessage].map(m => ({
             role: m.role,
             content: m.content
-          }))
+          })),
+          viewingCompanyId: currentCompany?.id
         }
       });
 

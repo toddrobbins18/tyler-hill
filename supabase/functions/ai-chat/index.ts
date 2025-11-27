@@ -38,7 +38,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messages } = await req.json();
+    const { messages, viewingCompanyId } = await req.json();
     const authHeader = req.headers.get('authorization');
     
     if (!authHeader) {
@@ -58,7 +58,7 @@ serve(async (req) => {
     }
 
     // Get user context
-    const userContext = await getUserContext(supabase, user.id);
+    const userContext = await getUserContext(supabase, user.id, viewingCompanyId);
 
     if (!userContext.companyId) {
       throw new Error('User has no company assigned');
@@ -277,7 +277,7 @@ Important:
   }
 });
 
-async function getUserContext(supabase: any, userId: string): Promise<UserContext> {
+async function getUserContext(supabase: any, userId: string, viewingCompanyId?: string): Promise<UserContext> {
   // Get profile with company
   const { data: profile } = await supabase
     .from('profiles')
@@ -298,6 +298,22 @@ async function getUserContext(supabase: any, userId: string): Promise<UserContex
   const roles = rolesData?.map((r: any) => r.role) || [];
   const isSuperAdmin = roles.includes('super_admin');
 
+  // For super admins, use the viewing company if provided
+  let effectiveCompanyId = profile.company_id;
+  if (isSuperAdmin && viewingCompanyId) {
+    // Validate that the viewing company exists and is active
+    const { data: viewingCompany } = await supabase
+      .from('companies')
+      .select('id')
+      .eq('id', viewingCompanyId)
+      .eq('is_active', true)
+      .single();
+    
+    if (viewingCompany) {
+      effectiveCompanyId = viewingCompanyId;
+    }
+  }
+
   // Get division permissions (only for non-admin/specialist roles)
   let divisionIds: string[] | null = null;
   if (!isSuperAdmin && !roles.includes('admin') && !roles.includes('staff') && !roles.includes('specialist')) {
@@ -312,11 +328,11 @@ async function getUserContext(supabase: any, userId: string): Promise<UserContex
     }
   }
 
-  // Get allowed menu items from role_permissions
+  // Get allowed menu items from role_permissions using effective company
   const { data: permissionsData } = await supabase
     .from('role_permissions')
     .select('menu_item')
-    .eq('company_id', profile.company_id)
+    .eq('company_id', effectiveCompanyId)
     .in('role', roles)
     .eq('can_access', true);
 
@@ -324,7 +340,7 @@ async function getUserContext(supabase: any, userId: string): Promise<UserContex
 
   return {
     userId,
-    companyId: profile.company_id,
+    companyId: effectiveCompanyId,
     roles,
     divisionIds,
     isSuperAdmin,
