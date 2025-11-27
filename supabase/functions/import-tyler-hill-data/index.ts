@@ -65,6 +65,10 @@ serve(async (req) => {
     });
 
     console.log(`Built award map with ${awardMap.size} awards`);
+    
+    // Debug: Log sample award IDs to verify format
+    const sampleAwardIds = Array.from(awardMap.keys()).slice(0, 5);
+    console.log('Sample award IDs in map:', JSON.stringify(sampleAwardIds));
 
     const importResults = {
       campersImported: 0,
@@ -179,7 +183,11 @@ serve(async (req) => {
           const awardDetails = awardMap.get(awardId);
 
           if (!awardDetails) {
-            importResults.errors.push(`Award ${awardId} not found in awards data for camper ${personId}`);
+            // Debug: Log first 10 missing awards with details
+            if (importResults.awardsSkipped < 10) {
+              console.log(`Award lookup failed - ID: "${awardId}" (type: ${typeof awardId}, length: ${String(awardId).length}, camper: ${personId})`);
+            }
+            // Silently skip - award not in awards data file
             importResults.awardsSkipped++;
             continue;
           }
@@ -239,6 +247,11 @@ serve(async (req) => {
     }
 
     console.log('Import completed:', importResults);
+    
+    // Summary: Log info about skipped awards
+    if (importResults.awardsSkipped > 0) {
+      console.log(`Note: ${importResults.awardsSkipped} awards were skipped (award IDs not found in awards data file)`);
+    }
 
     return new Response(
       JSON.stringify({
