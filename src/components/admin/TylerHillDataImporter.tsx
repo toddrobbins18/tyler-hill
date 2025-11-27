@@ -220,12 +220,16 @@ export default function TylerHillDataImporter() {
                 <div className="space-y-1">
                   <p className="font-medium">Ready to import:</p>
                   <ul className="text-sm list-disc list-inside space-y-1">
-                    <li>{campersData.length} campers will be imported</li>
-                    <li>Awards will be linked to campers based on winner_ids</li>
+                    <li>{campersData.length} campers in file</li>
+                    <li>Optimized batch processing (50 campers at a time)</li>
+                    <li>Existing person_ids will be automatically skipped</li>
+                    <li>Awards will be bulk-imported after campers</li>
                     <li>All data will be set to season 2025</li>
                     <li>Award dates will retain their original years (2014-2025)</li>
-                    <li>Duplicate person_ids will be skipped</li>
                   </ul>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Tip: You can safely re-run this import to complete any missing records.
+                  </p>
                 </div>
               </AlertDescription>
             </Alert>
@@ -306,7 +310,7 @@ export default function TylerHillDataImporter() {
               disabled={!canImport}
               size="lg"
             >
-              {importing ? "Importing..." : "Start Import"}
+              {importing ? "Importing..." : importResults ? "Re-run Import" : "Start Import"}
             </Button>
           </div>
         </CardContent>
