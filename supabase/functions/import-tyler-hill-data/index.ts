@@ -74,128 +74,168 @@ serve(async (req) => {
       errors: [] as string[],
     };
 
-    // Process campers in batches of 100
-    const BATCH_SIZE = 100;
+    // Step 1: Get all existing person_ids in bulk to avoid repeated queries
+    console.log('Checking for existing campers...');
+    const allPersonIds = campersData.map((c: any) => c._id?.$oid || c._id).filter(Boolean);
+    
+    const { data: existingChildren } = await supabase
+      .from('children')
+      .select('person_id, id')
+      .eq('company_id', companyId)
+      .eq('season', '2025')
+      .in('person_id', allPersonIds);
+
+    const existingPersonIdMap = new Map();
+    (existingChildren || []).forEach((child: any) => {
+      existingPersonIdMap.set(child.person_id, child.id);
+    });
+
+    console.log(`Found ${existingPersonIdMap.size} existing campers`);
+
+    // Step 2: Prepare new campers for batch insert
+    const newCampersToInsert: any[] = [];
     const camperIdMap = new Map(); // Maps person_id to child_id
 
-    for (let i = 0; i < campersData.length; i += BATCH_SIZE) {
-      const batch = campersData.slice(i, i + BATCH_SIZE);
-      console.log(`Processing camper batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(campersData.length / BATCH_SIZE)}`);
+    // Add existing campers to the map
+    existingPersonIdMap.forEach((childId, personId) => {
+      camperIdMap.set(personId, childId);
+    });
 
-      for (const camper of batch) {
-        try {
-          const personId = camper._id?.$oid || camper._id;
-          if (!personId) {
-            importResults.errors.push(`Camper missing _id: ${JSON.stringify(camper).substring(0, 100)}`);
-            importResults.campersSkipped++;
+    for (const camper of campersData) {
+      const personId = camper._id?.$oid || camper._id;
+      if (!personId) {
+        importResults.errors.push(`Camper missing _id: ${JSON.stringify(camper).substring(0, 100)}`);
+        importResults.campersSkipped++;
+        continue;
+      }
+
+      const name = `${camper.first || ''} ${camper.last || ''}`.trim();
+      if (!name) {
+        importResults.errors.push(`Camper ${personId} missing name`);
+        importResults.campersSkipped++;
+        continue;
+      }
+
+      // Skip if already exists
+      if (existingPersonIdMap.has(personId)) {
+        importResults.campersSkipped++;
+        continue;
+      }
+
+      // Add to batch insert list
+      newCampersToInsert.push({
+        person_id: personId,
+        name: name,
+        company_id: companyId,
+        season: '2025',
+        status: 'active',
+      });
+    }
+
+    console.log(`Prepared ${newCampersToInsert.length} new campers for batch insert`);
+
+    // Step 3: Insert campers in batches of 50
+    const CAMPER_BATCH_SIZE = 50;
+    for (let i = 0; i < newCampersToInsert.length; i += CAMPER_BATCH_SIZE) {
+      const batch = newCampersToInsert.slice(i, i + CAMPER_BATCH_SIZE);
+      console.log(`Inserting camper batch ${Math.floor(i / CAMPER_BATCH_SIZE) + 1}/${Math.ceil(newCampersToInsert.length / CAMPER_BATCH_SIZE)}`);
+
+      const { data: insertedChildren, error: insertError } = await supabase
+        .from('children')
+        .insert(batch)
+        .select('id, person_id');
+
+      if (insertError) {
+        importResults.errors.push(`Failed to insert camper batch: ${insertError.message}`);
+        importResults.campersSkipped += batch.length;
+        continue;
+      }
+
+      // Update the camper ID map with newly inserted children
+      (insertedChildren || []).forEach((child: any) => {
+        camperIdMap.set(child.person_id, child.id);
+      });
+
+      importResults.campersImported += insertedChildren?.length || 0;
+    }
+
+    console.log(`Successfully imported ${importResults.campersImported} campers`);
+
+    // Step 4: Prepare all awards for batch insert
+    console.log('Preparing awards for batch insert...');
+    const awardsToInsert: any[] = [];
+
+    for (const camper of campersData) {
+      const personId = camper._id?.$oid || camper._id;
+      if (!personId) continue;
+
+      const childId = camperIdMap.get(personId);
+      if (!childId) continue;
+
+      // Process awards for this camper
+      if (camper.winner_ids && Array.isArray(camper.winner_ids) && camper.winner_ids.length > 0) {
+        for (const awardIdObj of camper.winner_ids) {
+          const awardId = awardIdObj?.$oid || awardIdObj;
+          const awardDetails = awardMap.get(awardId);
+
+          if (!awardDetails) {
+            importResults.errors.push(`Award ${awardId} not found in awards data for camper ${personId}`);
+            importResults.awardsSkipped++;
             continue;
           }
 
-          const name = `${camper.first || ''} ${camper.last || ''}`.trim();
-          if (!name) {
-            importResults.errors.push(`Camper ${personId} missing name`);
-            importResults.campersSkipped++;
-            continue;
+          // Create award title based on type
+          let title = '';
+          switch (awardDetails.type?.toLowerCase()) {
+            case 'cw':
+              title = `Camper of the Week - ${awardDetails.description}`;
+              break;
+            case 'starfish':
+              title = `Starfish Award - ${awardDetails.description}`;
+              break;
+            case 'eoy':
+              title = `End of Year Award - ${awardDetails.description}`;
+              break;
+            default:
+              title = `${awardDetails.type || 'Award'} - ${awardDetails.description}`;
           }
 
-          // Check if camper already exists with this person_id and season
-          const { data: existing } = await supabase
-            .from('children')
-            .select('id')
-            .eq('person_id', personId)
-            .eq('season', '2025')
-            .eq('company_id', companyId)
-            .single();
+          const awardYear = awardDetails.year || 2025;
+          const awardDate = `${awardYear}-07-01`; // July 1st of the award year
 
-          if (existing) {
-            importResults.campersSkipped++;
-            camperIdMap.set(personId, existing.id);
-            continue;
-          }
-
-          // Insert new camper
-          const { data: newChild, error: insertError } = await supabase
-            .from('children')
-            .insert({
-              person_id: personId,
-              name: name,
-              company_id: companyId,
-              season: '2025',
-              status: 'active',
-            })
-            .select('id')
-            .single();
-
-          if (insertError) {
-            importResults.errors.push(`Failed to insert camper ${personId}: ${insertError.message}`);
-            importResults.campersSkipped++;
-            continue;
-          }
-
-          importResults.campersImported++;
-          camperIdMap.set(personId, newChild.id);
-
-          // Process awards for this camper
-          if (camper.winner_ids && Array.isArray(camper.winner_ids) && camper.winner_ids.length > 0) {
-            for (const awardIdObj of camper.winner_ids) {
-              const awardId = awardIdObj?.$oid || awardIdObj;
-              const awardDetails = awardMap.get(awardId);
-
-              if (!awardDetails) {
-                importResults.errors.push(`Award ${awardId} not found in awards data for camper ${personId}`);
-                importResults.awardsSkipped++;
-                continue;
-              }
-
-              // Create award title based on type
-              let title = '';
-              switch (awardDetails.type?.toLowerCase()) {
-                case 'cw':
-                  title = `Camper of the Week - ${awardDetails.description}`;
-                  break;
-                case 'starfish':
-                  title = `Starfish Award - ${awardDetails.description}`;
-                  break;
-                case 'eoy':
-                  title = `End of Year Award - ${awardDetails.description}`;
-                  break;
-                default:
-                  title = `${awardDetails.type || 'Award'} - ${awardDetails.description}`;
-              }
-
-              const awardYear = awardDetails.year || 2025;
-              const awardDate = `${awardYear}-07-01`; // July 1st of the award year
-
-              const { error: awardError } = await supabase
-                .from('awards')
-                .insert({
-                  child_id: newChild.id,
-                  title: title,
-                  category: awardDetails.type || 'award',
-                  description: awardDetails.description,
-                  date: awardDate,
-                  season: '2025',
-                  company_id: companyId,
-                });
-
-              if (awardError) {
-                importResults.errors.push(`Failed to create award for camper ${personId}: ${awardError.message}`);
-                importResults.awardsSkipped++;
-              } else {
-                importResults.awardsCreated++;
-              }
-            }
-          }
-        } catch (error: any) {
-          importResults.errors.push(`Error processing camper: ${error.message}`);
-          importResults.campersSkipped++;
+          awardsToInsert.push({
+            child_id: childId,
+            title: title,
+            category: awardDetails.type || 'award',
+            description: awardDetails.description,
+            date: awardDate,
+            season: '2025',
+            company_id: companyId,
+          });
         }
       }
+    }
 
-      // Small delay between batches to avoid rate limiting
-      if (i + BATCH_SIZE < campersData.length) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+    console.log(`Prepared ${awardsToInsert.length} awards for batch insert`);
+
+    // Step 5: Insert awards in batches of 100
+    const AWARD_BATCH_SIZE = 100;
+    for (let i = 0; i < awardsToInsert.length; i += AWARD_BATCH_SIZE) {
+      const batch = awardsToInsert.slice(i, i + AWARD_BATCH_SIZE);
+      console.log(`Inserting award batch ${Math.floor(i / AWARD_BATCH_SIZE) + 1}/${Math.ceil(awardsToInsert.length / AWARD_BATCH_SIZE)}`);
+
+      const { data: insertedAwards, error: awardError } = await supabase
+        .from('awards')
+        .insert(batch)
+        .select('id');
+
+      if (awardError) {
+        importResults.errors.push(`Failed to insert award batch: ${awardError.message}`);
+        importResults.awardsSkipped += batch.length;
+        continue;
       }
+
+      importResults.awardsCreated += insertedAwards?.length || 0;
     }
 
     console.log('Import completed:', importResults);
