@@ -243,6 +243,184 @@ serve(async (req) => {
             required: ["statsType"]
           }
         }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_awards",
+          description: "Get awards for campers, can filter by camper name or award type",
+          parameters: {
+            type: "object",
+            properties: {
+              query: { type: "string", description: "Optional search term for camper name or award title" },
+              category: { type: "string", description: "Optional award category filter" },
+              limit: { type: "number", description: "Number of awards to return (default 20)" }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_daily_notes",
+          description: "Get daily notes for campers, can filter by date or camper name",
+          parameters: {
+            type: "object",
+            properties: {
+              camper_name: { type: "string", description: "Optional camper name to filter by" },
+              date: { type: "string", description: "Optional date (YYYY-MM-DD) to filter by" },
+              limit: { type: "number", description: "Number of notes to return (default 20)" }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_medications",
+          description: "Get medication schedules and logs for campers",
+          parameters: {
+            type: "object",
+            properties: {
+              camper_name: { type: "string", description: "Optional camper name to filter by" },
+              date: { type: "string", description: "Optional date (YYYY-MM-DD) to filter by" },
+              medication_name: { type: "string", description: "Optional medication name to filter by" }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_menu",
+          description: "Get menu items for a specific date or meal type",
+          parameters: {
+            type: "object",
+            properties: {
+              date: { type: "string", description: "Optional date (YYYY-MM-DD), defaults to today" },
+              meal_type: { type: "string", description: "Optional meal type filter (breakfast, lunch, dinner, snack)" }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_trips",
+          description: "Get trips and transportation schedules",
+          parameters: {
+            type: "object",
+            properties: {
+              date: { type: "string", description: "Optional date (YYYY-MM-DD) to filter by" },
+              destination: { type: "string", description: "Optional destination to filter by" },
+              type: { type: "string", description: "Optional trip type to filter by" }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_sports_events",
+          description: "Get sports events for a date range",
+          parameters: {
+            type: "object",
+            properties: {
+              start_date: { type: "string", description: "Optional start date (YYYY-MM-DD)" },
+              end_date: { type: "string", description: "Optional end date (YYYY-MM-DD)" },
+              sport_type: { type: "string", description: "Optional sport type filter" },
+              division: { type: "string", description: "Optional division filter" }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_special_events",
+          description: "Get special events and activities",
+          parameters: {
+            type: "object",
+            properties: {
+              date: { type: "string", description: "Optional date (YYYY-MM-DD)" },
+              event_type: { type: "string", description: "Optional event type filter" }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_tutoring_therapy",
+          description: "Get tutoring and therapy sessions for campers",
+          parameters: {
+            type: "object",
+            properties: {
+              camper_name: { type: "string", description: "Optional camper name to filter by" },
+              service_type: { type: "string", description: "Optional service type filter" },
+              instructor: { type: "string", description: "Optional instructor name to filter by" }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_sports_academy",
+          description: "Get sports academy enrollments",
+          parameters: {
+            type: "object",
+            properties: {
+              camper_name: { type: "string", description: "Optional camper name to filter by" },
+              sport_name: { type: "string", description: "Optional sport name to filter by" },
+              instructor: { type: "string", description: "Optional instructor name to filter by" }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_calendar_events",
+          description: "Get all calendar events for a date range",
+          parameters: {
+            type: "object",
+            properties: {
+              start_date: { type: "string", description: "Optional start date (YYYY-MM-DD)" },
+              end_date: { type: "string", description: "Optional end date (YYYY-MM-DD)" },
+              event_type: { type: "string", description: "Optional event type filter" }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_special_meals",
+          description: "Get special meal information",
+          parameters: {
+            type: "object",
+            properties: {
+              date: { type: "string", description: "Optional date (YYYY-MM-DD)" },
+              meal_type: { type: "string", description: "Optional meal type filter" }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_camper_reports",
+          description: "Get evaluation reports for campers",
+          parameters: {
+            type: "object",
+            properties: {
+              camper_name: { type: "string", description: "Optional camper name to filter by" },
+              report_type: { type: "string", description: "Optional report type filter" },
+              date: { type: "string", description: "Optional date (YYYY-MM-DD)" }
+            }
+          }
+        }
       }
     ];
 
@@ -273,7 +451,21 @@ Tool usage tips:
 - Use get_divisions first if users ask about divisions or groups
 - For "all campers in [division]", use list_campers_by_division
 - For "all staff in [department]", use get_staff_by_department
-- Always check if you have permission before attempting to access data`;
+- Always check if you have permission before attempting to access data
+
+Available data tools:
+- Awards: get_awards - search camper awards and achievements
+- Daily Notes: get_daily_notes - view daily camper notes and observations
+- Medications: get_medications - check medication schedules and logs
+- Menu: get_menu - see meal plans and menu items
+- Trips: get_trips - view transportation and trip schedules
+- Sports: get_sports_events - get sports calendar and games
+- Special Events: get_special_events - see special activities and events
+- Tutoring: get_tutoring_therapy - view tutoring and therapy sessions
+- Sports Academy: get_sports_academy - check sports academy enrollments
+- Calendar: get_calendar_events - get master calendar events
+- Special Meals: get_special_meals - view special meal information
+- Reports: get_camper_reports - access camper evaluation reports`;
 
     let conversationMessages = [
       { role: "system", content: systemPrompt },
@@ -924,6 +1116,486 @@ async function executeToolCall(
       }
 
       return { error: 'Invalid stats type' };
+    }
+
+    case 'get_awards': {
+      if (!canAccessDataType(userContext, 'awards')) {
+        return { error: 'You do not have permission to access award information.' };
+      }
+
+      console.log(`get_awards: query="${args.query || ''}", category="${args.category || ''}"`);
+
+      let query = supabase
+        .from('awards')
+        .select('id, title, description, category, date, child_id, children(name)')
+        .eq('company_id', userContext.companyId);
+
+      if (args.query) {
+        query = query.or(`title.ilike.%${args.query}%,children.name.ilike.%${args.query}%`);
+      }
+
+      if (args.category) {
+        query = query.eq('category', args.category);
+      }
+
+      const limit = Math.min(args.limit || 20, 50);
+      const { data, error } = await query.order('date', { ascending: false }).limit(limit);
+
+      if (error) {
+        console.error('get_awards error:', error);
+        throw error;
+      }
+
+      console.log(`get_awards: Found ${data?.length || 0} awards`);
+      return { awards: data || [] };
+    }
+
+    case 'get_daily_notes': {
+      if (!canAccessDataType(userContext, 'notes')) {
+        return { error: 'You do not have permission to access daily notes.' };
+      }
+
+      console.log(`get_daily_notes: camper_name="${args.camper_name || ''}", date="${args.date || ''}"`);
+
+      let query = supabase
+        .from('daily_notes')
+        .select('id, date, mood, activities, meals, nap, notes, child_id, children(name)')
+        .eq('company_id', userContext.companyId);
+
+      if (userContext.divisionIds && userContext.divisionIds.length > 0) {
+        const { data: childIds } = await supabase
+          .from('children')
+          .select('id')
+          .in('division_id', userContext.divisionIds);
+
+        if (childIds && childIds.length > 0) {
+          query = query.in('child_id', childIds.map((c: any) => c.id));
+        } else {
+          return { notes: [] };
+        }
+      }
+
+      if (args.camper_name) {
+        query = query.ilike('children.name', `%${args.camper_name}%`);
+      }
+
+      if (args.date) {
+        query = query.eq('date', args.date);
+      }
+
+      const limit = Math.min(args.limit || 20, 50);
+      const { data, error } = await query.order('date', { ascending: false }).limit(limit);
+
+      if (error) {
+        console.error('get_daily_notes error:', error);
+        throw error;
+      }
+
+      console.log(`get_daily_notes: Found ${data?.length || 0} notes`);
+      return { notes: data || [] };
+    }
+
+    case 'get_medications': {
+      if (!canAccessDataType(userContext, 'health')) {
+        return { error: 'You do not have permission to access medication information.' };
+      }
+
+      console.log(`get_medications: camper_name="${args.camper_name || ''}", date="${args.date || ''}", medication="${args.medication_name || ''}"`);
+
+      let query = supabase
+        .from('medication_logs')
+        .select('id, medication_name, dosage, date, scheduled_time, administered, administered_at, notes, child_id, children(name)')
+        .eq('company_id', userContext.companyId);
+
+      if (userContext.divisionIds && userContext.divisionIds.length > 0) {
+        const { data: childIds } = await supabase
+          .from('children')
+          .select('id')
+          .in('division_id', userContext.divisionIds);
+
+        if (childIds && childIds.length > 0) {
+          query = query.in('child_id', childIds.map((c: any) => c.id));
+        } else {
+          return { medications: [] };
+        }
+      }
+
+      if (args.camper_name) {
+        query = query.ilike('children.name', `%${args.camper_name}%`);
+      }
+
+      if (args.date) {
+        query = query.eq('date', args.date);
+      }
+
+      if (args.medication_name) {
+        query = query.ilike('medication_name', `%${args.medication_name}%`);
+      }
+
+      const { data, error } = await query.order('date', { ascending: false }).limit(20);
+
+      if (error) {
+        console.error('get_medications error:', error);
+        throw error;
+      }
+
+      console.log(`get_medications: Found ${data?.length || 0} medication logs`);
+      return { medications: data || [] };
+    }
+
+    case 'get_menu': {
+      if (!canAccessDataType(userContext, 'menu')) {
+        return { error: 'You do not have permission to access menu information.' };
+      }
+
+      const targetDate = args.date || new Date().toISOString().split('T')[0];
+      console.log(`get_menu: date="${targetDate}", meal_type="${args.meal_type || ''}"`);
+
+      let query = supabase
+        .from('menu_items')
+        .select('id, meal_type, items, allergens, date')
+        .eq('company_id', userContext.companyId)
+        .eq('date', targetDate);
+
+      if (args.meal_type) {
+        query = query.eq('meal_type', args.meal_type);
+      }
+
+      const { data, error } = await query.order('meal_type');
+
+      if (error) {
+        console.error('get_menu error:', error);
+        throw error;
+      }
+
+      console.log(`get_menu: Found ${data?.length || 0} menu items`);
+      return { menu: data || [], date: targetDate };
+    }
+
+    case 'get_trips': {
+      if (!canAccessDataType(userContext, 'transportation')) {
+        return { error: 'You do not have permission to access trip information.' };
+      }
+
+      console.log(`get_trips: date="${args.date || ''}", destination="${args.destination || ''}", type="${args.type || ''}"`);
+
+      let query = supabase
+        .from('trips')
+        .select('id, name, date, destination, departure_time, return_time, type, status, transportation_type, driver, chaperone')
+        .eq('company_id', userContext.companyId);
+
+      if (args.date) {
+        query = query.eq('date', args.date);
+      }
+
+      if (args.destination) {
+        query = query.ilike('destination', `%${args.destination}%`);
+      }
+
+      if (args.type) {
+        query = query.eq('type', args.type);
+      }
+
+      const { data, error } = await query.order('date', { ascending: false }).limit(20);
+
+      if (error) {
+        console.error('get_trips error:', error);
+        throw error;
+      }
+
+      console.log(`get_trips: Found ${data?.length || 0} trips`);
+      return { trips: data || [] };
+    }
+
+    case 'get_sports_events': {
+      if (!canAccessDataType(userContext, 'sports-calendar')) {
+        return { error: 'You do not have permission to access sports calendar.' };
+      }
+
+      console.log(`get_sports_events: start_date="${args.start_date || ''}", end_date="${args.end_date || ''}", sport_type="${args.sport_type || ''}"`);
+
+      let query = supabase
+        .from('sports_calendar')
+        .select('id, title, event_date, time, location, sport_type, event_type, opponent, team, home_away, division_id')
+        .eq('company_id', userContext.companyId);
+
+      if (userContext.divisionIds && userContext.divisionIds.length > 0) {
+        query = query.in('division_id', userContext.divisionIds);
+      }
+
+      if (args.start_date) {
+        query = query.gte('event_date', args.start_date);
+      }
+
+      if (args.end_date) {
+        query = query.lte('event_date', args.end_date);
+      }
+
+      if (args.sport_type) {
+        query = query.eq('sport_type', args.sport_type);
+      }
+
+      if (args.division) {
+        query = query.ilike('division_id', `%${args.division}%`);
+      }
+
+      const { data, error } = await query.order('event_date', { ascending: true }).limit(20);
+
+      if (error) {
+        console.error('get_sports_events error:', error);
+        throw error;
+      }
+
+      console.log(`get_sports_events: Found ${data?.length || 0} sports events`);
+      return { sports_events: data || [] };
+    }
+
+    case 'get_special_events': {
+      if (!canAccessDataType(userContext, 'activities')) {
+        return { error: 'You do not have permission to access special events.' };
+      }
+
+      console.log(`get_special_events: date="${args.date || ''}", event_type="${args.event_type || ''}"`);
+
+      let query = supabase
+        .from('special_events_activities')
+        .select('id, title, event_date, time_slot, location, event_type, description, division_id')
+        .eq('company_id', userContext.companyId);
+
+      if (userContext.divisionIds && userContext.divisionIds.length > 0) {
+        query = query.in('division_id', userContext.divisionIds);
+      }
+
+      if (args.date) {
+        query = query.eq('event_date', args.date);
+      }
+
+      if (args.event_type) {
+        query = query.eq('event_type', args.event_type);
+      }
+
+      const { data, error } = await query.order('event_date', { ascending: false }).limit(20);
+
+      if (error) {
+        console.error('get_special_events error:', error);
+        throw error;
+      }
+
+      console.log(`get_special_events: Found ${data?.length || 0} special events`);
+      return { special_events: data || [] };
+    }
+
+    case 'get_tutoring_therapy': {
+      if (!canAccessDataType(userContext, 'tutoring')) {
+        return { error: 'You do not have permission to access tutoring/therapy information.' };
+      }
+
+      console.log(`get_tutoring_therapy: camper_name="${args.camper_name || ''}", service_type="${args.service_type || ''}", instructor="${args.instructor || ''}"`);
+
+      let query = supabase
+        .from('tutoring_therapy')
+        .select('id, service_type, instructor, start_date, end_date, schedule_periods, notes, child_id, children(name)')
+        .eq('company_id', userContext.companyId);
+
+      if (userContext.divisionIds && userContext.divisionIds.length > 0) {
+        const { data: childIds } = await supabase
+          .from('children')
+          .select('id')
+          .in('division_id', userContext.divisionIds);
+
+        if (childIds && childIds.length > 0) {
+          query = query.in('child_id', childIds.map((c: any) => c.id));
+        } else {
+          return { tutoring_therapy: [] };
+        }
+      }
+
+      if (args.camper_name) {
+        query = query.ilike('children.name', `%${args.camper_name}%`);
+      }
+
+      if (args.service_type) {
+        query = query.ilike('service_type', `%${args.service_type}%`);
+      }
+
+      if (args.instructor) {
+        query = query.ilike('instructor', `%${args.instructor}%`);
+      }
+
+      const { data, error } = await query.order('start_date', { ascending: false }).limit(20);
+
+      if (error) {
+        console.error('get_tutoring_therapy error:', error);
+        throw error;
+      }
+
+      console.log(`get_tutoring_therapy: Found ${data?.length || 0} sessions`);
+      return { tutoring_therapy: data || [] };
+    }
+
+    case 'get_sports_academy': {
+      if (!canAccessDataType(userContext, 'sports-academy')) {
+        return { error: 'You do not have permission to access sports academy information.' };
+      }
+
+      console.log(`get_sports_academy: camper_name="${args.camper_name || ''}", sport_name="${args.sport_name || ''}", instructor="${args.instructor || ''}"`);
+
+      let query = supabase
+        .from('sports_academy')
+        .select('id, sport_name, instructor, start_date, end_date, schedule_periods, notes, child_id, children(name)')
+        .eq('company_id', userContext.companyId);
+
+      if (userContext.divisionIds && userContext.divisionIds.length > 0) {
+        const { data: childIds } = await supabase
+          .from('children')
+          .select('id')
+          .in('division_id', userContext.divisionIds);
+
+        if (childIds && childIds.length > 0) {
+          query = query.in('child_id', childIds.map((c: any) => c.id));
+        } else {
+          return { sports_academy: [] };
+        }
+      }
+
+      if (args.camper_name) {
+        query = query.ilike('children.name', `%${args.camper_name}%`);
+      }
+
+      if (args.sport_name) {
+        query = query.ilike('sport_name', `%${args.sport_name}%`);
+      }
+
+      if (args.instructor) {
+        query = query.ilike('instructor', `%${args.instructor}%`);
+      }
+
+      const { data, error } = await query.order('start_date', { ascending: false }).limit(20);
+
+      if (error) {
+        console.error('get_sports_academy error:', error);
+        throw error;
+      }
+
+      console.log(`get_sports_academy: Found ${data?.length || 0} enrollments`);
+      return { sports_academy: data || [] };
+    }
+
+    case 'get_calendar_events': {
+      if (!canAccessDataType(userContext, 'activities')) {
+        return { error: 'You do not have permission to access calendar events.' };
+      }
+
+      console.log(`get_calendar_events: start_date="${args.start_date || ''}", end_date="${args.end_date || ''}", event_type="${args.event_type || ''}"`);
+
+      let query = supabase
+        .from('master_calendar')
+        .select('id, title, event_date, time, location, type, description, division_id');
+
+      if (userContext.divisionIds && userContext.divisionIds.length > 0) {
+        query = query.in('division_id', userContext.divisionIds);
+      }
+
+      if (args.start_date) {
+        query = query.gte('event_date', args.start_date);
+      }
+
+      if (args.end_date) {
+        query = query.lte('event_date', args.end_date);
+      }
+
+      if (args.event_type) {
+        query = query.eq('type', args.event_type);
+      }
+
+      const { data, error } = await query.order('event_date', { ascending: true }).limit(20);
+
+      if (error) {
+        console.error('get_calendar_events error:', error);
+        throw error;
+      }
+
+      console.log(`get_calendar_events: Found ${data?.length || 0} calendar events`);
+      return { calendar_events: data || [] };
+    }
+
+    case 'get_special_meals': {
+      if (!canAccessDataType(userContext, 'menu')) {
+        return { error: 'You do not have permission to access special meal information.' };
+      }
+
+      console.log(`get_special_meals: date="${args.date || ''}", meal_type="${args.meal_type || ''}"`);
+
+      let query = supabase
+        .from('special_meals')
+        .select('id, meal_type, items, allergens, date')
+        .eq('company_id', userContext.companyId);
+
+      if (args.date) {
+        query = query.eq('date', args.date);
+      }
+
+      if (args.meal_type) {
+        query = query.eq('meal_type', args.meal_type);
+      }
+
+      const { data, error } = await query.order('date', { ascending: false }).limit(20);
+
+      if (error) {
+        console.error('get_special_meals error:', error);
+        throw error;
+      }
+
+      console.log(`get_special_meals: Found ${data?.length || 0} special meals`);
+      return { special_meals: data || [] };
+    }
+
+    case 'get_camper_reports': {
+      if (!canAccessDataType(userContext, 'campers')) {
+        return { error: 'You do not have permission to access camper reports.' };
+      }
+
+      console.log(`get_camper_reports: camper_name="${args.camper_name || ''}", report_type="${args.report_type || ''}", date="${args.date || ''}"`);
+
+      let query = supabase
+        .from('camper_reports')
+        .select('id, report_type, report_date, report_data, child_id, children(name)')
+        .eq('company_id', userContext.companyId);
+
+      if (userContext.divisionIds && userContext.divisionIds.length > 0) {
+        const { data: childIds } = await supabase
+          .from('children')
+          .select('id')
+          .in('division_id', userContext.divisionIds);
+
+        if (childIds && childIds.length > 0) {
+          query = query.in('child_id', childIds.map((c: any) => c.id));
+        } else {
+          return { reports: [] };
+        }
+      }
+
+      if (args.camper_name) {
+        query = query.ilike('children.name', `%${args.camper_name}%`);
+      }
+
+      if (args.report_type) {
+        query = query.eq('report_type', args.report_type);
+      }
+
+      if (args.date) {
+        query = query.eq('report_date', args.date);
+      }
+
+      const { data, error } = await query.order('report_date', { ascending: false }).limit(20);
+
+      if (error) {
+        console.error('get_camper_reports error:', error);
+        throw error;
+      }
+
+      console.log(`get_camper_reports: Found ${data?.length || 0} reports`);
+      return { reports: data || [] };
     }
 
     default:
