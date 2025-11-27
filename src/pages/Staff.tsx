@@ -11,7 +11,6 @@ import AddStaffDialog from "@/components/dialogs/AddStaffDialog";
 import EditStaffDialog from "@/components/dialogs/EditStaffDialog";
 import { EvaluateStaffDialog } from "@/components/dialogs/EvaluateStaffDialog";
 import CSVUploader from "@/components/CSVUploader";
-import { JSONUploader } from "@/components/JSONUploader";
 import { toast } from "sonner";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
@@ -134,7 +133,6 @@ export default function Staff() {
         </div>
         <div className="flex gap-2">
           <CSVUploader tableName="staff" onUploadComplete={fetchStaff} />
-          <JSONUploader tableName="staff" onUploadComplete={fetchStaff} />
           <AddStaffDialog onSuccess={fetchStaff} />
         </div>
       </div>

@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import AddAwardDialog from "@/components/dialogs/AddAwardDialog";
 import EditAwardDialog from "@/components/dialogs/EditAwardDialog";
 import { CSVUploader } from "@/components/CSVUploader";
-import { JSONUploader } from "@/components/JSONUploader";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCompany } from "@/contexts/CompanyContext";
@@ -132,7 +131,6 @@ export default function Awards() {
         </div>
         <div className="flex gap-2">
           <CSVUploader tableName="awards" onUploadComplete={fetchAwards} />
-          <JSONUploader tableName="awards" onUploadComplete={fetchAwards} />
           <Button onClick={() => setAddDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Add Award
