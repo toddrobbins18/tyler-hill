@@ -226,24 +226,58 @@ serve(async (req) => {
 
     console.log(`Prepared ${awardsToInsert.length} awards for batch insert`);
 
-    // Step 5: Insert awards in batches of 100
-    const AWARD_BATCH_SIZE = 100;
-    for (let i = 0; i < awardsToInsert.length; i += AWARD_BATCH_SIZE) {
-      const batch = awardsToInsert.slice(i, i + AWARD_BATCH_SIZE);
-      console.log(`Inserting award batch ${Math.floor(i / AWARD_BATCH_SIZE) + 1}/${Math.ceil(awardsToInsert.length / AWARD_BATCH_SIZE)}`);
-
-      const { data: insertedAwards, error: awardError } = await supabase
+    // Step 5: Check for existing awards to prevent duplicates
+    if (awardsToInsert.length > 0) {
+      console.log(`Checking for existing awards before inserting ${awardsToInsert.length} awards...`);
+      
+      const { data: existingAwards } = await supabase
         .from('awards')
-        .insert(batch)
-        .select('id');
+        .select('child_id, title, category, description, date')
+        .eq('company_id', companyId)
+        .eq('season', '2025');
 
-      if (awardError) {
-        importResults.errors.push(`Failed to insert award batch: ${awardError.message}`);
-        importResults.awardsSkipped += batch.length;
-        continue;
+      // Create a Set of existing award keys for fast lookup
+      const existingAwardKeys = new Set(
+        (existingAwards || []).map(award => 
+          `${award.child_id}|${award.title}|${award.category}|${award.description}|${award.date}`
+        )
+      );
+
+      // Filter out awards that already exist
+      const newAwards = awardsToInsert.filter(award => {
+        const key = `${award.child_id}|${award.title}|${award.category}|${award.description}|${award.date}`;
+        const exists = existingAwardKeys.has(key);
+        if (exists) {
+          importResults.awardsSkipped++;
+        }
+        return !exists;
+      });
+
+      console.log(`${awardsToInsert.length - newAwards.length} duplicate awards skipped`);
+      
+      // Insert new awards in batches of 100
+      if (newAwards.length > 0) {
+        const AWARD_BATCH_SIZE = 100;
+        console.log(`Inserting ${newAwards.length} new awards in batches...`);
+        
+        for (let i = 0; i < newAwards.length; i += AWARD_BATCH_SIZE) {
+          const batch = newAwards.slice(i, i + AWARD_BATCH_SIZE);
+          console.log(`Inserting award batch ${Math.floor(i / AWARD_BATCH_SIZE) + 1}/${Math.ceil(newAwards.length / AWARD_BATCH_SIZE)}`);
+
+          const { data: insertedAwards, error: awardError } = await supabase
+            .from('awards')
+            .insert(batch)
+            .select('id');
+
+          if (awardError) {
+            importResults.errors.push(`Failed to insert award batch: ${awardError.message}`);
+            importResults.awardsSkipped += batch.length;
+            continue;
+          }
+
+          importResults.awardsCreated += insertedAwards?.length || 0;
+        }
       }
-
-      importResults.awardsCreated += insertedAwards?.length || 0;
     }
 
     console.log('Import completed:', importResults);
