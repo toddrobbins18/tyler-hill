@@ -1131,7 +1131,22 @@ async function executeToolCall(
         .eq('company_id', userContext.companyId);
 
       if (args.query) {
-        query = query.or(`title.ilike.%${args.query}%,children.name.ilike.%${args.query}%`);
+        // First, find children matching the query
+        const { data: matchingChildren } = await supabase
+          .from('children')
+          .select('id')
+          .eq('company_id', userContext.companyId)
+          .ilike('name', `%${args.query}%`);
+        
+        const childIds = matchingChildren?.map((c: any) => c.id) || [];
+        
+        if (childIds.length > 0) {
+          // Search by title OR by matching child IDs
+          query = query.or(`title.ilike.%${args.query}%,child_id.in.(${childIds.join(',')})`);
+        } else {
+          // No matching children, just search by title
+          query = query.ilike('title', `%${args.query}%`);
+        }
       }
 
       if (args.category) {
@@ -1176,7 +1191,21 @@ async function executeToolCall(
       }
 
       if (args.camper_name) {
-        query = query.ilike('children.name', `%${args.camper_name}%`);
+        // First, find children matching the name
+        const { data: matchingChildren } = await supabase
+          .from('children')
+          .select('id')
+          .eq('company_id', userContext.companyId)
+          .ilike('name', `%${args.camper_name}%`);
+        
+        const childIds = matchingChildren?.map((c: any) => c.id) || [];
+        
+        if (childIds.length > 0) {
+          query = query.in('child_id', childIds);
+        } else {
+          // No matching children, return empty
+          return { notes: [] };
+        }
       }
 
       if (args.date) {
@@ -1221,7 +1250,21 @@ async function executeToolCall(
       }
 
       if (args.camper_name) {
-        query = query.ilike('children.name', `%${args.camper_name}%`);
+        // First, find children matching the name
+        const { data: matchingChildren } = await supabase
+          .from('children')
+          .select('id')
+          .eq('company_id', userContext.companyId)
+          .ilike('name', `%${args.camper_name}%`);
+        
+        const childIds = matchingChildren?.map((c: any) => c.id) || [];
+        
+        if (childIds.length > 0) {
+          query = query.in('child_id', childIds);
+        } else {
+          // No matching children, return empty
+          return { medications: [] };
+        }
       }
 
       if (args.date) {
@@ -1411,7 +1454,21 @@ async function executeToolCall(
       }
 
       if (args.camper_name) {
-        query = query.ilike('children.name', `%${args.camper_name}%`);
+        // First, find children matching the name
+        const { data: matchingChildren } = await supabase
+          .from('children')
+          .select('id')
+          .eq('company_id', userContext.companyId)
+          .ilike('name', `%${args.camper_name}%`);
+        
+        const childIds = matchingChildren?.map((c: any) => c.id) || [];
+        
+        if (childIds.length > 0) {
+          query = query.in('child_id', childIds);
+        } else {
+          // No matching children, return empty
+          return { tutoring_therapy: [] };
+        }
       }
 
       if (args.service_type) {
@@ -1459,7 +1516,21 @@ async function executeToolCall(
       }
 
       if (args.camper_name) {
-        query = query.ilike('children.name', `%${args.camper_name}%`);
+        // First, find children matching the name
+        const { data: matchingChildren } = await supabase
+          .from('children')
+          .select('id')
+          .eq('company_id', userContext.companyId)
+          .ilike('name', `%${args.camper_name}%`);
+        
+        const childIds = matchingChildren?.map((c: any) => c.id) || [];
+        
+        if (childIds.length > 0) {
+          query = query.in('child_id', childIds);
+        } else {
+          // No matching children, return empty
+          return { sports_academy: [] };
+        }
       }
 
       if (args.sport_name) {
@@ -1576,7 +1647,21 @@ async function executeToolCall(
       }
 
       if (args.camper_name) {
-        query = query.ilike('children.name', `%${args.camper_name}%`);
+        // First, find children matching the name
+        const { data: matchingChildren } = await supabase
+          .from('children')
+          .select('id')
+          .eq('company_id', userContext.companyId)
+          .ilike('name', `%${args.camper_name}%`);
+        
+        const childIds = matchingChildren?.map((c: any) => c.id) || [];
+        
+        if (childIds.length > 0) {
+          query = query.in('child_id', childIds);
+        } else {
+          // No matching children, return empty
+          return { reports: [] };
+        }
       }
 
       if (args.report_type) {
