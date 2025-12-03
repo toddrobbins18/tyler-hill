@@ -32,6 +32,7 @@ export default function Dashboard() {
     breakfast: "",
     lunch: "",
     snack: "",
+    dinner: "",
     specialNotes: ""
   });
 
@@ -263,7 +264,8 @@ export default function Dashboard() {
         breakfast: menuData.breakfast || "Not scheduled",
         lunch: menuData.lunch || "Not scheduled",
         snack: menuData.snack || "Not scheduled",
-        specialNotes: menu[0]?.allergens || "Nut-free facility"
+        dinner: menuData.dinner || "Not scheduled",
+        specialNotes: menu[0]?.allergens || ""
       });
     }
   };
@@ -330,6 +332,52 @@ export default function Dashboard() {
         {currentCompany?.zip_code && (
           <WeatherWidget zipCode={currentCompany.zip_code} />
         )}
+
+        {/* Today's Menu Card */}
+        <Card className="shadow-card">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-orange-500/10">
+                <Utensils className="h-5 w-5 text-orange-500" />
+              </div>
+              <div>
+                <CardTitle>Today's Menu</CardTitle>
+                <CardDescription>Meal schedule for today</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="text-xs font-semibold text-muted-foreground uppercase">Breakfast</p>
+                <p className="text-sm font-medium mt-1 line-clamp-2">{todaysMenu.breakfast}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="text-xs font-semibold text-muted-foreground uppercase">Lunch</p>
+                <p className="text-sm font-medium mt-1 line-clamp-2">{todaysMenu.lunch}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="text-xs font-semibold text-muted-foreground uppercase">Snack</p>
+                <p className="text-sm font-medium mt-1 line-clamp-2">{todaysMenu.snack}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="text-xs font-semibold text-muted-foreground uppercase">Dinner</p>
+                <p className="text-sm font-medium mt-1 line-clamp-2">{todaysMenu.dinner}</p>
+              </div>
+            </div>
+            {todaysMenu.specialNotes && (
+              <div className="p-2 rounded-lg bg-warning/10 border border-warning/20">
+                <p className="text-xs text-warning-foreground">
+                  <span className="font-semibold">Allergens: </span>
+                  {todaysMenu.specialNotes}
+                </p>
+              </div>
+            )}
+            <Button variant="outline" className="w-full" onClick={() => navigate('/menu')}>
+              View Full Menu
+            </Button>
+          </CardContent>
+        </Card>
 
         {isTimberLakeCamp && healthCenterAdmissions.length > 0 && (
           <Card className="shadow-card">
