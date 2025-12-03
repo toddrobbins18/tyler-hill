@@ -50,6 +50,15 @@ export default function Nurse() {
   const [rfidInput, setRfidInput] = useState("");
   const [scannedChild, setScannedChild] = useState<any>(null);
   const [isScanning, setIsScanning] = useState(false);
+  
+  // Health Center RFID state
+  const [healthCenterRfidInput, setHealthCenterRfidInput] = useState("");
+  const [healthCenterScannedEntity, setHealthCenterScannedEntity] = useState<any>(null);
+  const [isHealthCenterScanning, setIsHealthCenterScanning] = useState(false);
+  const [showAdmissionForm, setShowAdmissionForm] = useState(false);
+  const [admissionReason, setAdmissionReason] = useState("");
+  const [admissionNotes, setAdmissionNotes] = useState("");
+  
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -541,9 +550,131 @@ export default function Nurse() {
       return;
     }
 
-    toast({ title: "Child checked out successfully" });
+    toast({ title: "Checked out successfully" });
     fetchAdmissions();
     fetchAdmissionHistory();
+    return true;
+  };
+
+  // Health Center RFID Scan Handler
+  const handleHealthCenterRfidScan = async () => {
+    if (!healthCenterRfidInput.trim()) {
+      toast({ 
+        title: "Please enter or scan an RFID", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    setIsHealthCenterScanning(true);
+    
+    try {
+      // First check children
+      const { data: child } = await supabase
+        .from('children')
+        .select('id, name, allergies, rfid, medical_notes, division:divisions(name)')
+        .eq('rfid', healthCenterRfidInput.trim())
+        .eq('company_id', currentCompany?.id || '')
+        .eq('season', currentSeason)
+        .maybeSingle() as { data: any };
+
+      // If not a child, check staff
+      let staffMember: any = null;
+      if (!child) {
+        const staffResult = await (supabase as any)
+          .from('staff')
+          .select('id, name, role, allergies, rfid')
+          .eq('rfid', healthCenterRfidInput.trim())
+          .eq('company_id', currentCompany?.id || '')
+          .maybeSingle();
+        staffMember = staffResult?.data;
+      }
+
+      const entity = child || staffMember;
+      const entityType = child ? 'child' : 'staff';
+
+      if (!entity) {
+        toast({
+          title: "RFID Not Found",
+          description: "No camper or staff found with this RFID",
+          variant: "destructive"
+        });
+        setHealthCenterRfidInput("");
+        setIsHealthCenterScanning(false);
+        return;
+      }
+
+      // Check if already admitted
+      const checkColumn = entityType === 'child' ? 'child_id' : 'staff_id';
+      const { data: existingAdmission } = await supabase
+        .from("health_center_admissions")
+        .select("id")
+        .eq(checkColumn, entity.id)
+        .is("checked_out_at", null)
+        .maybeSingle();
+
+      if (existingAdmission) {
+        // Auto check-out
+        await handleCheckout(existingAdmission.id);
+        toast({
+          title: "✓ Checked Out",
+          description: `${entity.name} has been checked out of the Health Center`,
+        });
+        setHealthCenterScannedEntity({ ...entity, action: 'checkout', entityType });
+        setHealthCenterRfidInput("");
+        setTimeout(() => setHealthCenterScannedEntity(null), 3000);
+      } else {
+        // Show admission form
+        setHealthCenterScannedEntity({ ...entity, action: 'admit', entityType });
+        setShowAdmissionForm(true);
+        setHealthCenterRfidInput("");
+      }
+
+    } catch (error) {
+      console.error('Health Center RFID scan error:', error);
+      toast({
+        title: "Scan Error",
+        description: "An error occurred while processing the RFID scan",
+        variant: "destructive"
+      });
+    } finally {
+      setIsHealthCenterScanning(false);
+    }
+  };
+
+  const handleHealthCenterRfidKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleHealthCenterRfidScan();
+    }
+  };
+
+  const handleConfirmAdmission = async () => {
+    if (!healthCenterScannedEntity) return;
+    
+    await handleAdmit(
+      healthCenterScannedEntity.id,
+      healthCenterScannedEntity.entityType,
+      admissionReason,
+      admissionNotes
+    );
+    
+    toast({
+      title: "✓ Admitted",
+      description: `${healthCenterScannedEntity.name} has been admitted to the Health Center`,
+    });
+    
+    // Reset form
+    setShowAdmissionForm(false);
+    setAdmissionReason("");
+    setAdmissionNotes("");
+    setTimeout(() => setHealthCenterScannedEntity(null), 3000);
+  };
+
+  const handleCancelAdmission = () => {
+    setShowAdmissionForm(false);
+    setHealthCenterScannedEntity(null);
+    setAdmissionReason("");
+    setAdmissionNotes("");
   };
 
   const getAdmissionDuration = (admittedAt: string, checkedOutAt?: string | null) => {
@@ -1003,6 +1134,148 @@ export default function Nurse() {
               <CardDescription>Track overnight admissions to the health center</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* RFID Quick Check-In/Out Scanner */}
+              <Card className="border-2 border-primary/20">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Scan className="h-5 w-5" />
+                    RFID Quick Check-In / Check-Out
+                  </CardTitle>
+                  <CardDescription>
+                    Scan RFID to admit or check out - system auto-detects the action
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <Input
+                        placeholder="Scan or type RFID..."
+                        value={healthCenterRfidInput}
+                        onChange={(e) => setHealthCenterRfidInput(e.target.value)}
+                        onKeyPress={handleHealthCenterRfidKeyPress}
+                        disabled={isHealthCenterScanning || showAdmissionForm}
+                        className="text-lg"
+                      />
+                    </div>
+                    <Button 
+                      onClick={handleHealthCenterRfidScan}
+                      disabled={isHealthCenterScanning || !healthCenterRfidInput.trim() || showAdmissionForm}
+                    >
+                      {isHealthCenterScanning ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Scanning...
+                        </>
+                      ) : (
+                        <>
+                          <Scan className="h-4 w-4 mr-2" />
+                          Scan
+                        </>
+                      )}
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      onClick={() => {
+                        setHealthCenterRfidInput("");
+                        setHealthCenterScannedEntity(null);
+                        setShowAdmissionForm(false);
+                        setAdmissionReason("");
+                        setAdmissionNotes("");
+                      }}
+                      disabled={isHealthCenterScanning}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+
+                  {/* Admission Form after RFID scan */}
+                  {showAdmissionForm && healthCenterScannedEntity && (
+                    <div className="mt-4 p-4 bg-accent/50 border rounded-lg space-y-4">
+                      <div className="flex items-center gap-2">
+                        <Hospital className="h-5 w-5 text-primary" />
+                        <div>
+                          <p className="font-semibold text-lg">{healthCenterScannedEntity.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {healthCenterScannedEntity.division?.name || healthCenterScannedEntity.role || "Unknown"} 
+                            {healthCenterScannedEntity.entityType === 'staff' && " (Staff)"}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {healthCenterScannedEntity.allergies && (
+                        <div className="p-2 bg-destructive/10 border border-destructive/20 rounded">
+                          <span className="font-medium text-destructive text-sm">⚠️ Allergies: </span>
+                          <span className="text-destructive text-sm">{healthCenterScannedEntity.allergies}</span>
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <Label>Reason for Admission</Label>
+                        <Input
+                          placeholder="Enter reason..."
+                          value={admissionReason}
+                          onChange={(e) => setAdmissionReason(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Additional Notes</Label>
+                        <Textarea
+                          placeholder="Enter any additional notes..."
+                          value={admissionNotes}
+                          onChange={(e) => setAdmissionNotes(e.target.value)}
+                          rows={2}
+                        />
+                      </div>
+
+                      <div className="flex gap-2 justify-end">
+                        <Button variant="outline" onClick={handleCancelAdmission}>
+                          Cancel
+                        </Button>
+                        <Button onClick={handleConfirmAdmission}>
+                          <Hospital className="h-4 w-4 mr-2" />
+                          Admit to Health Center
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Success Confirmation */}
+                  {healthCenterScannedEntity && !showAdmissionForm && (
+                    <div className={`mt-3 p-3 border rounded-lg ${
+                      healthCenterScannedEntity.action === 'checkout' 
+                        ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                        : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        {healthCenterScannedEntity.action === 'checkout' ? (
+                          <UserCheck className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                        ) : (
+                          <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                        )}
+                        <div>
+                          <p className={`font-medium ${
+                            healthCenterScannedEntity.action === 'checkout'
+                              ? 'text-blue-900 dark:text-blue-100'
+                              : 'text-green-900 dark:text-green-100'
+                          }`}>
+                            {healthCenterScannedEntity.name} - {healthCenterScannedEntity.action === 'checkout' ? 'Checked Out' : 'Admitted'}
+                          </p>
+                          <p className={`text-sm ${
+                            healthCenterScannedEntity.action === 'checkout'
+                              ? 'text-blue-700 dark:text-blue-300'
+                              : 'text-green-700 dark:text-green-300'
+                          }`}>
+                            {healthCenterScannedEntity.division?.name || healthCenterScannedEntity.role || ""}
+                            {healthCenterScannedEntity.entityType === 'staff' && " (Staff)"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
               {/* Search Bar */}
               <div className="space-y-2">
                 <Label>Search Children</Label>
