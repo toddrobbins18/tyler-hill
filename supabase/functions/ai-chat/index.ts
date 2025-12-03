@@ -21,6 +21,8 @@ const dataTypeToMenuItemMap: Record<string, string> = {
   tutoring: 'tutoring-therapy',
   menu: 'menu',
   transportation: 'transportation',
+  'daily-wolf': 'daily-wolf',
+  'rainy-day': 'rainy-day',
 };
 
 interface UserContext {
@@ -421,6 +423,62 @@ serve(async (req) => {
             }
           }
         }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_daily_wolf",
+          description: "Get Daily Wolf content (camp newsletter/announcements) for a specific date",
+          parameters: {
+            type: "object",
+            properties: {
+              date: { type: "string", description: "Optional date (YYYY-MM-DD), defaults to today" }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_rainy_day_schedule",
+          description: "Get rainy day schedule and activities",
+          parameters: {
+            type: "object",
+            properties: {
+              date: { type: "string", description: "Optional date (YYYY-MM-DD), defaults to today" }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_trip_attendees",
+          description: "Get attendees (campers) for a specific trip",
+          parameters: {
+            type: "object",
+            properties: {
+              trip_name: { type: "string", description: "Optional trip name to filter by" },
+              trip_id: { type: "string", description: "Optional trip ID to get specific trip attendees" },
+              date: { type: "string", description: "Optional date (YYYY-MM-DD) to filter trips by date" }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_sports_roster",
+          description: "Get roster of campers and staff assigned to a sports event",
+          parameters: {
+            type: "object",
+            properties: {
+              event_id: { type: "string", description: "Optional sports event ID to get specific roster" },
+              sport_type: { type: "string", description: "Optional sport type to filter by" },
+              date: { type: "string", description: "Optional date (YYYY-MM-DD) to filter events by date" }
+            }
+          }
+        }
       }
     ];
 
@@ -459,13 +517,17 @@ Available data tools:
 - Medications: get_medications - check medication schedules and logs
 - Menu: get_menu - see meal plans and menu items
 - Trips: get_trips - view transportation and trip schedules
+- Trip Attendees: get_trip_attendees - see who is attending a trip
 - Sports: get_sports_events - get sports calendar and games
+- Sports Roster: get_sports_roster - see campers/staff assigned to sports events
 - Special Events: get_special_events - see special activities and events
 - Tutoring: get_tutoring_therapy - view tutoring and therapy sessions
 - Sports Academy: get_sports_academy - check sports academy enrollments
 - Calendar: get_calendar_events - get master calendar events
 - Special Meals: get_special_meals - view special meal information
-- Reports: get_camper_reports - access camper evaluation reports`;
+- Reports: get_camper_reports - access camper evaluation reports
+- Daily Wolf: get_daily_wolf - view daily camp newsletter and announcements
+- Rainy Day: get_rainy_day_schedule - see rainy day schedule and activities`;
 
     let conversationMessages = [
       { role: "system", content: systemPrompt },
@@ -1681,6 +1743,206 @@ async function executeToolCall(
 
       console.log(`get_camper_reports: Found ${data?.length || 0} reports`);
       return { reports: data || [] };
+    }
+
+    case 'get_daily_wolf': {
+      if (!canAccessDataType(userContext, 'daily-wolf')) {
+        return { error: 'You do not have permission to access Daily Wolf content.' };
+      }
+
+      const targetDate = args.date || new Date().toISOString().split('T')[0];
+      console.log(`get_daily_wolf: date="${targetDate}"`);
+
+      const { data, error } = await supabase
+        .from('daily_wolf_content')
+        .select('id, date, quote_of_the_day, officer_of_day, phone_calls_info, laundry_info, notes, season')
+        .eq('company_id', userContext.companyId)
+        .eq('date', targetDate);
+
+      if (error) {
+        console.error('get_daily_wolf error:', error);
+        throw error;
+      }
+
+      // Also get any uploaded documents for that day
+      const { data: documents } = await supabase
+        .from('daily_wolf_documents')
+        .select('id, file_name, file_url, date')
+        .eq('company_id', userContext.companyId)
+        .eq('date', targetDate);
+
+      console.log(`get_daily_wolf: Found ${data?.length || 0} content items, ${documents?.length || 0} documents`);
+      return { daily_wolf: data || [], documents: documents || [], date: targetDate };
+    }
+
+    case 'get_rainy_day_schedule': {
+      if (!canAccessDataType(userContext, 'rainy-day')) {
+        return { error: 'You do not have permission to access rainy day schedule.' };
+      }
+
+      const targetDate = args.date || new Date().toISOString().split('T')[0];
+      console.log(`get_rainy_day_schedule: date="${targetDate}"`);
+
+      const { data, error } = await supabase
+        .from('rainy_day_schedule')
+        .select('id, name, date, time, location, activity_type, supervisor, notes, status, capacity')
+        .eq('company_id', userContext.companyId)
+        .eq('date', targetDate)
+        .order('time');
+
+      if (error) {
+        console.error('get_rainy_day_schedule error:', error);
+        throw error;
+      }
+
+      // Also get any uploaded documents for that day
+      const { data: documents } = await supabase
+        .from('rainy_day_documents')
+        .select('id, file_name, file_url, date')
+        .eq('company_id', userContext.companyId)
+        .eq('date', targetDate);
+
+      console.log(`get_rainy_day_schedule: Found ${data?.length || 0} activities, ${documents?.length || 0} documents`);
+      return { rainy_day_schedule: data || [], documents: documents || [], date: targetDate };
+    }
+
+    case 'get_trip_attendees': {
+      if (!canAccessDataType(userContext, 'transportation')) {
+        return { error: 'You do not have permission to access trip attendee information.' };
+      }
+
+      console.log(`get_trip_attendees: trip_name="${args.trip_name || ''}", trip_id="${args.trip_id || ''}", date="${args.date || ''}"`);
+
+      // First, get the trips based on filters
+      let tripsQuery = supabase
+        .from('trips')
+        .select('id, name, date, destination, departure_time, return_time')
+        .eq('company_id', userContext.companyId);
+
+      if (args.trip_id) {
+        tripsQuery = tripsQuery.eq('id', args.trip_id);
+      }
+
+      if (args.trip_name) {
+        tripsQuery = tripsQuery.ilike('name', `%${args.trip_name}%`);
+      }
+
+      if (args.date) {
+        tripsQuery = tripsQuery.eq('date', args.date);
+      }
+
+      const { data: trips, error: tripsError } = await tripsQuery.limit(5);
+
+      if (tripsError) {
+        console.error('get_trip_attendees trips error:', tripsError);
+        throw tripsError;
+      }
+
+      if (!trips || trips.length === 0) {
+        return { trips: [], message: 'No trips found matching the criteria' };
+      }
+
+      // Get attendees for each trip
+      const tripIds = trips.map((t: any) => t.id);
+      const { data: attendees, error: attendeesError } = await supabase
+        .from('trip_attendees')
+        .select('id, trip_id, child_id, children(name, group_name, division_id)')
+        .in('trip_id', tripIds);
+
+      if (attendeesError) {
+        console.error('get_trip_attendees attendees error:', attendeesError);
+        // Continue without attendees data
+      }
+
+      // Map attendees to their trips
+      const tripsWithAttendees = trips.map((trip: any) => ({
+        ...trip,
+        attendees: (attendees || []).filter((a: any) => a.trip_id === trip.id).map((a: any) => ({
+          child_id: a.child_id,
+          name: a.children?.name,
+          group: a.children?.group_name
+        }))
+      }));
+
+      console.log(`get_trip_attendees: Found ${trips.length} trips with attendees`);
+      return { trips: tripsWithAttendees };
+    }
+
+    case 'get_sports_roster': {
+      if (!canAccessDataType(userContext, 'sports-calendar')) {
+        return { error: 'You do not have permission to access sports roster information.' };
+      }
+
+      console.log(`get_sports_roster: event_id="${args.event_id || ''}", sport_type="${args.sport_type || ''}", date="${args.date || ''}"`);
+
+      // First, get the sports events based on filters
+      let eventsQuery = supabase
+        .from('sports_calendar')
+        .select('id, title, event_date, time, sport_type, location, team, opponent')
+        .eq('company_id', userContext.companyId);
+
+      if (args.event_id) {
+        eventsQuery = eventsQuery.eq('id', args.event_id);
+      }
+
+      if (args.sport_type) {
+        eventsQuery = eventsQuery.ilike('sport_type', `%${args.sport_type}%`);
+      }
+
+      if (args.date) {
+        eventsQuery = eventsQuery.eq('event_date', args.date);
+      }
+
+      const { data: events, error: eventsError } = await eventsQuery.order('event_date').limit(5);
+
+      if (eventsError) {
+        console.error('get_sports_roster events error:', eventsError);
+        throw eventsError;
+      }
+
+      if (!events || events.length === 0) {
+        return { events: [], message: 'No sports events found matching the criteria' };
+      }
+
+      // Get roster (campers) for each event
+      const eventIds = events.map((e: any) => e.id);
+      const { data: roster, error: rosterError } = await supabase
+        .from('sports_event_roster')
+        .select('id, event_id, child_id, confirmed, children(name, group_name)')
+        .in('event_id', eventIds);
+
+      if (rosterError) {
+        console.error('get_sports_roster roster error:', rosterError);
+      }
+
+      // Get staff assignments for each event
+      const { data: staffAssignments, error: staffError } = await supabase
+        .from('sports_event_staff')
+        .select('id, event_id, staff_id, role, staff(name)')
+        .in('event_id', eventIds);
+
+      if (staffError) {
+        console.error('get_sports_roster staff error:', staffError);
+      }
+
+      // Map roster and staff to their events
+      const eventsWithRoster = events.map((event: any) => ({
+        ...event,
+        campers: (roster || []).filter((r: any) => r.event_id === event.id).map((r: any) => ({
+          child_id: r.child_id,
+          name: r.children?.name,
+          group: r.children?.group_name,
+          confirmed: r.confirmed
+        })),
+        staff: (staffAssignments || []).filter((s: any) => s.event_id === event.id).map((s: any) => ({
+          staff_id: s.staff_id,
+          name: s.staff?.name,
+          role: s.role
+        }))
+      }));
+
+      console.log(`get_sports_roster: Found ${events.length} events with roster data`);
+      return { events: eventsWithRoster };
     }
 
     default:
