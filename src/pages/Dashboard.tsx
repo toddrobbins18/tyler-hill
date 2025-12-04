@@ -326,7 +326,8 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className={`grid gap-6 ${isTimberLakeCamp || isTylerHillCamp ? 'md:grid-cols-2' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
+      {/* Unified Dashboard Grid */}
+      <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
 
         {/* Weather Widget */}
         {currentCompany?.zip_code && (
@@ -334,7 +335,7 @@ export default function Dashboard() {
         )}
 
         {/* Today's Menu Card */}
-        <Card className="shadow-card">
+        <Card className="shadow-card h-full flex flex-col">
           <CardHeader>
             <div className="flex items-center gap-2">
               <div className="p-2 rounded-lg bg-orange-500/10">
@@ -346,8 +347,8 @@ export default function Dashboard() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
+          <CardContent className="space-y-3 flex-1 flex flex-col">
+            <div className="grid grid-cols-2 gap-3 flex-1">
               <div className="p-3 rounded-lg bg-muted/50">
                 <p className="text-xs font-semibold text-muted-foreground uppercase">Breakfast</p>
                 <p className="text-sm font-medium mt-1 line-clamp-2">{todaysMenu.breakfast}</p>
@@ -373,89 +374,14 @@ export default function Dashboard() {
                 </p>
               </div>
             )}
-            <Button variant="outline" className="w-full" onClick={() => navigate('/menu')}>
+            <Button variant="outline" className="w-full mt-auto" onClick={() => navigate('/menu')}>
               View Full Menu
             </Button>
           </CardContent>
         </Card>
 
-        {isTimberLakeCamp && healthCenterAdmissions.length > 0 && (
-          <Card className="shadow-card">
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-destructive/10">
-                  <Activity className="h-5 w-5 text-destructive" />
-                </div>
-                <div>
-                  <CardTitle>Health Center</CardTitle>
-                  <CardDescription>Current admissions</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {healthCenterAdmissions.length === 0 ? (
-                <p className="text-muted-foreground text-sm">No current admissions</p>
-              ) : (
-                <div className="space-y-3">
-                  {healthCenterAdmissions.map((admission: any) => (
-                    <div key={admission.id} className="flex items-start justify-between p-3 rounded-lg bg-accent/50 border border-border">
-                      <div className="flex-1">
-                        <div className="font-medium text-foreground">
-                          {admission.children?.name || 'Unknown'}
-                        </div>
-                        {admission.reason && (
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {admission.reason}
-                          </p>
-                        )}
-                        <div className="text-xs text-muted-foreground mt-1">
-                          Admitted: {new Date(admission.admitted_at).toLocaleTimeString('en-US', { 
-                            hour: 'numeric', 
-                            minute: '2-digit' 
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        <Card className="shadow-card">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <CalendarIcon className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <CardTitle>Special Events & Activities</CardTitle>
-                <CardDescription>Today's schedule</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {specialEvents.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No special events today</p>
-            ) : (
-              specialEvents.map((event) => (
-                <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer" onClick={() => navigate('/special-events')}>
-                  <div className="flex-1">
-                    <p className="font-medium text-sm mb-1">{event.title}</p>
-                    <span className="text-xs text-muted-foreground">{event.time_slot || 'All day'}</span>
-                  </div>
-                  <Badge variant="outline" className="text-xs">{event.type}</Badge>
-                </div>
-              ))
-            )}
-            <Button variant="outline" className="w-full" onClick={() => navigate('/special-events')}>View All Events</Button>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="shadow-card">
+        {/* Athletics Schedule Card */}
+        <Card className={`shadow-card h-full flex flex-col ${isTylerHillCamp && threeDayOutlook.length > 0 ? 'lg:col-span-2 lg:row-span-1' : ''}`}>
           <CardHeader>
             <div className="flex items-center gap-2">
               <div className="p-2 rounded-lg bg-warning/10">
@@ -467,7 +393,7 @@ export default function Dashboard() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 flex-1 flex flex-col">
             {/* Today's Events */}
             <div className="space-y-3 p-3 rounded-lg bg-info/5 dark:bg-info/10 border-l-4 border-info">
               {sportsEvents.length === 0 ? (
@@ -530,11 +456,45 @@ export default function Dashboard() {
               </div>
             )}
 
-            <Button variant="outline" className="w-full" onClick={() => navigate('/athletics')}>View Full Schedule</Button>
+            <Button variant="outline" className="w-full mt-auto" onClick={() => navigate('/athletics')}>View Full Schedule</Button>
           </CardContent>
         </Card>
 
-        <Card className="shadow-card">
+        {/* Special Events & Activities Card */}
+        <Card className="shadow-card h-full flex flex-col">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <CalendarIcon className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <CardTitle>Special Events & Activities</CardTitle>
+                <CardDescription>Today's schedule</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3 flex-1 flex flex-col">
+            {specialEvents.length === 0 ? (
+              <p className="text-muted-foreground text-sm">No special events today</p>
+            ) : (
+              <div className="space-y-3 flex-1">
+                {specialEvents.map((event) => (
+                  <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer" onClick={() => navigate('/special-events')}>
+                    <div className="flex-1">
+                      <p className="font-medium text-sm mb-1">{event.title}</p>
+                      <span className="text-xs text-muted-foreground">{event.time_slot || 'All day'}</span>
+                    </div>
+                    <Badge variant="outline" className="text-xs">{event.type}</Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Button variant="outline" className="w-full mt-auto" onClick={() => navigate('/special-events')}>View All Events</Button>
+          </CardContent>
+        </Card>
+
+        {/* Today's Birthdays Card */}
+        <Card className="shadow-card h-full flex flex-col">
           <CardHeader>
             <div className="flex items-center gap-2">
               <div className="p-2 rounded-lg bg-success/10">
@@ -546,24 +506,71 @@ export default function Dashboard() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 flex-1 flex flex-col">
             {todaysBirthdays.length === 0 ? (
               <p className="text-muted-foreground text-sm">No birthdays today</p>
             ) : (
-              todaysBirthdays.map((child: any) => (
-                <div key={child.id} className="flex items-center gap-3 p-3 rounded-lg bg-success/10 border border-success/20">
-                  <Cake className="h-5 w-5 text-success" />
-                  <div>
-                    <p className="font-medium text-sm">{child.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Born {new Date(child.date_of_birth).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-                    </p>
+              <div className="space-y-3 flex-1">
+                {todaysBirthdays.map((child: any) => (
+                  <div key={child.id} className="flex items-center gap-3 p-3 rounded-lg bg-success/10 border border-success/20">
+                    <Cake className="h-5 w-5 text-success" />
+                    <div>
+                      <p className="font-medium text-sm">{child.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Born {new Date(child.date_of_birth).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>
+
+        {/* Health Center Card - Timber Lake only */}
+        {isTimberLakeCamp && healthCenterAdmissions.length > 0 && (
+          <Card className="shadow-card h-full flex flex-col">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-destructive/10">
+                  <Activity className="h-5 w-5 text-destructive" />
+                </div>
+                <div>
+                  <CardTitle>Health Center</CardTitle>
+                  <CardDescription>Current admissions</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="flex-1">
+              {healthCenterAdmissions.length === 0 ? (
+                <p className="text-muted-foreground text-sm">No current admissions</p>
+              ) : (
+                <div className="space-y-3">
+                  {healthCenterAdmissions.map((admission: any) => (
+                    <div key={admission.id} className="flex items-start justify-between p-3 rounded-lg bg-accent/50 border border-border">
+                      <div className="flex-1">
+                        <div className="font-medium text-foreground">
+                          {admission.children?.name || 'Unknown'}
+                        </div>
+                        {admission.reason && (
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {admission.reason}
+                          </p>
+                        )}
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Admitted: {new Date(admission.admitted_at).toLocaleTimeString('en-US', { 
+                            hour: 'numeric', 
+                            minute: '2-digit' 
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
