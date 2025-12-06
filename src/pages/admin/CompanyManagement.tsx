@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Upload, Pencil, Users } from "lucide-react";
+import { Building2, Upload, Pencil, Users, Link, Loader2, CheckCircle, XCircle } from "lucide-react";
 import { useCompany } from "@/contexts/CompanyContext";
+import { Separator } from "@/components/ui/separator";
 
 interface Company {
   id: string;
@@ -16,6 +17,8 @@ interface Company {
   logo_url: string | null;
   theme_color: string;
   is_active: boolean;
+  campminder_sync_enabled: boolean;
+  campminder_last_sync_at: string | null;
 }
 
 interface CompanyStats {
@@ -37,6 +40,14 @@ export default function CompanyManagement() {
     theme_color: '#0066cc',
     is_active: true,
   });
+  
+  // CampMinder integration state
+  const [campminderApiKey, setCampminderApiKey] = useState('');
+  const [campminderSubscriptionKey, setCampminderSubscriptionKey] = useState('');
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  
   const { toast } = useToast();
   const { refetchCompanies } = useCompany();
 
@@ -44,11 +55,21 @@ export default function CompanyManagement() {
     fetchCompanies();
   }, []);
 
+  // Reset CampMinder state when editing company changes
+  useEffect(() => {
+    if (editingCompany) {
+      setCampminderApiKey('');
+      setCampminderSubscriptionKey('');
+      setConnectionStatus('idle');
+      setConnectionError(null);
+    }
+  }, [editingCompany?.id]);
+
   const fetchCompanies = async () => {
     try {
       const { data: companiesData, error } = await supabase
         .from('companies')
-        .select('*')
+        .select('id, name, slug, logo_url, theme_color, is_active, campminder_sync_enabled, campminder_last_sync_at')
         .order('name');
 
       if (error) throw error;
@@ -190,14 +211,36 @@ export default function CompanyManagement() {
         logoUrl = publicUrl;
       }
 
+      // Build update object
+      const updateData: Record<string, unknown> = {
+        name: editingCompany.name,
+        theme_color: editingCompany.theme_color,
+        logo_url: logoUrl,
+        is_active: editingCompany.is_active,
+        campminder_sync_enabled: editingCompany.campminder_sync_enabled,
+      };
+
+      // If CampMinder credentials are provided, encrypt and store them
+      if (campminderApiKey && campminderSubscriptionKey) {
+        // Encrypt API key
+        const { data: encryptedApiKey, error: apiKeyError } = await supabase
+          .rpc('encrypt_secret', { secret: campminderApiKey });
+        
+        if (apiKeyError) throw apiKeyError;
+
+        // Encrypt subscription key
+        const { data: encryptedSubKey, error: subKeyError } = await supabase
+          .rpc('encrypt_secret', { secret: campminderSubscriptionKey });
+        
+        if (subKeyError) throw subKeyError;
+
+        updateData.campminder_api_key_encrypted = encryptedApiKey;
+        updateData.campminder_subscription_key_encrypted = encryptedSubKey;
+      }
+
       const { error } = await supabase
         .from('companies')
-        .update({
-          name: editingCompany.name,
-          theme_color: editingCompany.theme_color,
-          logo_url: logoUrl,
-          is_active: editingCompany.is_active,
-        })
+        .update(updateData)
         .eq('id', editingCompany.id);
 
       if (error) throw error;
@@ -209,6 +252,9 @@ export default function CompanyManagement() {
 
       setEditingCompany(null);
       setLogoFile(null);
+      setCampminderApiKey('');
+      setCampminderSubscriptionKey('');
+      setConnectionStatus('idle');
       fetchCompanies();
       refetchCompanies();
     } catch (error) {
@@ -218,6 +264,76 @@ export default function CompanyManagement() {
         description: "Failed to update company",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleTestConnection = async () => {
+    if (!editingCompany) return;
+    
+    setTestingConnection(true);
+    setConnectionStatus('idle');
+    setConnectionError(null);
+
+    try {
+      // If new credentials are provided, save them first
+      if (campminderApiKey && campminderSubscriptionKey) {
+        // Encrypt and save credentials temporarily for testing
+        const { data: encryptedApiKey, error: apiKeyError } = await supabase
+          .rpc('encrypt_secret', { secret: campminderApiKey });
+        
+        if (apiKeyError) throw apiKeyError;
+
+        const { data: encryptedSubKey, error: subKeyError } = await supabase
+          .rpc('encrypt_secret', { secret: campminderSubscriptionKey });
+        
+        if (subKeyError) throw subKeyError;
+
+        // Update credentials first
+        const { error: updateError } = await supabase
+          .from('companies')
+          .update({
+            campminder_api_key_encrypted: encryptedApiKey,
+            campminder_subscription_key_encrypted: encryptedSubKey,
+          })
+          .eq('id', editingCompany.id);
+
+        if (updateError) throw updateError;
+      }
+
+      // Call test connection edge function
+      const { data, error } = await supabase.functions.invoke('test-campminder-connection', {
+        body: { company_id: editingCompany.id },
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        setConnectionStatus('success');
+        toast({
+          title: "Connection Successful",
+          description: "CampMinder API credentials are valid",
+        });
+      } else {
+        setConnectionStatus('error');
+        setConnectionError(data?.error || 'Connection failed');
+        toast({
+          title: "Connection Failed",
+          description: data?.error || "Could not connect to CampMinder",
+          variant: "destructive",
+        });
+      }
+    } catch (error: unknown) {
+      console.error('Error testing connection:', error);
+      setConnectionStatus('error');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setConnectionError(errorMessage);
+      toast({
+        title: "Error",
+        description: "Failed to test connection",
+        variant: "destructive",
+      });
+    } finally {
+      setTestingConnection(false);
     }
   };
 
@@ -385,6 +501,17 @@ export default function CompanyManagement() {
                           <span>{companyStats[company.id]?.children || 0} children</span>
                           <span>{companyStats[company.id]?.staff || 0} staff</span>
                         </div>
+                        {company.campminder_sync_enabled && (
+                          <div className="flex items-center gap-1 mt-1 text-xs text-green-600">
+                            <Link className="h-3 w-3" />
+                            CampMinder Connected
+                            {company.campminder_last_sync_at && (
+                              <span className="text-muted-foreground ml-1">
+                                (Last sync: {new Date(company.campminder_last_sync_at).toLocaleDateString()})
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -403,11 +530,11 @@ export default function CompanyManagement() {
                             <Pencil className="h-4 w-4" />
                           </Button>
                         </DialogTrigger>
-                        <DialogContent className="sm:max-w-[500px]">
+                        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
                           <DialogHeader>
                             <DialogTitle>Edit Company</DialogTitle>
                             <DialogDescription>
-                              Update company details, logo, and theme color
+                              Update company details, logo, and integrations
                             </DialogDescription>
                           </DialogHeader>
                           <form onSubmit={handleUpdateCompany} className="space-y-4">
@@ -465,6 +592,93 @@ export default function CompanyManagement() {
                                 </div>
                               )}
                             </div>
+                            
+                            <Separator className="my-4" />
+                            
+                            {/* CampMinder Integration Section */}
+                            <div className="space-y-4">
+                              <div className="flex items-center gap-2">
+                                <Link className="h-4 w-4" />
+                                <Label className="text-base font-semibold">CampMinder Integration</Label>
+                              </div>
+                              
+                              <div>
+                                <Label htmlFor="campminder_api_key">API Key</Label>
+                                <Input
+                                  id="campminder_api_key"
+                                  type="password"
+                                  value={campminderApiKey}
+                                  onChange={(e) => setCampminderApiKey(e.target.value)}
+                                  placeholder="Enter API Key (leave blank to keep existing)"
+                                />
+                              </div>
+                              
+                              <div>
+                                <Label htmlFor="campminder_subscription_key">Subscription Key</Label>
+                                <Input
+                                  id="campminder_subscription_key"
+                                  type="password"
+                                  value={campminderSubscriptionKey}
+                                  onChange={(e) => setCampminderSubscriptionKey(e.target.value)}
+                                  placeholder="Enter Subscription Key (leave blank to keep existing)"
+                                />
+                              </div>
+                              
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  id="campminder_sync_enabled"
+                                  checked={editingCompany?.campminder_sync_enabled || false}
+                                  onChange={(e) => setEditingCompany(prev => 
+                                    prev ? { ...prev, campminder_sync_enabled: e.target.checked } : null
+                                  )}
+                                  className="rounded"
+                                />
+                                <Label htmlFor="campminder_sync_enabled">Enable CampMinder Sync</Label>
+                              </div>
+                              
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={handleTestConnection}
+                                  disabled={testingConnection}
+                                >
+                                  {testingConnection ? (
+                                    <>
+                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                      Testing...
+                                    </>
+                                  ) : (
+                                    'Test Connection'
+                                  )}
+                                </Button>
+                                
+                                {connectionStatus === 'success' && (
+                                  <span className="flex items-center gap-1 text-sm text-green-600">
+                                    <CheckCircle className="h-4 w-4" />
+                                    Connected
+                                  </span>
+                                )}
+                                
+                                {connectionStatus === 'error' && (
+                                  <span className="flex items-center gap-1 text-sm text-destructive">
+                                    <XCircle className="h-4 w-4" />
+                                    {connectionError || 'Failed'}
+                                  </span>
+                                )}
+                              </div>
+                              
+                              {editingCompany?.campminder_last_sync_at && (
+                                <p className="text-xs text-muted-foreground">
+                                  Last sync: {new Date(editingCompany.campminder_last_sync_at).toLocaleString()}
+                                </p>
+                              )}
+                            </div>
+                            
+                            <Separator className="my-4" />
+                            
                             <div className="flex items-center gap-2">
                               <input
                                 type="checkbox"
@@ -484,6 +698,9 @@ export default function CompanyManagement() {
                                 onClick={() => {
                                   setEditingCompany(null);
                                   setLogoFile(null);
+                                  setCampminderApiKey('');
+                                  setCampminderSubscriptionKey('');
+                                  setConnectionStatus('idle');
                                 }}
                               >
                                 Cancel

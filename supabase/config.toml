@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.ai-chat]
 verify_jwt = true
+
+[functions.test-campminder-connection]
+verify_jwt = true

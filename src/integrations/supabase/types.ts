@@ -500,6 +500,10 @@ export type Database = {
       }
       companies: {
         Row: {
+          campminder_api_key_encrypted: string | null
+          campminder_last_sync_at: string | null
+          campminder_subscription_key_encrypted: string | null
+          campminder_sync_enabled: boolean | null
           created_at: string | null
           id: string
           is_active: boolean
@@ -511,6 +515,10 @@ export type Database = {
           zip_code: string | null
         }
         Insert: {
+          campminder_api_key_encrypted?: string | null
+          campminder_last_sync_at?: string | null
+          campminder_subscription_key_encrypted?: string | null
+          campminder_sync_enabled?: boolean | null
           created_at?: string | null
           id?: string
           is_active?: boolean
@@ -522,6 +530,10 @@ export type Database = {
           zip_code?: string | null
         }
         Update: {
+          campminder_api_key_encrypted?: string | null
+          campminder_last_sync_at?: string | null
+          campminder_subscription_key_encrypted?: string | null
+          campminder_sync_enabled?: boolean | null
           created_at?: string | null
           id?: string
           is_active?: boolean
