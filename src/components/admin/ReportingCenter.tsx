@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Download, FileText, Calendar, ArrowUpDown, ArrowUp, ArrowDown, Filter, X } from "lucide-react";
 import { exportToCSV, exportToPDF } from "@/lib/reportExports";
 import { format } from "date-fns";
@@ -32,24 +33,48 @@ export default function ReportingCenter() {
   const { toast } = useToast();
   const { currentCompany } = useCompany();
   const { selectedSeason } = useSeason();
+  const { getDivisionFilter, userDivisions, loading: permissionsLoading } = usePermissions();
 
-  // Fetch divisions on mount
+  // Get allowed divisions for the current user
+  const allowedDivisionIds = getDivisionFilter();
+
+  // Fetch divisions on mount - filter by user's allowed divisions
   useEffect(() => {
     const fetchDivisions = async () => {
       if (!currentCompany?.id) return;
-      const { data } = await supabase
+      
+      let query = supabase
         .from("divisions")
         .select("*")
         .eq("company_id", currentCompany.id);
+      
+      // If user has division restrictions, only fetch those divisions
+      if (allowedDivisionIds !== null && allowedDivisionIds.length > 0) {
+        query = query.in("id", allowedDivisionIds);
+      } else if (allowedDivisionIds !== null && allowedDivisionIds.length === 0) {
+        // User has no division access
+        setDivisions([]);
+        return;
+      }
+      
+      const { data } = await query;
       if (data) {
         setDivisions(sortDivisionsGirlsFirst(data));
       }
     };
     fetchDivisions();
-  }, [currentCompany?.id]);
+  }, [currentCompany?.id, allowedDivisionIds]);
 
   const fetchReportData = async () => {
     if (!currentCompany?.id) return;
+    
+    // If user has restricted divisions but none assigned, show no data
+    if (allowedDivisionIds !== null && allowedDivisionIds.length === 0) {
+      setReportData([]);
+      setSummary({});
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     try {
@@ -58,16 +83,24 @@ export default function ReportingCenter() {
 
       switch (reportType) {
         case 'incidents':
-          const { data: incidents } = await supabase
+          // Incidents are linked to children, so we need to filter by child's division
+          let incidentsQuery = supabase
             .from('incident_reports')
-            .select('*, children(name)')
+            .select('*, children(name, division_id)')
             .eq('company_id', currentCompany.id)
             .eq('season', selectedSeason)
             .gte('date', startDate || '1900-01-01')
             .lte('date', endDate || '2100-12-31')
             .order('date', { ascending: false });
           
-          data = incidents?.map(i => ({
+          const { data: incidents } = await incidentsQuery;
+          
+          // Filter by allowed divisions if user has restrictions
+          const filteredIncidents = allowedDivisionIds 
+            ? incidents?.filter(i => i.children?.division_id && allowedDivisionIds.includes(i.children.division_id))
+            : incidents;
+          
+          data = filteredIncidents?.map(i => ({
             Date: i.date,
             Child: i.children?.name || 'Unknown',
             Type: i.type,
@@ -77,9 +110,9 @@ export default function ReportingCenter() {
           })) || [];
           
           summaryData = {
-            'Total Incidents': incidents?.length || 0,
-            'Open': incidents?.filter(i => i.status === 'open').length || 0,
-            'Resolved': incidents?.filter(i => i.status === 'resolved').length || 0,
+            'Total Incidents': filteredIncidents?.length || 0,
+            'Open': filteredIncidents?.filter(i => i.status === 'open').length || 0,
+            'Resolved': filteredIncidents?.filter(i => i.status === 'resolved').length || 0,
           };
           break;
 
@@ -135,7 +168,12 @@ export default function ReportingCenter() {
             .lte('date', endDate || '2100-12-31')
             .order('date', { ascending: false });
           
-          data = awards?.map(a => ({
+          // Filter by allowed divisions if user has restrictions
+          const filteredAwards = allowedDivisionIds 
+            ? awards?.filter(a => a.children?.division_id && allowedDivisionIds.includes(a.children.division_id))
+            : awards;
+          
+          data = filteredAwards?.map(a => ({
             Date: a.date,
             Child: a.children?.name || 'Unknown',
             Division: a.children?.divisions?.name || 'N/A',
@@ -145,7 +183,7 @@ export default function ReportingCenter() {
           })) || [];
           
           summaryData = {
-            'Total Awards': awards?.length || 0,
+            'Total Awards': filteredAwards?.length || 0,
           };
           break;
 
@@ -269,7 +307,12 @@ export default function ReportingCenter() {
             .lte('date', endDate || '2100-12-31')
             .order('date', { ascending: false });
           
-          data = meds?.map(m => ({
+          // Filter by allowed divisions if user has restrictions
+          const filteredMeds = allowedDivisionIds 
+            ? meds?.filter(m => m.children?.division_id && allowedDivisionIds.includes(m.children.division_id))
+            : meds;
+          
+          data = filteredMeds?.map(m => ({
             Date: m.date,
             Child: m.children?.name || 'Unknown',
             Division: m.children?.divisions?.name || 'N/A',
@@ -281,13 +324,13 @@ export default function ReportingCenter() {
             Notes: m.notes || '',
           })) || [];
           
-          const uniqueChildren = new Set(meds?.map(m => m.child_id));
-          const uniqueMedications = new Set(meds?.map(m => m.medication_name));
-          const administeredCount = meds?.filter(m => m.administered).length || 0;
-          const pendingCount = meds?.filter(m => !m.administered).length || 0;
+          const uniqueChildren = new Set(filteredMeds?.map(m => m.child_id));
+          const uniqueMedications = new Set(filteredMeds?.map(m => m.medication_name));
+          const administeredCount = filteredMeds?.filter(m => m.administered).length || 0;
+          const pendingCount = filteredMeds?.filter(m => !m.administered).length || 0;
           
           summaryData = {
-            'Total Medication Entries': meds?.length || 0,
+            'Total Medication Entries': filteredMeds?.length || 0,
             'Unique Children': uniqueChildren.size,
             'Different Medications': uniqueMedications.size,
             'Administered': administeredCount,
@@ -296,20 +339,27 @@ export default function ReportingCenter() {
           break;
 
         case 'allergies':
-          const { data: allergicChildren } = await supabase
+          let allergiesQuery = supabase
             .from('children')
             .select(`
               name,
               allergies,
               medical_notes,
               status,
+              division_id,
               divisions (name)
             `)
             .eq('company_id', currentCompany.id)
             .eq('season', selectedSeason)
             .not('allergies', 'is', null)
-            .neq('allergies', '')
-            .order('name');
+            .neq('allergies', '');
+          
+          // Filter by allowed divisions if user has restrictions
+          if (allowedDivisionIds !== null && allowedDivisionIds.length > 0) {
+            allergiesQuery = allergiesQuery.in('division_id', allowedDivisionIds);
+          }
+          
+          const { data: allergicChildren } = await allergiesQuery.order('name');
           
           data = allergicChildren?.map(c => ({
             Child: c.name,
@@ -347,10 +397,10 @@ export default function ReportingCenter() {
   };
 
   useEffect(() => {
-    if (currentCompany?.id) {
+    if (currentCompany?.id && !permissionsLoading) {
       fetchReportData();
     }
-  }, [reportType, currentCompany, selectedSeason]);
+  }, [reportType, currentCompany, selectedSeason, allowedDivisionIds, permissionsLoading]);
 
   useEffect(() => {
     setSortColumn(null);
