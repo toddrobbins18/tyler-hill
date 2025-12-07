@@ -1213,6 +1213,7 @@ export type Database = {
       }
       master_calendar: {
         Row: {
+          company_id: string | null
           created_at: string | null
           created_by: string | null
           description: string | null
@@ -1226,6 +1227,7 @@ export type Database = {
           type: string
         }
         Insert: {
+          company_id?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
@@ -1239,6 +1241,7 @@ export type Database = {
           type: string
         }
         Update: {
+          company_id?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
@@ -1252,6 +1255,13 @@ export type Database = {
           type?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "master_calendar_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "master_calendar_division_id_fkey"
             columns: ["division_id"]

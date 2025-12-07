@@ -18,6 +18,11 @@ interface BulkEmailRequest {
   };
 }
 
+// Rate limiting: max 5 bulk emails per hour per user
+const RATE_LIMIT_WINDOW_HOURS = 1;
+const RATE_LIMIT_MAX_REQUESTS = 5;
+const MAX_RECIPIENTS_PER_REQUEST = 200;
+
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -51,6 +56,38 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (userError || !user) {
       throw new Error("Unauthorized");
+    }
+
+    // Check user has admin or staff role
+    const { data: userRoles, error: rolesError } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id);
+
+    if (rolesError) {
+      console.error("Error checking user roles:", rolesError);
+      throw new Error("Failed to verify permissions");
+    }
+
+    const roles = userRoles?.map(r => r.role) || [];
+    const hasPermission = roles.includes('admin') || roles.includes('super_admin') || roles.includes('staff');
+
+    if (!hasPermission) {
+      throw new Error("Insufficient permissions: admin or staff role required for bulk emails");
+    }
+
+    // Rate limiting check
+    const oneHourAgo = new Date(Date.now() - RATE_LIMIT_WINDOW_HOURS * 60 * 60 * 1000).toISOString();
+    const { data: recentEmails, error: rateError } = await supabase
+      .from('email_logs')
+      .select('id')
+      .eq('sent_by', user.id)
+      .gte('sent_at', oneHourAgo);
+
+    if (rateError) {
+      console.error("Error checking rate limit:", rateError);
+    } else if (recentEmails && recentEmails.length >= RATE_LIMIT_MAX_REQUESTS) {
+      throw new Error(`Rate limit exceeded: maximum ${RATE_LIMIT_MAX_REQUESTS} bulk emails per hour. Please wait before sending more.`);
     }
 
     // Get sender's company
@@ -135,6 +172,12 @@ const handler = async (req: Request): Promise<Response> => {
     });
 
     const recipients = Array.from(allRecipients.values());
+    
+    // Enforce maximum recipients per request
+    if (recipients.length > MAX_RECIPIENTS_PER_REQUEST) {
+      throw new Error(`Too many recipients: maximum ${MAX_RECIPIENTS_PER_REQUEST} recipients per request. Please send in batches.`);
+    }
+
     const emails = recipients.map((r) => r.email);
 
     console.log(`Prepared ${recipients.length} unique recipients`);
@@ -283,6 +326,7 @@ const handler = async (req: Request): Promise<Response> => {
       recipient_ids: Array.from(allRecipients.keys()),
       delivery_methods: deliveryMethodsUsed,
       status: "sent",
+      sent_at: new Date().toISOString(),
       error_details: null,
     });
 
