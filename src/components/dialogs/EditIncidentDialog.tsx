@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
+import { Search } from "lucide-react";
 
 interface EditIncidentDialogProps {
   open: boolean;
@@ -20,6 +21,7 @@ export default function EditIncidentDialog({ open, onOpenChange, incident, onSuc
   const { currentCompany } = useCompany();
   const [children, setChildren] = useState<any[]>([]);
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
+  const [childSearch, setChildSearch] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [formData, setFormData] = useState({
@@ -49,6 +51,7 @@ export default function EditIncidentDialog({ open, onOpenChange, incident, onSuc
         status: incident.status || "open",
       });
       setTags(incident.tags || []);
+      setChildSearch("");
       fetchIncidentChildren();
     }
   }, [incident, open]);
@@ -79,6 +82,14 @@ export default function EditIncidentDialog({ open, onOpenChange, incident, onSuc
       setSelectedChildren(data.map(ic => ic.child_id));
     }
   };
+
+  const filteredChildren = useMemo(() => {
+    if (!childSearch.trim()) return children;
+    const searchLower = childSearch.toLowerCase();
+    return children.filter(child => 
+      child.name.toLowerCase().includes(searchLower)
+    );
+  }, [children, childSearch]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,21 +163,36 @@ export default function EditIncidentDialog({ open, onOpenChange, incident, onSuc
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label>Children Involved *</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={childSearch}
+                onChange={(e) => setChildSearch(e.target.value)}
+                placeholder="Search children..."
+                className="pl-9"
+              />
+            </div>
             <div className="border rounded-md p-2 max-h-48 overflow-y-auto">
-              {children.map((child) => (
-                <div key={child.id} className="flex items-center space-x-2 py-1">
-                  <input
-                    type="checkbox"
-                    id={`child-${child.id}`}
-                    checked={selectedChildren.includes(child.id)}
-                    onChange={() => toggleChildSelection(child.id)}
-                    className="rounded"
-                  />
-                  <label htmlFor={`child-${child.id}`} className="cursor-pointer flex-1">
-                    {child.name}
-                  </label>
-                </div>
-              ))}
+              {filteredChildren.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2 text-center">
+                  {childSearch ? "No children found" : "No children available"}
+                </p>
+              ) : (
+                filteredChildren.map((child) => (
+                  <div key={child.id} className="flex items-center space-x-2 py-1">
+                    <input
+                      type="checkbox"
+                      id={`edit-child-${child.id}`}
+                      checked={selectedChildren.includes(child.id)}
+                      onChange={() => toggleChildSelection(child.id)}
+                      className="rounded"
+                    />
+                    <label htmlFor={`edit-child-${child.id}`} className="cursor-pointer flex-1">
+                      {child.name}
+                    </label>
+                  </div>
+                ))
+              )}
             </div>
             {selectedChildren.length > 0 && (
               <p className="text-sm text-muted-foreground">
@@ -267,20 +293,11 @@ export default function EditIncidentDialog({ open, onOpenChange, incident, onSuc
           </div>
 
           <div className="space-y-2">
-            <Label>Staff Reporter</Label>
+            <Label>Reported By</Label>
             <Input
               value={formData.reported_by}
               onChange={(e) => setFormData({ ...formData, reported_by: e.target.value })}
-              placeholder="Enter staff reporter name"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Reported By (External)</Label>
-            <Input
-              value={formData.reported_by}
-              onChange={(e) => setFormData({ ...formData, reported_by: e.target.value })}
-              placeholder="External reporter name (if not staff)"
+              placeholder="Enter reporter name"
             />
           </div>
 
