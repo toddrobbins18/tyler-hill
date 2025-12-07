@@ -24,11 +24,8 @@ const YEAR_END_AWARDS = [
   "Starfish",
   "Spirit",
   "Achievement",
-  "Color War Captain",
-  "Other"
+  "Color War Captain"
 ];
-
-const OTHER_SUB_OPTIONS = ["Starfish", "Spirit", "Achievement"];
 
 const STARFISH_VALUES = [
   "Sportsmanship",
@@ -46,9 +43,9 @@ export default function EditAwardDialog({ awardId, open, onOpenChange, onSuccess
   const { currentSeason } = useSeasonContext();
   const [loading, setLoading] = useState(false);
   const [children, setChildren] = useState<any[]>([]);
-  const [awardType, setAwardType] = useState("");
-  const [otherSelections, setOtherSelections] = useState<string[]>([]);
-  const [starfishValues, setStarfishValues] = useState<string[]>([]);
+  const [weeklyStarfishValues, setWeeklyStarfishValues] = useState<string[]>([]);
+  const [yearEndAward, setYearEndAward] = useState("");
+  const [yearEndStarfishValues, setYearEndStarfishValues] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     description: "",
     date: "",
@@ -70,32 +67,42 @@ export default function EditAwardDialog({ awardId, open, onOpenChange, onSuccess
       .single();
 
     if (!error && data) {
-      // Parse the stored data back into form state
       const title = data.title || "";
       
-      // Determine if it's a standard award type or "Other"
-      if (YEAR_END_AWARDS.includes(title)) {
-        setAwardType(title);
-        setOtherSelections([]);
-      } else {
-        // It's an "Other" selection - parse the comma-separated values
-        setAwardType("Other");
-        const selections = title.split(", ").filter((s: string) => OTHER_SUB_OPTIONS.includes(s));
-        setOtherSelections(selections);
+      // Parse title to determine award types
+      const hasWeeklyStarfish = title.includes("Weekly Starfish");
+      
+      // Extract year end award from title
+      let yearEnd = "";
+      for (const award of YEAR_END_AWARDS) {
+        if (title.includes(award)) {
+          yearEnd = award;
+          break;
+        }
       }
+      setYearEndAward(yearEnd);
 
-      // Parse starfish values from category JSON
+      // Parse category JSON for values
       if (data.category) {
         try {
           const parsed = JSON.parse(data.category);
-          if (parsed.starfish_values) {
-            setStarfishValues(parsed.starfish_values);
+          if (parsed.weekly_starfish_values) {
+            setWeeklyStarfishValues(parsed.weekly_starfish_values);
+          } else {
+            setWeeklyStarfishValues([]);
+          }
+          if (parsed.year_end_starfish_values) {
+            setYearEndStarfishValues(parsed.year_end_starfish_values);
+          } else {
+            setYearEndStarfishValues([]);
           }
         } catch {
-          setStarfishValues([]);
+          setWeeklyStarfishValues([]);
+          setYearEndStarfishValues([]);
         }
       } else {
-        setStarfishValues([]);
+        setWeeklyStarfishValues([]);
+        setYearEndStarfishValues([]);
       }
 
       setFormData({
@@ -119,18 +126,16 @@ export default function EditAwardDialog({ awardId, open, onOpenChange, onSuccess
     if (data) setChildren(data);
   };
 
-  const showStarfishValues = awardType === "Starfish" || otherSelections.includes("Starfish");
-
-  const toggleOtherSelection = (value: string) => {
-    setOtherSelections(prev => 
+  const toggleWeeklyStarfishValue = (value: string) => {
+    setWeeklyStarfishValues(prev => 
       prev.includes(value) 
         ? prev.filter(v => v !== value)
         : [...prev, value]
     );
   };
 
-  const toggleStarfishValue = (value: string) => {
-    setStarfishValues(prev => 
+  const toggleYearEndStarfishValue = (value: string) => {
+    setYearEndStarfishValues(prev => 
       prev.includes(value) 
         ? prev.filter(v => v !== value)
         : [...prev, value]
@@ -140,27 +145,37 @@ export default function EditAwardDialog({ awardId, open, onOpenChange, onSuccess
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!awardType) {
-      toast.error("Please select a Year End Award type");
-      return;
-    }
+    const hasWeeklyStarfish = weeklyStarfishValues.length > 0;
+    const hasYearEnd = yearEndAward !== "";
 
-    if (awardType === "Other" && otherSelections.length === 0) {
-      toast.error("Please select at least one option for Other");
+    if (!hasWeeklyStarfish && !hasYearEnd) {
+      toast.error("Please select at least one award type");
       return;
     }
 
     setLoading(true);
 
     // Build title based on selections
-    let title = awardType;
-    if (awardType === "Other") {
-      title = otherSelections.join(", ");
+    let title = "";
+    if (hasWeeklyStarfish && hasYearEnd) {
+      title = `Weekly Starfish, ${yearEndAward}`;
+    } else if (hasWeeklyStarfish) {
+      title = "Weekly Starfish";
+    } else {
+      title = yearEndAward;
     }
 
-    // Store starfish values in category field as JSON
-    const category = showStarfishValues && starfishValues.length > 0 
-      ? JSON.stringify({ starfish_values: starfishValues })
+    // Store values in category field as JSON
+    const categoryData: any = {};
+    if (hasWeeklyStarfish) {
+      categoryData.weekly_starfish_values = weeklyStarfishValues;
+    }
+    if (yearEndAward === "Starfish" && yearEndStarfishValues.length > 0) {
+      categoryData.year_end_starfish_values = yearEndStarfishValues;
+    }
+
+    const category = Object.keys(categoryData).length > 0 
+      ? JSON.stringify(categoryData)
       : null;
 
     const { error } = await supabase
@@ -202,9 +217,30 @@ export default function EditAwardDialog({ awardId, open, onOpenChange, onSuccess
             />
           </div>
 
+          <div className="space-y-2">
+            <Label>Weekly Starfish (multi-select)</Label>
+            <div className="grid grid-cols-2 gap-2 p-3 border rounded-md bg-muted/30">
+              {STARFISH_VALUES.map((value) => (
+                <div key={value} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`edit-weekly-${value}`}
+                    checked={weeklyStarfishValues.includes(value)}
+                    onCheckedChange={() => toggleWeeklyStarfishValue(value)}
+                  />
+                  <label
+                    htmlFor={`edit-weekly-${value}`}
+                    className="text-sm font-medium leading-none cursor-pointer"
+                  >
+                    {value}
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div>
-            <Label htmlFor="awardType">Year End Award</Label>
-            <Select value={awardType} onValueChange={setAwardType}>
+            <Label htmlFor="yearEndAward">Year End Award</Label>
+            <Select value={yearEndAward} onValueChange={setYearEndAward}>
               <SelectTrigger>
                 <SelectValue placeholder="Select award type..." />
               </SelectTrigger>
@@ -218,42 +254,19 @@ export default function EditAwardDialog({ awardId, open, onOpenChange, onSuccess
             </Select>
           </div>
 
-          {awardType === "Other" && (
-            <div className="space-y-2">
-              <Label>Select Options (multi-select)</Label>
-              <div className="flex flex-wrap gap-4 p-3 border rounded-md bg-muted/30">
-                {OTHER_SUB_OPTIONS.map((option) => (
-                  <div key={option} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`edit-other-${option}`}
-                      checked={otherSelections.includes(option)}
-                      onCheckedChange={() => toggleOtherSelection(option)}
-                    />
-                    <label
-                      htmlFor={`edit-other-${option}`}
-                      className="text-sm font-medium leading-none cursor-pointer"
-                    >
-                      {option}
-                    </label>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {showStarfishValues && (
+          {yearEndAward === "Starfish" && (
             <div className="space-y-2">
               <Label>Starfish Values (multi-select)</Label>
               <div className="grid grid-cols-2 gap-2 p-3 border rounded-md bg-muted/30">
                 {STARFISH_VALUES.map((value) => (
                   <div key={value} className="flex items-center space-x-2">
                     <Checkbox
-                      id={`edit-starfish-${value}`}
-                      checked={starfishValues.includes(value)}
-                      onCheckedChange={() => toggleStarfishValue(value)}
+                      id={`edit-yearend-starfish-${value}`}
+                      checked={yearEndStarfishValues.includes(value)}
+                      onCheckedChange={() => toggleYearEndStarfishValue(value)}
                     />
                     <label
-                      htmlFor={`edit-starfish-${value}`}
+                      htmlFor={`edit-yearend-starfish-${value}`}
                       className="text-sm font-medium leading-none cursor-pointer"
                     >
                       {value}
