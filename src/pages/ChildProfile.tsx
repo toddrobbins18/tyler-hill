@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Award, Trophy, Star, Calendar, AlertTriangle, FileText, Pencil, Users, MapPin } from "lucide-react";
+import { ArrowLeft, Award, Trophy, Star, Calendar, AlertTriangle, FileText, Pencil, Users, MapPin, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,13 +13,16 @@ import { toast as sonnerToast } from "sonner";
 import { useCompany } from "@/contexts/CompanyContext";
 import CamperReportsTab from "@/components/CamperReportsTab";
 import ConflictIndicator from "@/components/ConflictIndicator";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function ChildProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentCompany } = useCompany();
+  const { getDivisionFilter, canSeeDivision, loading: permissionsLoading } = usePermissions();
   const [loading, setLoading] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [child, setChild] = useState<any>(null);
   const [awards, setAwards] = useState<any[]>([]);
   const [incidents, setIncidents] = useState<any[]>([]);
@@ -32,10 +35,10 @@ export default function ChildProfile() {
   const [conflicts, setConflicts] = useState<any[]>([]);
 
   useEffect(() => {
-    if (id) {
+    if (id && !permissionsLoading) {
       fetchChildData();
     }
-  }, [id]);
+  }, [id, permissionsLoading]);
 
   const fetchChildData = async () => {
     try {
@@ -47,6 +50,17 @@ export default function ChildProfile() {
         .single();
 
       if (childError) throw childError;
+      
+      // Check if user has access to this child's division
+      const divisionFilter = getDivisionFilter();
+      if (divisionFilter !== null && childData?.division_id) {
+        if (!divisionFilter.includes(childData.division_id)) {
+          setAccessDenied(true);
+          setLoading(false);
+          return;
+        }
+      }
+      
       setChild(childData);
       setAllergyText(childData?.allergies || "");
 
@@ -206,8 +220,21 @@ export default function ChildProfile() {
     }
   };
 
-  if (loading) {
+  if (loading || permissionsLoading) {
     return <div className="text-center py-8">Loading...</div>;
+  }
+
+  if (accessDenied) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+        <Shield className="h-16 w-16 text-muted-foreground" />
+        <h2 className="text-2xl font-bold">Access Denied</h2>
+        <p className="text-muted-foreground">You don't have permission to view this camper's profile.</p>
+        <Button onClick={() => navigate("/roster")} className="mt-4">
+          Back to Campers
+        </Button>
+      </div>
+    );
   }
 
   if (!child) {

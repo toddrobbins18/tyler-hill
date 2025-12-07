@@ -440,6 +440,7 @@ export default function Nurse() {
         children!fk_health_center_admissions_child_id (
           id,
           name,
+          division_id,
           division:division_id (
             name
           )
@@ -459,7 +460,20 @@ export default function Nurse() {
       toast({ title: "Error fetching admissions", variant: "destructive" });
       return;
     }
-    setAdmissions(data || []);
+    
+    // Filter child admissions by allowed divisions (staff admissions are not filtered)
+    const divisionFilter = getDivisionFilter();
+    if (divisionFilter !== null && divisionFilter.length > 0) {
+      const filtered = (data || []).filter(admission => {
+        // If it's a staff admission (no child), include it
+        if (!admission.child_id) return true;
+        // If it's a child admission, check division
+        return admission.children?.division_id && divisionFilter.includes(admission.children.division_id);
+      });
+      setAdmissions(filtered);
+    } else {
+      setAdmissions(data || []);
+    }
   };
 
   const fetchAdmissionHistory = async (childId?: string) => {
@@ -470,6 +484,7 @@ export default function Nurse() {
         children!fk_health_center_admissions_child_id (
           id,
           name,
+          division_id,
           division:division_id (
             name
           )
@@ -486,7 +501,17 @@ export default function Nurse() {
     const { data, error } = await query;
     
     if (!error && data) {
-      setAdmissionHistory(data);
+      // Filter by allowed divisions
+      const divisionFilter = getDivisionFilter();
+      if (divisionFilter !== null && divisionFilter.length > 0) {
+        const filtered = data.filter(admission => {
+          if (!admission.child_id) return true;
+          return admission.children?.division_id && divisionFilter.includes(admission.children.division_id);
+        });
+        setAdmissionHistory(filtered);
+      } else {
+        setAdmissionHistory(data);
+      }
     }
   };
 

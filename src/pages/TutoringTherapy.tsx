@@ -104,7 +104,17 @@ const TutoringTherapy = () => {
         .order("service_type");
 
       if (error) throw error;
-      setEnrollments(data || []);
+      
+      // Filter enrollments by allowed divisions
+      const divisionFilter = getDivisionFilter();
+      if (divisionFilter !== null && divisionFilter.length > 0) {
+        const filtered = (data || []).filter(enrollment => 
+          enrollment.children?.division_id && divisionFilter.includes(enrollment.children.division_id)
+        );
+        setEnrollments(filtered);
+      } else {
+        setEnrollments(data || []);
+      }
     } catch (error) {
       console.error("Error fetching enrollments:", error);
       toast.error("Failed to load enrollments");

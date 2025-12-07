@@ -104,7 +104,17 @@ export default function SportsAcademy() {
       setLoading(false);
       return;
     }
-    setEnrollments(data || []);
+    
+    // Filter enrollments by allowed divisions
+    const divisionFilter = getDivisionFilter();
+    if (divisionFilter !== null && divisionFilter.length > 0) {
+      const filtered = (data || []).filter(enrollment => 
+        enrollment.child?.division_id && divisionFilter.includes(enrollment.child.division_id)
+      );
+      setEnrollments(filtered);
+    } else {
+      setEnrollments(data || []);
+    }
     setLoading(false);
   };
 
