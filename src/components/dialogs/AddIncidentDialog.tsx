@@ -72,6 +72,11 @@ export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: Add
       return;
     }
 
+    if (!formData.type) {
+      toast({ title: "Please select an incident type", variant: "destructive" });
+      return;
+    }
+
     const { data: incident, error: incidentError } = await supabase
       .from("incident_reports")
       .insert({ ...formData, tags, company_id: currentCompany?.id, season: currentSeason })

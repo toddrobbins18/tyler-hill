@@ -8,9 +8,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
-import { Download, FileText, Calendar, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Download, FileText, Calendar, ArrowUpDown, ArrowUp, ArrowDown, Filter, X } from "lucide-react";
 import { exportToCSV, exportToPDF } from "@/lib/reportExports";
 import { format } from "date-fns";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 
 type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'conflicts' | 'medications' | 'allergies';
 
@@ -23,9 +27,26 @@ export default function ReportingCenter() {
   const [summary, setSummary] = useState<Record<string, any>>({});
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [divisions, setDivisions] = useState<any[]>([]);
+  const [selectedDivisions, setSelectedDivisions] = useState<string[]>([]);
   const { toast } = useToast();
   const { currentCompany } = useCompany();
   const { selectedSeason } = useSeason();
+
+  // Fetch divisions on mount
+  useEffect(() => {
+    const fetchDivisions = async () => {
+      if (!currentCompany?.id) return;
+      const { data } = await supabase
+        .from("divisions")
+        .select("*")
+        .eq("company_id", currentCompany.id);
+      if (data) {
+        setDivisions(sortDivisionsGirlsFirst(data));
+      }
+    };
+    fetchDivisions();
+  }, [currentCompany?.id]);
 
   const fetchReportData = async () => {
     if (!currentCompany?.id) return;
@@ -350,10 +371,28 @@ export default function ReportingCenter() {
     }
   };
 
-  const sortedData = useMemo(() => {
-    if (!sortColumn || reportData.length === 0) return reportData;
+  // Filter report data by selected divisions
+  const filteredReportData = useMemo(() => {
+    if (selectedDivisions.length === 0) return reportData;
     
-    return [...reportData].sort((a, b) => {
+    // Only filter reports that have a Division column
+    return reportData.filter(row => {
+      const divisionValue = row['Division'];
+      if (!divisionValue) return true; // Include rows without division info
+      
+      // Get division names from selected IDs
+      const selectedDivisionNames = divisions
+        .filter(d => selectedDivisions.includes(d.id))
+        .map(d => d.name);
+      
+      return selectedDivisionNames.includes(divisionValue);
+    });
+  }, [reportData, selectedDivisions, divisions]);
+
+  const sortedData = useMemo(() => {
+    if (!sortColumn || filteredReportData.length === 0) return filteredReportData;
+    
+    return [...filteredReportData].sort((a, b) => {
       const aVal = a[sortColumn];
       const bVal = b[sortColumn];
       
@@ -383,7 +422,7 @@ export default function ReportingCenter() {
       if (strA > strB) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [reportData, sortColumn, sortDirection]);
+  }, [filteredReportData, sortColumn, sortDirection]);
 
   const handleExportCSV = () => {
     const filename = `${reportType}_report`;
@@ -450,7 +489,7 @@ export default function ReportingCenter() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
             <div className="space-y-2">
               <Label>Report Type</Label>
               <Select value={reportType} onValueChange={(value) => setReportType(value as ReportType)}>
@@ -486,6 +525,60 @@ export default function ReportingCenter() {
             </div>
 
             <div className="space-y-2">
+              <Label>Filter by Division</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start">
+                    <Filter className="h-4 w-4 mr-2" />
+                    {selectedDivisions.length === 0 
+                      ? "All Divisions" 
+                      : `${selectedDivisions.length} selected`}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-3" align="start">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Select Divisions</span>
+                      {selectedDivisions.length > 0 && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => setSelectedDivisions([])}
+                          className="h-auto py-1 px-2 text-xs"
+                        >
+                          Clear all
+                        </Button>
+                      )}
+                    </div>
+                    <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                      {divisions.map((div) => (
+                        <div key={div.id} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`report-div-${div.id}`}
+                            checked={selectedDivisions.includes(div.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedDivisions([...selectedDivisions, div.id]);
+                              } else {
+                                setSelectedDivisions(selectedDivisions.filter(id => id !== div.id));
+                              }
+                            }}
+                          />
+                          <label 
+                            htmlFor={`report-div-${div.id}`} 
+                            className="text-sm cursor-pointer flex-1"
+                          >
+                            {div.name}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="space-y-2">
               <Label>&nbsp;</Label>
               <Button onClick={fetchReportData} disabled={loading} className="w-full">
                 {loading ? 'Loading...' : 'Generate Report'}
@@ -493,6 +586,34 @@ export default function ReportingCenter() {
             </div>
           </div>
 
+          {/* Show selected division badges */}
+          {selectedDivisions.length > 0 && (
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="text-sm text-muted-foreground">Filtering by:</span>
+              {selectedDivisions.map((divId) => {
+                const div = divisions.find(d => d.id === divId);
+                return div ? (
+                  <Badge key={divId} variant="secondary" className="flex items-center gap-1">
+                    {div.name}
+                    <button
+                      onClick={() => setSelectedDivisions(selectedDivisions.filter(id => id !== divId))}
+                      className="ml-1 hover:text-destructive"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ) : null;
+              })}
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setSelectedDivisions([])}
+                className="h-auto py-1 px-2 text-xs"
+              >
+                Clear all
+              </Button>
+            </div>
+          )}
           {Object.keys(summary).length > 0 && (
             <div className="grid gap-4 md:grid-cols-3">
               {Object.entries(summary).map(([key, value]) => (
