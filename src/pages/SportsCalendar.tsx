@@ -70,6 +70,8 @@ export default function SportsCalendar() {
   const { toast } = useToast();
 
   useEffect(() => {
+    if (!currentCompany?.id) return;
+    
     fetchEvents();
     fetchDivisions();
 
@@ -85,10 +87,13 @@ export default function SportsCalendar() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentSeason]);
+  }, [currentSeason, currentCompany?.id]);
 
   const fetchEvents = async () => {
-    // Fetch first batch (0-999)
+    if (!currentCompany?.id) {
+      setLoading(false);
+      return;
+    }
     const { data: batch1, error: error1 } = await supabase
       .from("sports_calendar")
       .select(`
