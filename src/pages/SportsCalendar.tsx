@@ -56,7 +56,8 @@ export default function SportsCalendar() {
     sport_type: "",
     custom_sport_type: "",
     event_type: "",
-    time: "",
+    depart_time: "",
+    start_time_field: "",
     location: "",
     team: "",
     opponent: "",
@@ -177,7 +178,8 @@ export default function SportsCalendar() {
       sport_type: formData.sport_type === "Other" ? "Other" : formData.sport_type,
       custom_sport_type: formData.sport_type === "Other" || formData.event_type === "Other" ? formData.custom_sport_type : null,
       event_type: formData.event_type || null,
-      time: formData.time,
+      depart_time: formData.depart_time || null,
+      start_time_field: formData.start_time_field || null,
       location: formData.location,
       team: formData.team,
       opponent: formData.opponent,
@@ -243,7 +245,7 @@ export default function SportsCalendar() {
         type: "sporting_event",
         event_type: formData.sport_type === "Other" ? formData.custom_sport_type : formData.sport_type,
         destination: formData.location || null,
-        departure_time: formData.time || null,
+        departure_time: formData.depart_time || null,
         status: "pending",
         sports_event_id: newEvent.id,
         season: currentSeason,
@@ -266,7 +268,8 @@ export default function SportsCalendar() {
       sport_type: "",
       custom_sport_type: "",
       event_type: "",
-      time: "",
+      depart_time: "",
+      start_time_field: "",
       location: "",
       team: "",
       opponent: "",
@@ -293,7 +296,8 @@ export default function SportsCalendar() {
       sport_type: event.sport_type,
       custom_sport_type: event.custom_sport_type || "",
       event_type: event.event_type || "",
-      time: event.time || "",
+      depart_time: event.depart_time || "",
+      start_time_field: event.start_time_field || "",
       location: event.location || "",
       team: event.team || "",
       opponent: event.opponent || "",
@@ -930,20 +934,42 @@ export default function SportsCalendar() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label>{formData.home_away === 'away' ? 'Depart from Camp (optional)' : 'Start Time (optional)'}</Label>
-              <Input
-                type="time"
-                value={formData.time}
-                onChange={(e) => setFormData({ ...formData, time: e.target.value })}
-              />
-              {formData.home_away === 'away' && (
+            {formData.home_away === 'away' && (
+              <div className="space-y-2">
+                <Label>Depart from Camp</Label>
+                <Input
+                  type="time"
+                  value={formData.depart_time}
+                  onChange={(e) => setFormData({ ...formData, depart_time: e.target.value })}
+                />
                 <p className="text-xs text-muted-foreground">Time to depart from camp for away event</p>
-              )}
-              {formData.home_away === 'home' && (
+              </div>
+            )}
+
+            {formData.home_away === 'home' && (
+              <div className="space-y-2">
+                <Label>Start Time (on field)</Label>
+                <Input
+                  type="time"
+                  value={formData.start_time_field}
+                  onChange={(e) => setFormData({ ...formData, start_time_field: e.target.value })}
+                />
                 <p className="text-xs text-muted-foreground">Event start time for home event</p>
-              )}
-            </div>
+              </div>
+            )}
+
+            {formData.home_away === 'neutral' && (
+              <>
+                <div className="space-y-2">
+                  <Label>Start Time</Label>
+                  <Input
+                    type="time"
+                    value={formData.start_time_field}
+                    onChange={(e) => setFormData({ ...formData, start_time_field: e.target.value })}
+                  />
+                </div>
+              </>
+            )}
 
             <div className="space-y-2">
               <Label>Location (optional)</Label>
