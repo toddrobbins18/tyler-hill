@@ -44,7 +44,8 @@ export default function ActivitiesFieldTrips() {
     title: "",
     description: "",
     activity_type: "",
-    time: "",
+    depart_from_camp: "",
+    depart_from_activity: "",
     location: "",
     capacity: "",
     chaperone: "",
@@ -152,7 +153,8 @@ export default function ActivitiesFieldTrips() {
       title: formData.title,
       description: formData.description,
       activity_type: formData.activity_type,
-      time: formData.time,
+      depart_from_camp: formData.depart_from_camp || null,
+      depart_from_activity: formData.depart_from_activity || null,
       location: formData.location,
       capacity: formData.capacity ? parseInt(formData.capacity) : null,
       chaperone: formData.chaperone,
@@ -226,7 +228,7 @@ export default function ActivitiesFieldTrips() {
           type: "field_trip",
           event_type: formData.activity_type,
           destination: formData.location || null,
-          departure_time: formData.time || null,
+          departure_time: formData.depart_from_camp || null,
           capacity: formData.capacity ? parseInt(formData.capacity) : null,
           chaperone: formData.chaperone || null,
           status: "pending",
@@ -259,7 +261,8 @@ export default function ActivitiesFieldTrips() {
       title: "",
       description: "",
       activity_type: "",
-      time: "",
+      depart_from_camp: "",
+      depart_from_activity: "",
       location: "",
       capacity: "",
       chaperone: "",
@@ -287,7 +290,8 @@ export default function ActivitiesFieldTrips() {
       title: event.title,
       description: event.description || "",
       activity_type: event.activity_type,
-      time: event.time || "",
+      depart_from_camp: event.depart_from_camp || "",
+      depart_from_activity: event.depart_from_activity || "",
       location: event.location || "",
       capacity: event.capacity?.toString() || "",
       chaperone: event.chaperone || "",
@@ -484,8 +488,12 @@ export default function ActivitiesFieldTrips() {
                           <Badge key={div.id} variant="secondary">{div.name}</Badge>
                         ))}
                       </div>
-                      {event.time && (
-                        <p className="text-sm text-muted-foreground">⏰ {event.time}</p>
+                      {(event.depart_from_camp || event.depart_from_activity) && (
+                        <p className="text-sm text-muted-foreground">
+                          ⏰ {event.depart_from_camp && `Depart: ${event.depart_from_camp}`}
+                          {event.depart_from_camp && event.depart_from_activity && ' | '}
+                          {event.depart_from_activity && `Return: ${event.depart_from_activity}`}
+                        </p>
                       )}
                       {event.location && (
                         <p className="text-sm text-muted-foreground">📍 {event.location}</p>
@@ -609,11 +617,20 @@ export default function ActivitiesFieldTrips() {
             </div>
 
             <div className="space-y-2">
-              <Label>Time (optional)</Label>
+              <Label>Depart from Camp (optional)</Label>
               <Input
                 type="time"
-                value={formData.time}
-                onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+                value={formData.depart_from_camp}
+                onChange={(e) => setFormData({ ...formData, depart_from_camp: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Depart from Activity (optional)</Label>
+              <Input
+                type="time"
+                value={formData.depart_from_activity}
+                onChange={(e) => setFormData({ ...formData, depart_from_activity: e.target.value })}
               />
             </div>
 

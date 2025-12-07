@@ -912,12 +912,18 @@ export default function SportsCalendar() {
             </div>
 
             <div className="space-y-2">
-              <Label>Time (optional)</Label>
+              <Label>{formData.home_away === 'away' ? 'Depart from Camp (optional)' : 'Start Time (optional)'}</Label>
               <Input
                 type="time"
                 value={formData.time}
                 onChange={(e) => setFormData({ ...formData, time: e.target.value })}
               />
+              {formData.home_away === 'away' && (
+                <p className="text-xs text-muted-foreground">Time to depart from camp for away event</p>
+              )}
+              {formData.home_away === 'home' && (
+                <p className="text-xs text-muted-foreground">Event start time for home event</p>
+              )}
             </div>
 
             <div className="space-y-2">
