@@ -19,7 +19,6 @@ interface EditIncidentDialogProps {
 export default function EditIncidentDialog({ open, onOpenChange, incident, onSuccess }: EditIncidentDialogProps) {
   const { currentCompany } = useCompany();
   const [children, setChildren] = useState<any[]>([]);
-  const [staff, setStaff] = useState<any[]>([]);
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
@@ -28,7 +27,6 @@ export default function EditIncidentDialog({ open, onOpenChange, incident, onSuc
     type: "",
     description: "",
     severity: "medium",
-    reporter_id: "",
     reported_by: "",
     status: "open",
   });
@@ -37,7 +35,6 @@ export default function EditIncidentDialog({ open, onOpenChange, incident, onSuc
   useEffect(() => {
     if (open) {
       fetchChildren();
-      fetchStaff();
     }
   }, [open]);
 
@@ -48,7 +45,6 @@ export default function EditIncidentDialog({ open, onOpenChange, incident, onSuc
         type: incident.type,
         description: incident.description,
         severity: incident.severity || "medium",
-        reporter_id: incident.reporter_id || "",
         reported_by: incident.reported_by || "",
         status: incident.status || "open",
       });
@@ -68,20 +64,6 @@ export default function EditIncidentDialog({ open, onOpenChange, incident, onSuc
 
     if (!error && data) {
       setChildren(data);
-    }
-  };
-
-  const fetchStaff = async () => {
-    if (!currentCompany?.id) return;
-    const { data, error } = await supabase
-      .from("staff")
-      .select("*")
-      .eq("status", "active")
-      .eq("company_id", currentCompany.id)
-      .order("name");
-
-    if (!error && data) {
-      setStaff(data);
     }
   };
 
@@ -286,18 +268,11 @@ export default function EditIncidentDialog({ open, onOpenChange, incident, onSuc
 
           <div className="space-y-2">
             <Label>Staff Reporter</Label>
-            <Select value={formData.reporter_id} onValueChange={(value) => setFormData({ ...formData, reporter_id: value })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select staff member" />
-              </SelectTrigger>
-              <SelectContent>
-                {staff.map((member) => (
-                  <SelectItem key={member.id} value={member.id}>
-                    {member.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Input
+              value={formData.reported_by}
+              onChange={(e) => setFormData({ ...formData, reported_by: e.target.value })}
+              placeholder="Enter staff reporter name"
+            />
           </div>
 
           <div className="space-y-2">

@@ -19,6 +19,7 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
+import SearchableChildSelect from "@/components/SearchableChildSelect";
 
 export default function SportsAcademy() {
   const { currentCompany } = useCompany();
@@ -610,18 +611,13 @@ export default function SportsAcademy() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label>Camper *</Label>
-              <Select value={formData.child_id} onValueChange={(value) => setFormData({ ...formData, child_id: value })} required>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select camper" />
-                </SelectTrigger>
-                <SelectContent>
-                  {children && children.map((child) => (
-                    <SelectItem key={child.id} value={child.id}>
-                      {child.name} {child.age && `(${child.age})`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableChildSelect
+                children={children}
+                value={formData.child_id}
+                onValueChange={(value) => setFormData({ ...formData, child_id: value })}
+                placeholder="Type to search for a camper..."
+                required
+              />
             </div>
 
             <div className="space-y-2">

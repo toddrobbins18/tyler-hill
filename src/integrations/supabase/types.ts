@@ -22,6 +22,8 @@ export type Database = {
           company_id: string | null
           created_at: string | null
           created_by: string | null
+          depart_from_activity: string | null
+          depart_from_camp: string | null
           description: string | null
           division_id: string | null
           event_date: string
@@ -41,6 +43,8 @@ export type Database = {
           company_id?: string | null
           created_at?: string | null
           created_by?: string | null
+          depart_from_activity?: string | null
+          depart_from_camp?: string | null
           description?: string | null
           division_id?: string | null
           event_date: string
@@ -60,6 +64,8 @@ export type Database = {
           company_id?: string | null
           created_at?: string | null
           created_by?: string | null
+          depart_from_activity?: string | null
+          depart_from_camp?: string | null
           description?: string | null
           division_id?: string | null
           event_date?: string
@@ -1903,11 +1909,13 @@ export type Database = {
           created_by: string | null
           description: string | null
           division_id: string | null
+          end_time: string | null
           event_date: string
           event_type: string
           id: string
           location: string | null
           season: string | null
+          start_time: string | null
           time_slot: string
           title: string
         }
@@ -1917,11 +1925,13 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           division_id?: string | null
+          end_time?: string | null
           event_date: string
           event_type: string
           id?: string
           location?: string | null
           season?: string | null
+          start_time?: string | null
           time_slot: string
           title: string
         }
@@ -1931,11 +1941,13 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           division_id?: string | null
+          end_time?: string | null
           event_date?: string
           event_type?: string
           id?: string
           location?: string | null
           season?: string | null
+          start_time?: string | null
           time_slot?: string
           title?: string
         }
@@ -2144,6 +2156,7 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           custom_sport_type: string | null
+          depart_time: string | null
           description: string | null
           division_id: string | null
           division_provides_coach: boolean | null
@@ -2158,6 +2171,7 @@ export type Database = {
           opponent: string | null
           season: string | null
           sport_type: string
+          start_time_field: string | null
           team: string | null
           time: string | null
           title: string
@@ -2167,6 +2181,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           custom_sport_type?: string | null
+          depart_time?: string | null
           description?: string | null
           division_id?: string | null
           division_provides_coach?: boolean | null
@@ -2181,6 +2196,7 @@ export type Database = {
           opponent?: string | null
           season?: string | null
           sport_type: string
+          start_time_field?: string | null
           team?: string | null
           time?: string | null
           title: string
@@ -2190,6 +2206,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           custom_sport_type?: string | null
+          depart_time?: string | null
           description?: string | null
           division_id?: string | null
           division_provides_coach?: boolean | null
@@ -2204,6 +2221,7 @@ export type Database = {
           opponent?: string | null
           season?: string | null
           sport_type?: string
+          start_time_field?: string | null
           team?: string | null
           time?: string | null
           title?: string

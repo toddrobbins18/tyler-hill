@@ -100,7 +100,14 @@ export default function ReportingCenter() {
         case 'awards':
           const { data: awards } = await supabase
             .from('awards')
-            .select('*, children(name)')
+            .select(`
+              *, 
+              children(
+                name,
+                division_id,
+                divisions(name)
+              )
+            `)
             .eq('company_id', currentCompany.id)
             .eq('season', selectedSeason)
             .gte('date', startDate || '1900-01-01')
@@ -110,6 +117,7 @@ export default function ReportingCenter() {
           data = awards?.map(a => ({
             Date: a.date,
             Child: a.children?.name || 'Unknown',
+            Division: a.children?.divisions?.name || 'N/A',
             Title: a.title,
             Category: a.category,
             Description: a.description,

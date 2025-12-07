@@ -4,11 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Award } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useCompany } from "@/contexts/CompanyContext";
+import SearchableChildSelect from "@/components/SearchableChildSelect";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 
 interface AddAwardDialogProps {
@@ -83,18 +83,13 @@ export default function AddAwardDialog({ onSuccess, open, onOpenChange }: AddAwa
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label htmlFor="child">Child</Label>
-            <Select value={formData.child_id} onValueChange={(value) => setFormData({ ...formData, child_id: value })} required>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a child" />
-              </SelectTrigger>
-              <SelectContent>
-                {children.map((child) => (
-                  <SelectItem key={child.id} value={child.id}>
-                    {child.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableChildSelect
+              children={children}
+              value={formData.child_id}
+              onValueChange={(value) => setFormData({ ...formData, child_id: value })}
+              placeholder="Type to search for a child..."
+              required
+            />
           </div>
 
           <div>

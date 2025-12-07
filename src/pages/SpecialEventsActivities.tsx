@@ -33,7 +33,8 @@ export default function SpecialEventsActivities() {
     title: "",
     description: "",
     event_type: "",
-    time_slot: "",
+    start_time: "",
+    end_time: "",
     location: "",
     division_ids: [] as string[],
   });
@@ -141,7 +142,11 @@ export default function SpecialEventsActivities() {
       title: formData.title,
       description: formData.description,
       event_type: formData.event_type,
-      time_slot: formData.time_slot,
+      time_slot: formData.start_time && formData.end_time 
+        ? `${formData.start_time} - ${formData.end_time}` 
+        : formData.start_time || formData.end_time || "",
+      start_time: formData.start_time || null,
+      end_time: formData.end_time || null,
       location: formData.location,
       season: selectedSeason,
       company_id: currentCompany?.id,
@@ -214,7 +219,8 @@ export default function SpecialEventsActivities() {
       title: "",
       description: "",
       event_type: "",
-      time_slot: "",
+      start_time: "",
+      end_time: "",
       location: "",
       division_ids: [],
     });
@@ -237,7 +243,8 @@ export default function SpecialEventsActivities() {
       title: event.title,
       description: event.description || "",
       event_type: event.event_type,
-      time_slot: event.time_slot || "",
+      start_time: event.start_time || "",
+      end_time: event.end_time || "",
       location: event.location || "",
       division_ids: divisionLinks?.map(link => link.division_id) || [],
     });
@@ -275,8 +282,18 @@ export default function SpecialEventsActivities() {
     return acc;
   }, {} as Record<string, any[]>);
 
-  const getTimeSlotIcon = (timeSlot: string) => {
-    if (timeSlot.toLowerCase().includes('evening') || timeSlot.toLowerCase().includes('night')) {
+  const formatTimeDisplay = (event: any) => {
+    if (event.start_time && event.end_time) {
+      return `${event.start_time} - ${event.end_time}`;
+    }
+    if (event.start_time) return event.start_time;
+    if (event.end_time) return event.end_time;
+    return event.time_slot || '';
+  };
+
+  const getTimeSlotIcon = (event: any) => {
+    const timeStr = event.start_time || event.time_slot || '';
+    if (timeStr.includes('PM') && parseInt(timeStr) >= 5 || timeStr >= '17:00') {
       return <Moon className="h-4 w-4" />;
     }
     return <Sun className="h-4 w-4" />;
@@ -350,11 +367,11 @@ export default function SpecialEventsActivities() {
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <CardTitle className="text-lg flex items-center gap-2">
-                            {getTimeSlotIcon(event.time_slot)}
+                            {getTimeSlotIcon(event)}
                             {event.title}
                           </CardTitle>
                           <p className="text-sm text-muted-foreground mt-1">
-                            {event.time_slot}
+                            {formatTimeDisplay(event)}
                           </p>
                         </div>
                         <div className="flex gap-1">
@@ -445,19 +462,23 @@ export default function SpecialEventsActivities() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label>Time Slot</Label>
-              <Select value={formData.time_slot} onValueChange={(value) => setFormData({ ...formData, time_slot: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select time slot" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Morning (6-12 PM)">Morning (6-12 PM)</SelectItem>
-                  <SelectItem value="Afternoon (12-5 PM)">Afternoon (12-5 PM)</SelectItem>
-                  <SelectItem value="Evening (5-9 PM)">Evening (5-9 PM)</SelectItem>
-                  <SelectItem value="Night (9 PM+)">Night (9 PM+)</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Start Time</Label>
+                <Input
+                  type="time"
+                  value={formData.start_time}
+                  onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>End Time</Label>
+                <Input
+                  type="time"
+                  value={formData.end_time}
+                  onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
