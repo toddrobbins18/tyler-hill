@@ -917,6 +917,20 @@ export default function SportsCalendar() {
             </div>
 
             <div className="space-y-2">
+              <Label>Home or Away</Label>
+              <Select value={formData.home_away} onValueChange={(value) => setFormData({ ...formData, home_away: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select home/away" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="home">Home</SelectItem>
+                  <SelectItem value="away">Away</SelectItem>
+                  <SelectItem value="neutral">Neutral</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
               <Label>{formData.home_away === 'away' ? 'Depart from Camp (optional)' : 'Start Time (optional)'}</Label>
               <Input
                 type="time"
@@ -953,20 +967,6 @@ export default function SportsCalendar() {
                 value={formData.opponent}
                 onChange={(e) => setFormData({ ...formData, opponent: e.target.value })}
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Home or Away</Label>
-              <Select value={formData.home_away} onValueChange={(value) => setFormData({ ...formData, home_away: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select location" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="home">Home</SelectItem>
-                  <SelectItem value="away">Away</SelectItem>
-                  <SelectItem value="neutral">Neutral</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
 
             <div className="space-y-2">
