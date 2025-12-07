@@ -27,7 +27,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
     if (open) {
       fetchSupervisors();
     }
-  }, [open]);
+  }, [open, currentSeason]);
 
   const fetchSupervisors = async () => {
     if (!currentCompany?.id) return;
@@ -36,6 +36,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
       .select("id, name, role")
       .eq("status", "active")
       .eq("company_id", currentCompany.id)
+      .eq("season", currentSeason)
       .in("role", ["Director", "Supervisor", "Manager"])
       .order("name");
     setSupervisors(data || []);

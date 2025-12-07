@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 
 interface EditNoteDialogProps {
   noteId: string;
@@ -18,6 +19,7 @@ interface EditNoteDialogProps {
 
 export default function EditNoteDialog({ noteId, open, onOpenChange, onSuccess }: EditNoteDialogProps) {
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const [loading, setLoading] = useState(false);
   const [children, setChildren] = useState<any[]>([]);
   const [formData, setFormData] = useState({
@@ -35,7 +37,7 @@ export default function EditNoteDialog({ noteId, open, onOpenChange, onSuccess }
       fetchNote();
       fetchChildren();
     }
-  }, [open, noteId]);
+  }, [open, noteId, currentSeason]);
 
   const fetchNote = async () => {
     const { data, error } = await supabase
@@ -64,6 +66,7 @@ export default function EditNoteDialog({ noteId, open, onOpenChange, onSuccess }
       .select("id, name")
       .eq("status", "active")
       .eq("company_id", currentCompany.id)
+      .eq("season", currentSeason)
       .order("name");
     
     if (data) setChildren(data);

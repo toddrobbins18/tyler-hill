@@ -124,7 +124,9 @@ const TutoringTherapy = () => {
       let query = supabase
         .from("children")
         .select("*")
-        .eq('company_id', currentCompany.id);
+        .eq("status", "active")
+        .eq('company_id', currentCompany.id)
+        .eq("season", currentSeason);
       
       // Apply division filter if user has limited access
       if (divisionFilter !== null && divisionFilter.length > 0) {

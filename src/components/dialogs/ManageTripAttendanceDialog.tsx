@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -26,6 +27,7 @@ export default function ManageTripAttendanceDialog({
   onOpenChange,
 }: ManageTripAttendanceDialogProps) {
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const { checkConflict } = useConflictDetection();
   const [children, setChildren] = useState<any[]>([]);
   const [attendees, setAttendees] = useState<Set<string>>(new Set());
@@ -42,7 +44,7 @@ export default function ManageTripAttendanceDialog({
       fetchDivisionsAndChildren();
       fetchAttendees();
     }
-  }, [open, tripId]);
+  }, [open, tripId, currentSeason]);
 
   const fetchDivisionsAndChildren = async () => {
     if (!currentCompany?.id) return;
@@ -56,6 +58,7 @@ export default function ManageTripAttendanceDialog({
       .select("*, division:divisions(*)")
       .eq("status", "active")
       .eq("company_id", currentCompany.id)
+      .eq("season", currentSeason)
       .order("name");
 
     if (divisionsData) setDivisions(sortDivisionsGirlsFirst(divisionsData));

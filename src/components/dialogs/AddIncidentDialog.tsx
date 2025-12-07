@@ -39,7 +39,7 @@ export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: Add
     if (open) {
       fetchChildren();
     }
-  }, [open]);
+  }, [open, currentSeason]);
 
   const fetchChildren = async () => {
     if (!currentCompany?.id) return;
@@ -48,6 +48,7 @@ export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: Add
       .select("*")
       .eq("status", "active")
       .eq("company_id", currentCompany.id)
+      .eq("season", currentSeason)
       .order("name");
 
     if (!error && data) {
