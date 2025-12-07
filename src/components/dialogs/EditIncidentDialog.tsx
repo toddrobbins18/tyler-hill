@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 import { Search } from "lucide-react";
 
 interface EditIncidentDialogProps {
@@ -19,6 +20,7 @@ interface EditIncidentDialogProps {
 
 export default function EditIncidentDialog({ open, onOpenChange, incident, onSuccess }: EditIncidentDialogProps) {
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const [children, setChildren] = useState<any[]>([]);
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [childSearch, setChildSearch] = useState("");
@@ -38,7 +40,7 @@ export default function EditIncidentDialog({ open, onOpenChange, incident, onSuc
     if (open) {
       fetchChildren();
     }
-  }, [open]);
+  }, [open, currentSeason]);
 
   useEffect(() => {
     if (incident && open) {
@@ -63,6 +65,7 @@ export default function EditIncidentDialog({ open, onOpenChange, incident, onSuc
       .select("*")
       .eq("status", "active")
       .eq("company_id", currentCompany.id)
+      .eq("season", currentSeason)
       .order("name");
 
     if (!error && data) {

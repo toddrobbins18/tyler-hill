@@ -191,7 +191,7 @@ export default function MasterCalendar() {
       setChildren([]);
       return;
     }
-    const { data } = await supabase.from("children").select("id, name").eq("status", "active").eq('company_id', currentCompany.id).order("name");
+    const { data } = await supabase.from("children").select("id, name").eq("status", "active").eq('company_id', currentCompany.id).eq("season", currentSeason).order("name");
     if (data) setChildren(data);
   };
 
@@ -200,7 +200,7 @@ export default function MasterCalendar() {
       setStaff([]);
       return;
     }
-    const { data } = await supabase.from("staff").select("id, name").eq("status", "active").eq('company_id', currentCompany.id).order("name");
+    const { data } = await supabase.from("staff").select("id, name").eq("status", "active").eq('company_id', currentCompany.id).eq("season", currentSeason).order("name");
     if (data) setStaff(data);
   };
 

@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
 
 interface EditAwardDialogProps {
@@ -18,6 +19,7 @@ interface EditAwardDialogProps {
 
 export default function EditAwardDialog({ awardId, open, onOpenChange, onSuccess }: EditAwardDialogProps) {
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const [loading, setLoading] = useState(false);
   const [children, setChildren] = useState<any[]>([]);
   const [formData, setFormData] = useState({
@@ -33,7 +35,7 @@ export default function EditAwardDialog({ awardId, open, onOpenChange, onSuccess
       fetchAward();
       fetchChildren();
     }
-  }, [open, awardId]);
+  }, [open, awardId, currentSeason]);
 
   const fetchAward = async () => {
     const { data, error } = await supabase
@@ -60,6 +62,7 @@ export default function EditAwardDialog({ awardId, open, onOpenChange, onSuccess
       .select("id, name")
       .eq("status", "active")
       .eq("company_id", currentCompany.id)
+      .eq("season", currentSeason)
       .order("name");
     
     if (data) setChildren(data);

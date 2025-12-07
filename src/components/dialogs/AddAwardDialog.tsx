@@ -34,7 +34,7 @@ export default function AddAwardDialog({ onSuccess, open, onOpenChange }: AddAwa
     if (open) {
       fetchChildren();
     }
-  }, [open]);
+  }, [open, currentSeason]);
 
   const fetchChildren = async () => {
     if (!currentCompany?.id) return;
@@ -43,6 +43,7 @@ export default function AddAwardDialog({ onSuccess, open, onOpenChange }: AddAwa
       .select("id, name")
       .eq("status", "active")
       .eq("company_id", currentCompany.id)
+      .eq("season", currentSeason)
       .order("name");
     
     if (data) setChildren(data);

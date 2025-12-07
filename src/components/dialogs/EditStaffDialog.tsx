@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { staffSchema } from "@/lib/validationSchemas";
 import { z } from "zod";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 
 interface EditStaffDialogProps {
   staffId: string;
@@ -20,6 +21,7 @@ interface EditStaffDialogProps {
 
 export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess }: EditStaffDialogProps) {
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const [loading, setLoading] = useState(false);
   const [staff, setStaff] = useState<any>(null);
   const [supervisors, setSupervisors] = useState<any[]>([]);
@@ -32,7 +34,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
       fetchStaff();
       fetchSupervisors();
     }
-  }, [open, staffId]);
+  }, [open, staffId, currentSeason]);
 
   const fetchStaff = async () => {
     const { data, error } = await supabase
@@ -56,6 +58,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
       .select("id, name, role")
       .eq("status", "active")
       .eq("company_id", currentCompany.id)
+      .eq("season", currentSeason)
       .in("role", ["Director", "Supervisor", "Manager"])
       .neq("id", staffId)
       .order("name");
