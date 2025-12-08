@@ -13,7 +13,7 @@ import UserTagManagement from "@/components/admin/UserTagManagement";
 import AutomatedEmailConfig from "@/components/admin/AutomatedEmailConfig";
 import CompanyEmailConfig from "@/components/admin/CompanyEmailConfig";
 import CompanyManagement from "@/pages/admin/CompanyManagement";
-import TylerHillDataImporter from "@/components/admin/TylerHillDataImporter";
+import CampDataImporter from "@/components/admin/CampDataImporter";
 
 export default function Admin() {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -157,7 +157,7 @@ export default function Admin() {
         </TabsContent>
 
         <TabsContent value="import" className="space-y-6">
-          <TylerHillDataImporter />
+          <CampDataImporter />
         </TabsContent>
 
         <TabsContent value="history" className="space-y-6">
