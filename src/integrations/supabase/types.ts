@@ -2409,6 +2409,7 @@ export type Database = {
           id: string
           leader_id: string | null
           name: string
+          person_id: string | null
           phone: string | null
           role: string
           season: string | null
@@ -2429,6 +2430,7 @@ export type Database = {
           id?: string
           leader_id?: string | null
           name: string
+          person_id?: string | null
           phone?: string | null
           role: string
           season?: string | null
@@ -2449,6 +2451,7 @@ export type Database = {
           id?: string
           leader_id?: string | null
           name?: string
+          person_id?: string | null
           phone?: string | null
           role?: string
           season?: string | null
