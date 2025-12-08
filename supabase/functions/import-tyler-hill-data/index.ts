@@ -86,7 +86,7 @@ serve(async (req) => {
       .from('children')
       .select('person_id, id')
       .eq('company_id', companyId)
-      .eq('season', '2025')
+      .eq('season', '2026')
       .in('person_id', allPersonIds);
 
     const existingPersonIdMap = new Map();
@@ -131,7 +131,7 @@ serve(async (req) => {
         person_id: personId,
         name: name,
         company_id: companyId,
-        season: '2025',
+        season: '2026',
         status: 'active',
       });
     }
@@ -208,7 +208,7 @@ serve(async (req) => {
               title = `${awardDetails.type || 'Award'} - ${awardDetails.description}`;
           }
 
-          const awardYear = awardDetails.year || 2025;
+          const awardYear = awardDetails.year || 2026;
           const awardDate = `${awardYear}-07-01`; // July 1st of the award year
 
           awardsToInsert.push({
@@ -217,7 +217,7 @@ serve(async (req) => {
             category: awardDetails.type || 'award',
             description: awardDetails.description,
             date: awardDate,
-            season: '2025',
+            season: '2026',
             company_id: companyId,
           });
         }
@@ -234,7 +234,7 @@ serve(async (req) => {
         .from('awards')
         .select('child_id, title, category, description, date')
         .eq('company_id', companyId)
-        .eq('season', '2025');
+        .eq('season', '2026');
 
       // Create a Set of existing award keys for fast lookup
       const existingAwardKeys = new Set(
