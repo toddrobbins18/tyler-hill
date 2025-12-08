@@ -541,7 +541,7 @@ serve(async (req) => {
         }
 
         const clientId = clientIds[0]; // Use first client ID
-        const seasonId = season_id || new Date().getFullYear(); // Default to current year
+        const seasonId = season_id || 2026; // Default to 2026 season
 
         // Sync all data types
         const divisionResult = await syncDivisions(supabase, token, subscriptionKey, clientId, company.id);
