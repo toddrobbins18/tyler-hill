@@ -77,23 +77,68 @@ serve(async (req) => {
     const subscriptionKey = subscriptionKeyResult;
 
     console.log('Testing CampMinder connection for company:', company_id);
+    console.log('API Key length:', apiKey?.length || 0);
+    console.log('Subscription Key length:', subscriptionKey?.length || 0);
 
-    // Call CampMinder auth endpoint to get JWT token
-    const authResponse = await fetch('https://webapi.campminder.com/api/auth/GetJWTWithApiKey', {
-      method: 'POST',
+    // Call CampMinder auth endpoint using correct format from documentation
+    // GET https://api.campminder.com/auth/apikey
+    // Headers: Authorization: Bearer {apiKey}, Ocp-Apim-Subscription-Key: {subscriptionKey}
+    const authResponse = await fetch('https://api.campminder.com/auth/apikey', {
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
         'Ocp-Apim-Subscription-Key': subscriptionKey,
       },
-      body: JSON.stringify({
-        ApiKey: apiKey,
-        SubscriptionKey: subscriptionKey,
-      }),
     });
 
-    const authData = await authResponse.json();
+    console.log('CampMinder auth response status:', authResponse.status);
+    console.log('CampMinder auth response headers:', Object.fromEntries(authResponse.headers.entries()));
 
-    if (!authResponse.ok || !authData.Success) {
+    // Check if response is JSON before parsing
+    const contentType = authResponse.headers.get('content-type');
+    const responseText = await authResponse.text();
+    
+    console.log('CampMinder auth response content-type:', contentType);
+    console.log('CampMinder auth response body (first 500 chars):', responseText.substring(0, 500));
+
+    if (!contentType?.includes('application/json')) {
+      console.error('CampMinder returned non-JSON response:', responseText.substring(0, 1000));
+      
+      // Update last test status
+      await supabase
+        .from('companies')
+        .update({ 
+          campminder_last_sync_at: new Date().toISOString(),
+        })
+        .eq('id', company_id);
+
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: `CampMinder returned unexpected response (status ${authResponse.status}). The API may be down or the endpoint URL may have changed.`,
+          details: responseText.substring(0, 200)
+        }),
+        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    let authData;
+    try {
+      authData = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Failed to parse CampMinder response as JSON:', parseError);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Failed to parse CampMinder response',
+          details: responseText.substring(0, 200)
+        }),
+        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check for successful response - expecting Token and ClientIDs
+    if (!authResponse.ok || !authData.Token) {
       console.error('CampMinder auth failed:', authData);
       
       // Update last test status
@@ -107,13 +152,14 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: authData.ErrorText || 'Authentication failed' 
+          error: authData.Message || authData.error || 'Authentication failed - check your API Key and Subscription Key'
         }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     console.log('CampMinder connection successful for company:', company_id);
+    console.log('ClientIDs:', authData.ClientIDs);
 
     // Update last sync timestamp on success
     await supabase
@@ -127,6 +173,7 @@ serve(async (req) => {
       JSON.stringify({ 
         success: true, 
         message: 'Connection successful',
+        clientIds: authData.ClientIDs,
         token_expires_in: '1 hour'
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

@@ -6,8 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// CampMinder API Base URLs
-const CM_AUTH_URL = 'https://webapi.campminder.com/api/auth/GetJWTWithApiKey';
+// CampMinder API Base URLs (per official documentation)
+const CM_AUTH_URL = 'https://api.campminder.com/auth/apikey';
 const CM_PERSONS_URL = 'https://api.campminder.com/persons';
 const CM_STAFF_URL = 'https://api.campminder.com/staff';
 const CM_DIVISIONS_URL = 'https://api.campminder.com/divisions';
@@ -23,30 +23,43 @@ interface SyncResult {
 
 async function getJwtToken(subscriptionKey: string, apiKey: string): Promise<{ token: string; clientIds: string[] }> {
   console.log('Authenticating with CampMinder...');
+  console.log('API Key length:', apiKey?.length || 0);
+  console.log('Subscription Key length:', subscriptionKey?.length || 0);
   
+  // Use correct auth endpoint: GET with Bearer token in Authorization header
   const authResponse = await fetch(CM_AUTH_URL, {
-    method: 'POST',
+    method: 'GET',
     headers: {
-      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
       'Ocp-Apim-Subscription-Key': subscriptionKey,
     },
-    body: JSON.stringify({
-      ApiKey: apiKey,
-      SubscriptionKey: subscriptionKey,
-    }),
   });
 
-  if (!authResponse.ok) {
-    throw new Error(`Authentication failed: ${authResponse.status}`);
-  }
-
-  const authData = await authResponse.json();
+  console.log('Auth response status:', authResponse.status);
   
-  if (!authData.Token) {
-    throw new Error('No token received from CampMinder');
+  // Check content type before parsing
+  const contentType = authResponse.headers.get('content-type');
+  const responseText = await authResponse.text();
+  
+  console.log('Auth response content-type:', contentType);
+  console.log('Auth response body (first 500 chars):', responseText.substring(0, 500));
+
+  if (!contentType?.includes('application/json')) {
+    throw new Error(`CampMinder returned non-JSON response (status ${authResponse.status}): ${responseText.substring(0, 200)}`);
   }
 
-  const clientIds = authData.ClientIDs ? authData.ClientIDs.split(',').map((id: string) => id.trim()) : [];
+  let authData;
+  try {
+    authData = JSON.parse(responseText);
+  } catch (parseError) {
+    throw new Error(`Failed to parse CampMinder response: ${responseText.substring(0, 200)}`);
+  }
+
+  if (!authResponse.ok || !authData.Token) {
+    throw new Error(`Authentication failed: ${authData.Message || authData.error || JSON.stringify(authData)}`);
+  }
+
+  const clientIds = authData.ClientIDs ? String(authData.ClientIDs).split(',').map((id: string) => id.trim()) : [];
   
   console.log(`Authenticated successfully. ClientIDs: ${clientIds.join(', ')}`);
   
