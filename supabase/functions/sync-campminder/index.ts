@@ -271,9 +271,9 @@ async function performFullSync(
       progress: { step: 'Starting sync' },
     });
 
-    // 1. Auto-detect season if not provided
-    const season = seasonId || await detectActiveSeason(token, subscriptionKey, clientId);
-    console.log(`\n[Season] Using season: ${season}\n`);
+    // 1. Force 2026 season for now - can be made dynamic later for 2027
+    const season = '2026';
+    console.log(`\n[Season] Using season: ${season} (hardcoded for now)\n`);
     
     await updateSyncJob(supabase, jobId, {
       progress: { step: 'Season detected', season },
@@ -308,9 +308,10 @@ async function performFullSync(
       );
 
       const divisionData = divisions.map((d: any, index: number) => {
-        let gender = 'coed';
-        if (d.GenderID === 0) gender = 'female';
-        else if (d.GenderID === 1) gender = 'male';
+        // Map to standard values that match database constraints
+        let gender = 'Coed';
+        if (d.GenderID === 0) gender = 'Girls';
+        else if (d.GenderID === 1) gender = 'Boys';
         
         const name = d.Name;
         const existingId = existingDivisionMap.get(name.toLowerCase());
@@ -354,10 +355,29 @@ async function performFullSync(
       total_counts: { divisions: divisions.length },
     });
 
-    // 3. Fetch ALL persons with contact details in ONE call (eliminates per-staff API calls!)
+    // 3. FIRST: Fetch enrolled attendees to filter campers (status=2 = enrolled)
+    console.log('\n--- FETCHING ENROLLED ATTENDEES ---');
+    await updateSyncJob(supabase, jobId, {
+      progress: { step: 'Fetching enrolled attendees', divisions: divisions.length, season },
+    });
+
+    const enrolledAttendees = await fetchAllPaginated(
+      `${CM_SESSIONS_URL}/attendees`,
+      token,
+      subscriptionKey,
+      { clientid: clientId, seasonid: season, status: 2 }  // status=2 = enrolled
+    );
+    console.log(`Found ${enrolledAttendees.length} enrolled attendees`);
+
+    // Create set of enrolled person IDs for quick lookup
+    const enrolledPersonIds = new Set(
+      enrolledAttendees.map((a: any) => String(a.PersonID))
+    );
+
+    // 4. Fetch ALL persons with contact details
     console.log('\n--- FETCHING ALL PERSONS ---');
     await updateSyncJob(supabase, jobId, {
-      progress: { step: 'Fetching persons', divisions: divisions.length, season },
+      progress: { step: 'Fetching persons', divisions: divisions.length, enrolledAttendees: enrolledAttendees.length, season },
     });
 
     const allPersons = await fetchAllPaginated(
@@ -373,11 +393,14 @@ async function performFullSync(
     );
     console.log(`Found ${allPersons.length} total persons`);
 
-    // Separate campers from non-campers
-    const campers = allPersons.filter((p: any) => p.CamperDetails);
+    // Filter to ONLY enrolled campers (not all 25,000+ persons with CamperDetails)
+    const campers = allPersons.filter((p: any) => 
+      p.CamperDetails && enrolledPersonIds.has(String(p.ID))
+    );
     const nonCampers = allPersons.filter((p: any) => !p.CamperDetails);
     
-    console.log(`Separated: ${campers.length} campers, ${nonCampers.length} non-campers`);
+    const totalWithCamperDetails = allPersons.filter((p: any) => p.CamperDetails).length;
+    console.log(`Filtered to ${campers.length} ENROLLED campers (from ${totalWithCamperDetails} total with CamperDetails)`);
 
     // 4. Sync campers with batch upsert
     console.log('\n--- SYNCING CAMPERS ---');
