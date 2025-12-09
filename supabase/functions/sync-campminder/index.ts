@@ -442,10 +442,40 @@ async function performFullSync(
     );
     console.log(`Found ${enrolledAttendees.length} enrolled attendees`);
 
+    // Debug: Log sample attendee structure to understand available fields
+    if (enrolledAttendees.length > 0) {
+      console.log('[DEBUG] Sample attendee record:', JSON.stringify(enrolledAttendees[0], null, 2));
+    }
+
     // Create set of enrolled person IDs for quick lookup
     const enrolledPersonIds = new Set(
       enrolledAttendees.map((a: any) => String(a.PersonID))
     );
+
+    // Fetch all sessions to get SessionID -> DivisionID mapping
+    // (DivisionID is on Session, not on Attendee)
+    console.log('\n--- FETCHING SESSIONS FOR DIVISION LOOKUP ---');
+    const sessions = await fetchAllPaginated(
+      CM_SESSIONS_URL,
+      token,
+      subscriptionKey,
+      { clientid: clientId, seasonid: season }
+    );
+    console.log(`Found ${sessions.length} sessions for division lookup`);
+
+    // Debug: Log sample session structure
+    if (sessions.length > 0) {
+      console.log('[DEBUG] Sample session record:', JSON.stringify(sessions[0], null, 2));
+    }
+
+    // Build SessionID -> DivisionID map
+    const sessionDivisionMap = new Map<number, number>();
+    for (const session of sessions) {
+      if (session.ID && session.DivisionID) {
+        sessionDivisionMap.set(session.ID, session.DivisionID);
+      }
+    }
+    console.log(`Built session->division map with ${sessionDivisionMap.size} entries`);
 
     // Create PersonID -> Our Division ID mapping from enrolled attendees
     const personDivisionMap = new Map<string, string>();
@@ -454,13 +484,18 @@ async function performFullSync(
     const unmappedDivisionIds = new Set<number>();
     
     for (const attendee of enrolledAttendees) {
-      const ourDivId = cmDivisionIdMap.get(attendee.DivisionID);
+      // Try direct DivisionID first, then fall back to session-based lookup
+      const cmDivisionId = attendee.DivisionID || sessionDivisionMap.get(attendee.SessionID);
+      const ourDivId = cmDivisionIdMap.get(cmDivisionId);
+      
       if (ourDivId) {
         personDivisionMap.set(String(attendee.PersonID), ourDivId);
         mappedToDivision++;
       } else {
         unmappedToDivision++;
-        unmappedDivisionIds.add(attendee.DivisionID);
+        if (cmDivisionId) {
+          unmappedDivisionIds.add(cmDivisionId);
+        }
       }
     }
     
