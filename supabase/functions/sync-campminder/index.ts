@@ -600,6 +600,98 @@ async function performFullSync(
       }
     }
 
+    // Step 1: Collect all parent PersonIDs from campers' Relatives
+    console.log('\n--- FETCHING PARENT EMAILS ---');
+    const parentPersonIds = new Set<string>();
+    const camperToParentMap = new Map<string, string>(); // camperPersonId -> parentPersonId
+    
+    for (const camper of campers) {
+      if (camper.Relatives && Array.isArray(camper.Relatives)) {
+        // Find primary guardian first, fallback to any guardian
+        const primaryGuardian = camper.Relatives.find((r: any) => r.IsGuardian && r.IsPrimary);
+        const anyGuardian = camper.Relatives.find((r: any) => r.IsGuardian);
+        const guardian = primaryGuardian || anyGuardian;
+        
+        if (guardian?.ID) {
+          parentPersonIds.add(String(guardian.ID));
+          camperToParentMap.set(String(camper.ID), String(guardian.ID));
+        }
+      }
+    }
+    console.log(`Found ${parentPersonIds.size} unique parent PersonIDs from ${camperToParentMap.size} campers`);
+    
+    // Debug: Log sample camper with Relatives
+    const sampleWithRelatives = campers.find((c: any) => c.Relatives?.length > 0);
+    if (sampleWithRelatives) {
+      console.log('[DEBUG] Sample Camper Relatives:', JSON.stringify(sampleWithRelatives.Relatives?.slice(0, 2), null, 2));
+    }
+
+    // Step 2: Batch fetch parent details to get their emails
+    const parentEmailMap = new Map<string, string>(); // parentPersonId -> email
+    const parentPhoneMap = new Map<string, string>(); // parentPersonId -> phone
+    
+    if (parentPersonIds.size > 0) {
+      const parentIdArray = Array.from(parentPersonIds);
+      const parentChunks: string[][] = [];
+      for (let i = 0; i < parentIdArray.length; i += 50) {
+        parentChunks.push(parentIdArray.slice(i, i + 50));
+      }
+      
+      console.log(`Fetching parent details in ${parentChunks.length} batch(es)...`);
+      
+      for (const chunk of parentChunks) {
+        try {
+          const parentUrl = `${CM_PERSONS_URL}?clientId=${clientId}&seasonID=${season}&personIDs=${chunk.join(',')}&includecontactdetails=true`;
+          console.log(`[Parent API] Fetching ${chunk.length} parents...`);
+          
+          const parentResponse = await rateLimitedFetch(parentUrl, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Ocp-Apim-Subscription-Key': subscriptionKey,
+              'Content-Type': 'application/json',
+            },
+          });
+          
+          if (parentResponse.ok) {
+            const parentData = await parentResponse.json();
+            const parents = parentData?.Value || parentData || [];
+            console.log(`[Parent API] Received ${Array.isArray(parents) ? parents.length : 0} parent records`);
+            
+            if (Array.isArray(parents) && parents.length > 0) {
+              // Debug: Log first parent to see structure
+              console.log('[DEBUG] Sample Parent ContactDetails:', JSON.stringify(parents[0]?.ContactDetails, null, 2));
+              
+              for (const parent of parents) {
+                const parentId = String(parent.ID);
+                
+                // Get login email (preferred) or first email
+                if (parent.ContactDetails?.Emails?.length > 0) {
+                  const loginEmail = parent.ContactDetails.Emails.find((e: any) => e.IsLogin);
+                  const email = loginEmail?.Address || parent.ContactDetails.Emails[0]?.Address;
+                  if (email) {
+                    parentEmailMap.set(parentId, email);
+                  }
+                }
+                
+                // Get phone
+                if (parent.ContactDetails?.PhoneNumbers?.length > 0) {
+                  parentPhoneMap.set(parentId, parent.ContactDetails.PhoneNumbers[0].Number);
+                }
+              }
+            }
+          } else {
+            const errorText = await parentResponse.text();
+            console.error(`[Parent API] Error ${parentResponse.status}: ${errorText.substring(0, 200)}`);
+          }
+        } catch (err) {
+          console.error('[Parent API] Error fetching parent batch:', err);
+        }
+      }
+      
+      console.log(`[Parent API] Retrieved ${parentEmailMap.size} parent emails, ${parentPhoneMap.size} parent phones`);
+    }
+
     if (campers.length > 0) {
       // Map grade IDs to names
       const gradeMap: Record<number, string> = {
@@ -618,13 +710,16 @@ async function performFullSync(
         // Get grade
         const grade = gradeMap[person.CamperDetails?.CampGradeID] || null;
         
-        // Get contact info
-        let guardianEmail = '';
-        let guardianPhone = '';
-        if (person.ContactDetails?.Emails?.length > 0) {
+        // Get parent contact info (Step 3 & 4: Map parent emails to campers)
+        const parentPersonId = camperToParentMap.get(String(person.ID));
+        let guardianEmail = parentPersonId ? parentEmailMap.get(parentPersonId) || '' : '';
+        let guardianPhone = parentPersonId ? parentPhoneMap.get(parentPersonId) || '' : '';
+        
+        // Fallback to camper's own contact info if parent not found
+        if (!guardianEmail && person.ContactDetails?.Emails?.length > 0) {
           guardianEmail = person.ContactDetails.Emails[0].Address;
         }
-        if (person.ContactDetails?.PhoneNumbers?.length > 0) {
+        if (!guardianPhone && person.ContactDetails?.PhoneNumbers?.length > 0) {
           guardianPhone = person.ContactDetails.PhoneNumbers[0].Number;
         }
 
