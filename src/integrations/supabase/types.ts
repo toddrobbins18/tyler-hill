@@ -815,6 +815,7 @@ export type Database = {
           created_at: string | null
           gender: string
           id: string
+          is_active: boolean
           name: string
           sort_order: number
         }
@@ -823,6 +824,7 @@ export type Database = {
           created_at?: string | null
           gender: string
           id?: string
+          is_active?: boolean
           name: string
           sort_order: number
         }
@@ -831,6 +833,7 @@ export type Database = {
           created_at?: string | null
           gender?: string
           id?: string
+          is_active?: boolean
           name?: string
           sort_order?: number
         }
