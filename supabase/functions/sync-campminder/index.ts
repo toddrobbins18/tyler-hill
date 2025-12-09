@@ -10,7 +10,8 @@ const CM_SESSIONS_URL = 'https://api.campminder.com/sessions';
 const CM_V1_CAMPERS_URL = 'https://webapi.campminder.com/api/entity/person/camper/GetCampers';
 // V1 API endpoint for family/guardian data (more reliable than V2 Relatives)
 const CM_V1_FAMILY_URL = 'https://webapi.campminder.com/api/entity/family/GetFamilyPersons';
-const CM_V1_EMAILS_URL = 'https://webapi.campminder.com/api/entity/contact/GetEmailAddresses';
+// V1 API endpoint for person data with email addresses
+const CM_V1_PERSONS_URL = 'https://webapi.campminder.com/api/entity/person/GetPersons';
 
 // Rate limiting: 250ms between calls (4 calls/sec = 240/min)
 const RATE_LIMIT_DELAY_MS = 250;
@@ -604,7 +605,8 @@ async function performFullSync(
       }
     }
 
-    // Step 1: Use V1 Family API to get parent/guardian PersonIDs (V2 Relatives doesn't work)
+    // Step 1: Use V1 Family API to get parent/guardian PersonIDs
+    // API returns: FamilyID, PersonID, RoleID (1=Parent1, 2=Parent2, 3=PrimaryFamilyChild, 4=SecondaryFamilyChild)
     console.log('\n--- FETCHING PARENT EMAILS VIA V1 FAMILY API ---');
     const parentPersonIds = new Set<string>();
     const camperToParentMap = new Map<string, string>(); // camperPersonId -> parentPersonId
@@ -618,8 +620,13 @@ async function performFullSync(
     
     console.log(`Fetching family data for ${camperPersonIdArray.length} campers in ${familyChunks.length} batch(es)...`);
     
+    // Group all family records by FamilyID to map campers to parents
+    const familyGroups = new Map<number, { parents: string[], children: string[] }>();
+    const camperPersonIdSet = new Set(camperPersonIdArray);
+    
     for (const chunk of familyChunks) {
       try {
+        // Include Roles filter: 1,2 = parents, 3,4 = children
         const familyUrl = `${CM_V1_FAMILY_URL}?PersonIDs=${chunk.join(',')}`;
         console.log(`[V1 Family API] Fetching family for ${chunk.length} campers...`);
         
@@ -637,47 +644,36 @@ async function performFullSync(
           const familyResults = familyData?.Result || familyData || [];
           console.log(`[V1 Family API] Received ${Array.isArray(familyResults) ? familyResults.length : 0} family records`);
           
-          // Debug: Log sample family record to understand structure
+          // Debug: Log first 3 family records to understand structure
           if (Array.isArray(familyResults) && familyResults.length > 0) {
-            console.log('[DEBUG] Sample V1 Family Record:', JSON.stringify(familyResults[0], null, 2));
+            console.log('[DEBUG] Sample V1 Family Records (first 3):');
+            familyResults.slice(0, 3).forEach((r: any, i: number) => {
+              console.log(`  [${i}] FamilyID=${r.FamilyID}, PersonID=${r.PersonID}, RoleID=${r.RoleID}, Role=${r.Role}`);
+            });
           }
           
           if (Array.isArray(familyResults)) {
-            for (const family of familyResults) {
-              // Each family record should have PersonID (camper) and related parent info
-              const camperPersonId = String(family.PersonID || family.CamperPersonID);
+            // Group by FamilyID
+            for (const record of familyResults) {
+              const familyId = record.FamilyID;
+              const personId = String(record.PersonID);
+              const roleId = record.RoleID || record.Role;
               
-              // Look for parent/guardian in family members
-              // Common fields: GuardianPersonID, Parent1PersonID, FamilyMembers array, etc.
-              let parentId = null;
-              
-              if (family.GuardianPersonID) {
-                parentId = String(family.GuardianPersonID);
-              } else if (family.Parent1PersonID) {
-                parentId = String(family.Parent1PersonID);
-              } else if (family.PrimaryGuardianPersonID) {
-                parentId = String(family.PrimaryGuardianPersonID);
-              } else if (family.FamilyMembers && Array.isArray(family.FamilyMembers)) {
-                // Find guardian in family members
-                const guardian = family.FamilyMembers.find((m: any) => 
-                  m.IsGuardian || m.IsPrimaryGuardian || m.RelationshipType === 'Parent' || m.RelationshipType === 'Guardian'
-                );
-                if (guardian?.PersonID) {
-                  parentId = String(guardian.PersonID);
-                }
-              } else if (family.Persons && Array.isArray(family.Persons)) {
-                // Alternative structure
-                const guardian = family.Persons.find((p: any) => 
-                  p.IsGuardian || p.PersonType === 'Parent' || p.PersonType === 'Guardian'
-                );
-                if (guardian?.ID || guardian?.PersonID) {
-                  parentId = String(guardian.ID || guardian.PersonID);
-                }
+              if (!familyGroups.has(familyId)) {
+                familyGroups.set(familyId, { parents: [], children: [] });
               }
               
-              if (parentId && camperPersonId) {
-                parentPersonIds.add(parentId);
-                camperToParentMap.set(camperPersonId, parentId);
+              const group = familyGroups.get(familyId)!;
+              
+              // RoleID: 1=Parent1, 2=Parent2, 3=PrimaryFamilyChild, 4=SecondaryFamilyChild
+              if (roleId === 1 || roleId === 2) {
+                if (!group.parents.includes(personId)) {
+                  group.parents.push(personId);
+                }
+              } else if (roleId === 3 || roleId === 4) {
+                if (!group.children.includes(personId)) {
+                  group.children.push(personId);
+                }
               }
             }
           }
@@ -690,9 +686,27 @@ async function performFullSync(
       }
     }
     
-    console.log(`[V1 Family API] Found ${parentPersonIds.size} unique parent PersonIDs from ${camperToParentMap.size} campers`);
+    console.log(`[V1 Family API] Found ${familyGroups.size} family groups`);
+    
+    // Now map each camper to their parent(s) via FamilyID grouping
+    for (const [familyId, group] of familyGroups) {
+      // Find children that are our enrolled campers
+      const enrolledChildren = group.children.filter(childId => camperPersonIdSet.has(childId));
+      
+      // Get first parent (prioritize Parent1)
+      const primaryParent = group.parents[0];
+      
+      if (primaryParent && enrolledChildren.length > 0) {
+        parentPersonIds.add(primaryParent);
+        for (const childId of enrolledChildren) {
+          camperToParentMap.set(childId, primaryParent);
+        }
+      }
+    }
+    
+    console.log(`[V1 Family API] Mapped ${camperToParentMap.size} campers to ${parentPersonIds.size} unique parents`);
 
-    // Step 2: Fetch parent emails using V1 Emails API (more reliable than V2)
+    // Step 2: Fetch parent contact info using V1 GetPersons API (returns EmailAddresses and PhoneNumbers)
     const parentEmailMap = new Map<string, string>(); // parentPersonId -> email
     const parentPhoneMap = new Map<string, string>(); // parentPersonId -> phone
     
@@ -703,15 +717,15 @@ async function performFullSync(
         parentChunks.push(parentIdArray.slice(i, i + 50));
       }
       
-      console.log(`Fetching parent emails in ${parentChunks.length} batch(es) using V1 Emails API...`);
+      console.log(`Fetching parent contact info in ${parentChunks.length} batch(es) using V1 GetPersons API...`);
       
       for (const chunk of parentChunks) {
         try {
-          // Use V1 GetEmailAddresses endpoint for parent emails
-          const emailsUrl = `${CM_V1_EMAILS_URL}?PersonIDs=${chunk.join(',')}`;
-          console.log(`[V1 Emails API] Fetching emails for ${chunk.length} parents...`);
+          // Use V1 GetPersons endpoint which returns EmailAddresses and PhoneNumbers
+          const personsUrl = `${CM_V1_PERSONS_URL}?PersonIDs=${chunk.join(',')}`;
+          console.log(`[V1 Persons API] Fetching contact info for ${chunk.length} parents...`);
           
-          const emailsResponse = await rateLimitedFetch(emailsUrl, {
+          const personsResponse = await rateLimitedFetch(personsUrl, {
             method: 'GET',
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -720,33 +734,45 @@ async function performFullSync(
             },
           });
           
-          if (emailsResponse.ok) {
-            const emailsData = await emailsResponse.json();
-            const emailResults = emailsData?.Result || emailsData || [];
-            console.log(`[V1 Emails API] Received ${Array.isArray(emailResults) ? emailResults.length : 0} email records`);
+          if (personsResponse.ok) {
+            const personsData = await personsResponse.json();
+            const personResults = personsData?.Result || personsData || [];
+            console.log(`[V1 Persons API] Received ${Array.isArray(personResults) ? personResults.length : 0} person records`);
             
-            // Debug: Log sample email record
-            if (Array.isArray(emailResults) && emailResults.length > 0) {
-              console.log('[DEBUG] Sample V1 Email Record:', JSON.stringify(emailResults[0], null, 2));
+            // Debug: Log sample person record with email structure
+            if (Array.isArray(personResults) && personResults.length > 0) {
+              const sample = personResults[0];
+              console.log('[DEBUG] Sample V1 Person Record:');
+              console.log(`  ID=${sample.ID}, Name=${sample.Name?.FirstName} ${sample.Name?.LastName}`);
+              console.log(`  EmailAddresses: ${JSON.stringify(sample.EmailAddresses || [])}`);
+              console.log(`  PhoneNumbers: ${JSON.stringify(sample.PhoneNumbers || [])}`);
             }
             
-            if (Array.isArray(emailResults)) {
-              for (const emailRecord of emailResults) {
-                const personId = String(emailRecord.PersonID);
-                // Prefer login email, then any email
-                const email = emailRecord.IsLogin ? emailRecord.Address : 
-                              (emailRecord.Address || emailRecord.Email || emailRecord.EmailAddress);
-                if (email && parentPersonIds.has(personId)) {
-                  // Only set if not already set (prioritize login email)
-                  if (!parentEmailMap.has(personId) || emailRecord.IsLogin) {
+            if (Array.isArray(personResults)) {
+              for (const person of personResults) {
+                const personId = String(person.ID);
+                
+                // Extract email (prioritize login email)
+                if (person.EmailAddresses && Array.isArray(person.EmailAddresses) && person.EmailAddresses.length > 0) {
+                  const loginEmail = person.EmailAddresses.find((e: any) => e.IsLoginEmail);
+                  const email = loginEmail?.Email || person.EmailAddresses[0]?.Email;
+                  if (email) {
                     parentEmailMap.set(personId, email);
+                  }
+                }
+                
+                // Extract phone
+                if (person.PhoneNumbers && Array.isArray(person.PhoneNumbers) && person.PhoneNumbers.length > 0) {
+                  const phone = person.PhoneNumbers[0]?.Number;
+                  if (phone) {
+                    parentPhoneMap.set(personId, phone);
                   }
                 }
               }
             }
           } else {
-            const errorText = await emailsResponse.text();
-            console.error(`[V1 Emails API] Error ${emailsResponse.status}: ${errorText.substring(0, 200)}`);
+            const errorText = await personsResponse.text();
+            console.error(`[V1 Persons API] Error ${personsResponse.status}: ${errorText.substring(0, 200)}`);
             
             // Fallback to V2 API if V1 fails
             console.log('[Fallback] Trying V2 API for parent contact details...');
@@ -780,7 +806,7 @@ async function performFullSync(
             }
           }
         } catch (err) {
-          console.error('[V1 Emails API] Error fetching email batch:', err);
+          console.error('[V1 Persons API] Error fetching parent batch:', err);
         }
       }
       
