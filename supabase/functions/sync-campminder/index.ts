@@ -16,6 +16,34 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Normalize division names for flexible matching
+// Handles: "Freshmen" -> "Freshman", "Cadets" -> "Cadet", etc.
+function normalizeDivisionName(name: string): string {
+  let normalized = name.toLowerCase().trim();
+  
+  // Common plural -> singular transformations
+  const pluralMappings: Record<string, string> = {
+    'freshmen': 'freshman',
+    'sophomores': 'sophomore',
+    'juniors': 'junior',
+    'seniors': 'senior',
+    'cadets': 'cadet',
+    'pioneers': 'pioneer',
+    'rangers': 'ranger',
+    'explorers': 'explorer',
+    'cubs': 'cub',
+    'wolves': 'wolf',
+  };
+  
+  // Apply plural mappings
+  for (const [plural, singular] of Object.entries(pluralMappings)) {
+    // Replace at word boundary to avoid partial matches
+    normalized = normalized.replace(new RegExp(`\\b${plural}\\b`, 'g'), singular);
+  }
+  
+  return normalized;
+}
+
 // Declare EdgeRuntime for background task processing
 declare const EdgeRuntime: {
   waitUntil(promise: Promise<any>): void;
@@ -343,24 +371,56 @@ async function performFullSync(
         }
       }
       
-      // Refresh division map with all divisions
+      // Refresh division map with all divisions (store both exact AND normalized names)
       const { data: allDivisions } = await supabase
         .from('divisions')
         .select('id, name')
         .eq('company_id', companyId);
       
+      // Create map with both exact lowercase and normalized names for flexible matching
+      const normalizedDivisionMap = new Map<string, string>();
       for (const d of allDivisions || []) {
-        divisionIdMap.set(d.name.toLowerCase(), d.id);
+        const exactKey = d.name.toLowerCase();
+        const normalizedKey = normalizeDivisionName(d.name);
+        divisionIdMap.set(exactKey, d.id);
+        normalizedDivisionMap.set(normalizedKey, d.id);
+        console.log(`[Division Map] "${d.name}" -> exact: "${exactKey}", normalized: "${normalizedKey}"`);
       }
       
-      // Populate CampMinder DivisionID -> Our Division ID mapping
+      // Populate CampMinder DivisionID -> Our Division ID mapping with flexible matching
+      let matchedCount = 0;
+      let unmatchedDivisions: string[] = [];
+      
       for (const d of divisions) {
-        const ourDivId = divisionIdMap.get(d.Name.toLowerCase());
+        const cmName = d.Name;
+        const exactKey = cmName.toLowerCase();
+        const normalizedKey = normalizeDivisionName(cmName);
+        
+        // Try exact match first, then normalized match
+        let ourDivId = divisionIdMap.get(exactKey);
+        if (!ourDivId) {
+          ourDivId = normalizedDivisionMap.get(normalizedKey);
+          if (ourDivId) {
+            console.log(`[Division Match] Normalized match: CM "${cmName}" -> normalized "${normalizedKey}" -> matched!`);
+          }
+        }
+        
         if (ourDivId) {
           cmDivisionIdMap.set(d.ID, ourDivId);
+          matchedCount++;
+        } else {
+          unmatchedDivisions.push(`"${cmName}" (ID: ${d.ID})`);
         }
       }
-      console.log(`Synced ${divisions.length} divisions, mapped ${cmDivisionIdMap.size} CampMinder division IDs`);
+      
+      console.log(`\n[Division Mapping Summary]`);
+      console.log(`  Total CampMinder divisions: ${divisions.length}`);
+      console.log(`  Successfully matched: ${matchedCount}`);
+      console.log(`  Our active divisions: ${allDivisions?.length || 0}`);
+      
+      if (unmatchedDivisions.length > 0) {
+        console.log(`  UNMATCHED CampMinder divisions: ${unmatchedDivisions.join(', ')}`);
+      }
     }
 
     await updateSyncJob(supabase, jobId, {
@@ -389,13 +449,29 @@ async function performFullSync(
 
     // Create PersonID -> Our Division ID mapping from enrolled attendees
     const personDivisionMap = new Map<string, string>();
+    let mappedToDivision = 0;
+    let unmappedToDivision = 0;
+    const unmappedDivisionIds = new Set<number>();
+    
     for (const attendee of enrolledAttendees) {
       const ourDivId = cmDivisionIdMap.get(attendee.DivisionID);
       if (ourDivId) {
         personDivisionMap.set(String(attendee.PersonID), ourDivId);
+        mappedToDivision++;
+      } else {
+        unmappedToDivision++;
+        unmappedDivisionIds.add(attendee.DivisionID);
       }
     }
-    console.log(`Mapped ${personDivisionMap.size} campers to divisions`);
+    
+    console.log(`\n[Camper Division Mapping Summary]`);
+    console.log(`  Total enrolled attendees: ${enrolledAttendees.length}`);
+    console.log(`  Mapped to divisions: ${mappedToDivision}`);
+    console.log(`  NOT mapped (division not found): ${unmappedToDivision}`);
+    
+    if (unmappedDivisionIds.size > 0) {
+      console.log(`  Unmatched CampMinder Division IDs: ${Array.from(unmappedDivisionIds).join(', ')}`);
+    }
 
     // 4. Fetch ALL persons with contact details
     console.log('\n--- FETCHING ALL PERSONS ---');
