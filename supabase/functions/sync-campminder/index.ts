@@ -525,6 +525,7 @@ async function performFullSync(
         seasonid: season,
         includecamperdetails: 'true',
         includecontactdetails: 'true',
+        includerelatives: 'true',  // Required for parent/guardian email data
       }
     );
     console.log(`Found ${allPersons.length} total persons`);
