@@ -400,6 +400,7 @@ export type Database = {
           grade: string | null
           group_name: string | null
           guardian_email: string | null
+          guardian_name: string | null
           guardian_phone: string | null
           id: string
           leader_id: string | null
@@ -434,6 +435,7 @@ export type Database = {
           grade?: string | null
           group_name?: string | null
           guardian_email?: string | null
+          guardian_name?: string | null
           guardian_phone?: string | null
           id?: string
           leader_id?: string | null
@@ -468,6 +470,7 @@ export type Database = {
           grade?: string | null
           group_name?: string | null
           guardian_email?: string | null
+          guardian_name?: string | null
           guardian_phone?: string | null
           id?: string
           leader_id?: string | null
