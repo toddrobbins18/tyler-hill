@@ -295,6 +295,8 @@ async function performFullSync(
 
     // Create division ID mapping (CampMinder ID -> our ID)
     const divisionIdMap = new Map<string, string>();
+    // Build CampMinder DivisionID -> Our Division ID mapping (declared here for scope)
+    const cmDivisionIdMap = new Map<number, string>();
     
     if (divisions.length > 0) {
       // First, get existing divisions to maintain our IDs
@@ -325,10 +327,14 @@ async function performFullSync(
         };
       });
       
-      // Insert new divisions, update existing
+      // Insert new divisions, update existing (but preserve sort_order!)
       for (const div of divisionData) {
         if (div.id) {
-          await supabase.from('divisions').update(div).eq('id', div.id);
+          // Only update name and gender, NOT sort_order (preserve user's manual ordering)
+          await supabase.from('divisions').update({
+            name: div.name,
+            gender: div.gender,
+          }).eq('id', div.id);
         } else {
           const { data } = await supabase.from('divisions').insert(div).select().single();
           if (data) {
@@ -347,7 +353,14 @@ async function performFullSync(
         divisionIdMap.set(d.name.toLowerCase(), d.id);
       }
       
-      console.log(`Synced ${divisions.length} divisions`);
+      // Populate CampMinder DivisionID -> Our Division ID mapping
+      for (const d of divisions) {
+        const ourDivId = divisionIdMap.get(d.Name.toLowerCase());
+        if (ourDivId) {
+          cmDivisionIdMap.set(d.ID, ourDivId);
+        }
+      }
+      console.log(`Synced ${divisions.length} divisions, mapped ${cmDivisionIdMap.size} CampMinder division IDs`);
     }
 
     await updateSyncJob(supabase, jobId, {
@@ -373,6 +386,16 @@ async function performFullSync(
     const enrolledPersonIds = new Set(
       enrolledAttendees.map((a: any) => String(a.PersonID))
     );
+
+    // Create PersonID -> Our Division ID mapping from enrolled attendees
+    const personDivisionMap = new Map<string, string>();
+    for (const attendee of enrolledAttendees) {
+      const ourDivId = cmDivisionIdMap.get(attendee.DivisionID);
+      if (ourDivId) {
+        personDivisionMap.set(String(attendee.PersonID), ourDivId);
+      }
+    }
+    console.log(`Mapped ${personDivisionMap.size} campers to divisions`);
 
     // 4. Fetch ALL persons with contact details
     console.log('\n--- FETCHING ALL PERSONS ---');
@@ -450,6 +473,7 @@ async function performFullSync(
           company_id: companyId,
           season: season,
           status: 'active',
+          division_id: personDivisionMap.get(String(person.ID)) || null,
         };
       });
 
