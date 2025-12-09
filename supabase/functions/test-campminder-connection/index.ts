@@ -82,11 +82,11 @@ serve(async (req) => {
 
     // Call CampMinder auth endpoint using correct format from documentation
     // GET https://api.campminder.com/auth/apikey
-    // Headers: Authorization: Bearer {apiKey}, Ocp-Apim-Subscription-Key: {subscriptionKey}
+    // Headers: Authorization: {apiKey} (no Bearer prefix), Ocp-Apim-Subscription-Key: {subscriptionKey}
     const authResponse = await fetch('https://api.campminder.com/auth/apikey', {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': apiKey,
         'Ocp-Apim-Subscription-Key': subscriptionKey,
       },
     });

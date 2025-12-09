@@ -26,11 +26,11 @@ async function getJwtToken(subscriptionKey: string, apiKey: string): Promise<{ t
   console.log('API Key length:', apiKey?.length || 0);
   console.log('Subscription Key length:', subscriptionKey?.length || 0);
   
-  // Use correct auth endpoint: GET with Bearer token in Authorization header
+  // Use correct auth endpoint: GET with API key directly (no Bearer prefix per CampMinder docs)
   const authResponse = await fetch(CM_AUTH_URL, {
     method: 'GET',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': apiKey,
       'Ocp-Apim-Subscription-Key': subscriptionKey,
     },
   });
