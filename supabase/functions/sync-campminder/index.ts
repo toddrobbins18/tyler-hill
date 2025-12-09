@@ -628,11 +628,25 @@ async function performFullSync(
           guardianPhone = person.ContactDetails.PhoneNumbers[0].Number;
         }
 
-        // Get division from V1 API data (preferred) or fall back to CamperDetails
+        // Get division - Priority: 1) V1 API, 2) CamperDetails, 3) Session-based (personDivisionMap)
         const v1DivId = v1DivisionMap.get(String(person.ID));
         const v2DivId = person.CamperDetails?.DivisionID;
-        const cmDivisionId = v1DivId || v2DivId;
-        const divisionId = cmDivisionId ? cmDivisionIdMap.get(cmDivisionId) || null : null;
+        const sessionDivId = personDivisionMap.get(String(person.ID)); // Already contains our UUID!
+
+        let divisionId: string | null = null;
+        let divisionSource = 'none';
+        
+        if (v1DivId) {
+          divisionId = cmDivisionIdMap.get(v1DivId) || null;
+          divisionSource = 'V1 API';
+        } else if (v2DivId) {
+          divisionId = cmDivisionIdMap.get(v2DivId) || null;
+          divisionSource = 'CamperDetails';
+        } else if (sessionDivId) {
+          // personDivisionMap already contains our division UUID from session mapping
+          divisionId = sessionDivId;
+          divisionSource = 'Session';
+        }
 
         return {
           person_id: String(person.ID),
