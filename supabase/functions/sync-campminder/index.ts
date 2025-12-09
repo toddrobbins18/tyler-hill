@@ -519,6 +519,33 @@ async function performFullSync(
 
     console.log(`Building data for ${staffPersonIds.size} staff members`);
 
+    // Fetch missing staff person data (those not in allPersons)
+    const missingPersonIds = [...staffPersonIds].filter(id => !personMap.has(id));
+    console.log(`Found ${missingPersonIds.length} staff persons not in initial fetch, fetching individually...`);
+
+    if (missingPersonIds.length > 0) {
+      for (const personId of missingPersonIds) {
+        try {
+          const personResponse = await rateLimitedFetch(
+            `${CM_PERSONS_URL}/${personId}?clientid=${clientId}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Ocp-Apim-Subscription-Key': subscriptionKey,
+              },
+            }
+          );
+          if (personResponse.ok) {
+            const person = await personResponse.json();
+            personMap.set(String(person.ID), person);
+            console.log(`Fetched missing person ${personId}: ${person.Name?.First} ${person.Name?.Last}`);
+          }
+        } catch (e) {
+          console.log(`Could not fetch person ${personId}:`, e);
+        }
+      }
+    }
+
     await updateSyncJob(supabase, jobId, {
       progress: { step: 'Syncing staff', total: staffPersonIds.size, campers: campers.length, divisions: divisions.length, season },
       total_counts: { divisions: divisions.length, campers: campers.length, staff: staffPersonIds.size },
@@ -535,7 +562,13 @@ async function performFullSync(
         
         const name = person 
           ? `${person.Name?.First || ''} ${person.Name?.Last || ''}`.trim()
-          : 'Unknown';
+          : '';
+        
+        // Skip staff without valid names
+        if (!name || name === 'Unknown' || name.trim() === '') {
+          console.log(`Skipping staff ${personId} - no valid name`);
+          continue;
+        }
         
         // Get role from position map
         const role = positionMap.get(assignment.Position1ID) || 
@@ -564,6 +597,8 @@ async function performFullSync(
           status: 'active',
         });
       }
+
+      console.log(`Built ${staffData.length} staff records with valid names (skipped ${staffPersonIds.size - staffData.length} without names)`);
 
       if (staffData.length > 0) {
         const { inserted: staffInserted, errors: staffErrors } = await batchUpsert(
