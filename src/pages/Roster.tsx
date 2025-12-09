@@ -70,7 +70,8 @@ export default function Roster() {
         *,
         division:divisions(id, name, gender, sort_order)
       `)
-      .eq('company_id', currentCompany.id);
+      .eq('company_id', currentCompany.id)
+      .eq('season', currentSeason);
     
     // Apply division filter if user has limited access
     if (divisionFilter !== null && divisionFilter.length > 0) {
@@ -88,7 +89,8 @@ export default function Roster() {
         *,
         division:divisions(id, name, gender, sort_order)
       `)
-      .eq('company_id', currentCompany.id);
+      .eq('company_id', currentCompany.id)
+      .eq('season', currentSeason);
     
     // Apply division filter if user has limited access
     if (divisionFilter !== null && divisionFilter.length > 0) {
