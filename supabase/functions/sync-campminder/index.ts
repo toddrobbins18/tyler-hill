@@ -543,6 +543,12 @@ async function performFullSync(
       total_counts: { divisions: divisions.length, campers: campers.length },
     });
 
+    // Debug: Log sample CamperDetails to confirm DivisionID field
+    const sampleCamper = campers.find((p: any) => p.CamperDetails);
+    if (sampleCamper) {
+      console.log('[DEBUG] Sample CamperDetails:', JSON.stringify(sampleCamper.CamperDetails, null, 2));
+    }
+
     if (campers.length > 0) {
       // Map grade IDs to names
       const gradeMap: Record<number, string> = {
@@ -571,6 +577,10 @@ async function performFullSync(
           guardianPhone = person.ContactDetails.PhoneNumbers[0].Number;
         }
 
+        // Get division directly from CamperDetails.DivisionID
+        const cmDivisionId = person.CamperDetails?.DivisionID;
+        const divisionId = cmDivisionId ? cmDivisionIdMap.get(cmDivisionId) || null : null;
+
         return {
           person_id: String(person.ID),
           name,
@@ -584,9 +594,13 @@ async function performFullSync(
           company_id: companyId,
           season: season,
           status: 'active',
-          division_id: personDivisionMap.get(String(person.ID)) || null,
+          division_id: divisionId,
         };
       });
+
+      // Log division mapping results
+      const mappedCount = camperData.filter(c => c.division_id).length;
+      console.log(`[Division Mapping] ${mappedCount}/${camperData.length} campers mapped to divisions`);
 
       const { inserted: camperInserted, errors: camperErrors } = await batchUpsert(
         supabase,
