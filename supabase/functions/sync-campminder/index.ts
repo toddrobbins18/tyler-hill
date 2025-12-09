@@ -6,6 +6,8 @@ const CM_PERSONS_URL = 'https://api.campminder.com/persons';
 const CM_STAFF_URL = 'https://api.campminder.com/staff';
 const CM_DIVISIONS_URL = 'https://api.campminder.com/divisions';
 const CM_SESSIONS_URL = 'https://api.campminder.com/sessions';
+// V1 API endpoint for fetching camper data with DivisionID
+const CM_V1_CAMPERS_URL = 'https://webapi.campminder.com/api/entity/person/camper/GetCampers';
 
 // Rate limiting: 250ms between calls (4 calls/sec = 240/min)
 const RATE_LIMIT_DELAY_MS = 250;
@@ -543,10 +545,59 @@ async function performFullSync(
       total_counts: { divisions: divisions.length, campers: campers.length },
     });
 
-    // Debug: Log sample CamperDetails to confirm DivisionID field
-    const sampleCamper = campers.find((p: any) => p.CamperDetails);
-    if (sampleCamper) {
-      console.log('[DEBUG] Sample CamperDetails:', JSON.stringify(sampleCamper.CamperDetails, null, 2));
+    // Fetch division data from V1 API (has DivisionID at camper level)
+    console.log('\n--- FETCHING V1 CAMPER DATA FOR DIVISIONS ---');
+    const v1DivisionMap = new Map<string, number>();
+    
+    if (campers.length > 0) {
+      try {
+        // Build PersonIDs list for V1 API call (batch in chunks of 100 to avoid URL length issues)
+        const personIdChunks: string[][] = [];
+        const allPersonIds = campers.map((p: any) => String(p.ID));
+        for (let i = 0; i < allPersonIds.length; i += 100) {
+          personIdChunks.push(allPersonIds.slice(i, i + 100));
+        }
+        
+        console.log(`Fetching V1 camper data in ${personIdChunks.length} batch(es)...`);
+        
+        for (const chunk of personIdChunks) {
+          const v1Url = `${CM_V1_CAMPERS_URL}?SeasonID=${season}&PersonIDs=${chunk.join(',')}`;
+          console.log(`[V1 API] Calling: ${v1Url.substring(0, 120)}...`);
+          
+          const v1Response = await rateLimitedFetch(v1Url, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Ocp-Apim-Subscription-Key': subscriptionKey,
+              'Content-Type': 'application/json',
+            },
+          });
+          
+          if (v1Response.ok) {
+            const v1Data = await v1Response.json();
+            const v1Campers = v1Data?.Result || v1Data || [];
+            console.log(`[V1 API] Received ${Array.isArray(v1Campers) ? v1Campers.length : 0} campers`);
+            
+            // Debug: Log first camper to see structure
+            if (Array.isArray(v1Campers) && v1Campers.length > 0) {
+              console.log('[DEBUG] Sample V1 Camper:', JSON.stringify(v1Campers[0], null, 2));
+              
+              for (const camper of v1Campers) {
+                if (camper.PersonID && camper.DivisionID) {
+                  v1DivisionMap.set(String(camper.PersonID), camper.DivisionID);
+                }
+              }
+            }
+          } else {
+            const errorText = await v1Response.text();
+            console.error(`[V1 API] Error ${v1Response.status}: ${errorText.substring(0, 200)}`);
+          }
+        }
+        
+        console.log(`[V1 API] Built division map with ${v1DivisionMap.size} entries`);
+      } catch (v1Error) {
+        console.error('[V1 API] Failed to fetch camper divisions:', v1Error);
+      }
     }
 
     if (campers.length > 0) {
@@ -577,8 +628,10 @@ async function performFullSync(
           guardianPhone = person.ContactDetails.PhoneNumbers[0].Number;
         }
 
-        // Get division directly from CamperDetails.DivisionID
-        const cmDivisionId = person.CamperDetails?.DivisionID;
+        // Get division from V1 API data (preferred) or fall back to CamperDetails
+        const v1DivId = v1DivisionMap.get(String(person.ID));
+        const v2DivId = person.CamperDetails?.DivisionID;
+        const cmDivisionId = v1DivId || v2DivId;
         const divisionId = cmDivisionId ? cmDivisionIdMap.get(cmDivisionId) || null : null;
 
         return {
