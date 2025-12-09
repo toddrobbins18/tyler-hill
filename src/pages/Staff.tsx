@@ -50,6 +50,8 @@ export default function Staff() {
       .from("staff")
       .select("*")
       .eq("company_id", currentCompany.id)
+      .neq("name", "Unknown")
+      .not("name", "is", null)
       .order("name");
 
     if (!staffError && staffData) {
