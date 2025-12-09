@@ -303,13 +303,10 @@ export default function Roster() {
                   >
                     <h3 className="font-semibold text-lg">{child.name}</h3>
                     <p className="text-sm text-muted-foreground">
-                      {child.division?.name || child.grade || "N/A"}
+                      {child.grade || "N/A"}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    {child.division && (
-                      <Badge variant="secondary">{child.division.name}</Badge>
-                    )}
                     <Button
                       size="icon"
                       variant="ghost"
@@ -338,7 +335,7 @@ export default function Roster() {
                   className="flex items-center justify-between text-sm cursor-pointer"
                   onClick={() => navigate(`/child/${child.id}`)}
                 >
-                  <span className="text-muted-foreground">Age: {child.age || "N/A"}</span>
+                  <span className="text-muted-foreground">Division: {child.division?.name || "N/A"}</span>
                   <Badge 
                     variant="outline" 
                     className={
