@@ -8,10 +8,12 @@ const CM_DIVISIONS_URL = 'https://api.campminder.com/divisions';
 const CM_SESSIONS_URL = 'https://api.campminder.com/sessions';
 // V1 API endpoint for fetching camper data with DivisionID
 const CM_V1_CAMPERS_URL = 'https://webapi.campminder.com/api/entity/person/camper/GetCampers';
-// V1 API endpoint for family/guardian data (more reliable than V2 Relatives)
+// V1 API endpoints for family/guardian data
 const CM_V1_FAMILY_URL = 'https://webapi.campminder.com/api/entity/family/GetFamilyPersons';
-// V1 API endpoint for person data with email addresses
 const CM_V1_PERSONS_URL = 'https://webapi.campminder.com/api/entity/person/GetPersons';
+// Dedicated V1 endpoints for contact info (returns dictionary by PersonID)
+const CM_V1_EMAILS_URL = 'https://webapi.campminder.com/api/entity/person/GetEmailAddresses';
+const CM_V1_PHONES_URL = 'https://webapi.campminder.com/api/entity/person/GetPhoneNumbers';
 
 // Rate limiting: 250ms between calls (4 calls/sec = 240/min)
 const RATE_LIMIT_DELAY_MS = 250;
@@ -706,7 +708,8 @@ async function performFullSync(
     
     console.log(`[V1 Family API] Mapped ${camperToParentMap.size} campers to ${parentPersonIds.size} unique parents`);
 
-    // Step 2: Fetch parent contact info using V1 GetPersons API (returns EmailAddresses, PhoneNumbers, and Name)
+    // Step 2: Fetch parent contact info using DEDICATED V1 endpoints
+    // Use GetEmailAddresses and GetPhoneNumbers (return dictionary by PersonID) + GetPersons for names
     const parentEmailMap = new Map<string, string>(); // parentPersonId -> email
     const parentPhoneMap = new Map<string, string>(); // parentPersonId -> phone (prioritize mobile)
     const parentNameMap = new Map<string, string>(); // parentPersonId -> full name
@@ -714,17 +717,109 @@ async function performFullSync(
     if (parentPersonIds.size > 0) {
       const parentIdArray = Array.from(parentPersonIds);
       const parentChunks: string[][] = [];
-      for (let i = 0; i < parentIdArray.length; i += 50) {
-        parentChunks.push(parentIdArray.slice(i, i + 50));
+      for (let i = 0; i < parentIdArray.length; i += 100) {
+        parentChunks.push(parentIdArray.slice(i, i + 100));
       }
       
-      console.log(`Fetching parent contact info in ${parentChunks.length} batch(es) using V1 GetPersons API...`);
+      console.log(`Fetching parent contact info for ${parentIdArray.length} parents in ${parentChunks.length} batch(es)...`);
       
       for (const chunk of parentChunks) {
         try {
-          // Use V1 GetPersons endpoint which returns EmailAddresses, PhoneNumbers, and Name
+          // 1. Fetch emails using dedicated GetEmailAddresses endpoint
+          // Returns: { Result: { "PersonID": [{ Email, IsLoginEmail, Label }], ... } }
+          const emailsUrl = `${CM_V1_EMAILS_URL}?PersonIDs=${chunk.join(',')}`;
+          console.log(`[V1 Emails API] Fetching emails for ${chunk.length} parents...`);
+          
+          const emailsResponse = await rateLimitedFetch(emailsUrl, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Ocp-Apim-Subscription-Key': subscriptionKey,
+              'Content-Type': 'application/json',
+            },
+          });
+          
+          if (emailsResponse.ok) {
+            const emailsData = await emailsResponse.json();
+            console.log(`[V1 Emails API] Success: ${emailsData.Success}, ErrorText: ${emailsData.ErrorText || 'none'}`);
+            
+            // Result is a dictionary: { "personId": [{ Email, IsLoginEmail }], ... }
+            const emailResults = emailsData?.Result || {};
+            const personIds = Object.keys(emailResults);
+            console.log(`[V1 Emails API] Got emails for ${personIds.length} persons`);
+            
+            // Debug: log first entry
+            if (personIds.length > 0) {
+              const firstId = personIds[0];
+              console.log(`[DEBUG] Sample email entry: PersonID=${firstId}, Emails=${JSON.stringify(emailResults[firstId])}`);
+            }
+            
+            for (const [personId, emails] of Object.entries(emailResults)) {
+              if (Array.isArray(emails) && emails.length > 0) {
+                // Prioritize login email
+                const loginEmail = (emails as any[]).find(e => e.IsLoginEmail);
+                const email = loginEmail?.Email || (emails as any[])[0]?.Email;
+                if (email) {
+                  parentEmailMap.set(personId, email);
+                }
+              }
+            }
+          } else {
+            const errorText = await emailsResponse.text();
+            console.error(`[V1 Emails API] Error ${emailsResponse.status}: ${errorText.substring(0, 300)}`);
+          }
+          
+          // 2. Fetch phone numbers using dedicated GetPhoneNumbers endpoint
+          // Returns: { Result: { "PersonID": [{ Number, TypeID, Type, Label }], ... } }
+          const phonesUrl = `${CM_V1_PHONES_URL}?PersonIDs=${chunk.join(',')}`;
+          console.log(`[V1 Phones API] Fetching phones for ${chunk.length} parents...`);
+          
+          const phonesResponse = await rateLimitedFetch(phonesUrl, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Ocp-Apim-Subscription-Key': subscriptionKey,
+              'Content-Type': 'application/json',
+            },
+          });
+          
+          if (phonesResponse.ok) {
+            const phonesData = await phonesResponse.json();
+            console.log(`[V1 Phones API] Success: ${phonesData.Success}, ErrorText: ${phonesData.ErrorText || 'none'}`);
+            
+            const phoneResults = phonesData?.Result || {};
+            const personIds = Object.keys(phoneResults);
+            console.log(`[V1 Phones API] Got phones for ${personIds.length} persons`);
+            
+            // Debug: log first entry
+            if (personIds.length > 0) {
+              const firstId = personIds[0];
+              console.log(`[DEBUG] Sample phone entry: PersonID=${firstId}, Phones=${JSON.stringify(phoneResults[firstId])}`);
+            }
+            
+            for (const [personId, phones] of Object.entries(phoneResults)) {
+              if (Array.isArray(phones) && phones.length > 0) {
+                // Prioritize mobile: TypeID 0 appears to be Cell based on docs, also check Type/Label
+                const mobilePhone = (phones as any[]).find(p => 
+                  p.TypeID === 0 || p.Type === 0 || p.Label === 0 ||
+                  p.TypeID === 2 || p.Type === 2 ||
+                  String(p.Type).toLowerCase().includes('cell') ||
+                  String(p.Type).toLowerCase().includes('mobile')
+                );
+                const phone = mobilePhone?.Number || (phones as any[])[0]?.Number;
+                if (phone) {
+                  parentPhoneMap.set(personId, phone);
+                }
+              }
+            }
+          } else {
+            const errorText = await phonesResponse.text();
+            console.error(`[V1 Phones API] Error ${phonesResponse.status}: ${errorText.substring(0, 300)}`);
+          }
+          
+          // 3. Fetch parent names using GetPersons endpoint
           const personsUrl = `${CM_V1_PERSONS_URL}?PersonIDs=${chunk.join(',')}`;
-          console.log(`[V1 Persons API] Fetching contact info for ${chunk.length} parents...`);
+          console.log(`[V1 Persons API] Fetching names for ${chunk.length} parents...`);
           
           const personsResponse = await rateLimitedFetch(personsUrl, {
             method: 'GET',
@@ -737,55 +832,23 @@ async function performFullSync(
           
           if (personsResponse.ok) {
             const personsData = await personsResponse.json();
-            const personResults = personsData?.Result || personsData || [];
+            const personResults = personsData?.Result || [];
             console.log(`[V1 Persons API] Received ${Array.isArray(personResults) ? personResults.length : 0} person records`);
             
-            // Debug: Log sample person record with all details
             if (Array.isArray(personResults) && personResults.length > 0) {
+              // Debug: log first person
               const sample = personResults[0];
-              console.log('[DEBUG] Sample V1 Parent Person Record:');
-              console.log(`  ID=${sample.ID}`);
-              console.log(`  Name: ${JSON.stringify(sample.Name || {})}`);
-              console.log(`  EmailAddresses: ${JSON.stringify(sample.EmailAddresses || [])}`);
-              console.log(`  PhoneNumbers: ${JSON.stringify(sample.PhoneNumbers || [])}`);
-            }
-            
-            if (Array.isArray(personResults)) {
+              console.log(`[DEBUG] Sample Person: ID=${sample.ID}, Name=${JSON.stringify(sample.Name || {})}`);
+              
               for (const person of personResults) {
                 const personId = String(person.ID);
                 
-                // Extract parent name
+                // Extract parent name - use FullName if available, otherwise construct it
                 if (person.Name) {
-                  const firstName = person.Name.FirstName || person.Name.First || '';
-                  const lastName = person.Name.LastName || person.Name.Last || '';
-                  const fullName = `${firstName} ${lastName}`.trim();
+                  const fullName = person.Name.FullName || 
+                    `${person.Name.FirstName || ''} ${person.Name.LastName || ''}`.trim();
                   if (fullName) {
                     parentNameMap.set(personId, fullName);
-                  }
-                }
-                
-                // Extract email (prioritize login email)
-                if (person.EmailAddresses && Array.isArray(person.EmailAddresses) && person.EmailAddresses.length > 0) {
-                  const loginEmail = person.EmailAddresses.find((e: any) => e.IsLoginEmail);
-                  const email = loginEmail?.Email || person.EmailAddresses[0]?.Email;
-                  if (email) {
-                    parentEmailMap.set(personId, email);
-                  }
-                }
-                
-                // Extract phone - prioritize Mobile (Type 2 or Label containing "mobile/cell")
-                if (person.PhoneNumbers && Array.isArray(person.PhoneNumbers) && person.PhoneNumbers.length > 0) {
-                  // PhoneNumber types: 0=Home, 1=Work, 2=Mobile/Cell based on common patterns
-                  // Try to find mobile first
-                  const mobilePhone = person.PhoneNumbers.find((p: any) => 
-                    p.Type === 2 || p.TypeID === 2 || 
-                    p.Label === 2 || p.Label === 'Mobile' || p.Label === 'Cell' ||
-                    String(p.Type).toLowerCase().includes('mobile') ||
-                    String(p.Type).toLowerCase().includes('cell')
-                  );
-                  const phone = mobilePhone?.Number || person.PhoneNumbers[0]?.Number;
-                  if (phone) {
-                    parentPhoneMap.set(personId, phone);
                   }
                 }
               }
@@ -793,56 +856,14 @@ async function performFullSync(
           } else {
             const errorText = await personsResponse.text();
             console.error(`[V1 Persons API] Error ${personsResponse.status}: ${errorText.substring(0, 200)}`);
-            
-            // Fallback to V2 API if V1 fails
-            console.log('[Fallback] Trying V2 API for parent contact details...');
-            const parentUrl = `${CM_PERSONS_URL}?clientId=${clientId}&seasonID=${season}&personIDs=${chunk.join(',')}&includecontactdetails=true`;
-            
-            const parentResponse = await rateLimitedFetch(parentUrl, {
-              method: 'GET',
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Ocp-Apim-Subscription-Key': subscriptionKey,
-              },
-            });
-            
-            if (parentResponse.ok) {
-              const parentData = await parentResponse.json();
-              const parents = parentData?.Results || parentData?.Value || parentData || [];
-              
-              if (Array.isArray(parents)) {
-                for (const parent of parents) {
-                  const parentId = String(parent.ID);
-                  
-                  // Extract name from V2 API
-                  if (parent.Name) {
-                    const fullName = `${parent.Name.First || ''} ${parent.Name.Last || ''}`.trim();
-                    if (fullName) parentNameMap.set(parentId, fullName);
-                  }
-                  
-                  if (parent.ContactDetails?.Emails?.length > 0) {
-                    const loginEmail = parent.ContactDetails.Emails.find((e: any) => e.IsLogin);
-                    const email = loginEmail?.Address || parent.ContactDetails.Emails[0]?.Address;
-                    if (email) parentEmailMap.set(parentId, email);
-                  }
-                  if (parent.ContactDetails?.PhoneNumbers?.length > 0) {
-                    // Try to find mobile phone in V2 format
-                    const mobilePhone = parent.ContactDetails.PhoneNumbers.find((p: any) => 
-                      p.Type === 'Mobile' || p.Type === 'Cell' || p.TypeID === 2
-                    );
-                    const phone = mobilePhone?.Number || parent.ContactDetails.PhoneNumbers[0]?.Number;
-                    if (phone) parentPhoneMap.set(parentId, phone);
-                  }
-                }
-              }
-            }
           }
+          
         } catch (err) {
-          console.error('[V1 Persons API] Error fetching parent batch:', err);
+          console.error('[V1 Parent API] Error fetching parent batch:', err);
         }
       }
       
-      console.log(`[Parent Info] Retrieved ${parentEmailMap.size} emails, ${parentPhoneMap.size} phones, ${parentNameMap.size} names`);
+      console.log(`[Parent Info] Retrieved ${parentEmailMap.size} emails, ${parentPhoneMap.size} phones, ${parentNameMap.size} names out of ${parentPersonIds.size} total parents`);
     }
 
     if (campers.length > 0) {
