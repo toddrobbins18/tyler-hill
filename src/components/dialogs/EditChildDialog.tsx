@@ -84,7 +84,8 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
     const { data } = await supabase
       .from("divisions")
       .select("*")
-      .eq("company_id", currentCompany.id);
+      .eq("company_id", currentCompany.id)
+      .eq("is_active", true);
     setDivisions(sortDivisionsGirlsFirst(data || []));
   };
 

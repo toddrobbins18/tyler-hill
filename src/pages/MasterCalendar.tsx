@@ -182,7 +182,7 @@ export default function MasterCalendar() {
       setDivisions([]);
       return;
     }
-    const { data } = await supabase.from("divisions").select("*").eq('company_id', currentCompany.id);
+    const { data } = await supabase.from("divisions").select("*").eq('company_id', currentCompany.id).eq('is_active', true);
     if (data) setDivisions(sortDivisionsGirlsFirst(data));
   };
 

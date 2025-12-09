@@ -154,6 +154,7 @@ export default function SportsAcademy() {
       .from("divisions")
       .select("*")
       .eq('company_id', currentCompany.id)
+      .eq('is_active', true)
       .order("sort_order");
     
     if (data) {

@@ -158,7 +158,7 @@ const TutoringTherapy = () => {
       return;
     }
     try {
-      const { data, error } = await supabase.from("divisions").select("*").eq('company_id', currentCompany.id);
+      const { data, error } = await supabase.from("divisions").select("*").eq('company_id', currentCompany.id).eq('is_active', true);
       if (error) throw error;
       setDivisions(sortDivisionsGirlsFirst(data || []));
     } catch (error) {

@@ -46,7 +46,8 @@ export default function ReportingCenter() {
       let query = supabase
         .from("divisions")
         .select("*")
-        .eq("company_id", currentCompany.id);
+        .eq("company_id", currentCompany.id)
+        .eq("is_active", true);
       
       // If user has division restrictions, only fetch those divisions
       if (allowedDivisionIds !== null && allowedDivisionIds.length > 0) {
