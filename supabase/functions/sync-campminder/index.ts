@@ -708,16 +708,22 @@ serve(async (req) => {
     for (const company of companies) {
       console.log(`Processing company: ${company.name}`);
       
-      // Decrypt credentials
+      // Decrypt credentials - parameter name must match the function signature
       const { data: apiKeyData, error: apiKeyError } = await supabase
-        .rpc('decrypt_secret', { encrypted_value: company.campminder_api_key_encrypted });
+        .rpc('decrypt_secret', { encrypted: company.campminder_api_key_encrypted });
       
       const { data: subKeyData, error: subKeyError } = await supabase
-        .rpc('decrypt_secret', { encrypted_value: company.campminder_subscription_key_encrypted });
+        .rpc('decrypt_secret', { encrypted: company.campminder_subscription_key_encrypted });
 
-      if (apiKeyError || subKeyError || !apiKeyData || !subKeyData) {
-        console.error('Failed to decrypt credentials for company:', company.name);
+      if (apiKeyError || subKeyError) {
+        console.error('Failed to decrypt credentials for company:', company.name, { apiKeyError, subKeyError });
         results.push({ company: company.name, status: 'error', message: 'Failed to decrypt credentials' });
+        continue;
+      }
+      
+      if (!apiKeyData || !subKeyData) {
+        console.error('Empty credentials for company:', company.name);
+        results.push({ company: company.name, status: 'error', message: 'Credentials not configured' });
         continue;
       }
 
