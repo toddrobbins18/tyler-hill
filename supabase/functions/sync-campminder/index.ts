@@ -1,33 +1,63 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const CM_AUTH_URL = 'https://api.campminder.com/auth/apikey';
+const CM_PERSONS_URL = 'https://api.campminder.com/persons';
+const CM_STAFF_URL = 'https://api.campminder.com/staff';
+const CM_DIVISIONS_URL = 'https://api.campminder.com/divisions';
+const CM_SESSIONS_URL = 'https://api.campminder.com/sessions';
+
+// Rate limiting: 250ms between calls (4 calls/sec = 240/min)
+const RATE_LIMIT_DELAY_MS = 250;
+let lastApiCallTime = 0;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// CampMinder API Base URLs (per official documentation)
-const CM_AUTH_URL = 'https://api.campminder.com/auth/apikey';
-const CM_PERSONS_URL = 'https://api.campminder.com/persons';
-const CM_STAFF_URL = 'https://api.campminder.com/staff';
-const CM_DIVISIONS_URL = 'https://api.campminder.com/divisions';
-const CM_BUNKS_URL = 'https://api.campminder.com/bunks';
-const CM_SESSIONS_URL = 'https://api.campminder.com/sessions';
+// Declare EdgeRuntime for background task processing
+declare const EdgeRuntime: {
+  waitUntil(promise: Promise<any>): void;
+};
 
-interface SyncResult {
-  campers: { imported: number; updated: number; errors: number };
-  staff: { imported: number; updated: number; errors: number };
-  divisions: { imported: number; updated: number; errors: number };
-  sessions: { imported: number; updated: number; errors: number };
+interface SyncJob {
+  id: string;
+  company_id: string;
+  status: string;
+  progress: Record<string, any>;
+  total_counts: Record<string, number>;
+  error_message?: string;
+  started_at?: string;
+  completed_at?: string;
 }
 
+// Helper to delay execution
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Rate-limited fetch that enforces 250ms between API calls
+async function rateLimitedFetch(url: string, options: RequestInit): Promise<Response> {
+  const now = Date.now();
+  const timeSinceLastCall = now - lastApiCallTime;
+  
+  if (timeSinceLastCall < RATE_LIMIT_DELAY_MS && lastApiCallTime > 0) {
+    const waitTime = RATE_LIMIT_DELAY_MS - timeSinceLastCall;
+    console.log(`[Rate Limit] Waiting ${waitTime}ms before next API call`);
+    await delay(waitTime);
+  }
+  
+  lastApiCallTime = Date.now();
+  console.log(`[API] Fetching: ${url.substring(0, 100)}...`);
+  return fetch(url, options);
+}
+
+// Get JWT token from CampMinder (only called once per sync)
 async function getJwtToken(subscriptionKey: string, apiKey: string): Promise<{ token: string; clientIds: string[] }> {
   console.log('Authenticating with CampMinder...');
-  console.log('API Key length:', apiKey?.length || 0);
-  console.log('Subscription Key length:', subscriptionKey?.length || 0);
   
-  // Use correct auth endpoint: GET with API key directly (no Bearer prefix per CampMinder docs)
-  const authResponse = await fetch(CM_AUTH_URL, {
+  const authResponse = await rateLimitedFetch(CM_AUTH_URL, {
     method: 'GET',
     headers: {
       'Authorization': apiKey,
@@ -35,14 +65,8 @@ async function getJwtToken(subscriptionKey: string, apiKey: string): Promise<{ t
     },
   });
 
-  console.log('Auth response status:', authResponse.status);
-  
-  // Check content type before parsing
   const contentType = authResponse.headers.get('content-type');
   const responseText = await authResponse.text();
-  
-  console.log('Auth response content-type:', contentType);
-  console.log('Auth response body (first 500 chars):', responseText.substring(0, 500));
 
   if (!contentType?.includes('application/json')) {
     throw new Error(`CampMinder returned non-JSON response (status ${authResponse.status}): ${responseText.substring(0, 200)}`);
@@ -60,19 +84,19 @@ async function getJwtToken(subscriptionKey: string, apiKey: string): Promise<{ t
   }
 
   const clientIds = authData.ClientIDs ? String(authData.ClientIDs).split(',').map((id: string) => id.trim()) : [];
-  
   console.log(`Authenticated successfully. ClientIDs: ${clientIds.join(', ')}`);
   
   return { token: authData.Token, clientIds };
 }
 
-async function fetchPaginatedData(
-  baseUrl: string, 
-  token: string, 
+// Fetch all paginated data from an endpoint with rate limiting
+async function fetchAllPaginated(
+  baseUrl: string,
+  token: string,
   subscriptionKey: string,
-  params: Record<string, string | number>
+  params: Record<string, string | number> = {}
 ): Promise<any[]> {
-  const results: any[] = [];
+  const allItems: any[] = [];
   let pageNumber = 1;
   const pageSize = 500;
   let hasMore = true;
@@ -84,7 +108,10 @@ async function fetchPaginatedData(
       pagesize: String(pageSize),
     });
 
-    const response = await fetch(`${baseUrl}?${queryParams}`, {
+    const url = `${baseUrl}?${queryParams}`;
+    
+    const response = await rateLimitedFetch(url, {
+      method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Ocp-Apim-Subscription-Key': subscriptionKey,
@@ -92,140 +119,292 @@ async function fetchPaginatedData(
     });
 
     if (!response.ok) {
-      console.error(`API error: ${response.status} - ${await response.text()}`);
+      const errorText = await response.text();
+      console.error(`API error for ${baseUrl}: ${response.status} - ${errorText}`);
       break;
     }
 
     const data = await response.json();
-    const items = data.Results || data || [];
-    results.push(...items);
+    const items = data.Results || data.data || data.items || data || [];
+    
+    if (Array.isArray(items)) {
+      allItems.push(...items);
+      console.log(`Fetched page ${pageNumber}: ${items.length} items (total: ${allItems.length})`);
+      
+      hasMore = items.length === pageSize;
+      pageNumber++;
+    } else {
+      hasMore = false;
+    }
 
-    // Check if there's more data
-    hasMore = items.length === pageSize;
-    pageNumber++;
-
-    if (pageNumber > 100) {
-      console.warn('Reached maximum page limit (100)');
+    // Safety limit
+    if (pageNumber > 50) {
+      console.warn('Reached maximum page limit (50)');
       break;
     }
   }
 
-  return results;
+  return allItems;
 }
 
-async function syncDivisions(
+// Update sync job progress in database
+async function updateSyncJob(
   supabase: any,
-  token: string,
-  subscriptionKey: string,
-  clientId: string,
-  companyId: string
-): Promise<{ imported: number; updated: number; errors: number }> {
-  console.log('Syncing divisions...');
-  let imported = 0, updated = 0, errors = 0;
+  jobId: string,
+  updates: Partial<SyncJob>
+): Promise<void> {
+  const { error } = await supabase
+    .from('sync_jobs')
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', jobId);
+  
+  if (error) {
+    console.error('Failed to update sync job:', error);
+  }
+}
 
-  try {
-    const divisions = await fetchPaginatedData(CM_DIVISIONS_URL, token, subscriptionKey, {
-      clientid: clientId,
-    });
+// Batch upsert helper - reduces DB calls dramatically
+async function batchUpsert(
+  supabase: any,
+  table: string,
+  data: any[],
+  conflictColumns: string,
+  batchSize: number = 100
+): Promise<{ inserted: number; errors: string[] }> {
+  let inserted = 0;
+  const errors: string[] = [];
+  const totalBatches = Math.ceil(data.length / batchSize);
 
-    console.log(`Found ${divisions.length} divisions in CampMinder`);
-
-    for (const div of divisions) {
-      try {
-        // Map CampMinder gender to our format
-        let gender = 'coed';
-        if (div.GenderID === 0) gender = 'female';
-        else if (div.GenderID === 1) gender = 'male';
-
-        const divisionData = {
-          name: div.Name,
-          gender,
-          company_id: companyId,
-          sort_order: div.SortOrder || divisions.indexOf(div),
-        };
-
-        // Check if division exists by name
-        const { data: existing } = await supabase
-          .from('divisions')
-          .select('id')
-          .eq('company_id', companyId)
-          .eq('name', div.Name)
-          .single();
-
-        if (existing) {
-          await supabase
-            .from('divisions')
-            .update(divisionData)
-            .eq('id', existing.id);
-          updated++;
-        } else {
-          await supabase
-            .from('divisions')
-            .insert(divisionData);
-          imported++;
-        }
-      } catch (err) {
-        console.error(`Error syncing division ${div.Name}:`, err);
-        errors++;
-      }
+  for (let i = 0; i < data.length; i += batchSize) {
+    const batch = data.slice(i, i + batchSize);
+    const batchNum = Math.floor(i / batchSize) + 1;
+    
+    const { error } = await supabase
+      .from(table)
+      .upsert(batch, { onConflict: conflictColumns });
+    
+    if (error) {
+      console.error(`[${table}] Batch ${batchNum}/${totalBatches} error:`, error.message);
+      errors.push(`Batch ${batchNum}: ${error.message}`);
+    } else {
+      inserted += batch.length;
+      console.log(`[${table}] Processed batch ${batchNum}/${totalBatches} (${inserted}/${data.length})`);
     }
-  } catch (err) {
-    console.error('Error fetching divisions:', err);
-    errors++;
   }
 
-  console.log(`Divisions sync complete: ${imported} imported, ${updated} updated, ${errors} errors`);
-  return { imported, updated, errors };
+  return { inserted, errors };
 }
 
-async function syncCampers(
+// Auto-detect active season from CampMinder sessions
+async function detectActiveSeason(
+  token: string,
+  subscriptionKey: string,
+  clientId: string
+): Promise<string> {
+  console.log('Auto-detecting active season from CampMinder...');
+  
+  try {
+    const sessions = await fetchAllPaginated(
+      CM_SESSIONS_URL,
+      token,
+      subscriptionKey,
+      { clientid: clientId }
+    );
+    
+    if (!sessions.length) {
+      console.log('No sessions found, defaulting to 2025');
+      return '2025';
+    }
+    
+    // Find sessions with dates and extract years
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    
+    // Look for most recent session
+    const sessionsWithDates = sessions
+      .filter((s: any) => s.StartDate || s.EndDate)
+      .map((s: any) => ({
+        ...s,
+        startDate: new Date(s.StartDate || s.EndDate),
+        year: new Date(s.StartDate || s.EndDate).getFullYear(),
+      }))
+      .filter((s: any) => s.year >= currentYear - 1 && s.year <= currentYear + 1)
+      .sort((a: any, b: any) => b.startDate.getTime() - a.startDate.getTime());
+
+    if (sessionsWithDates.length > 0) {
+      const latestSession = sessionsWithDates[0];
+      console.log(`Detected active season: ${latestSession.year} from session: ${latestSession.Name}`);
+      return latestSession.year.toString();
+    }
+    
+    console.log(`No relevant sessions found, defaulting to ${currentYear}`);
+    return currentYear.toString();
+  } catch (error) {
+    console.error('Error detecting season:', error);
+    return '2025';
+  }
+}
+
+// Main sync function that runs in background
+async function performFullSync(
   supabase: any,
+  jobId: string,
+  companyId: string,
   token: string,
   subscriptionKey: string,
   clientId: string,
-  companyId: string,
-  seasonId: number
-): Promise<{ imported: number; updated: number; errors: number }> {
-  console.log('Syncing campers...');
-  let imported = 0, updated = 0, errors = 0;
-
+  seasonId?: string
+): Promise<void> {
+  console.log(`\n========================================`);
+  console.log(`Starting full sync for company ${companyId}`);
+  console.log(`Job ID: ${jobId}`);
+  console.log(`========================================\n`);
+  
   try {
-    // Get division mapping
-    const { data: divisions } = await supabase
-      .from('divisions')
-      .select('id, name')
-      .eq('company_id', companyId);
-    
-    const divisionMap = new Map(divisions?.map((d: any) => [d.name, d.id]) || []);
-
-    // Fetch persons with camper details
-    const persons = await fetchPaginatedData(CM_PERSONS_URL, token, subscriptionKey, {
-      clientid: clientId,
-      seasonid: seasonId,
-      includecamperdetails: 'true',
-      includecontactdetails: 'true',
-      includerelatives: 'true',
+    // Update job to running
+    await updateSyncJob(supabase, jobId, {
+      status: 'running',
+      started_at: new Date().toISOString(),
+      progress: { step: 'Starting sync' },
     });
 
-    console.log(`Found ${persons.length} persons in CampMinder`);
+    // 1. Auto-detect season if not provided
+    const season = seasonId || await detectActiveSeason(token, subscriptionKey, clientId);
+    console.log(`\n[Season] Using season: ${season}\n`);
+    
+    await updateSyncJob(supabase, jobId, {
+      progress: { step: 'Season detected', season },
+    });
 
-    // Filter for campers (those with CamperDetails)
-    const campers = persons.filter((p: any) => p.CamperDetails);
-    console.log(`Found ${campers.length} campers`);
+    // 2. Fetch and sync divisions
+    console.log('\n--- SYNCING DIVISIONS ---');
+    await updateSyncJob(supabase, jobId, {
+      progress: { step: 'Fetching divisions', season },
+    });
 
-    for (const person of campers) {
-      try {
-        const name = `${person.Name?.First || ''} ${person.Name?.Last || ''}`.trim();
-        if (!name) continue;
+    const divisions = await fetchAllPaginated(
+      CM_DIVISIONS_URL,
+      token,
+      subscriptionKey,
+      { clientid: clientId }
+    );
+    console.log(`Found ${divisions.length} divisions`);
 
-        // Find division
-        let divisionId = null;
-        if (person.CamperDetails?.DivisionID) {
-          // We need to find division by CampMinder ID - for now match by grade range
-          // In production, you'd store CM division IDs
+    // Create division ID mapping (CampMinder ID -> our ID)
+    const divisionIdMap = new Map<string, string>();
+    
+    if (divisions.length > 0) {
+      // First, get existing divisions to maintain our IDs
+      const { data: existingDivisions } = await supabase
+        .from('divisions')
+        .select('id, name')
+        .eq('company_id', companyId);
+      
+      const existingDivisionMap = new Map(
+        existingDivisions?.map((d: any) => [d.name.toLowerCase(), d.id]) || []
+      );
+
+      const divisionData = divisions.map((d: any, index: number) => {
+        let gender = 'coed';
+        if (d.GenderID === 0) gender = 'female';
+        else if (d.GenderID === 1) gender = 'male';
+        
+        const name = d.Name;
+        const existingId = existingDivisionMap.get(name.toLowerCase());
+        
+        return {
+          id: existingId || undefined, // Let DB generate if new
+          name,
+          gender,
+          sort_order: d.SortOrder ?? index,
+          company_id: companyId,
+        };
+      });
+      
+      // Insert new divisions, update existing
+      for (const div of divisionData) {
+        if (div.id) {
+          await supabase.from('divisions').update(div).eq('id', div.id);
+        } else {
+          const { data } = await supabase.from('divisions').insert(div).select().single();
+          if (data) {
+            divisionIdMap.set(div.name.toLowerCase(), data.id);
+          }
         }
+      }
+      
+      // Refresh division map with all divisions
+      const { data: allDivisions } = await supabase
+        .from('divisions')
+        .select('id, name')
+        .eq('company_id', companyId);
+      
+      for (const d of allDivisions || []) {
+        divisionIdMap.set(d.name.toLowerCase(), d.id);
+      }
+      
+      console.log(`Synced ${divisions.length} divisions`);
+    }
 
-        // Extract guardian info
+    await updateSyncJob(supabase, jobId, {
+      progress: { step: 'Divisions synced', divisions: divisions.length, season },
+      total_counts: { divisions: divisions.length },
+    });
+
+    // 3. Fetch ALL persons with contact details in ONE call (eliminates per-staff API calls!)
+    console.log('\n--- FETCHING ALL PERSONS ---');
+    await updateSyncJob(supabase, jobId, {
+      progress: { step: 'Fetching persons', divisions: divisions.length, season },
+    });
+
+    const allPersons = await fetchAllPaginated(
+      CM_PERSONS_URL,
+      token,
+      subscriptionKey,
+      { 
+        clientid: clientId,
+        seasonid: season,
+        includecamperdetails: 'true',
+        includecontactdetails: 'true',
+      }
+    );
+    console.log(`Found ${allPersons.length} total persons`);
+
+    // Separate campers from non-campers
+    const campers = allPersons.filter((p: any) => p.CamperDetails);
+    const nonCampers = allPersons.filter((p: any) => !p.CamperDetails);
+    
+    console.log(`Separated: ${campers.length} campers, ${nonCampers.length} non-campers`);
+
+    // 4. Sync campers with batch upsert
+    console.log('\n--- SYNCING CAMPERS ---');
+    await updateSyncJob(supabase, jobId, {
+      progress: { step: 'Syncing campers', total: campers.length, divisions: divisions.length, season },
+      total_counts: { divisions: divisions.length, campers: campers.length },
+    });
+
+    if (campers.length > 0) {
+      // Map grade IDs to names
+      const gradeMap: Record<number, string> = {
+        0: 'Pre-K', 1: 'K', 2: '1st', 3: '2nd', 4: '3rd', 5: '4th',
+        6: '5th', 7: '6th', 8: '7th', 9: '8th', 10: '9th', 11: '10th', 12: '11th', 13: '12th'
+      };
+
+      const camperData = campers.map((person: any) => {
+        const name = `${person.Name?.First || ''} ${person.Name?.Last || ''}`.trim() || 'Unknown';
+        
+        // Map gender
+        let gender = null;
+        if (person.GenderID === 0) gender = 'Female';
+        else if (person.GenderID === 1) gender = 'Male';
+        
+        // Get grade
+        const grade = gradeMap[person.CamperDetails?.CampGradeID] || null;
+        
+        // Get contact info
         let guardianEmail = '';
         let guardianPhone = '';
         if (person.ContactDetails?.Emails?.length > 0) {
@@ -235,375 +414,397 @@ async function syncCampers(
           guardianPhone = person.ContactDetails.PhoneNumbers[0].Number;
         }
 
-        // Map gender
-        let gender = null;
-        if (person.GenderID === 0) gender = 'Female';
-        else if (person.GenderID === 1) gender = 'Male';
-
-        // Map grade
-        const gradeMap: Record<number, string> = {
-          0: 'Pre-K', 1: 'K', 2: '1st', 3: '2nd', 4: '3rd', 5: '4th',
-          6: '5th', 7: '6th', 8: '7th', 9: '8th', 10: '9th', 11: '10th', 12: '11th', 13: '12th'
-        };
-        const grade = gradeMap[person.CamperDetails?.CampGradeID] || null;
-
-        const camperData = {
-          name,
+        return {
           person_id: String(person.ID),
-          company_id: companyId,
-          season: String(seasonId),
-          date_of_birth: person.DateOfBirth || null,
+          name,
           gender,
+          date_of_birth: person.DateOfBirth || null,
           grade,
-          guardian_email: guardianEmail,
-          guardian_phone: guardianPhone,
+          guardian_email: guardianEmail || null,
+          guardian_phone: guardianPhone || null,
+          allergies: person.MedicalInfo?.Allergies || null,
+          medical_notes: person.MedicalInfo?.Notes || null,
+          company_id: companyId,
+          season: season,
           status: 'active',
         };
+      });
 
-        // Check if camper exists
-        const { data: existing } = await supabase
-          .from('children')
-          .select('id')
-          .eq('company_id', companyId)
-          .eq('person_id', String(person.ID))
-          .eq('season', String(seasonId))
-          .single();
-
-        if (existing) {
-          await supabase
-            .from('children')
-            .update(camperData)
-            .eq('id', existing.id);
-          updated++;
-        } else {
-          await supabase
-            .from('children')
-            .insert(camperData);
-          imported++;
-        }
-      } catch (err) {
-        console.error(`Error syncing camper ${person.ID}:`, err);
-        errors++;
+      const { inserted: camperInserted, errors: camperErrors } = await batchUpsert(
+        supabase,
+        'children',
+        camperData,
+        'company_id,person_id,season'
+      );
+      console.log(`Synced ${camperInserted} campers`);
+      if (camperErrors.length) {
+        console.error('Camper sync errors:', camperErrors);
       }
     }
-  } catch (err) {
-    console.error('Error fetching campers:', err);
-    errors++;
-  }
 
-  console.log(`Campers sync complete: ${imported} imported, ${updated} updated, ${errors} errors`);
-  return { imported, updated, errors };
-}
-
-async function syncStaff(
-  supabase: any,
-  token: string,
-  subscriptionKey: string,
-  clientId: string,
-  companyId: string,
-  seasonId: number
-): Promise<{ imported: number; updated: number; errors: number }> {
-  console.log('Syncing staff...');
-  let imported = 0, updated = 0, errors = 0;
-
-  try {
-    // Fetch positions and organizational categories first
-    const positions = await fetchPaginatedData(`${CM_STAFF_URL}/positions`, token, subscriptionKey, {
-      clientid: clientId,
-    });
-    const positionMap = new Map(positions.map((p: any) => [p.ID, p.Name]));
-
-    // Fetch active staff
-    const staffMembers = await fetchPaginatedData(CM_STAFF_URL, token, subscriptionKey, {
-      clientid: clientId,
-      seasonid: seasonId,
-      status: 1, // Active staff
+    // 5. Fetch staff assignments and positions (only 2-3 API calls total)
+    console.log('\n--- SYNCING STAFF ---');
+    await updateSyncJob(supabase, jobId, {
+      progress: { step: 'Fetching staff data', campers: campers.length, divisions: divisions.length, season },
     });
 
-    console.log(`Found ${staffMembers.length} active staff in CampMinder`);
+    // Fetch positions for role mapping
+    let positionMap = new Map<number, string>();
+    try {
+      const positions = await fetchAllPaginated(
+        `${CM_STAFF_URL}/positions`,
+        token,
+        subscriptionKey,
+        { clientid: clientId }
+      );
+      positionMap = new Map(positions.map((p: any) => [p.ID, p.Name]));
+      console.log(`Found ${positions.length} staff positions`);
+    } catch (error) {
+      console.log('Staff positions endpoint not available');
+    }
 
-    // Fetch person details for each staff member
-    for (const staff of staffMembers) {
-      try {
-        // Get person details
-        const personResponse = await fetch(`${CM_PERSONS_URL}/${staff.PersonID}?clientid=${clientId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Ocp-Apim-Subscription-Key': subscriptionKey,
-          },
-        });
+    // Fetch staff assignments
+    let staffAssignments: any[] = [];
+    try {
+      staffAssignments = await fetchAllPaginated(
+        CM_STAFF_URL,
+        token,
+        subscriptionKey,
+        { clientid: clientId, seasonid: season, status: 1 }
+      );
+      console.log(`Found ${staffAssignments.length} staff assignments`);
+    } catch (error) {
+      console.log('Staff assignments endpoint not available');
+    }
 
-        if (!personResponse.ok) {
-          console.error(`Failed to fetch person ${staff.PersonID}`);
-          errors++;
-          continue;
-        }
+    // Create a map of person ID to staff assignment
+    const staffAssignmentMap = new Map<string, any>();
+    for (const assignment of staffAssignments) {
+      staffAssignmentMap.set(String(assignment.PersonID), assignment);
+    }
 
-        const person = await personResponse.json();
-        const name = `${person.Name?.First || ''} ${person.Name?.Last || ''}`.trim();
-        if (!name) continue;
+    // Create person lookup from all persons we already fetched (NO additional API calls!)
+    const personMap = new Map<string, any>();
+    for (const person of allPersons) {
+      personMap.set(String(person.ID), person);
+    }
 
-        // Get position name
-        const position = positionMap.get(staff.Position1ID) || 'Staff';
+    // Build staff data
+    const staffPersonIds = new Set([
+      ...staffAssignments.map((a: any) => String(a.PersonID)),
+    ]);
 
-        // Get contact info
+    console.log(`Building data for ${staffPersonIds.size} staff members`);
+
+    await updateSyncJob(supabase, jobId, {
+      progress: { step: 'Syncing staff', total: staffPersonIds.size, campers: campers.length, divisions: divisions.length, season },
+      total_counts: { divisions: divisions.length, campers: campers.length, staff: staffPersonIds.size },
+    });
+
+    if (staffPersonIds.size > 0) {
+      const staffData: any[] = [];
+      
+      for (const personId of staffPersonIds) {
+        const person = personMap.get(personId);
+        const assignment = staffAssignmentMap.get(personId);
+        
+        if (!assignment) continue;
+        
+        const name = person 
+          ? `${person.Name?.First || ''} ${person.Name?.Last || ''}`.trim()
+          : 'Unknown';
+        
+        // Get role from position map
+        const role = positionMap.get(assignment.Position1ID) || 
+                    positionMap.get(assignment.PositionID) || 
+                    'Staff';
+        
+        // Get contact info from person data we already have
         let email = '';
         let phone = '';
-        if (person.ContactDetails?.Emails?.length > 0) {
+        if (person?.ContactDetails?.Emails?.length > 0) {
           email = person.ContactDetails.Emails[0].Address;
         }
-        if (person.ContactDetails?.PhoneNumbers?.length > 0) {
+        if (person?.ContactDetails?.PhoneNumbers?.length > 0) {
           phone = person.ContactDetails.PhoneNumbers[0].Number;
         }
 
-        const staffData = {
+        staffData.push({
+          person_id: personId,
           name,
-          person_id: String(staff.PersonID),
+          role,
+          email: email || null,
+          phone: phone || null,
+          date_of_birth: person?.DateOfBirth || null,
           company_id: companyId,
-          season: String(seasonId),
-          role: position,
-          email,
-          phone,
+          season: season,
           status: 'active',
-          start_date: staff.EmploymentStartDate || null,
-          end_date: staff.EmploymentEndDate || null,
-        };
+        });
+      }
 
-        // Check if staff exists
-        const { data: existing } = await supabase
-          .from('staff')
-          .select('id')
-          .eq('company_id', companyId)
-          .eq('person_id', String(staff.PersonID))
-          .single();
-
-        if (existing) {
-          await supabase
-            .from('staff')
-            .update(staffData)
-            .eq('id', existing.id);
-          updated++;
-        } else {
-          await supabase
-            .from('staff')
-            .insert(staffData);
-          imported++;
+      if (staffData.length > 0) {
+        const { inserted: staffInserted, errors: staffErrors } = await batchUpsert(
+          supabase,
+          'staff',
+          staffData,
+          'company_id,person_id,season'
+        );
+        console.log(`Synced ${staffInserted} staff`);
+        if (staffErrors.length) {
+          console.error('Staff sync errors:', staffErrors);
         }
-      } catch (err) {
-        console.error(`Error syncing staff ${staff.PersonID}:`, err);
-        errors++;
       }
     }
-  } catch (err) {
-    console.error('Error fetching staff:', err);
-    errors++;
-  }
 
-  console.log(`Staff sync complete: ${imported} imported, ${updated} updated, ${errors} errors`);
-  return { imported, updated, errors };
-}
-
-async function syncSessions(
-  supabase: any,
-  token: string,
-  subscriptionKey: string,
-  clientId: string,
-  companyId: string,
-  seasonId: number
-): Promise<{ imported: number; updated: number; errors: number }> {
-  console.log('Syncing sessions and enrollment...');
-  let imported = 0, updated = 0, errors = 0;
-
-  try {
-    // Fetch sessions
-    const sessions = await fetchPaginatedData(CM_SESSIONS_URL, token, subscriptionKey, {
-      clientid: clientId,
-      seasonid: seasonId,
+    // 6. Update session enrollment for campers
+    console.log('\n--- SYNCING SESSIONS ---');
+    await updateSyncJob(supabase, jobId, {
+      progress: { step: 'Syncing sessions', staff: staffPersonIds.size, campers: campers.length, divisions: divisions.length, season },
     });
 
-    console.log(`Found ${sessions.length} sessions in CampMinder`);
+    try {
+      const sessions = await fetchAllPaginated(
+        CM_SESSIONS_URL,
+        token,
+        subscriptionKey,
+        { clientid: clientId, seasonid: season }
+      );
+      console.log(`Found ${sessions.length} sessions`);
 
-    // Fetch enrolled attendees
-    const attendees = await fetchPaginatedData(`${CM_SESSIONS_URL}/attendees`, token, subscriptionKey, {
-      clientid: clientId,
-      seasonid: seasonId,
-      status: 2, // Enrolled
-    });
-
-    console.log(`Found ${attendees.length} enrolled attendees`);
-
-    // Create a map of person ID to sessions
-    const enrollmentMap = new Map<number, any[]>();
-    for (const attendee of attendees) {
-      const sessions = attendee.SessionProgramStatus || [];
-      if (!enrollmentMap.has(attendee.PersonID)) {
-        enrollmentMap.set(attendee.PersonID, []);
+      // Create session name map
+      const sessionNameMap = new Map<number, string>();
+      for (const session of sessions) {
+        sessionNameMap.set(session.ID, session.Name);
       }
-      enrollmentMap.get(attendee.PersonID)!.push(...sessions);
-    }
 
-    // Update children with session info
-    for (const [personId, sessionData] of enrollmentMap) {
-      try {
-        // Find the session names for this camper
-        const sessionNames = sessionData
-          .filter((s: any) => s.StatusID === 2) // Enrolled
-          .map((s: any) => {
-            const session = sessions.find((sess: any) => sess.ID === s.SessionID);
-            return session?.Name || `Session ${s.SessionID}`;
-          })
+      // Fetch attendees
+      const attendees = await fetchAllPaginated(
+        `${CM_SESSIONS_URL}/attendees`,
+        token,
+        subscriptionKey,
+        { clientid: clientId, seasonid: season, status: 2 }
+      );
+      console.log(`Found ${attendees.length} enrolled attendees`);
+
+      // Update camper session info in batches
+      const sessionUpdates: any[] = [];
+      for (const attendee of attendees) {
+        const sessionPrograms = attendee.SessionProgramStatus || [];
+        const enrolledSessions = sessionPrograms
+          .filter((s: any) => s.StatusID === 2)
+          .map((s: any) => sessionNameMap.get(s.SessionID) || `Session ${s.SessionID}`)
           .join(', ');
+        
+        if (enrolledSessions) {
+          sessionUpdates.push({
+            person_id: String(attendee.PersonID),
+            session: enrolledSessions,
+          });
+        }
+      }
 
-        if (sessionNames) {
-          // Update the child's session field
+      // Batch update sessions
+      for (let i = 0; i < sessionUpdates.length; i += 100) {
+        const batch = sessionUpdates.slice(i, i + 100);
+        for (const update of batch) {
           await supabase
             .from('children')
-            .update({ session: sessionNames })
+            .update({ session: update.session })
             .eq('company_id', companyId)
-            .eq('person_id', String(personId))
-            .eq('season', String(seasonId));
-          
-          updated++;
+            .eq('person_id', update.person_id)
+            .eq('season', season);
         }
-      } catch (err) {
-        console.error(`Error updating session for person ${personId}:`, err);
-        errors++;
+        console.log(`Updated sessions for batch ${Math.floor(i / 100) + 1}/${Math.ceil(sessionUpdates.length / 100)}`);
       }
+      
+      console.log(`Updated session info for ${sessionUpdates.length} campers`);
+    } catch (error) {
+      console.error('Error syncing sessions:', error);
     }
 
-    imported = sessions.length; // Count sessions found
-  } catch (err) {
-    console.error('Error fetching sessions:', err);
-    errors++;
-  }
+    // 7. Update company sync timestamp
+    await supabase
+      .from('companies')
+      .update({ campminder_last_sync_at: new Date().toISOString() })
+      .eq('id', companyId);
 
-  console.log(`Sessions sync complete: ${imported} sessions found, ${updated} campers updated, ${errors} errors`);
-  return { imported, updated, errors };
+    // 8. Complete the job
+    const finalStats = {
+      step: 'Completed',
+      divisions: divisions.length,
+      campers: campers.length,
+      staff: staffPersonIds.size,
+      season: season,
+    };
+
+    await updateSyncJob(supabase, jobId, {
+      status: 'completed',
+      completed_at: new Date().toISOString(),
+      progress: finalStats,
+      total_counts: { divisions: divisions.length, campers: campers.length, staff: staffPersonIds.size },
+    });
+
+    console.log(`\n========================================`);
+    console.log(`Sync completed successfully!`);
+    console.log(`Divisions: ${divisions.length}`);
+    console.log(`Campers: ${campers.length}`);
+    console.log(`Staff: ${staffPersonIds.size}`);
+    console.log(`Season: ${season}`);
+    console.log(`========================================\n`);
+
+  } catch (error) {
+    console.error('Sync failed:', error);
+    
+    await updateSyncJob(supabase, jobId, {
+      status: 'failed',
+      completed_at: new Date().toISOString(),
+      error_message: error instanceof Error ? error.message : 'Unknown error',
+      progress: { step: 'Failed', error: error instanceof Error ? error.message : 'Unknown error' },
+    });
+  }
 }
 
 serve(async (req) => {
-  // Handle CORS preflight requests
+  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const { company_id, season_id } = await req.json().catch(() => ({}));
+    
+    console.log('Sync request received:', { company_id, season_id });
 
-    // Initialize Supabase client with service role key
+    // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // If no company_id provided, sync all companies with CampMinder enabled
-    let companiesToSync: any[] = [];
-
+    // Fetch company with CampMinder credentials
+    let companiesQuery = supabase
+      .from('companies')
+      .select('*')
+      .eq('campminder_sync_enabled', true);
+    
     if (company_id) {
-      const { data: company, error } = await supabase
-        .from('companies')
-        .select('*')
-        .eq('id', company_id)
-        .single();
-
-      if (error || !company) {
-        throw new Error('Company not found');
-      }
-      companiesToSync = [company];
-    } else {
-      // Get all companies with CampMinder sync enabled
-      const { data: companies, error } = await supabase
-        .from('companies')
-        .select('*')
-        .eq('campminder_sync_enabled', true)
-        .not('campminder_api_key_encrypted', 'is', null)
-        .not('campminder_subscription_key_encrypted', 'is', null);
-
-      if (error) {
-        throw new Error(`Error fetching companies: ${error.message}`);
-      }
-
-      companiesToSync = companies || [];
+      companiesQuery = companiesQuery.eq('id', company_id);
     }
 
-    console.log(`Starting CampMinder sync for ${companiesToSync.length} companies`);
+    const { data: companies, error: companyError } = await companiesQuery;
 
-    const allResults: Record<string, SyncResult> = {};
+    if (companyError) {
+      throw new Error(`Failed to fetch companies: ${companyError.message}`);
+    }
 
-    for (const company of companiesToSync) {
-      console.log(`\n--- Syncing company: ${company.name} ---`);
+    if (!companies || companies.length === 0) {
+      return new Response(
+        JSON.stringify({ error: 'No companies with CampMinder sync enabled' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const results: any[] = [];
+
+    for (const company of companies) {
+      console.log(`Processing company: ${company.name}`);
+      
+      // Decrypt credentials
+      const { data: apiKeyData, error: apiKeyError } = await supabase
+        .rpc('decrypt_secret', { encrypted_value: company.campminder_api_key_encrypted });
+      
+      const { data: subKeyData, error: subKeyError } = await supabase
+        .rpc('decrypt_secret', { encrypted_value: company.campminder_subscription_key_encrypted });
+
+      if (apiKeyError || subKeyError || !apiKeyData || !subKeyData) {
+        console.error('Failed to decrypt credentials for company:', company.name);
+        results.push({ company: company.name, status: 'error', message: 'Failed to decrypt credentials' });
+        continue;
+      }
 
       try {
-        // Decrypt credentials
-        const { data: apiKey, error: apiKeyError } = await supabase
-          .rpc('decrypt_secret', { encrypted: company.campminder_api_key_encrypted });
-
-        const { data: subscriptionKey, error: subKeyError } = await supabase
-          .rpc('decrypt_secret', { encrypted: company.campminder_subscription_key_encrypted });
-
-        if (apiKeyError || subKeyError || !apiKey || !subscriptionKey) {
-          console.error(`Failed to decrypt credentials for ${company.name}`);
-          continue;
+        // Authenticate with CampMinder (only 1 auth call!)
+        const { token, clientIds } = await getJwtToken(subKeyData, apiKeyData);
+        const clientId = clientIds[0];
+        
+        if (!clientId) {
+          throw new Error('No client ID returned from CampMinder');
         }
 
-        // Get JWT token
-        const { token, clientIds } = await getJwtToken(subscriptionKey, apiKey);
+        // Create a sync job record
+        const { data: job, error: jobError } = await supabase
+          .from('sync_jobs')
+          .insert({
+            company_id: company.id,
+            entity_type: 'campminder',
+            status: 'pending',
+            progress: { step: 'Initializing' },
+            total_counts: {},
+          })
+          .select()
+          .single();
 
-        if (clientIds.length === 0) {
-          console.error(`No client IDs returned for ${company.name}`);
-          continue;
+        if (jobError) {
+          console.error('Failed to create sync job:', jobError);
+          throw new Error('Failed to create sync job');
         }
 
-        const clientId = clientIds[0]; // Use first client ID
-        const seasonId = season_id || 2026; // Default to 2026 season
+        console.log(`Created sync job: ${job.id}`);
 
-        // Sync all data types
-        const divisionResult = await syncDivisions(supabase, token, subscriptionKey, clientId, company.id);
-        const camperResult = await syncCampers(supabase, token, subscriptionKey, clientId, company.id, seasonId);
-        const staffResult = await syncStaff(supabase, token, subscriptionKey, clientId, company.id, seasonId);
-        const sessionResult = await syncSessions(supabase, token, subscriptionKey, clientId, company.id, seasonId);
+        // Start background sync using EdgeRuntime.waitUntil
+        // This allows the function to return immediately while sync continues
+        EdgeRuntime.waitUntil(
+          performFullSync(
+            supabase,
+            job.id,
+            company.id,
+            token,
+            subKeyData,
+            clientId,
+            season_id
+          )
+        );
 
-        allResults[company.name] = {
-          campers: camperResult,
-          staff: staffResult,
-          divisions: divisionResult,
-          sessions: sessionResult,
-        };
+        results.push({
+          company: company.name,
+          company_id: company.id,
+          status: 'started',
+          job_id: job.id,
+          message: 'Sync running in background. Check sync_jobs table for progress.',
+        });
 
-        // Update last sync timestamp
-        await supabase
-          .from('companies')
-          .update({ campminder_last_sync_at: new Date().toISOString() })
-          .eq('id', company.id);
-
-      } catch (err) {
-        console.error(`Error syncing company ${company.name}:`, err);
-        allResults[company.name] = {
-          campers: { imported: 0, updated: 0, errors: 1 },
-          staff: { imported: 0, updated: 0, errors: 1 },
-          divisions: { imported: 0, updated: 0, errors: 1 },
-          sessions: { imported: 0, updated: 0, errors: 1 },
-        };
+      } catch (authError) {
+        console.error(`Auth error for ${company.name}:`, authError);
+        results.push({
+          company: company.name,
+          status: 'error',
+          message: authError instanceof Error ? authError.message : 'Authentication failed',
+        });
       }
     }
 
-    console.log('\n=== CampMinder Sync Complete ===');
-    console.log(JSON.stringify(allResults, null, 2));
-
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        results: allResults,
-        companies_synced: companiesToSync.length,
+      JSON.stringify({
+        success: true,
+        message: 'Sync jobs started in background',
+        results,
+        note: 'API calls are rate-limited to 4/second (240/min). Large syncs may take a few minutes.',
       }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { 
+        status: 200, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
     );
 
-  } catch (error: unknown) {
-    console.error('Error in CampMinder sync:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+  } catch (error) {
+    console.error('Sync error:', error);
     return new Response(
-      JSON.stringify({ success: false, error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({
+        error: error instanceof Error ? error.message : 'Unknown error',
+      }),
+      { 
+        status: 500, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
     );
   }
 });

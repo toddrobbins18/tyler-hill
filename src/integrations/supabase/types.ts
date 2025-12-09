@@ -2583,6 +2583,56 @@ export type Database = {
           },
         ]
       }
+      sync_jobs: {
+        Row: {
+          company_id: string | null
+          completed_at: string | null
+          created_at: string | null
+          entity_type: string
+          error_message: string | null
+          id: string
+          progress: Json | null
+          started_at: string | null
+          status: string
+          total_counts: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          company_id?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          entity_type?: string
+          error_message?: string | null
+          id?: string
+          progress?: Json | null
+          started_at?: string | null
+          status?: string
+          total_counts?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          company_id?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          entity_type?: string
+          error_message?: string | null
+          id?: string
+          progress?: Json | null
+          started_at?: string | null
+          status?: string
+          total_counts?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_jobs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_attendees: {
         Row: {
           child_id: string
