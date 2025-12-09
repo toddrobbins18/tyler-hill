@@ -68,7 +68,8 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
     const { data } = await supabase
       .from("divisions")
       .select("*")
-      .eq("company_id", currentCompany.id);
+      .eq("company_id", currentCompany.id)
+      .eq("is_active", true);
     setDivisions(sortDivisionsGirlsFirst(data || []));
   };
 

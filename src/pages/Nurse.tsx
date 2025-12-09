@@ -166,7 +166,8 @@ export default function Nurse() {
     const { data, error } = await supabase
       .from("divisions")
       .select("*")
-      .eq('company_id', currentCompany.id);
+      .eq('company_id', currentCompany.id)
+      .eq('is_active', true);
 
     if (error) {
       toast({ title: "Error fetching divisions", variant: "destructive" });

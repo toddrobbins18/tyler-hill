@@ -51,7 +51,8 @@ export default function ManageTripAttendanceDialog({
     const { data: divisionsData } = await supabase
       .from("divisions")
       .select("*")
-      .eq("company_id", currentCompany.id);
+      .eq("company_id", currentCompany.id)
+      .eq("is_active", true);
 
     const { data: childrenData } = await supabase
       .from("children")
