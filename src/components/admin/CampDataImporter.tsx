@@ -51,6 +51,7 @@ export default function CampDataImporter() {
   const [importProgress, setImportProgress] = useState(0);
   const [importResults, setImportResults] = useState<ImportResults | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [importSeason, setImportSeason] = useState<string>("2025");
 
   useEffect(() => {
     fetchCompanies();
@@ -209,6 +210,7 @@ export default function CampDataImporter() {
           campersData,
           awardsData,
           companyId: currentCompany.id,
+          season: importSeason,
         },
       });
 
@@ -359,11 +361,24 @@ export default function CampDataImporter() {
             Manual JSON Import
           </CardTitle>
           <CardDescription>
-            Import campers and awards data from JSON files for the 2026 season.
-            Awards will retain their original years while being linked to 2026 season records.
+            Import campers and awards data from JSON files.
+            Awards will retain their original years while being linked to the selected season records.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Season Selector */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Import Season</label>
+            <select
+              value={importSeason}
+              onChange={(e) => setImportSeason(e.target.value)}
+              className="w-full p-2 border rounded-md bg-background"
+              disabled={importing}
+            >
+              <option value="2025">2025</option>
+              <option value="2026">2026</option>
+            </select>
+          </div>
           {/* File Upload Section */}
           <div className="grid gap-6 md:grid-cols-2">
             <div className="space-y-2">
@@ -447,7 +462,7 @@ export default function CampDataImporter() {
                     <li>Optimized batch processing (50 campers at a time)</li>
                     <li>Existing person_ids will be automatically skipped</li>
                     <li>Awards will be bulk-imported after campers</li>
-                    <li>All data will be set to season 2026</li>
+                    <li>All data will be set to season {importSeason}</li>
                     <li>Award dates will retain their original years</li>
                   </ul>
                   <p className="text-xs text-muted-foreground mt-2">
