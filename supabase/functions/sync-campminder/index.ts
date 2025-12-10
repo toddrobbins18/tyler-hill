@@ -516,34 +516,62 @@ async function performFullSync(
       console.log(`  Unmatched CampMinder Division IDs: ${Array.from(unmappedDivisionIds).join(', ')}`);
     }
 
-    // 4. Fetch ALL persons with contact details
-    console.log('\n--- FETCHING ALL PERSONS ---');
+    // 4. Fetch ONLY enrolled camper persons (not ALL 14,500+ persons)
+    // OPTIMIZATION: Instead of fetching ALL persons and filtering, fetch ONLY by enrolled PersonIDs
+    console.log('\n--- FETCHING ENROLLED CAMPER PERSONS (OPTIMIZED) ---');
     await updateSyncJob(supabase, jobId, {
-      progress: { step: 'Fetching persons', divisions: divisions.length, enrolledAttendees: enrolledAttendees.length, season },
+      progress: { step: 'Fetching enrolled camper data', divisions: divisions.length, enrolledAttendees: enrolledAttendees.length, season },
     });
-
-    const allPersons = await fetchAllPaginated(
-      CM_PERSONS_URL,
-      token,
-      subscriptionKey,
-      { 
-        clientid: clientId,
-        seasonid: season,
-        includecamperdetails: 'true',
-        includecontactdetails: 'true',
-        includerelatives: 'true',  // Required for parent/guardian email data
-      }
-    );
-    console.log(`Found ${allPersons.length} total persons`);
-
-    // Filter to ONLY enrolled campers (not all 25,000+ persons with CamperDetails)
-    const campers = allPersons.filter((p: any) => 
-      p.CamperDetails && enrolledPersonIds.has(String(p.ID))
-    );
-    const nonCampers = allPersons.filter((p: any) => !p.CamperDetails);
     
-    const totalWithCamperDetails = allPersons.filter((p: any) => p.CamperDetails).length;
-    console.log(`Filtered to ${campers.length} ENROLLED campers (from ${totalWithCamperDetails} total with CamperDetails)`);
+    const enrolledPersonIdArray = Array.from(enrolledPersonIds);
+    console.log(`Fetching data for ${enrolledPersonIdArray.length} enrolled campers (instead of all 14,500+ persons)...`);
+    
+    // Batch fetch only enrolled campers in chunks of 100 to avoid URL length issues
+    const campers: any[] = [];
+    const personIdChunks: string[][] = [];
+    for (let i = 0; i < enrolledPersonIdArray.length; i += 100) {
+      personIdChunks.push(enrolledPersonIdArray.slice(i, i + 100));
+    }
+    
+    console.log(`Fetching camper data in ${personIdChunks.length} batch(es) of 100...`);
+    
+    for (let chunkIndex = 0; chunkIndex < personIdChunks.length; chunkIndex++) {
+      const chunk = personIdChunks[chunkIndex];
+      const personIdsParam = chunk.join(',');
+      
+      try {
+        // Use the personids parameter to fetch specific persons
+        const url = `${CM_PERSONS_URL}?clientid=${clientId}&personids=${personIdsParam}&includecamperdetails=true&includecontactdetails=true`;
+        console.log(`[Batch ${chunkIndex + 1}/${personIdChunks.length}] Fetching ${chunk.length} persons...`);
+        
+        const response = await rateLimitedFetch(url, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Ocp-Apim-Subscription-Key': subscriptionKey,
+          },
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          const items = data.Results || data.data || data.items || data || [];
+          
+          if (Array.isArray(items)) {
+            // Filter for those with CamperDetails (enrolled campers)
+            const batchCampers = items.filter((p: any) => p.CamperDetails);
+            campers.push(...batchCampers);
+            console.log(`[Batch ${chunkIndex + 1}] Got ${items.length} persons, ${batchCampers.length} with CamperDetails (total: ${campers.length})`);
+          }
+        } else {
+          const errorText = await response.text();
+          console.error(`[Batch ${chunkIndex + 1}] Error ${response.status}: ${errorText.substring(0, 200)}`);
+        }
+      } catch (batchError) {
+        console.error(`[Batch ${chunkIndex + 1}] Failed:`, batchError);
+      }
+    }
+    
+    console.log(`✓ PHASE COMPLETE: Fetched ${campers.length} enrolled campers (optimized from ${enrolledPersonIdArray.length} enrolled IDs)`);
 
     // 4. Sync campers with batch upsert
     console.log('\n--- SYNCING CAMPERS ---');
@@ -993,9 +1021,9 @@ async function performFullSync(
       staffAssignmentMap.set(String(assignment.PersonID), assignment);
     }
 
-    // Create person lookup from all persons we already fetched (NO additional API calls!)
+    // Create person lookup from campers we already fetched (NO additional API calls for campers!)
     const personMap = new Map<string, any>();
-    for (const person of allPersons) {
+    for (const person of campers) {
       personMap.set(String(person.ID), person);
     }
 
