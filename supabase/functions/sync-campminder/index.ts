@@ -353,7 +353,7 @@ async function performFullSync(
       total_counts: { divisions: divisions.length },
     });
 
-    // 2. Fetch enrolled attendees for filtering
+    // 2. Fetch enrolled attendees for filtering (using session attendees for enrollment status)
     console.log('\n--- FETCHING ENROLLED ATTENDEES ---');
     await updateSyncJob(supabase, jobId, {
       progress: { step: 'Fetching enrolled attendees', divisions: divisions.length, season },
@@ -368,7 +368,7 @@ async function performFullSync(
     console.log(`Found ${enrolledAttendees.length} enrolled attendees`);
 
     if (enrolledAttendees.length > 0) {
-      console.log('[DEBUG] Sample attendee record:', JSON.stringify(enrolledAttendees[0], null, 2));
+      console.log('[DEBUG] Sample session attendee record:', JSON.stringify(enrolledAttendees[0], null, 2));
     }
 
     const enrolledPersonIds = new Set(
@@ -376,39 +376,46 @@ async function performFullSync(
     );
     const enrolledPersonIdArray = Array.from(enrolledPersonIds);
 
-    // Fetch sessions for division lookup
-    console.log('\n--- FETCHING SESSIONS FOR DIVISION LOOKUP ---');
-    const sessions = await fetchAllPaginated(
-      CM_SESSIONS_URL,
+    // =====================================================
+    // PHASE 2B: Fetch DIVISION ATTENDEES for proper division assignment
+    // This is the CORRECT endpoint for PersonID -> DivisionID mapping!
+    // =====================================================
+    console.log('\n--- FETCHING DIVISION ATTENDEES (for division assignment) ---');
+    await updateSyncJob(supabase, jobId, {
+      progress: { step: 'Fetching division attendees', divisions: divisions.length, enrolledAttendees: enrolledAttendees.length, season },
+    });
+
+    const divisionAttendees = await fetchAllPaginated(
+      `${CM_DIVISIONS_URL}/attendees`,
       token,
       subscriptionKey,
       { clientid: clientId, seasonid: season }
     );
-    console.log(`Found ${sessions.length} sessions for division lookup`);
+    console.log(`Found ${divisionAttendees.length} division attendees`);
 
-    if (sessions.length > 0) {
-      console.log('[DEBUG] Sample session record:', JSON.stringify(sessions[0], null, 2));
+    if (divisionAttendees.length > 0) {
+      console.log('[DEBUG] Sample division attendee record:', JSON.stringify(divisionAttendees[0], null, 2));
     }
 
-    const sessionDivisionMap = new Map<number, number>();
-    for (const session of sessions) {
-      if (session.ID && session.DivisionID) {
-        sessionDivisionMap.set(session.ID, session.DivisionID);
-      }
-    }
-    console.log(`Built session->division map with ${sessionDivisionMap.size} entries`);
-
+    // Build PersonID -> DivisionID map from division attendees (the correct source!)
     const personDivisionMap = new Map<string, string>();
     let mappedToDivision = 0;
     let unmappedToDivision = 0;
     const unmappedDivisionIds = new Set<number>();
     
-    for (const attendee of enrolledAttendees) {
-      const cmDivisionId = attendee.DivisionID || sessionDivisionMap.get(attendee.SessionID);
+    for (const attendee of divisionAttendees) {
+      const personId = String(attendee.PersonID);
+      const cmDivisionId = attendee.DivisionID;
+      
+      // Only process if this person is enrolled (in our enrolledPersonIds set)
+      if (!enrolledPersonIds.has(personId)) {
+        continue;
+      }
+      
       const ourDivId = cmDivisionIdMap.get(cmDivisionId);
       
       if (ourDivId) {
-        personDivisionMap.set(String(attendee.PersonID), ourDivId);
+        personDivisionMap.set(personId, ourDivId);
         mappedToDivision++;
       } else {
         unmappedToDivision++;
@@ -418,14 +425,25 @@ async function performFullSync(
       }
     }
     
-    console.log(`\n[Camper Division Mapping Summary]`);
-    console.log(`  Total enrolled attendees: ${enrolledAttendees.length}`);
-    console.log(`  Mapped to divisions: ${mappedToDivision}`);
-    console.log(`  NOT mapped (division not found): ${unmappedToDivision}`);
+    console.log(`\n[Camper Division Mapping Summary (from /divisions/attendees)]`);
+    console.log(`  Total division attendees: ${divisionAttendees.length}`);
+    console.log(`  Enrolled campers mapped to divisions: ${mappedToDivision}`);
+    console.log(`  Enrolled campers NOT mapped (division not found): ${unmappedToDivision}`);
+    console.log(`  Division attendees for non-enrolled: ${divisionAttendees.length - mappedToDivision - unmappedToDivision}`);
     
     if (unmappedDivisionIds.size > 0) {
       console.log(`  Unmatched CampMinder Division IDs: ${Array.from(unmappedDivisionIds).join(', ')}`);
     }
+
+    // Fetch sessions for session NAME lookup (used later for session enrollment)
+    console.log('\n--- FETCHING SESSIONS FOR NAME LOOKUP ---');
+    const sessions = await fetchAllPaginated(
+      CM_SESSIONS_URL,
+      token,
+      subscriptionKey,
+      { clientid: clientId, seasonid: season }
+    );
+    console.log(`Found ${sessions.length} sessions for name lookup`);
 
     // =====================================================
     // PHASE 3: Fetch ALL persons with V2 API including relatives and contact details
