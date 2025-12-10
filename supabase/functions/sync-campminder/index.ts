@@ -688,26 +688,27 @@ async function performFullSync(
     const currentSeason = season; // 2026
     const fallbackSeason = '2025';
     
-    // Try current season first
-    console.log(`[Staff Sync] Trying /staff endpoint with season ${currentSeason}...`);
+    // Try current season first with status=1 (Active/Hired staff only)
+    // Per API docs: status is REQUIRED. 1=Active, 2=Resigned, 3=Dismissed, 4=Cancelled
+    console.log(`[Staff Sync] Trying /staff endpoint with season ${currentSeason}, status=1 (Active)...`);
     let staffAssignments = await fetchAllPaginated(
       CM_STAFF_URL,
       token,
       subscriptionKey,
-      { clientid: clientId, seasonid: currentSeason }
+      { clientid: clientId, seasonid: currentSeason, status: 1 }
     );
-    console.log(`Found ${staffAssignments.length} staff assignments for season ${currentSeason}`);
+    console.log(`Found ${staffAssignments.length} active staff assignments for season ${currentSeason}`);
 
     // Fallback to previous season if no results
     if (staffAssignments.length === 0) {
-      console.log(`[Staff Sync] No staff found for ${currentSeason}, trying ${fallbackSeason}...`);
+      console.log(`[Staff Sync] No staff found for ${currentSeason}, trying ${fallbackSeason} with status=1...`);
       staffAssignments = await fetchAllPaginated(
         CM_STAFF_URL,
         token,
         subscriptionKey,
-        { clientid: clientId, seasonid: fallbackSeason }
+        { clientid: clientId, seasonid: fallbackSeason, status: 1 }
       );
-      console.log(`Found ${staffAssignments.length} staff assignments for season ${fallbackSeason}`);
+      console.log(`Found ${staffAssignments.length} active staff assignments for season ${fallbackSeason}`);
     }
 
     // Fetch staff positions for role mapping (works without season)
