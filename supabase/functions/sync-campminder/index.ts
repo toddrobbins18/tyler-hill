@@ -398,7 +398,7 @@ async function performFullSync(
       progress: { step: 'Fetching persons with V2 API', divisions: divisions.length, enrolledAttendees: enrolledAttendees.length, season },
     });
     
-    // Use V2 API with includerelatives, includecontactdetails, includecamperdetails
+    // Use V2 API with includerelatives, includecontactdetails, includecamperdetails, includestaffdetails
     const allPersons = await fetchAllPaginated(
       CM_PERSONS_URL,
       token,
@@ -408,7 +408,8 @@ async function performFullSync(
         includecamperdetails: true,
         includecontactdetails: true,
         includerelatives: true,
-        includefamilypersons: true
+        includefamilypersons: true,
+        includestaffdetails: true
       }
     );
     
