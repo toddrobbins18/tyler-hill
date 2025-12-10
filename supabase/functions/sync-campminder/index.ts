@@ -513,17 +513,20 @@ async function performFullSync(
     console.log(`  Parents with names: ${parentNameMap.size}`);
 
     // =====================================================
-    // PHASE 5: Fetch missing parent details (parents not in initial fetch)
+    // PHASE 5: Fetch missing parent details (parents not in initial fetch OR without email)
+    // Parents may be in personMap but have empty ContactDetails in the season query
     // =====================================================
-    const missingParentIds = Array.from(parentPersonIds).filter(id => !personMap.has(id));
+    const parentsWithoutEmail = Array.from(parentPersonIds).filter(id => !parentEmailMap.has(id));
     
-    if (missingParentIds.length > 0) {
-      console.log(`\n--- FETCHING ${missingParentIds.length} MISSING PARENT DETAILS ---`);
-      
-      // Batch fetch missing parents
+    console.log(`\n--- FETCHING PARENT DETAILS FOR ${parentsWithoutEmail.length} PARENTS WITHOUT EMAIL ---`);
+    console.log(`  (Parents in personMap but no email: ${parentsWithoutEmail.filter(id => personMap.has(id)).length})`);
+    console.log(`  (Parents not in personMap at all: ${parentsWithoutEmail.filter(id => !personMap.has(id)).length})`);
+    
+    if (parentsWithoutEmail.length > 0) {
+      // Batch fetch parents without email
       const parentChunks: string[][] = [];
-      for (let i = 0; i < missingParentIds.length; i += 50) {
-        parentChunks.push(missingParentIds.slice(i, i + 50));
+      for (let i = 0; i < parentsWithoutEmail.length; i += 50) {
+        parentChunks.push(parentsWithoutEmail.slice(i, i + 50));
       }
       
       for (const chunk of parentChunks) {
