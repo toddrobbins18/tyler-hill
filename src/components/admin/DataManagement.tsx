@@ -46,15 +46,21 @@ export default function DataManagement() {
   };
 
   const deleteTableData = async (tableName: string) => {
+    if (!currentCompany?.id) {
+      toast.error("No company selected");
+      return;
+    }
+    
     try {
       const { error } = await (supabase as any)
         .from(tableName)
         .delete()
+        .eq("company_id", currentCompany.id)
         .neq("id", "00000000-0000-0000-0000-000000000000");
 
       if (error) throw error;
 
-      toast.success(`All ${tableName} data deleted successfully`);
+      toast.success(`All ${tableName} data for ${currentCompany.name} deleted successfully`);
       fetchStats();
     } catch (error) {
       toast.error(`Failed to delete ${tableName} data`);
@@ -63,6 +69,11 @@ export default function DataManagement() {
   };
 
   const deleteAllTestData = async () => {
+    if (!currentCompany?.id) {
+      toast.error("No company selected");
+      return;
+    }
+    
     const tables = ["children", "staff", "awards", "daily_notes", "trips", "events", 
                     "incident_reports", "medication_logs", "sports_academy", "tutoring_therapy",
                     "activities_field_trips", "special_events_activities", "rainy_day_schedule",
@@ -74,10 +85,11 @@ export default function DataManagement() {
         await (supabase as any)
           .from(table)
           .delete()
+          .eq("company_id", currentCompany.id)
           .neq("id", "00000000-0000-0000-0000-000000000000");
       }
       
-      toast.success("All test data deleted successfully");
+      toast.success(`All test data for ${currentCompany.name} deleted successfully`);
       fetchStats();
     } catch (error) {
       toast.error("Failed to delete all test data");
@@ -116,9 +128,9 @@ export default function DataManagement() {
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Delete All Test Data</AlertDialogTitle>
+                <AlertDialogTitle>Delete All Test Data for {currentCompany?.name}</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will permanently delete all data from all tables including children, staff, awards, notes, trips, events, and more. This action cannot be undone. Are you absolutely sure?
+                  This will permanently delete all data for <strong>{currentCompany?.name}</strong> including children, staff, awards, notes, trips, events, and more. This action cannot be undone. Are you absolutely sure?
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -150,12 +162,12 @@ export default function DataManagement() {
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete {card.title} Data</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This will permanently delete all {card.count} records from {card.title.toLowerCase()}. This action cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete {card.title} Data for {currentCompany?.name}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete all {card.count} {card.title.toLowerCase()} records for <strong>{currentCompany?.name}</strong>. This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction onClick={() => deleteTableData(card.title.toLowerCase().replace(" ", "_"))}>
