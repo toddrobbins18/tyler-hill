@@ -516,33 +516,22 @@ async function performFullSync(
       console.log(`  Unmatched CampMinder Division IDs: ${Array.from(unmappedDivisionIds).join(', ')}`);
     }
 
-    // 4. Fetch ONLY enrolled camper persons (not ALL 14,500+ persons)
-    // OPTIMIZATION: Instead of fetching ALL persons and filtering, fetch ONLY by enrolled PersonIDs
-    console.log('\n--- FETCHING ENROLLED CAMPER PERSONS (OPTIMIZED) ---');
+    // 4. Fetch enrolled camper persons individually (V2 API doesn't support bulk personids filter)
+    console.log('\n--- FETCHING ENROLLED CAMPER PERSONS ---');
     await updateSyncJob(supabase, jobId, {
       progress: { step: 'Fetching enrolled camper data', divisions: divisions.length, enrolledAttendees: enrolledAttendees.length, season },
     });
     
     const enrolledPersonIdArray = Array.from(enrolledPersonIds);
-    console.log(`Fetching data for ${enrolledPersonIdArray.length} enrolled campers (instead of all 14,500+ persons)...`);
+    console.log(`Fetching data for ${enrolledPersonIdArray.length} enrolled campers individually...`);
     
-    // Batch fetch only enrolled campers in chunks of 100 to avoid URL length issues
+    // Fetch each enrolled camper individually with rate limiting
     const campers: any[] = [];
-    const personIdChunks: string[][] = [];
-    for (let i = 0; i < enrolledPersonIdArray.length; i += 100) {
-      personIdChunks.push(enrolledPersonIdArray.slice(i, i + 100));
-    }
+    let fetchedCount = 0;
     
-    console.log(`Fetching camper data in ${personIdChunks.length} batch(es) of 100...`);
-    
-    for (let chunkIndex = 0; chunkIndex < personIdChunks.length; chunkIndex++) {
-      const chunk = personIdChunks[chunkIndex];
-      const personIdsParam = chunk.join(',');
-      
+    for (const personId of enrolledPersonIdArray) {
       try {
-        // Use the personids parameter to fetch specific persons
-        const url = `${CM_PERSONS_URL}?clientid=${clientId}&personids=${personIdsParam}&includecamperdetails=true&includecontactdetails=true`;
-        console.log(`[Batch ${chunkIndex + 1}/${personIdChunks.length}] Fetching ${chunk.length} persons...`);
+        const url = `${CM_PERSONS_URL}/${personId}?clientid=${clientId}&includecamperdetails=true&includecontactdetails=true`;
         
         const response = await rateLimitedFetch(url, {
           method: 'GET',
@@ -553,25 +542,23 @@ async function performFullSync(
         });
         
         if (response.ok) {
-          const data = await response.json();
-          const items = data.Results || data.data || data.items || data || [];
-          
-          if (Array.isArray(items)) {
-            // Filter for those with CamperDetails (enrolled campers)
-            const batchCampers = items.filter((p: any) => p.CamperDetails);
-            campers.push(...batchCampers);
-            console.log(`[Batch ${chunkIndex + 1}] Got ${items.length} persons, ${batchCampers.length} with CamperDetails (total: ${campers.length})`);
+          const person = await response.json();
+          if (person && person.CamperDetails) {
+            campers.push(person);
           }
-        } else {
-          const errorText = await response.text();
-          console.error(`[Batch ${chunkIndex + 1}] Error ${response.status}: ${errorText.substring(0, 200)}`);
         }
-      } catch (batchError) {
-        console.error(`[Batch ${chunkIndex + 1}] Failed:`, batchError);
+        
+        fetchedCount++;
+        // Log progress every 50 campers
+        if (fetchedCount % 50 === 0) {
+          console.log(`[Progress] Fetched ${fetchedCount}/${enrolledPersonIdArray.length} campers (${campers.length} with CamperDetails)`);
+        }
+      } catch (fetchError) {
+        console.error(`Failed to fetch person ${personId}:`, fetchError);
       }
     }
     
-    console.log(`✓ PHASE COMPLETE: Fetched ${campers.length} enrolled campers (optimized from ${enrolledPersonIdArray.length} enrolled IDs)`);
+    console.log(`✓ PHASE COMPLETE: Fetched ${campers.length} enrolled campers from ${enrolledPersonIdArray.length} enrolled IDs`);
 
     // 4. Sync campers with batch upsert
     console.log('\n--- SYNCING CAMPERS ---');
