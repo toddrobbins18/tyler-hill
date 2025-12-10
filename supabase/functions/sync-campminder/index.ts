@@ -376,64 +376,8 @@ async function performFullSync(
     );
     const enrolledPersonIdArray = Array.from(enrolledPersonIds);
 
-    // =====================================================
-    // PHASE 2B: Fetch DIVISION ATTENDEES for proper division assignment
-    // This is the CORRECT endpoint for PersonID -> DivisionID mapping!
-    // =====================================================
-    console.log('\n--- FETCHING DIVISION ATTENDEES (for division assignment) ---');
-    await updateSyncJob(supabase, jobId, {
-      progress: { step: 'Fetching division attendees', divisions: divisions.length, enrolledAttendees: enrolledAttendees.length, season },
-    });
-
-    const divisionAttendees = await fetchAllPaginated(
-      `${CM_DIVISIONS_URL}/attendees`,
-      token,
-      subscriptionKey,
-      { clientid: clientId, seasonid: season }
-    );
-    console.log(`Found ${divisionAttendees.length} division attendees`);
-
-    if (divisionAttendees.length > 0) {
-      console.log('[DEBUG] Sample division attendee record:', JSON.stringify(divisionAttendees[0], null, 2));
-    }
-
-    // Build PersonID -> DivisionID map from division attendees (the correct source!)
-    const personDivisionMap = new Map<string, string>();
-    let mappedToDivision = 0;
-    let unmappedToDivision = 0;
-    const unmappedDivisionIds = new Set<number>();
-    
-    for (const attendee of divisionAttendees) {
-      const personId = String(attendee.PersonID);
-      const cmDivisionId = attendee.DivisionID;
-      
-      // Only process if this person is enrolled (in our enrolledPersonIds set)
-      if (!enrolledPersonIds.has(personId)) {
-        continue;
-      }
-      
-      const ourDivId = cmDivisionIdMap.get(cmDivisionId);
-      
-      if (ourDivId) {
-        personDivisionMap.set(personId, ourDivId);
-        mappedToDivision++;
-      } else {
-        unmappedToDivision++;
-        if (cmDivisionId) {
-          unmappedDivisionIds.add(cmDivisionId);
-        }
-      }
-    }
-    
-    console.log(`\n[Camper Division Mapping Summary (from /divisions/attendees)]`);
-    console.log(`  Total division attendees: ${divisionAttendees.length}`);
-    console.log(`  Enrolled campers mapped to divisions: ${mappedToDivision}`);
-    console.log(`  Enrolled campers NOT mapped (division not found): ${unmappedToDivision}`);
-    console.log(`  Division attendees for non-enrolled: ${divisionAttendees.length - mappedToDivision - unmappedToDivision}`);
-    
-    if (unmappedDivisionIds.size > 0) {
-      console.log(`  Unmatched CampMinder Division IDs: ${Array.from(unmappedDivisionIds).join(', ')}`);
-    }
+    // NOTE: We'll use CamperDetails.DivisionID directly from persons API instead of /divisions/attendees
+    // The /divisions/attendees endpoint was returning DivisionID: 0 for everyone
 
     // Fetch sessions for session NAME lookup (used later for session enrollment)
     console.log('\n--- FETCHING SESSIONS FOR NAME LOOKUP ---');
@@ -676,8 +620,13 @@ async function performFullSync(
           guardianPhone = person.ContactDetails.PhoneNumbers[0].Number;
         }
 
-        // Get division from session mapping
-        const divisionId = personDivisionMap.get(String(person.ID)) || null;
+        // Get division directly from CamperDetails.DivisionID (the correct source!)
+        const cmDivisionId = person.CamperDetails?.DivisionID;
+        const divisionId = cmDivisionId ? cmDivisionIdMap.get(cmDivisionId) : null;
+        
+        if (!divisionId && cmDivisionId) {
+          console.log(`[Division Warning] Camper ${name} has CamperDetails.DivisionID=${cmDivisionId} but no matching division in our DB`);
+        }
 
         return {
           person_id: String(person.ID),
