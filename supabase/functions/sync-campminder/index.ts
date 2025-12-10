@@ -680,30 +680,36 @@ async function performFullSync(
     }
 
     // =====================================================
-    // PHASE 7: Sync staff
+    // PHASE 7: Sync staff with season fallback
     // =====================================================
     console.log('\n--- SYNCING STAFF ---');
-    const staffAssignments = await fetchAllPaginated(
+    
+    const currentSeason = season; // 2026
+    const fallbackSeason = '2025';
+    
+    // Try current season first
+    console.log(`[Staff Sync] Trying /staff endpoint with season ${currentSeason}...`);
+    let staffAssignments = await fetchAllPaginated(
       CM_STAFF_URL,
       token,
       subscriptionKey,
-      { clientid: clientId, seasonid: season }
+      { clientid: clientId, seasonid: currentSeason }
     );
-    console.log(`Found ${staffAssignments.length} staff assignments`);
+    console.log(`Found ${staffAssignments.length} staff assignments for season ${currentSeason}`);
 
-    const staffPersonIds = new Set<string>();
-    const staffAssignmentMap = new Map<string, any>();
-    
-    for (const assignment of staffAssignments) {
-      if (assignment.PersonID) {
-        const personId = String(assignment.PersonID);
-        staffPersonIds.add(personId);
-        staffAssignmentMap.set(personId, assignment);
-      }
+    // Fallback to previous season if no results
+    if (staffAssignments.length === 0) {
+      console.log(`[Staff Sync] No staff found for ${currentSeason}, trying ${fallbackSeason}...`);
+      staffAssignments = await fetchAllPaginated(
+        CM_STAFF_URL,
+        token,
+        subscriptionKey,
+        { clientid: clientId, seasonid: fallbackSeason }
+      );
+      console.log(`Found ${staffAssignments.length} staff assignments for season ${fallbackSeason}`);
     }
-    console.log(`Found ${staffPersonIds.size} unique staff person IDs`);
 
-    // Fetch staff positions for role mapping
+    // Fetch staff positions for role mapping (works without season)
     const positions = await fetchAllPaginated(
       `${CM_STAFF_URL}/positions`,
       token,
@@ -716,6 +722,45 @@ async function performFullSync(
     for (const pos of positions) {
       positionMap.set(pos.ID, pos.Name);
     }
+
+    // Alternative: If /staff endpoint returns nothing, extract staff from persons API
+    // Staff members have StaffDetails in their person record
+    if (staffAssignments.length === 0) {
+      console.log('[Staff Sync] No staff from /staff endpoint. Attempting to find staff from persons API (StaffDetails)...');
+      
+      const staffFromPersons = allPersons.filter((p: any) => p.StaffDetails);
+      console.log(`Found ${staffFromPersons.length} persons with StaffDetails`);
+      
+      if (staffFromPersons.length > 0) {
+        console.log('[DEBUG] Sample person with StaffDetails:', JSON.stringify({
+          ID: staffFromPersons[0].ID,
+          Name: staffFromPersons[0].Name,
+          StaffDetails: staffFromPersons[0].StaffDetails,
+        }, null, 2));
+        
+        // Map StaffDetails persons to staff assignment format
+        for (const person of staffFromPersons) {
+          staffAssignments.push({
+            PersonID: person.ID,
+            Position1ID: person.StaffDetails?.PositionID || person.StaffDetails?.Position1ID || null,
+            PositionID: person.StaffDetails?.PositionID || null,
+          });
+        }
+        console.log(`[Staff Sync] Created ${staffAssignments.length} staff assignments from StaffDetails`);
+      }
+    }
+
+    const staffPersonIds = new Set<string>();
+    const staffAssignmentMap = new Map<string, any>();
+    
+    for (const assignment of staffAssignments) {
+      if (assignment.PersonID) {
+        const personId = String(assignment.PersonID);
+        staffPersonIds.add(personId);
+        staffAssignmentMap.set(personId, assignment);
+      }
+    }
+    console.log(`Found ${staffPersonIds.size} unique staff person IDs`);
 
     await updateSyncJob(supabase, jobId, {
       progress: { step: 'Syncing staff', total: staffPersonIds.size, campers: campers.length, divisions: divisions.length, season },
@@ -780,6 +825,8 @@ async function performFullSync(
           console.error('Staff sync errors:', staffErrors);
         }
       }
+    } else {
+      console.log('[Staff Sync] No staff found from any source. Check if staff data exists in CampMinder for this season.');
     }
 
     // =====================================================
