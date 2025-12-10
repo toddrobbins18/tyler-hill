@@ -41,11 +41,13 @@ serve(async (req) => {
       throw new Error('User must be an admin');
     }
 
-    const { campersData, awardsData, companyId } = await req.json();
+    const { campersData, awardsData, companyId, season = '2025' } = await req.json();
 
     if (!campersData || !awardsData || !companyId) {
       throw new Error('Missing required data: campersData, awardsData, or companyId');
     }
+    
+    console.log(`Importing data for season: ${season}`);
 
     console.log(`Starting import for company ${companyId}`);
     console.log(`Campers to import: ${campersData.length}`);
@@ -86,7 +88,7 @@ serve(async (req) => {
       .from('children')
       .select('person_id, id')
       .eq('company_id', companyId)
-      .eq('season', '2026')
+      .eq('season', season)
       .in('person_id', allPersonIds);
 
     const existingPersonIdMap = new Map();
@@ -131,7 +133,7 @@ serve(async (req) => {
         person_id: personId,
         name: name,
         company_id: companyId,
-        season: '2026',
+        season: season,
         status: 'active',
       });
     }
@@ -217,7 +219,7 @@ serve(async (req) => {
             category: awardDetails.type || 'award',
             description: awardDetails.description,
             date: awardDate,
-            season: '2026',
+            season: season,
             company_id: companyId,
           });
         }
@@ -234,7 +236,7 @@ serve(async (req) => {
         .from('awards')
         .select('child_id, title, category, description, date')
         .eq('company_id', companyId)
-        .eq('season', '2026');
+        .eq('season', season);
 
       // Create a Set of existing award keys for fast lookup
       const existingAwardKeys = new Set(
