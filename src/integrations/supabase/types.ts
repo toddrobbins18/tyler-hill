@@ -2924,6 +2924,7 @@ export type Database = {
       is_specialist: { Args: { _user_id: string }; Returns: boolean }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       set_current_company: { Args: { company_id: string }; Returns: undefined }
+      trigger_campminder_sync: { Args: never; Returns: undefined }
     }
     Enums: {
       app_role:
