@@ -183,35 +183,158 @@ async function updateSyncJob(
   }
 }
 
+interface ChangeRecord {
+  person_id: string;
+  name: string;
+  changes: { field: string; old_value: any; new_value: any }[];
+}
+
+interface UpsertResult {
+  inserted: number;
+  updated: number;
+  errors: string[];
+  changes: ChangeRecord[];
+}
+
+// Compare two values for equality (handles null, undefined, arrays)
+function valuesEqual(a: any, b: any): boolean {
+  if (a === b) return true;
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return JSON.stringify(a.sort()) === JSON.stringify(b.sort());
+  }
+  return String(a) === String(b);
+}
+
+// Fields to track changes for each table
+const TRACKED_FIELDS: Record<string, string[]> = {
+  children: ['name', 'gender', 'date_of_birth', 'grade', 'guardian_name', 'guardian_email', 'guardian_phone', 'allergies', 'medical_notes', 'division_id', 'session', 'status'],
+  staff: ['name', 'role', 'email', 'phone', 'date_of_birth', 'status'],
+};
+
 async function batchUpsert(
   supabase: any,
   table: string,
   data: any[],
   conflictColumns: string,
   batchSize: number = 100
-): Promise<{ inserted: number; errors: string[] }> {
+): Promise<UpsertResult> {
   let inserted = 0;
+  let updated = 0;
   const errors: string[] = [];
+  const changes: ChangeRecord[] = [];
   const totalBatches = Math.ceil(data.length / batchSize);
+  const trackedFields = TRACKED_FIELDS[table] || [];
+
+  // Fetch existing records for comparison
+  const personIds = data.map(d => d.person_id).filter(Boolean);
+  const companyId = data[0]?.company_id;
+  const season = data[0]?.season;
+  
+  let existingRecordsMap = new Map<string, any>();
+  
+  if (personIds.length > 0 && companyId && season) {
+    console.log(`[${table}] Fetching existing records for change detection...`);
+    
+    // Fetch in batches of 500 to avoid query limits
+    for (let i = 0; i < personIds.length; i += 500) {
+      const batchIds = personIds.slice(i, i + 500);
+      const { data: existingData, error: fetchError } = await supabase
+        .from(table)
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('season', season)
+        .in('person_id', batchIds);
+      
+      if (fetchError) {
+        console.error(`[${table}] Error fetching existing records:`, fetchError.message);
+      } else if (existingData) {
+        for (const record of existingData) {
+          existingRecordsMap.set(record.person_id, record);
+        }
+      }
+    }
+    
+    console.log(`[${table}] Found ${existingRecordsMap.size} existing records for comparison`);
+  }
+
+  const now = new Date().toISOString();
 
   for (let i = 0; i < data.length; i += batchSize) {
     const batch = data.slice(i, i + batchSize);
     const batchNum = Math.floor(i / batchSize) + 1;
     
+    // Check each record for changes
+    for (const record of batch) {
+      const existingRecord = existingRecordsMap.get(record.person_id);
+      
+      if (existingRecord) {
+        // Record exists - check for changes
+        const recordChanges: { field: string; old_value: any; new_value: any }[] = [];
+        
+        for (const field of trackedFields) {
+          const oldVal = existingRecord[field];
+          const newVal = record[field];
+          
+          if (!valuesEqual(oldVal, newVal)) {
+            recordChanges.push({
+              field,
+              old_value: oldVal,
+              new_value: newVal,
+            });
+          }
+        }
+        
+        if (recordChanges.length > 0) {
+          updated++;
+          changes.push({
+            person_id: record.person_id,
+            name: record.name || existingRecord.name,
+            changes: recordChanges,
+          });
+          
+          // Log individual changes
+          console.log(`[${table}] UPDATED: ${record.name} (${record.person_id})`);
+          for (const change of recordChanges) {
+            console.log(`  - ${change.field}: "${change.old_value}" → "${change.new_value}"`);
+          }
+        }
+      } else {
+        // New record
+        inserted++;
+        console.log(`[${table}] NEW: ${record.name} (${record.person_id})`);
+      }
+    }
+    
+    // Add updated_at timestamp to all records
+    const batchWithTimestamp = batch.map(record => ({
+      ...record,
+      updated_at: now,
+    }));
+    
     const { error } = await supabase
       .from(table)
-      .upsert(batch, { onConflict: conflictColumns });
+      .upsert(batchWithTimestamp, { onConflict: conflictColumns });
     
     if (error) {
       console.error(`[${table}] Batch ${batchNum}/${totalBatches} error:`, error.message);
       errors.push(`Batch ${batchNum}: ${error.message}`);
     } else {
-      inserted += batch.length;
-      console.log(`[${table}] Processed batch ${batchNum}/${totalBatches} (${inserted}/${data.length})`);
+      console.log(`[${table}] Processed batch ${batchNum}/${totalBatches} (${i + batch.length}/${data.length})`);
     }
   }
 
-  return { inserted, errors };
+  // Summary log
+  console.log(`\n[${table}] Change Detection Summary:`);
+  console.log(`  - New records: ${inserted}`);
+  console.log(`  - Updated records: ${updated}`);
+  console.log(`  - Unchanged records: ${data.length - inserted - updated}`);
+  if (changes.length > 0) {
+    console.log(`  - Total field changes: ${changes.reduce((sum, c) => sum + c.changes.length, 0)}`);
+  }
+
+  return { inserted, updated, errors, changes };
 }
 
 async function performFullSync(
@@ -595,6 +718,11 @@ async function performFullSync(
       total_counts: { divisions: divisions.length, campers: campers.length },
     });
 
+    // Variables for tracking changes - declared outside if blocks
+    let camperChanges: ChangeRecord[] = [];
+    let camperInsertedCount = 0;
+    let camperUpdatedCount = 0;
+
     if (campers.length > 0) {
       const gradeMap: Record<number, string> = {
         0: 'Pre-K', 1: 'K', 2: '1st', 3: '2nd', 4: '3rd', 5: '4th',
@@ -668,16 +796,22 @@ async function performFullSync(
       const campersWithName = camperData.filter(c => c.guardian_name).length;
       console.log(`[Camper Data Summary] ${campersWithEmail} with guardian_email, ${campersWithPhone} with guardian_phone, ${campersWithName} with guardian_name`);
 
-      const { inserted: campersInserted, errors: camperErrors } = await batchUpsert(
+      const camperResult = await batchUpsert(
         supabase,
         'children',
         camperData,
         'company_id,person_id,season'
       );
-      console.log(`Synced ${campersInserted} campers`);
-      if (camperErrors.length) {
-        console.error('Camper sync errors:', camperErrors);
+      console.log(`Synced campers: ${camperResult.inserted} new, ${camperResult.updated} updated`);
+      if (camperResult.errors.length) {
+        console.error('Camper sync errors:', camperResult.errors);
       }
+
+      // Store camper changes for final summary
+      camperChanges = camperResult.changes;
+      camperInsertedCount = camperResult.inserted;
+      camperUpdatedCount = camperResult.updated;
+      console.log(`Synced ${camperResult.inserted + camperResult.updated} campers`);
     }
 
     // =====================================================
@@ -769,6 +903,11 @@ async function performFullSync(
       total_counts: { divisions: divisions.length, campers: campers.length, staff: staffPersonIds.size },
     });
 
+    // Variables for tracking staff changes - declared outside if blocks
+    let staffChanges: ChangeRecord[] = [];
+    let staffInsertedCount = 0;
+    let staffUpdatedCount = 0;
+
     if (staffPersonIds.size > 0) {
       const staffData: any[] = [];
       
@@ -816,16 +955,19 @@ async function performFullSync(
       console.log(`Built ${staffData.length} staff records with valid names (skipped ${staffPersonIds.size - staffData.length} without names)`);
 
       if (staffData.length > 0) {
-        const { inserted: staffInserted, errors: staffErrors } = await batchUpsert(
+        const staffResult = await batchUpsert(
           supabase,
           'staff',
           staffData,
           'company_id,person_id,season'
         );
-        console.log(`Synced ${staffInserted} staff`);
-        if (staffErrors.length) {
-          console.error('Staff sync errors:', staffErrors);
+        console.log(`Synced staff: ${staffResult.inserted} new, ${staffResult.updated} updated`);
+        if (staffResult.errors.length) {
+          console.error('Staff sync errors:', staffResult.errors);
         }
+        staffChanges = staffResult.changes;
+        staffInsertedCount = staffResult.inserted;
+        staffUpdatedCount = staffResult.updated;
       }
     } else {
       console.log('[Staff Sync] No staff found from any source. Check if staff data exists in CampMinder for this season.');
@@ -885,31 +1027,52 @@ async function performFullSync(
       .update({ campminder_last_sync_at: new Date().toISOString() })
       .eq('id', companyId);
 
+    // Build change summary for the final stats
+    const allChanges = [
+      ...camperChanges.map(c => ({ ...c, type: 'camper' as const })),
+      ...staffChanges.map(c => ({ ...c, type: 'staff' as const })),
+    ];
+
     // Complete the job
     const finalStats = {
       step: 'Completed',
       divisions: divisions.length,
       campers: campers.length,
+      campers_inserted: camperInsertedCount,
+      campers_updated: camperUpdatedCount,
       staff: staffPersonIds.size,
+      staff_inserted: staffInsertedCount,
+      staff_updated: staffUpdatedCount,
       parentEmails: parentEmailMap.size,
       parentPhones: parentPhoneMap.size,
       season: season,
+      changes_summary: allChanges.slice(0, 50), // Limit to first 50 changes to avoid huge payloads
+      total_changes: allChanges.length,
     };
 
     await updateSyncJob(supabase, jobId, {
       status: 'completed',
       completed_at: new Date().toISOString(),
       progress: finalStats,
-      total_counts: { divisions: divisions.length, campers: campers.length, staff: staffPersonIds.size },
+      total_counts: { 
+        divisions: divisions.length, 
+        campers: campers.length, 
+        staff: staffPersonIds.size,
+        campers_inserted: camperInsertedCount,
+        campers_updated: camperUpdatedCount,
+        staff_inserted: staffInsertedCount,
+        staff_updated: staffUpdatedCount,
+      },
     });
 
     console.log(`\n========================================`);
     console.log(`Sync completed successfully!`);
     console.log(`Divisions: ${divisions.length}`);
-    console.log(`Campers: ${campers.length}`);
-    console.log(`Staff: ${staffPersonIds.size}`);
+    console.log(`Campers: ${campers.length} (${camperInsertedCount} new, ${camperUpdatedCount} updated)`);
+    console.log(`Staff: ${staffPersonIds.size} (${staffInsertedCount} new, ${staffUpdatedCount} updated)`);
     console.log(`Parent Emails: ${parentEmailMap.size}`);
     console.log(`Parent Phones: ${parentPhoneMap.size}`);
+    console.log(`Total changes detected: ${allChanges.length}`);
     console.log(`Season: ${season}`);
     console.log(`========================================\n`);
 
