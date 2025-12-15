@@ -229,14 +229,16 @@ export default function Dashboard() {
 
     const birthdaysToday = (childrenData || []).filter((child: any) => {
       if (!child.date_of_birth) return false;
-      const birthDate = new Date(child.date_of_birth);
-      return (birthDate.getMonth() + 1) === todayMonth && birthDate.getDate() === todayDay;
+      // Parse date string directly to avoid timezone issues
+      const [year, month, day] = child.date_of_birth.split('-').map(Number);
+      return month === todayMonth && day === todayDay;
     });
 
     const staffBirthdaysToday = (staffBirthdayData || []).filter((staff: any) => {
       if (!staff.date_of_birth) return false;
-      const birthDate = new Date(staff.date_of_birth);
-      return (birthDate.getMonth() + 1) === todayMonth && birthDate.getDate() === todayDay;
+      // Parse date string directly to avoid timezone issues
+      const [year, month, day] = staff.date_of_birth.split('-').map(Number);
+      return month === todayMonth && day === todayDay;
     });
 
     // Fetch health center admissions (not yet checked out) with division filtering
@@ -305,10 +307,12 @@ export default function Dashboard() {
 
   const calculateAge = (dateOfBirth: string): number => {
     const today = new Date();
-    const birthDate = new Date(dateOfBirth);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    // Parse date string directly to avoid timezone issues
+    const [year, month, day] = dateOfBirth.split('-').map(Number);
+    let age = today.getFullYear() - year;
+    const todayMonth = today.getMonth() + 1;
+    const todayDay = today.getDate();
+    if (todayMonth < month || (todayMonth === month && todayDay < day)) {
       age--;
     }
     return age;
