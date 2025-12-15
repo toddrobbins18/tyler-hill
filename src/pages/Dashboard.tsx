@@ -27,6 +27,7 @@ export default function Dashboard() {
   const [sportsEvents, setSportsEvents] = useState<any[]>([]);
   const [threeDayOutlook, setThreeDayOutlook] = useState<any[]>([]);
   const [todaysBirthdays, setTodaysBirthdays] = useState<any[]>([]);
+  const [staffBirthdays, setStaffBirthdays] = useState<any[]>([]);
   const [healthCenterAdmissions, setHealthCenterAdmissions] = useState<any[]>([]);
   const [todaysMenu, setTodaysMenu] = useState<any>({
     breakfast: "",
@@ -82,6 +83,11 @@ export default function Dashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'health_center_admissions' }, fetchDashboardData)
       .subscribe();
 
+    const staffChannel = supabase
+      .channel('dashboard-staff')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'staff' }, fetchDashboardData)
+      .subscribe();
+
     return () => {
       supabase.removeChannel(childrenChannel);
       supabase.removeChannel(notesChannel);
@@ -91,6 +97,7 @@ export default function Dashboard() {
       supabase.removeChannel(specialEventsChannel);
       supabase.removeChannel(sportsChannel);
       supabase.removeChannel(healthCenterChannel);
+      supabase.removeChannel(staffChannel);
     };
   }, [currentCompany?.id]);
 
@@ -202,8 +209,15 @@ export default function Dashboard() {
     }
 
     // Fetch birthdays for today (matching month and day)
-    const { data: staffData } = await supabase
+    const { data: childrenData } = await supabase
       .from('children')
+      .select('id, name, date_of_birth')
+      .eq('status', 'active')
+      .eq('company_id', currentCompany.id)
+      .not('date_of_birth', 'is', null);
+
+    const { data: staffBirthdayData } = await supabase
+      .from('staff')
       .select('id, name, date_of_birth')
       .eq('status', 'active')
       .eq('company_id', currentCompany.id)
@@ -213,9 +227,15 @@ export default function Dashboard() {
     const todayMonth = todayDate.getMonth() + 1;
     const todayDay = todayDate.getDate();
 
-    const birthdaysToday = (staffData || []).filter((child: any) => {
+    const birthdaysToday = (childrenData || []).filter((child: any) => {
       if (!child.date_of_birth) return false;
       const birthDate = new Date(child.date_of_birth);
+      return (birthDate.getMonth() + 1) === todayMonth && birthDate.getDate() === todayDay;
+    });
+
+    const staffBirthdaysToday = (staffBirthdayData || []).filter((staff: any) => {
+      if (!staff.date_of_birth) return false;
+      const birthDate = new Date(staff.date_of_birth);
       return (birthDate.getMonth() + 1) === todayMonth && birthDate.getDate() === todayDay;
     });
 
@@ -245,6 +265,7 @@ export default function Dashboard() {
     setSportsEvents(sportsData || []);
     setThreeDayOutlook(threeDayData || []);
     setTodaysBirthdays(birthdaysToday);
+    setStaffBirthdays(staffBirthdaysToday);
     setHealthCenterAdmissions(healthCenterData || []);
     
     const eventsData = trips?.map(trip => ({
@@ -281,6 +302,17 @@ export default function Dashboard() {
     day: 'numeric', 
     year: 'numeric' 
   });
+
+  const calculateAge = (dateOfBirth: string): number => {
+    const today = new Date();
+    const birthDate = new Date(dateOfBirth);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
 
   return (
     <div className="space-y-8">
@@ -507,7 +539,7 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent className="space-y-3 flex-1 flex flex-col">
-            {todaysBirthdays.length === 0 ? (
+            {todaysBirthdays.length === 0 && staffBirthdays.length === 0 ? (
               <p className="text-muted-foreground text-sm">No birthdays today</p>
             ) : (
               <div className="space-y-3 flex-1">
@@ -517,8 +549,17 @@ export default function Dashboard() {
                     <div>
                       <p className="font-medium text-sm">{child.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        Born {new Date(child.date_of_birth).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                        Turning {calculateAge(child.date_of_birth)} today! 🎂
                       </p>
+                    </div>
+                  </div>
+                ))}
+                {staffBirthdays.map((staff: any) => (
+                  <div key={staff.id} className="flex items-center gap-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                    <Cake className="h-5 w-5 text-primary" />
+                    <div>
+                      <p className="font-medium text-sm">{staff.name}</p>
+                      <p className="text-xs text-muted-foreground">Staff Member 🎉</p>
                     </div>
                   </div>
                 ))}
