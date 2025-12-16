@@ -32,6 +32,31 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     loadCompanyData();
+
+    // Listen for auth state changes and reload company data when user signs in
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        console.log('🔐 [CompanyContext] Auth state changed:', event);
+        if (event === 'SIGNED_IN' && session) {
+          console.log('✅ [CompanyContext] User signed in, reloading company data...');
+          // Use setTimeout to avoid Supabase auth deadlock
+          setTimeout(() => {
+            loadCompanyData();
+          }, 0);
+        } else if (event === 'SIGNED_OUT') {
+          console.log('👋 [CompanyContext] User signed out, clearing company data');
+          setCurrentCompany(null);
+          setAvailableCompanies([]);
+          setIsSuperAdmin(false);
+          setLoading(false);
+          sessionStorage.removeItem('viewing_company_id');
+        }
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const loadCompanyData = async () => {
