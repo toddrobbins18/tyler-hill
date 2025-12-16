@@ -105,11 +105,12 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
   const [isAdmin, setIsAdmin] = useState(false);
-  const { userRole, canAccessPage, loading: permissionsLoading } = usePermissions();
+  const { userRole, userRoles, canAccessPage, loading: permissionsLoading } = usePermissions();
   const { currentCompany, availableCompanies, switchCompany, loading: companyLoading, isSuperAdmin } = useCompany();
   
   const items = getMenuItems(currentCompany?.slug);
   const [visibleItems, setVisibleItems] = useState<typeof items>([]);
+  const [filteringMenus, setFilteringMenus] = useState(false);
 
   useEffect(() => {
     checkAdminStatus();
@@ -121,11 +122,24 @@ export function AppSidebar() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Wait for roles AND company to be loaded before filtering
   useEffect(() => {
-    if (!permissionsLoading && userRole && currentCompany) {
+    console.log('[Sidebar] Permission check state:', {
+      permissionsLoading,
+      userRole,
+      userRolesCount: userRoles.length,
+      currentCompany: currentCompany?.name,
+      itemsCount: items.length
+    });
+    
+    if (!permissionsLoading && userRole && userRoles.length > 0 && currentCompany) {
       filterMenuItems();
+    } else if (!permissionsLoading && !userRole) {
+      // No role found - show all items as fallback
+      console.warn('[Sidebar] No user role found, showing all menu items');
+      setVisibleItems(items);
     }
-  }, [userRole, permissionsLoading, currentCompany, items]);
+  }, [userRole, userRoles, permissionsLoading, currentCompany, items]);
 
   const checkAdminStatus = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -145,14 +159,32 @@ export function AppSidebar() {
   };
 
   const filterMenuItems = async () => {
-    const filtered = [];
-    for (const item of items) {
-      const hasAccess = await canAccessPage(item.menuId, { respectPermissions: true });
-      if (hasAccess) {
-        filtered.push(item);
+    setFilteringMenus(true);
+    try {
+      console.log('[Sidebar] Filtering menu items for company:', currentCompany?.name);
+      const filtered = [];
+      for (const item of items) {
+        try {
+          const hasAccess = await canAccessPage(item.menuId, { respectPermissions: true });
+          console.log(`[Sidebar] Menu "${item.menuId}": access=${hasAccess}`);
+          if (hasAccess) {
+            filtered.push(item);
+          }
+        } catch (itemError) {
+          console.error(`[Sidebar] Error checking access for ${item.menuId}:`, itemError);
+          // Include item on error to avoid hiding menu items due to errors
+          filtered.push(item);
+        }
       }
+      console.log(`[Sidebar] Visible items: ${filtered.length} of ${items.length}`);
+      setVisibleItems(filtered);
+    } catch (error) {
+      console.error('[Sidebar] Error filtering menu items:', error);
+      // Fallback: show all items if permission check fails completely
+      setVisibleItems(items);
+    } finally {
+      setFilteringMenus(false);
     }
-    setVisibleItems(filtered);
   };
 
   const handleLogout = async () => {

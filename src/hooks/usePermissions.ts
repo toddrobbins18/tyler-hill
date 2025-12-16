@@ -90,20 +90,31 @@ export function usePermissions() {
   ): Promise<boolean> => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return false;
+      if (!user) {
+        console.log(`[usePermissions] canAccessPage(${pageName}): No user`);
+        return false;
+      }
 
       // Super admins bypass all permission checks UNLESS we're filtering menus
-      if (isSuperAdmin && !options?.respectPermissions) return true;
+      if (isSuperAdmin && !options?.respectPermissions) {
+        console.log(`[usePermissions] canAccessPage(${pageName}): Super admin bypass`);
+        return true;
+      }
       
       if (!currentCompany) {
-        console.warn('[usePermissions] No currentCompany for permission check');
+        console.warn(`[usePermissions] canAccessPage(${pageName}): No currentCompany`);
         return false;
       }
 
       // Check if ANY of the user's roles grant access to this page
       const rolesToCheck = userRoles.length > 0 ? userRoles : (userRole ? [userRole] : []);
       
-      if (rolesToCheck.length === 0) return false;
+      console.log(`[usePermissions] canAccessPage(${pageName}): roles=${rolesToCheck.join(',')}, company=${currentCompany.name}`);
+      
+      if (rolesToCheck.length === 0) {
+        console.warn(`[usePermissions] canAccessPage(${pageName}): No roles to check`);
+        return false;
+      }
 
       const { data, error } = await supabase
         .from('role_permissions')
@@ -115,14 +126,15 @@ export function usePermissions() {
         .limit(1);
 
       if (error) {
-        console.error('[usePermissions] Error checking page access:', error);
+        console.error(`[usePermissions] canAccessPage(${pageName}): DB error`, error);
         return false;
       }
 
       const hasAccess = data && data.length > 0;
+      console.log(`[usePermissions] canAccessPage(${pageName}): result=${hasAccess}`);
       return hasAccess;
     } catch (error) {
-      console.error('Error checking page access:', error);
+      console.error(`[usePermissions] canAccessPage(${pageName}): Exception`, error);
       return false;
     }
   };
