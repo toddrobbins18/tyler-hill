@@ -12,7 +12,7 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   const [approved, setApproved] = useState(true);
   const [hasPageAccess, setHasPageAccess] = useState(true);
   const { canAccessPage, loading: permissionsLoading } = usePermissions();
-  const { loading: companyLoading } = useCompany();
+  const { loading: companyLoading, currentCompany } = useCompany();
 
   // Map route paths to their menu item names for permission checks
   const getMenuItemFromPath = (path: string): string => {
@@ -40,11 +40,12 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     return () => subscription.unsubscribe();
   }, [navigate]);
 
+  // Wait for company to be fully loaded before checking page access
   useEffect(() => {
-    if (approved && !permissionsLoading && !companyLoading) {
+    if (approved && !permissionsLoading && !companyLoading && currentCompany) {
       checkPageAccess();
     }
-  }, [location.pathname, approved, permissionsLoading, companyLoading]);
+  }, [location.pathname, approved, permissionsLoading, companyLoading, currentCompany]);
 
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
