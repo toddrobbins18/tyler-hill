@@ -2,22 +2,30 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCompany } from "@/contexts/CompanyContext";
 import { CheckCircle, XCircle, Clock, Shield, Building2 } from "lucide-react";
 
+interface Company {
+  id: string;
+  name: string;
+}
+
 export default function UserApprovals() {
   const [pendingUsers, setPendingUsers] = useState<any[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [selectedCompanies, setSelectedCompanies] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const { isSuperAdmin } = usePermissions();
-  const { currentCompany } = useCompany();
+  const { currentCompany, availableCompanies } = useCompany();
 
   useEffect(() => {
-    if (!currentCompany?.id) return;
     fetchPendingUsers();
+    fetchCompanies();
 
     const channel = supabase
       .channel('profile-changes')
@@ -31,29 +39,69 @@ export default function UserApprovals() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentCompany?.id]);
+  }, [isSuperAdmin, currentCompany?.id]);
+
+  const fetchCompanies = async () => {
+    const { data, error } = await supabase
+      .from("companies")
+      .select("id, name")
+      .eq("is_active", true)
+      .order("name");
+
+    if (!error && data) {
+      setCompanies(data);
+    }
+  };
 
   const fetchPendingUsers = async () => {
-    const { data, error } = await supabase
+    let query = supabase
       .from("profiles")
       .select("*")
       .eq("approved", false)
-      .eq("company_id", currentCompany!.id)
       .order("approval_requested_at", { ascending: false });
+
+    // Super admins see all pending users, regular admins only see their company's users
+    if (!isSuperAdmin && currentCompany?.id) {
+      query = query.eq("company_id", currentCompany.id);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       toast({ title: "Error fetching pending users", variant: "destructive" });
       setLoading(false);
       return;
     }
+    
+    // Initialize selected companies with existing company_id values
+    const initialSelections: Record<string, string> = {};
+    data?.forEach(user => {
+      if (user.company_id) {
+        initialSelections[user.id] = user.company_id;
+      }
+    });
+    setSelectedCompanies(prev => ({ ...prev, ...initialSelections }));
+    
     setPendingUsers(data || []);
     setLoading(false);
   };
 
+  const handleCompanySelect = (userId: string, companyId: string) => {
+    setSelectedCompanies(prev => ({ ...prev, [userId]: companyId }));
+  };
+
   const handleApprove = async (userId: string) => {
+    const selectedCompanyId = selectedCompanies[userId];
+    
+    if (!selectedCompanyId) {
+      toast({ title: "Please select a camp first", variant: "destructive" });
+      return;
+    }
+
+    // Update profile with approved status and company_id
     const { error: updateError } = await supabase
       .from("profiles")
-      .update({ approved: true })
+      .update({ approved: true, company_id: selectedCompanyId })
       .eq("id", userId);
 
     if (updateError) {
@@ -61,10 +109,13 @@ export default function UserApprovals() {
       return;
     }
 
+    // Upsert user role with the selected company
     const { error: roleError } = await supabase
       .from("user_roles")
-      .update({ role: 'staff' })
-      .eq("user_id", userId);
+      .upsert(
+        { user_id: userId, role: 'staff', company_id: selectedCompanyId },
+        { onConflict: 'user_id,company_id' }
+      );
 
     if (roleError) {
       console.error("Error updating role:", roleError);
@@ -128,46 +179,74 @@ export default function UserApprovals() {
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {pendingUsers.map((user) => (
-            <Card key={user.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <CardTitle className="text-lg">{user.full_name || "No Name"}</CardTitle>
-                    <p className="text-sm text-muted-foreground mt-1">{user.email}</p>
+          {pendingUsers.map((user) => {
+            const existingCompany = companies.find(c => c.id === user.company_id);
+            const selectedCompanyId = selectedCompanies[user.id];
+            const canApprove = !!selectedCompanyId;
+            
+            return (
+              <Card key={user.id} className="hover:shadow-lg transition-shadow">
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <CardTitle className="text-lg">{user.full_name || "No Name"}</CardTitle>
+                      <p className="text-sm text-muted-foreground mt-1">{user.email}</p>
+                    </div>
+                    <Badge variant="outline" className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      Pending
+                    </Badge>
                   </div>
-                  <Badge variant="outline" className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    Pending
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <p className="text-xs text-muted-foreground">
-                  Requested: {new Date(user.approval_requested_at).toLocaleString()}
-                </p>
-                <div className="flex gap-2 mt-4">
-                  <Button
-                    size="sm"
-                    onClick={() => handleApprove(user.id)}
-                    className="flex-1"
-                  >
-                    <CheckCircle className="h-4 w-4 mr-1" />
-                    Approve
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => handleReject(user.id)}
-                    className="flex-1"
-                  >
-                    <XCircle className="h-4 w-4 mr-1" />
-                    Reject
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Requested: {user.approval_requested_at ? new Date(user.approval_requested_at).toLocaleString() : 'N/A'}
+                  </p>
+                  
+                  {/* Camp Selection */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Assign to Camp</label>
+                    <Select
+                      value={selectedCompanyId || ""}
+                      onValueChange={(value) => handleCompanySelect(user.id, value)}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select a camp..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {companies.map((company) => (
+                          <SelectItem key={company.id} value={company.id}>
+                            {company.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex gap-2 mt-4">
+                    <Button
+                      size="sm"
+                      onClick={() => handleApprove(user.id)}
+                      className="flex-1"
+                      disabled={!canApprove}
+                    >
+                      <CheckCircle className="h-4 w-4 mr-1" />
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => handleReject(user.id)}
+                      className="flex-1"
+                    >
+                      <XCircle className="h-4 w-4 mr-1" />
+                      Reject
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
