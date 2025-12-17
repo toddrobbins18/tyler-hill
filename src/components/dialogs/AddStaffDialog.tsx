@@ -168,6 +168,8 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
                 <SelectItem value="none">Not Specified</SelectItem>
                 <SelectItem value="general_counselor">General Counselor</SelectItem>
                 <SelectItem value="specialist">Specialist</SelectItem>
+                <SelectItem value="support">Support</SelectItem>
+                <SelectItem value="leadership">Leadership</SelectItem>
                 <SelectItem value="both">Both</SelectItem>
               </SelectContent>
             </Select>
