@@ -172,7 +172,9 @@ export default function Staff() {
           {filteredStaff.map((staffMember) => (
             <Card
               key={staffMember.id}
-              className="shadow-card hover:shadow-md transition-all group"
+              className={`shadow-card hover:shadow-md transition-all group ${
+                !staffMember.staff_type ? 'border-2 border-destructive bg-destructive/5' : ''
+              }`}
             >
               <CardHeader>
                 <div className="flex items-start justify-between">
@@ -236,10 +238,16 @@ export default function Staff() {
                         {staffMember.department}
                       </Badge>
                     )}
-                    {staffMember.staff_type && (
+                    {staffMember.staff_type ? (
                       <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
                         {staffMember.staff_type === "general_counselor" ? "General Counselor" : 
-                         staffMember.staff_type === "specialist" ? "Specialist" : "Both"}
+                         staffMember.staff_type === "specialist" ? "Specialist" : 
+                         staffMember.staff_type === "support" ? "Support" :
+                         staffMember.staff_type === "leadership" ? "Leadership" : "Both"}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">
+                        No Type Set
                       </Badge>
                     )}
                   </div>
