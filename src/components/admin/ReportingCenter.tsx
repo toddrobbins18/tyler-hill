@@ -479,16 +479,26 @@ export default function ReportingCenter() {
           ).length;
           
           // Calculate retention rate (returning / enrolled in previous season)
+          // Skip 2025 as comparison baseline since that data is incomplete/skewed
           const currentSeasonIndex = allSeasons.indexOf(selectedSeason);
-          const previousSeason = currentSeasonIndex > 0 ? allSeasons[currentSeasonIndex - 1] : null;
+          let previousSeason: string | null = null;
+          
+          // Find previous season, skipping 2025
+          for (let i = currentSeasonIndex - 1; i >= 0; i--) {
+            if (allSeasons[i] !== '2025') {
+              previousSeason = allSeasons[i];
+              break;
+            }
+          }
+          
           let retentionRate = 'N/A';
           
           if (previousSeason) {
             const enrolledPreviousSeason = Array.from(camperHistory.values()).filter(c => 
-              c.seasons.includes(previousSeason)
+              c.seasons.includes(previousSeason!)
             ).length;
             const returnedFromPrevious = Array.from(camperHistory.values()).filter(c => 
-              c.seasons.includes(previousSeason) && c.seasons.includes(selectedSeason)
+              c.seasons.includes(previousSeason!) && c.seasons.includes(selectedSeason)
             ).length;
             
             if (enrolledPreviousSeason > 0) {
