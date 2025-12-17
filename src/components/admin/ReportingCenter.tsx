@@ -17,7 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 
-type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'conflicts' | 'medications' | 'allergies';
+type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'conflicts' | 'medications' | 'allergies' | 're_enrollment';
 
 export default function ReportingCenter() {
   const [reportType, setReportType] = useState<ReportType>('incidents');
@@ -385,6 +385,131 @@ export default function ReportingCenter() {
             'Most Affected Division': Object.entries(byDivision).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A',
           };
           break;
+
+        case 're_enrollment':
+          // Fetch all campers across all seasons for this company
+          const { data: allCampers } = await supabase
+            .from('children')
+            .select(`
+              person_id,
+              name,
+              season,
+              division_id,
+              divisions(name),
+              grade,
+              gender,
+              session,
+              status
+            `)
+            .eq('company_id', currentCompany.id)
+            .not('person_id', 'is', null);
+
+          // Group by person_id to identify unique campers across seasons
+          const camperHistory = new Map<string, {
+            name: string;
+            person_id: string;
+            seasons: string[];
+            latestDivision: string | null;
+            latestGrade: string | null;
+            gender: string | null;
+            latestSession: string | null;
+            latestStatus: string | null;
+          }>();
+
+          // Sort by season to ensure latest info is captured
+          const sortedCampers = allCampers?.sort((a, b) => 
+            (a.season || '').localeCompare(b.season || '')
+          ) || [];
+
+          sortedCampers.forEach(c => {
+            if (!c.person_id) return;
+            
+            if (!camperHistory.has(c.person_id)) {
+              camperHistory.set(c.person_id, {
+                name: c.name,
+                person_id: c.person_id,
+                seasons: [],
+                latestDivision: null,
+                latestGrade: null,
+                gender: c.gender,
+                latestSession: null,
+                latestStatus: null,
+              });
+            }
+            
+            const entry = camperHistory.get(c.person_id)!;
+            if (c.season && !entry.seasons.includes(c.season)) {
+              entry.seasons.push(c.season);
+            }
+            // Update with latest info
+            entry.name = c.name;
+            entry.latestDivision = (c.divisions as any)?.name || entry.latestDivision;
+            entry.latestGrade = c.grade || entry.latestGrade;
+            entry.latestSession = c.session || entry.latestSession;
+            entry.latestStatus = c.status || entry.latestStatus;
+          });
+
+          // Get all unique seasons sorted
+          const allSeasons = [...new Set(sortedCampers.map(c => c.season).filter(Boolean))].sort();
+          
+          // Transform to report data
+          data = Array.from(camperHistory.values()).map(c => ({
+            Name: c.name,
+            'Person ID': c.person_id,
+            'Years Attended': c.seasons.length,
+            'Seasons': c.seasons.sort().join(', '),
+            'First Season': c.seasons.sort()[0] || 'N/A',
+            'Latest Division': c.latestDivision || 'N/A',
+            'Latest Grade': c.latestGrade || 'N/A',
+            Gender: c.gender || 'N/A',
+            'Latest Session': c.latestSession || 'N/A',
+            [`In ${selectedSeason}`]: c.seasons.includes(selectedSeason) ? 'Yes' : 'No',
+          }));
+
+          // Calculate summary statistics
+          const totalUniqueCampers = camperHistory.size;
+          const enrolledCurrentSeason = Array.from(camperHistory.values()).filter(c => 
+            c.seasons.includes(selectedSeason)
+          ).length;
+          const returningCampers = Array.from(camperHistory.values()).filter(c => 
+            c.seasons.includes(selectedSeason) && c.seasons.length > 1
+          ).length;
+          const newCampers = Array.from(camperHistory.values()).filter(c => 
+            c.seasons.includes(selectedSeason) && c.seasons.length === 1
+          ).length;
+          
+          // Calculate retention rate (returning / enrolled in previous season)
+          const currentSeasonIndex = allSeasons.indexOf(selectedSeason);
+          const previousSeason = currentSeasonIndex > 0 ? allSeasons[currentSeasonIndex - 1] : null;
+          let retentionRate = 'N/A';
+          
+          if (previousSeason) {
+            const enrolledPreviousSeason = Array.from(camperHistory.values()).filter(c => 
+              c.seasons.includes(previousSeason)
+            ).length;
+            const returnedFromPrevious = Array.from(camperHistory.values()).filter(c => 
+              c.seasons.includes(previousSeason) && c.seasons.includes(selectedSeason)
+            ).length;
+            
+            if (enrolledPreviousSeason > 0) {
+              retentionRate = `${((returnedFromPrevious / enrolledPreviousSeason) * 100).toFixed(1)}%`;
+            }
+          }
+
+          // Calculate average tenure
+          const avgTenure = totalUniqueCampers > 0 
+            ? (Array.from(camperHistory.values()).reduce((sum, c) => sum + c.seasons.length, 0) / totalUniqueCampers).toFixed(1)
+            : '0';
+
+          summaryData = {
+            'Total Unique Campers (All Time)': totalUniqueCampers,
+            [`Enrolled in ${selectedSeason}`]: enrolledCurrentSeason,
+            'Returning Campers': returningCampers,
+            'New Campers': newCampers,
+            [`Retention Rate${previousSeason ? ` (from ${previousSeason})` : ''}`]: retentionRate,
+            'Avg Years Attended': avgTenure,
+          };
+          break;
       }
 
       setReportData(data);
@@ -495,6 +620,7 @@ export default function ReportingCenter() {
       conflicts: 'SCHEDULE CONFLICTS',
       medications: 'MEDICATION SCHEDULE',
       allergies: 'ALLERGY REPORT',
+      re_enrollment: 'RE-ENROLLMENT REPORT',
     };
     
     const title = titleMap[reportType] || reportType.replace('_', ' ').toUpperCase();
@@ -514,6 +640,7 @@ export default function ReportingCenter() {
       { value: 'conflicts', label: 'Schedule Conflicts' },
       { value: 'medications', label: 'Medication Schedule' },
       { value: 'allergies', label: 'Allergy Report' },
+      { value: 're_enrollment', label: 'Re-Enrollment Report' },
     ];
 
     // Only add these report types if the company has the corresponding pages
