@@ -18,7 +18,8 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   const getMenuItemFromPath = (path: string): string => {
     const routeToMenuMap: Record<string, string> = {
       'athletics': 'sports-calendar',
-      // Add more mappings here if needed in the future
+      'child': 'roster',
+      'staff-profile': 'staff',
     };
     
     return routeToMenuMap[path] || path;
