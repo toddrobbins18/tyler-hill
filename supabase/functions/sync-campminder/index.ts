@@ -6,6 +6,7 @@ const CM_PERSONS_URL = 'https://api.campminder.com/persons';
 const CM_STAFF_URL = 'https://api.campminder.com/staff';
 const CM_DIVISIONS_URL = 'https://api.campminder.com/divisions';
 const CM_SESSIONS_URL = 'https://api.campminder.com/sessions';
+const CM_ORGANIZATIONAL_CATEGORIES_URL = 'https://api.campminder.com/staff/organizationalcategories';
 
 // Rate limiting: 250ms between calls (4 calls/sec = 240/min)
 const RATE_LIMIT_DELAY_MS = 250;
@@ -866,6 +867,29 @@ async function performFullSync(
       positionMap.set(pos.ID, pos.Name);
     }
 
+    // Fetch organizational categories for budget code mapping
+    console.log('[BudgetCode] Fetching organizational categories...');
+    const orgCategories = await fetchAllPaginated(
+      CM_ORGANIZATIONAL_CATEGORIES_URL,
+      token,
+      subscriptionKey,
+      { clientid: clientId }
+    );
+    console.log(`[BudgetCode] Found ${orgCategories.length} organizational categories`);
+    
+    // Create mapping from OrganizationalCategoryID -> Name (budget code)
+    const orgCategoryMap = new Map<number, string>();
+    for (const cat of orgCategories) {
+      orgCategoryMap.set(cat.ID, cat.Name);
+    }
+    
+    // DEBUG: Log the categories to verify
+    if (orgCategories.length > 0) {
+      console.log('[BudgetCode] Sample organizational categories:', JSON.stringify(orgCategories.slice(0, 5), null, 2));
+    } else {
+      console.log('[BudgetCode] WARNING: No organizational categories found - budget codes will be null');
+    }
+
     // Alternative: If /staff endpoint returns nothing, extract staff from persons API
     // Staff members have StaffDetails in their person record
     if (staffAssignments.length === 0) {
@@ -968,32 +992,16 @@ async function performFullSync(
           phone = person.ContactDetails.PhoneNumbers[0].Number;
         }
 
-        // Extract budget code from StaffDetails and/or staff assignment
-        const staffDetails = person?.StaffDetails;
+        // Extract budget code from OrganizationalCategoryID (the correct CampMinder field)
+        const orgCategoryId = assignment?.OrganizationalCategoryID;
+        const budgetCode: string | null = orgCategoryId ? (orgCategoryMap.get(orgCategoryId) || null) : null;
 
-        const assignmentBudgetCode: string | null =
-          assignment?.BudgetCode ??
-          assignment?.DepartmentCode ??
-          assignment?.Budget ??
-          assignment?.CostCenter ??
-          assignment?.CostCentre ??
-          assignment?.Budget_Code ??
-          assignment?.Department_Code ??
-          null;
-
-        const staffDetailsBudgetCode: string | null =
-          staffDetails?.BudgetCode ??
-          staffDetails?.DepartmentCode ??
-          staffDetails?.Budget ??
-          staffDetails?.CostCenter ??
-          staffDetails?.CostCentre ??
-          null;
-
-        const budgetCode: string | null = staffDetailsBudgetCode ?? assignmentBudgetCode;
-
-        if (staffDetails && debugLoggedStaffDetailsCount < 3) {
-          console.log(`[DEBUG] StaffDetails keys for ${name}:`, Object.keys(staffDetails).join(', '));
-          console.log(`[DEBUG] StaffDetails sample for ${name}:`, JSON.stringify(staffDetails, null, 2));
+        // Debug logging for budget code extraction
+        if (debugLoggedStaffDetailsCount < 5) {
+          console.log(`[BudgetCode] Staff: ${name}, OrganizationalCategoryID: ${orgCategoryId}, BudgetCode: ${budgetCode}`);
+          if (assignment) {
+            console.log(`[BudgetCode] Assignment keys for ${name}:`, Object.keys(assignment).join(', '));
+          }
           debugLoggedStaffDetailsCount += 1;
         }
 
