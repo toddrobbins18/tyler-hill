@@ -349,6 +349,7 @@ async function performFullSync(
   console.log(`\n========================================`);
   console.log(`Starting full sync for company ${companyId}`);
   console.log(`Job ID: ${jobId}`);
+  console.log(`[BudgetCode Debug] version=2025-12-18-1`);
   console.log(`========================================\n`);
   
   try {
@@ -919,6 +920,7 @@ async function performFullSync(
       
       let debugLoggedPerson = false;
       let debugLoggedAssignment = false;
+      let debugLoggedStaffDetailsCount = 0;
       
       for (const personId of staffPersonIds) {
         const person = personMap.get(personId);
@@ -966,21 +968,33 @@ async function performFullSync(
           phone = person.ContactDetails.PhoneNumbers[0].Number;
         }
 
-        // Extract budget code from StaffDetails
+        // Extract budget code from StaffDetails and/or staff assignment
         const staffDetails = person?.StaffDetails;
-        let budgetCode: string | null = null;
-        
-        if (staffDetails) {
-          // Log StaffDetails for debugging to discover exact field name
-          console.log(`[DEBUG] StaffDetails for ${name}:`, JSON.stringify(staffDetails, null, 2));
-          
-          // Try various possible field names for budget code
-          budgetCode = staffDetails.BudgetCode || 
-                       staffDetails.DepartmentCode || 
-                       staffDetails.Budget || 
-                       staffDetails.CostCenter ||
-                       assignment?.BudgetCode ||
-                       null;
+
+        const assignmentBudgetCode: string | null =
+          assignment?.BudgetCode ??
+          assignment?.DepartmentCode ??
+          assignment?.Budget ??
+          assignment?.CostCenter ??
+          assignment?.CostCentre ??
+          assignment?.Budget_Code ??
+          assignment?.Department_Code ??
+          null;
+
+        const staffDetailsBudgetCode: string | null =
+          staffDetails?.BudgetCode ??
+          staffDetails?.DepartmentCode ??
+          staffDetails?.Budget ??
+          staffDetails?.CostCenter ??
+          staffDetails?.CostCentre ??
+          null;
+
+        const budgetCode: string | null = staffDetailsBudgetCode ?? assignmentBudgetCode;
+
+        if (staffDetails && debugLoggedStaffDetailsCount < 3) {
+          console.log(`[DEBUG] StaffDetails keys for ${name}:`, Object.keys(staffDetails).join(', '));
+          console.log(`[DEBUG] StaffDetails sample for ${name}:`, JSON.stringify(staffDetails, null, 2));
+          debugLoggedStaffDetailsCount += 1;
         }
 
         staffData.push({
@@ -1142,6 +1156,7 @@ serve(async (req) => {
     const { company_id, season_id } = await req.json().catch(() => ({}));
     
     console.log('Sync request received:', { company_id, season_id });
+    console.log('[BudgetCode Debug] handler=sync-campminder version=2025-12-18-1');
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
