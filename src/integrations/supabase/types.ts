@@ -2406,7 +2406,6 @@ export type Database = {
       staff: {
         Row: {
           allergies: string | null
-          budget_code: string | null
           company_id: string | null
           created_at: string | null
           date_of_birth: string | null
@@ -2429,7 +2428,6 @@ export type Database = {
         }
         Insert: {
           allergies?: string | null
-          budget_code?: string | null
           company_id?: string | null
           created_at?: string | null
           date_of_birth?: string | null
@@ -2452,7 +2450,6 @@ export type Database = {
         }
         Update: {
           allergies?: string | null
-          budget_code?: string | null
           company_id?: string | null
           created_at?: string | null
           date_of_birth?: string | null
