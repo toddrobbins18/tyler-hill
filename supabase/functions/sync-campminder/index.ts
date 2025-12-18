@@ -832,6 +832,12 @@ async function performFullSync(
       { clientid: clientId, seasonid: currentSeason, status: 1 }
     );
     console.log(`Found ${staffAssignments.length} active staff assignments for season ${currentSeason}`);
+    
+    // DEBUG: Log sample staffAssignment from /staff endpoint
+    if (staffAssignments.length > 0) {
+      console.log('[DEBUG] Sample staffAssignment from /staff endpoint:', JSON.stringify(staffAssignments[0], null, 2));
+      console.log('[DEBUG] All keys in staffAssignment:', Object.keys(staffAssignments[0]).join(', '));
+    }
 
     // Fallback to previous season if no results
     if (staffAssignments.length === 0) {
@@ -911,9 +917,30 @@ async function performFullSync(
     if (staffPersonIds.size > 0) {
       const staffData: any[] = [];
       
+      let debugLoggedPerson = false;
+      let debugLoggedAssignment = false;
+      
       for (const personId of staffPersonIds) {
         const person = personMap.get(personId);
         const assignment = staffAssignmentMap.get(personId);
+        
+        // DEBUG: Log first person object to see full structure
+        if (person && !debugLoggedPerson) {
+          console.log('[DEBUG] Sample person object for staff:', JSON.stringify({
+            ID: person.ID,
+            Name: person.Name,
+            StaffDetails: person.StaffDetails,
+            topLevelKeys: Object.keys(person)
+          }, null, 2));
+          debugLoggedPerson = true;
+        }
+        
+        // DEBUG: Log first assignment object to see full structure
+        if (assignment && !debugLoggedAssignment) {
+          console.log('[DEBUG] Sample assignment object:', JSON.stringify(assignment, null, 2));
+          console.log('[DEBUG] All keys in assignment:', Object.keys(assignment).join(', '));
+          debugLoggedAssignment = true;
+        }
         
         if (!assignment) continue;
         
