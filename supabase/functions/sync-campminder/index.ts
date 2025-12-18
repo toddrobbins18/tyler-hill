@@ -6,7 +6,7 @@ const CM_PERSONS_URL = 'https://api.campminder.com/persons';
 const CM_STAFF_URL = 'https://api.campminder.com/staff';
 const CM_DIVISIONS_URL = 'https://api.campminder.com/divisions';
 const CM_SESSIONS_URL = 'https://api.campminder.com/sessions';
-const CM_ORGANIZATIONAL_CATEGORIES_URL = 'https://api.campminder.com/staff/organizationalcategories';
+
 
 // Rate limiting: 250ms between calls (4 calls/sec = 240/min)
 const RATE_LIMIT_DELAY_MS = 250;
@@ -867,28 +867,6 @@ async function performFullSync(
       positionMap.set(pos.ID, pos.Name);
     }
 
-    // Fetch organizational categories for budget code mapping
-    console.log('[BudgetCode] Fetching organizational categories...');
-    const orgCategories = await fetchAllPaginated(
-      CM_ORGANIZATIONAL_CATEGORIES_URL,
-      token,
-      subscriptionKey,
-      { clientid: clientId }
-    );
-    console.log(`[BudgetCode] Found ${orgCategories.length} organizational categories`);
-    
-    // Create mapping from OrganizationalCategoryID -> Name (budget code)
-    const orgCategoryMap = new Map<number, string>();
-    for (const cat of orgCategories) {
-      orgCategoryMap.set(cat.ID, cat.Name);
-    }
-    
-    // DEBUG: Log the categories to verify
-    if (orgCategories.length > 0) {
-      console.log('[BudgetCode] Sample organizational categories:', JSON.stringify(orgCategories.slice(0, 5), null, 2));
-    } else {
-      console.log('[BudgetCode] WARNING: No organizational categories found - budget codes will be null');
-    }
 
     // Alternative: If /staff endpoint returns nothing, extract staff from persons API
     // Staff members have StaffDetails in their person record
@@ -944,7 +922,7 @@ async function performFullSync(
       
       let debugLoggedPerson = false;
       let debugLoggedAssignment = false;
-      let debugLoggedStaffDetailsCount = 0;
+      
       
       for (const personId of staffPersonIds) {
         const person = personMap.get(personId);
@@ -992,19 +970,6 @@ async function performFullSync(
           phone = person.ContactDetails.PhoneNumbers[0].Number;
         }
 
-        // Extract budget code from OrganizationalCategoryID (the correct CampMinder field)
-        const orgCategoryId = assignment?.OrganizationalCategoryID;
-        const budgetCode: string | null = orgCategoryId ? (orgCategoryMap.get(orgCategoryId) || null) : null;
-
-        // Debug logging for budget code extraction
-        if (debugLoggedStaffDetailsCount < 5) {
-          console.log(`[BudgetCode] Staff: ${name}, OrganizationalCategoryID: ${orgCategoryId}, BudgetCode: ${budgetCode}`);
-          if (assignment) {
-            console.log(`[BudgetCode] Assignment keys for ${name}:`, Object.keys(assignment).join(', '));
-          }
-          debugLoggedStaffDetailsCount += 1;
-        }
-
         staffData.push({
           person_id: personId,
           name,
@@ -1015,7 +980,6 @@ async function performFullSync(
           company_id: companyId,
           season: season,
           status: 'active',
-          budget_code: budgetCode,
         });
       }
 
@@ -1155,244 +1119,6 @@ async function performFullSync(
   }
 }
 
-// ==================== STAFF-ONLY SYNC (FAST MODE) ====================
-// This function syncs only staff data, skipping the full persons/campers sync
-// for faster execution and debugging of budget code extraction
-async function performStaffOnlySync(
-  supabase: any,
-  jobId: string,
-  companyId: string,
-  token: string,
-  subscriptionKey: string,
-  clientId: string,
-  seasonId?: string
-): Promise<void> {
-  console.log(`\n========================================`);
-  console.log(`STAFF-ONLY SYNC (Fast Mode)`);
-  console.log(`Company: ${companyId}`);
-  console.log(`Job ID: ${jobId}`);
-  console.log(`[BudgetCode Debug] version=2025-12-18-2`);
-  console.log(`========================================\n`);
-  
-  try {
-    await updateSyncJob(supabase, jobId, {
-      status: 'running',
-      started_at: new Date().toISOString(),
-      progress: { step: 'Staff-only sync starting' },
-    });
-
-    const season = '2026';
-
-    // Step 1: Fetch organizational categories FIRST (for budget code)
-    console.log('\n[STEP 1] Fetching organizational categories...');
-    const orgCategories = await fetchAllPaginated(
-      CM_ORGANIZATIONAL_CATEGORIES_URL,
-      token,
-      subscriptionKey,
-      { clientid: clientId }
-    );
-    console.log(`[BudgetCode] Found ${orgCategories.length} organizational categories`);
-    
-    // Log ALL categories immediately
-    console.log('[BudgetCode] ALL organizational categories:');
-    for (const cat of orgCategories) {
-      console.log(`  - ID: ${cat.ID}, Name: "${cat.Name}"`);
-    }
-    
-    const orgCategoryMap = new Map<number, string>();
-    for (const cat of orgCategories) {
-      orgCategoryMap.set(cat.ID, cat.Name);
-    }
-
-    await updateSyncJob(supabase, jobId, {
-      progress: { step: 'Fetched organizational categories', count: orgCategories.length },
-    });
-
-    // Step 2: Fetch staff positions
-    console.log('\n[STEP 2] Fetching staff positions...');
-    const positions = await fetchAllPaginated(
-      `${CM_STAFF_URL}/positions`,
-      token,
-      subscriptionKey,
-      { clientid: clientId }
-    );
-    console.log(`Found ${positions.length} staff positions`);
-    
-    const positionMap = new Map<number, string>();
-    for (const pos of positions) {
-      positionMap.set(pos.ID, pos.Name);
-    }
-
-    // Step 3: Fetch staff assignments
-    console.log('\n[STEP 3] Fetching staff assignments...');
-    const staffAssignments = await fetchAllPaginated(
-      CM_STAFF_URL,
-      token,
-      subscriptionKey,
-      { clientid: clientId, seasonid: seasonId || '2026' }
-    );
-    console.log(`Found ${staffAssignments.length} staff assignments`);
-
-    await updateSyncJob(supabase, jobId, {
-      progress: { step: 'Fetched staff assignments', count: staffAssignments.length },
-    });
-
-    // Log first 10 staff assignments with OrganizationalCategoryID
-    console.log('\n[BudgetCode] First 10 staff assignments with OrganizationalCategoryID:');
-    for (let i = 0; i < Math.min(10, staffAssignments.length); i++) {
-      const s = staffAssignments[i];
-      const orgCatId = s.OrganizationalCategoryID;
-      const budgetCode = orgCatId ? orgCategoryMap.get(orgCatId) : null;
-      console.log(`  ${i + 1}. PersonID: ${s.PersonID}, OrganizationalCategoryID: ${orgCatId}, BudgetCode: "${budgetCode || 'N/A'}"`);
-      console.log(`     All keys: ${Object.keys(s).join(', ')}`);
-    }
-
-    // Step 4: Fetch persons for these staff (minimal)
-    console.log('\n[STEP 4] Fetching person data for staff...');
-    const staffPersonIds = staffAssignments.map((s: any) => String(s.PersonID));
-    const uniqueStaffIds = [...new Set(staffPersonIds)];
-    console.log(`Need to lookup ${uniqueStaffIds.length} unique staff persons`);
-
-    // Fetch all persons (we need this for name lookup)
-    const allPersons = await fetchAllPaginated(
-      CM_PERSONS_URL,
-      token,
-      subscriptionKey,
-      { clientid: clientId, includecamperdetails: 'true', includecontactdetails: 'true' }
-    );
-    console.log(`Fetched ${allPersons.length} total persons`);
-
-    const personMap = new Map<string, any>();
-    for (const p of allPersons) {
-      personMap.set(String(p.ID), p);
-    }
-
-    // Step 5: Build staff records with budget codes
-    console.log('\n[STEP 5] Building staff records with budget codes...');
-    const staffAssignmentMap = new Map<string, any>();
-    for (const assignment of staffAssignments) {
-      staffAssignmentMap.set(String(assignment.PersonID), assignment);
-    }
-
-    let staffWithBudgetCode = 0;
-    let staffWithoutBudgetCode = 0;
-
-    const staffToUpsert: any[] = [];
-    for (const personIdStr of uniqueStaffIds) {
-      const person = personMap.get(personIdStr);
-      const assignment = staffAssignmentMap.get(personIdStr);
-      
-      if (!person || !assignment) continue;
-
-      const name = [person.FirstName, person.MiddleName, person.LastName]
-        .filter(Boolean)
-        .join(' ')
-        .trim() || 'Unknown';
-
-      // Extract budget code from OrganizationalCategoryID
-      const orgCategoryId = assignment.OrganizationalCategoryID;
-      const budgetCode = orgCategoryId ? (orgCategoryMap.get(orgCategoryId) || null) : null;
-
-      if (budgetCode) {
-        staffWithBudgetCode++;
-        if (staffWithBudgetCode <= 5) {
-          console.log(`[BudgetCode SUCCESS] ${name}: ${budgetCode} (OrgCatID: ${orgCategoryId})`);
-        }
-      } else {
-        staffWithoutBudgetCode++;
-        if (staffWithoutBudgetCode <= 3) {
-          console.log(`[BudgetCode MISSING] ${name}: OrgCatID=${orgCategoryId || 'null'}`);
-        }
-      }
-
-      // Get position
-      const positionId = assignment.Position1ID || assignment.PositionID;
-      const position = positionId ? positionMap.get(positionId) : null;
-
-      staffToUpsert.push({
-        person_id: personIdStr,
-        name,
-        position: position || null,
-        budget_code: budgetCode,
-        company_id: companyId,
-        season,
-        status: 'active',
-      });
-    }
-
-    console.log(`\n[BudgetCode Summary]`);
-    console.log(`  Staff WITH budget code: ${staffWithBudgetCode}`);
-    console.log(`  Staff WITHOUT budget code: ${staffWithoutBudgetCode}`);
-    console.log(`  Total staff to upsert: ${staffToUpsert.length}`);
-
-    await updateSyncJob(supabase, jobId, {
-      progress: { 
-        step: 'Upserting staff records', 
-        total: staffToUpsert.length,
-        withBudgetCode: staffWithBudgetCode,
-        withoutBudgetCode: staffWithoutBudgetCode,
-      },
-    });
-
-    // Step 6: Upsert staff records
-    console.log('\n[STEP 6] Upserting staff records...');
-    const BATCH_SIZE = 100;
-    let insertedCount = 0;
-    let updatedCount = 0;
-
-    for (let i = 0; i < staffToUpsert.length; i += BATCH_SIZE) {
-      const batch = staffToUpsert.slice(i, i + BATCH_SIZE);
-      const { error } = await supabase
-        .from('staff')
-        .upsert(batch, { 
-          onConflict: 'person_id,company_id',
-          ignoreDuplicates: false 
-        });
-      
-      if (error) {
-        console.error(`Error upserting staff batch ${i / BATCH_SIZE + 1}:`, error);
-      } else {
-        insertedCount += batch.length;
-        console.log(`Upserted batch ${Math.floor(i / BATCH_SIZE) + 1}: ${batch.length} staff`);
-      }
-    }
-
-    // Update company last sync timestamp
-    await supabase
-      .from('companies')
-      .update({ campminder_last_sync_at: new Date().toISOString() })
-      .eq('id', companyId);
-
-    await updateSyncJob(supabase, jobId, {
-      status: 'completed',
-      completed_at: new Date().toISOString(),
-      progress: { 
-        step: 'Staff-only sync completed', 
-        staffSynced: staffToUpsert.length,
-        withBudgetCode: staffWithBudgetCode,
-        withoutBudgetCode: staffWithoutBudgetCode,
-      },
-      total_counts: { staff: staffToUpsert.length },
-    });
-
-    console.log(`\n========================================`);
-    console.log(`STAFF-ONLY SYNC COMPLETED`);
-    console.log(`Staff synced: ${staffToUpsert.length}`);
-    console.log(`With budget code: ${staffWithBudgetCode}`);
-    console.log(`Without budget code: ${staffWithoutBudgetCode}`);
-    console.log(`========================================\n`);
-
-  } catch (error) {
-    console.error('Staff-only sync failed:', error);
-    
-    await updateSyncJob(supabase, jobId, {
-      status: 'failed',
-      completed_at: new Date().toISOString(),
-      error_message: error instanceof Error ? error.message : 'Unknown error',
-      progress: { step: 'Failed', error: error instanceof Error ? error.message : 'Unknown error' },
-    });
-  }
-}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -1400,14 +1126,9 @@ serve(async (req) => {
   }
 
   try {
-    const { company_id, season_id, sync_type } = await req.json().catch(() => ({}));
+    const { company_id, season_id } = await req.json().catch(() => ({}));
     
-    // sync_type: "full" (default) or "staff_only" for faster staff-only sync
-    const isStaffOnly = sync_type === 'staff_only';
-    
-    console.log('Sync request received:', { company_id, season_id, sync_type: sync_type || 'full' });
-    console.log('[BudgetCode Debug] handler=sync-campminder version=2025-12-18-2');
-    console.log(`[Sync Mode] ${isStaffOnly ? 'STAFF ONLY (fast mode)' : 'FULL SYNC'}`);
+    console.log('Sync request received:', { company_id, season_id });
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -1486,25 +1207,15 @@ serve(async (req) => {
         console.log(`Created sync job: ${job.id}`);
 
         EdgeRuntime.waitUntil(
-          isStaffOnly 
-            ? performStaffOnlySync(
-                supabase,
-                job.id,
-                company.id,
-                token,
-                subKeyData,
-                clientId,
-                season_id
-              )
-            : performFullSync(
-                supabase,
-                job.id,
-                company.id,
-                token,
-                subKeyData,
-                clientId,
-                season_id
-              )
+          performFullSync(
+            supabase,
+            job.id,
+            company.id,
+            token,
+            subKeyData,
+            clientId,
+            season_id
+          )
         );
 
         results.push({

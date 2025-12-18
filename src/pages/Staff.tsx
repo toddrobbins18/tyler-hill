@@ -261,11 +261,6 @@ export default function Staff() {
                   >
                     {staffMember.status || "Active"}
                   </Badge>
-                  {staffMember.budget_code && (
-                    <Badge variant="outline" className="bg-accent/10 text-accent-foreground border-accent/20">
-                      {staffMember.budget_code}
-                    </Badge>
-                  )}
                 </div>
 
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">

@@ -39,7 +39,7 @@ export default function CampDataImporter() {
   // CampMinder sync state
   const [companies, setCompanies] = useState<CompanyWithCampMinder[]>([]);
   const [syncingCompanyId, setSyncingCompanyId] = useState<string | null>(null);
-  const [syncingStaffOnlyId, setSyncingStaffOnlyId] = useState<string | null>(null);
+  
   const [syncResults, setSyncResults] = useState<Record<string, CampMinderSyncResult>>({});
   const [loadingCompanies, setLoadingCompanies] = useState(true);
   
@@ -83,12 +83,8 @@ export default function CampDataImporter() {
     }
   };
 
-  const handleCampMinderSync = async (companyId: string, companyName: string, staffOnly: boolean = false) => {
-    if (staffOnly) {
-      setSyncingStaffOnlyId(companyId);
-    } else {
-      setSyncingCompanyId(companyId);
-    }
+  const handleCampMinderSync = async (companyId: string, companyName: string) => {
+    setSyncingCompanyId(companyId);
     setSyncResults(prev => ({ ...prev, [companyId]: {} }));
 
     try {
@@ -97,13 +93,12 @@ export default function CampDataImporter() {
         throw new Error("Not authenticated");
       }
 
-      toast.info(`Starting ${staffOnly ? 'Staff-Only' : 'CampMinder'} sync for ${companyName}...`);
+      toast.info(`Starting CampMinder sync for ${companyName}...`);
 
       const response = await supabase.functions.invoke('sync-campminder', {
         body: {
           company_id: companyId,
           season_id: 2026,
-          sync_type: staffOnly ? 'staff_only' : 'full',
         },
       });
 
@@ -131,16 +126,12 @@ export default function CampDataImporter() {
 
       // Refresh companies to get updated last_sync timestamp
       await fetchCompanies();
-      toast.success(`${staffOnly ? 'Staff-Only' : 'CampMinder'} sync completed for ${companyName}! Check logs for budget code details.`);
+      toast.success(`CampMinder sync completed for ${companyName}!`);
     } catch (error: any) {
       console.error("Sync error:", error);
       toast.error(`Sync failed for ${companyName}: ${error.message}`);
     } finally {
-      if (staffOnly) {
-        setSyncingStaffOnlyId(null);
-      } else {
-        setSyncingCompanyId(null);
-      }
+      setSyncingCompanyId(null);
     }
   };
 
@@ -325,27 +316,8 @@ export default function CampDataImporter() {
                         </Badge>
                       )}
                       <Button
-                        onClick={() => handleCampMinderSync(company.id, company.name, true)}
-                        disabled={!company.campminder_sync_enabled || syncingCompanyId !== null || syncingStaffOnlyId !== null}
-                        size="sm"
-                        variant="outline"
-                        title="Fast sync - only syncs staff with budget codes for testing"
-                      >
-                        {syncingStaffOnlyId === company.id ? (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                            Staff...
-                          </>
-                        ) : (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                            Staff Only
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        onClick={() => handleCampMinderSync(company.id, company.name, false)}
-                        disabled={!company.campminder_sync_enabled || syncingCompanyId !== null || syncingStaffOnlyId !== null}
+                        onClick={() => handleCampMinderSync(company.id, company.name)}
+                        disabled={!company.campminder_sync_enabled || syncingCompanyId !== null}
                         size="sm"
                       >
                         {syncingCompanyId === company.id ? (
@@ -356,7 +328,7 @@ export default function CampDataImporter() {
                         ) : (
                           <>
                             <RefreshCw className="h-4 w-4 mr-2" />
-                            Full Sync
+                            Sync Now
                           </>
                         )}
                       </Button>
