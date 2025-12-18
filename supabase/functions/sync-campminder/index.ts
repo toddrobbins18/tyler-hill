@@ -210,7 +210,7 @@ function valuesEqual(a: any, b: any): boolean {
 // Fields to track changes for each table
 const TRACKED_FIELDS: Record<string, string[]> = {
   children: ['name', 'gender', 'date_of_birth', 'grade', 'guardian_name', 'guardian_email', 'guardian_phone', 'allergies', 'medical_notes', 'division_id', 'session', 'status'],
-  staff: ['name', 'role', 'email', 'phone', 'date_of_birth', 'status'],
+  staff: ['name', 'role', 'email', 'phone', 'date_of_birth', 'status', 'budget_code'],
 };
 
 async function batchUpsert(
@@ -939,6 +939,23 @@ async function performFullSync(
           phone = person.ContactDetails.PhoneNumbers[0].Number;
         }
 
+        // Extract budget code from StaffDetails
+        const staffDetails = person?.StaffDetails;
+        let budgetCode: string | null = null;
+        
+        if (staffDetails) {
+          // Log StaffDetails for debugging to discover exact field name
+          console.log(`[DEBUG] StaffDetails for ${name}:`, JSON.stringify(staffDetails, null, 2));
+          
+          // Try various possible field names for budget code
+          budgetCode = staffDetails.BudgetCode || 
+                       staffDetails.DepartmentCode || 
+                       staffDetails.Budget || 
+                       staffDetails.CostCenter ||
+                       assignment?.BudgetCode ||
+                       null;
+        }
+
         staffData.push({
           person_id: personId,
           name,
@@ -949,6 +966,7 @@ async function performFullSync(
           company_id: companyId,
           season: season,
           status: 'active',
+          budget_code: budgetCode,
         });
       }
 
