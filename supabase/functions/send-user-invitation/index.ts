@@ -86,6 +86,18 @@ serve(async (req) => {
 
     if (inviteError) {
       console.error('Supabase invite error:', inviteError);
+      
+      // Check for existing user error
+      if (inviteError.message?.includes('already been registered')) {
+        return new Response(
+          JSON.stringify({ 
+            error: `${email} already has an account. They can log in directly at the portal.`,
+            code: 'user_exists'
+          }),
+          { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
       return new Response(
         JSON.stringify({ error: `Failed to send invitation: ${inviteError.message}` }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
