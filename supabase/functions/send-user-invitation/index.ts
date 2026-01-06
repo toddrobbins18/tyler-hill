@@ -1,8 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
-import { Resend } from "https://esm.sh/resend@4.0.0";
-
-const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -71,58 +68,34 @@ serve(async (req) => {
       targetCompanyId = adminProfile?.company_id;
     }
 
-    // Get the app URL - use the correct Lovable project URL
+    // Get the app URL for redirect
     const projectId = Deno.env.get('SUPABASE_URL')?.match(/https:\/\/([^.]+)\./)?.[1] || '';
-    const appUrl = `https://${projectId}.lovableproject.com`;
-    const signupUrl = `${appUrl}/auth?company_id=${targetCompanyId}&email=${encodeURIComponent(email)}`;
+    const redirectUrl = `https://${projectId}.lovableproject.com/auth?company_id=${targetCompanyId}`;
     
-    console.log('Generated signup URL:', signupUrl);
+    console.log('Using redirect URL:', redirectUrl);
 
-    // Send invitation email
-    console.log('Sending email via Resend to:', email);
-    
-    const emailResponse = await resend.emails.send({
-      from: "Camp Database <onboarding@resend.dev>",
-      to: [email],
-      subject: "You've been invited to join Camp Database",
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h1 style="color: #333;">Welcome to Camp Database!</h1>
-          <p>Hi ${fullName},</p>
-          <p>You've been invited to join our camp management system with the role of <strong>${role}</strong>.</p>
-          <p>To get started, please click the button below to create your account:</p>
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${signupUrl}" style="background-color: #0066cc; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
-              Create Your Account
-            </a>
-          </div>
-          <p style="color: #666; font-size: 14px;">
-            If the button doesn't work, copy and paste this link into your browser:<br>
-            <a href="${signupUrl}">${signupUrl}</a>
-          </p>
-          <p style="color: #666; font-size: 14px;">
-            After creating your account, an administrator will need to approve your access.
-          </p>
-          <p>Best regards,<br>The Camp Database Team</p>
-        </div>
-      `,
+    // Use Supabase Auth's built-in invite functionality
+    const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+      redirectTo: redirectUrl,
+      data: {
+        full_name: fullName,
+        invited_role: role,
+        company_id: targetCompanyId,
+      }
     });
 
-    console.log('Resend API response:', JSON.stringify(emailResponse));
-    
-    // Check if Resend returned an error
-    if (emailResponse.error) {
-      console.error('Resend email error:', emailResponse.error);
+    if (inviteError) {
+      console.error('Supabase invite error:', inviteError);
       return new Response(
-        JSON.stringify({ error: `Email send failed: ${emailResponse.error.message}` }),
+        JSON.stringify({ error: `Failed to send invitation: ${inviteError.message}` }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('Invitation email sent successfully to:', email, 'Email ID:', emailResponse.data?.id);
+    console.log('Invitation sent successfully to:', email, 'User ID:', inviteData.user?.id);
 
     return new Response(
-      JSON.stringify({ success: true, emailResponse }),
+      JSON.stringify({ success: true, userId: inviteData.user?.id }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: any) {
