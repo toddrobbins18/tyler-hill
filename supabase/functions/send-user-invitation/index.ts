@@ -71,11 +71,16 @@ serve(async (req) => {
       targetCompanyId = adminProfile?.company_id;
     }
 
-    // Get the app URL
-    const appUrl = Deno.env.get('SUPABASE_URL')?.replace('https://', 'https://') || 'https://your-app.lovable.app';
-    const signupUrl = `${appUrl.replace('.supabase.co', '.lovableproject.com')}/auth?company_id=${targetCompanyId}&email=${encodeURIComponent(email)}`;
+    // Get the app URL - use the correct Lovable project URL
+    const projectId = Deno.env.get('SUPABASE_URL')?.match(/https:\/\/([^.]+)\./)?.[1] || '';
+    const appUrl = `https://${projectId}.lovableproject.com`;
+    const signupUrl = `${appUrl}/auth?company_id=${targetCompanyId}&email=${encodeURIComponent(email)}`;
+    
+    console.log('Generated signup URL:', signupUrl);
 
     // Send invitation email
+    console.log('Sending email via Resend to:', email);
+    
     const emailResponse = await resend.emails.send({
       from: "Camp Database <onboarding@resend.dev>",
       to: [email],
@@ -103,7 +108,18 @@ serve(async (req) => {
       `,
     });
 
-    console.log('Invitation email sent:', emailResponse);
+    console.log('Resend API response:', JSON.stringify(emailResponse));
+    
+    // Check if Resend returned an error
+    if (emailResponse.error) {
+      console.error('Resend email error:', emailResponse.error);
+      return new Response(
+        JSON.stringify({ error: `Email send failed: ${emailResponse.error.message}` }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('Invitation email sent successfully to:', email, 'Email ID:', emailResponse.data?.id);
 
     return new Response(
       JSON.stringify({ success: true, emailResponse }),
