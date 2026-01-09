@@ -9,7 +9,7 @@ const CM_SESSIONS_URL = 'https://api.campminder.com/sessions';
 
 
 // Rate limiting: 250ms between calls (4 calls/sec = 240/min)
-const RATE_LIMIT_DELAY_MS = 250;
+const RATE_LIMIT_DELAY_MS = 100; // 100ms = 10 calls/sec (within CampMinder's limits)
 let lastApiCallTime = 0;
 
 const corsHeaders = {
@@ -663,38 +663,32 @@ async function performFullSync(
     console.log(`Built staff fallback map with ${staffFallbackMap.size} entries`);
 
     // =====================================================
-    // PHASE 3.5: Fetch ONLY enrolled campers + hired staff persons (not all 25k+)
+    // PHASE 3.5: Fetch ONLY enrolled campers (staff use fallback data from /staff endpoint)
     // =====================================================
-    const allNeededPersonIds = new Set<string>([
-      ...enrolledPersonIdArray,
-      ...staffPersonIdsFromAssignments
-    ]);
-    
-    console.log(`\n--- FETCHING PERSON DATA FOR ${allNeededPersonIds.size} ENROLLED/HIRED PERSONS ---`);
+    console.log(`\n--- FETCHING PERSON DATA FOR ${enrolledPersonIdArray.length} ENROLLED CAMPERS ---`);
     console.log(`  Enrolled campers: ${enrolledPersonIdArray.length}`);
-    console.log(`  Hired staff: ${staffPersonIdsFromAssignments.size}`);
+    console.log(`  Hired staff: ${staffPersonIdsFromAssignments.size} (using /staff endpoint data directly)`);
     
     await updateSyncJob(supabase, jobId, {
       progress: { 
-        step: 'Fetching person data for enrolled/hired', 
+        step: 'Fetching camper person data', 
         divisions: divisions.length, 
         enrolledCampers: enrolledPersonIdArray.length,
         hiredStaff: staffPersonIdsFromAssignments.size,
-        totalPersonsToFetch: allNeededPersonIds.size,
         season 
       },
     });
 
-    // Build person lookup map by fetching each person individually
+    // Build person lookup map by fetching only CAMPERS individually
+    // Staff will use the fallback data from /staff endpoint (already has name, email, phone)
     const personMap = new Map<string, any>();
-    const personIdArray = Array.from(allNeededPersonIds);
     let fetchedCount = 0;
     let failedCount = 0;
     
-    console.log(`\n[Person Fetch] Starting to fetch ${personIdArray.length} persons individually...`);
+    console.log(`\n[Camper Fetch] Starting to fetch ${enrolledPersonIdArray.length} campers individually...`);
     
-    for (let i = 0; i < personIdArray.length; i++) {
-      const personId = personIdArray[i];
+    for (let i = 0; i < enrolledPersonIdArray.length; i++) {
+      const personId = enrolledPersonIdArray[i];
       const person = await fetchPersonById(personId, token, subscriptionKey);
       
       if (person) {
@@ -703,7 +697,7 @@ async function performFullSync(
         
         // Log first person with relatives for debugging
         if (fetchedCount === 1 && person.Relatives && person.Relatives.length > 0) {
-          console.log('[DEBUG] Sample person with Relatives:', JSON.stringify({
+          console.log('[DEBUG] Sample camper with Relatives:', JSON.stringify({
             ID: person.ID,
             Name: person.Name,
             Relatives: person.Relatives,
@@ -714,14 +708,14 @@ async function performFullSync(
         failedCount++;
       }
       
-      // Progress update every 50 persons
-      if ((i + 1) % 50 === 0 || i === personIdArray.length - 1) {
-        console.log(`[Person Fetch] Progress: ${i + 1}/${personIdArray.length} (${fetchedCount} success, ${failedCount} failed)`);
+      // Progress update every 100 persons
+      if ((i + 1) % 100 === 0 || i === enrolledPersonIdArray.length - 1) {
+        console.log(`[Camper Fetch] Progress: ${i + 1}/${enrolledPersonIdArray.length} (${fetchedCount} success, ${failedCount} failed)`);
       }
     }
     
-    console.log(`\n[Person Fetch] Completed: ${fetchedCount} fetched, ${failedCount} failed out of ${personIdArray.length}`);
-    console.log(`Built person map with ${personMap.size} entries`);
+    console.log(`\n[Camper Fetch] Completed: ${fetchedCount} fetched, ${failedCount} failed out of ${enrolledPersonIdArray.length}`);
+    console.log(`Built person map with ${personMap.size} camper entries`);
 
     // =====================================================
     // PHASE 3.6: Identify any missing persons and create campers array
@@ -735,22 +729,14 @@ async function performFullSync(
       }
     }
     
-    // Identify staff PersonIDs that are NOT in personMap
-    const staffPersonIds = staffPersonIdsFromAssignments;
-    const missingStaffIds: string[] = [];
-    for (const personId of staffPersonIds) {
-      if (!personMap.has(personId)) {
-        missingStaffIds.push(personId);
-      }
-    }
+    // Staff use fallback data from /staff endpoint, so we don't need to track missing staff
+const staffPersonIds = staffPersonIdsFromAssignments;
     
     console.log(`\n[Post-Fetch Analysis]`);
     console.log(`  Enrolled campers: ${enrolledPersonIdArray.length}`);
-    console.log(`  Campers in personMap: ${enrolledPersonIdArray.length - missingCamperIds.length}`);
+    console.log(`  Campers fetched: ${enrolledPersonIdArray.length - missingCamperIds.length}`);
     console.log(`  Campers still missing: ${missingCamperIds.length}`);
-    console.log(`  Staff PersonIDs: ${staffPersonIds.size}`);
-    console.log(`  Staff in personMap: ${staffPersonIds.size - missingStaffIds.length}`);
-    console.log(`  Staff still missing: ${missingStaffIds.length}`);
+    console.log(`  Staff (using /staff data): ${staffPersonIds.size}`);
 
     // Filter to only enrolled campers with CamperDetails from personMap
     const campers: any[] = [];
@@ -1289,10 +1275,7 @@ async function performFullSync(
       parentEmails: parentEmailMap.size,
       parentPhones: parentPhoneMap.size,
       season: season,
-      missing_persons_attempted: {
-        staff: missingStaffIds.length,
-        campers: missingCamperIds.length,
-      },
+      missing_campers_count: missingCamperIds.length,
       fallback_data_used: {
         staff: usedFallbackData,
         campers: usedCamperFallbackData,
