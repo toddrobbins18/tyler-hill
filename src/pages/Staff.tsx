@@ -168,7 +168,11 @@ export default function Staff() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <>
+          <div className="text-sm text-muted-foreground">
+            Showing {filteredStaff.length} of {staff.filter(s => s.season === currentSeason || s.season === null).length} staff members
+          </div>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredStaff.map((staffMember) => (
             <Card
               key={staffMember.id}
@@ -291,6 +295,7 @@ export default function Staff() {
             </Card>
           ))}
         </div>
+        </>
       )}
 
       {!loading && filteredStaff.length === 0 && (
