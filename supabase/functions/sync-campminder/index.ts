@@ -414,12 +414,16 @@ async function performFullSync(
   clientId: string,
   seasonId?: string,
   isIncremental: boolean = false,
-  lastSyncAt?: string
+  lastSyncAt?: string,
+  syncType: 'campers' | 'staff' | 'full' = 'full'
 ): Promise<void> {
+  const syncTypeLabel = syncType === 'full' ? 'FULL' : syncType.toUpperCase() + ' ONLY';
+  
   console.log(`\n========================================`);
-  console.log(`Starting ${isIncremental ? 'INCREMENTAL' : 'FULL'} sync for company ${companyId}`);
+  console.log(`Starting ${isIncremental ? 'INCREMENTAL ' : ''}${syncTypeLabel} sync for company ${companyId}`);
   console.log(`Job ID: ${jobId}`);
-  console.log(`[Sync Debug] version=2025-01-09-missing-persons-fix`);
+  console.log(`Sync Type: ${syncType}`);
+  console.log(`[Sync Debug] version=2025-01-09-split-sync`);
   if (isIncremental && lastSyncAt) {
     console.log(`[Incremental] Last sync: ${lastSyncAt}`);
   }
@@ -429,7 +433,7 @@ async function performFullSync(
     await updateSyncJob(supabase, jobId, {
       status: 'running',
       started_at: new Date().toISOString(),
-      progress: { step: 'Starting sync', syncType: isIncremental ? 'incremental' : 'full' },
+      progress: { step: 'Starting sync', syncType: syncType, isIncremental },
     });
 
     const season = '2026';
@@ -550,218 +554,215 @@ async function performFullSync(
       total_counts: { divisions: divisions.length },
     });
 
-    // 2. Fetch enrolled attendees for filtering (using session attendees for enrollment status)
-    console.log('\n--- FETCHING ENROLLED ATTENDEES ---');
-    await updateSyncJob(supabase, jobId, {
-      progress: { step: 'Fetching enrolled attendees', divisions: divisions.length, season },
-    });
-
-    const enrolledAttendees = await fetchAllPaginated(
-      `${CM_SESSIONS_URL}/attendees`,
-      token,
-      subscriptionKey,
-      { clientid: clientId, seasonid: season, status: 2 }
-    );
-    console.log(`Found ${enrolledAttendees.length} enrolled attendees`);
-
-    if (enrolledAttendees.length > 0) {
-      console.log('[DEBUG] Sample session attendee record:', JSON.stringify(enrolledAttendees[0], null, 2));
-    }
-
-    // Build a map of attendee data for fallback (when persons API fails)
+    // =====================================================
+    // Initialize all variables needed across sync phases
+    // =====================================================
+    let enrolledAttendees: any[] = [];
     const attendeeDataMap = new Map<string, any>();
-    for (const attendee of enrolledAttendees) {
-      const personId = String(attendee.PersonID);
-      attendeeDataMap.set(personId, {
-        PersonID: personId,
-        FirstName: attendee.FirstName || attendee.Name?.First || '',
-        LastName: attendee.LastName || attendee.Name?.Last || '',
-        GenderID: attendee.GenderID,
-        DateOfBirth: attendee.DateOfBirth,
-        DivisionID: attendee.DivisionID,
-        SessionProgramStatus: attendee.SessionProgramStatus,
+    let enrolledPersonIdArray: string[] = [];
+    let sessions: any[] = [];
+    const personMap = new Map<string, any>();
+    const camperToParentMap = new Map<string, string>();
+    const parentEmailMap = new Map<string, string>();
+    const parentPhoneMap = new Map<string, string>();
+    const parentNameMap = new Map<string, string>();
+    let campers: any[] = [];
+    let missingCamperIds: string[] = [];
+    let staffAssignments: any[] = [];
+    const staffFallbackMap = new Map<string, any>();
+    const staffPersonIdsFromAssignments = new Set<string>();
+    const staffAssignmentMap = new Map<string, any>();
+    const parentPersonIds = new Set<string>();
+
+    // =====================================================
+    // PHASE 2: Fetch enrolled attendees (for CAMPER sync)
+    // Only run if syncType is 'campers' or 'full'
+    // =====================================================
+    if (syncType === 'campers' || syncType === 'full') {
+      console.log('\n--- FETCHING ENROLLED ATTENDEES (camper sync) ---');
+      await updateSyncJob(supabase, jobId, {
+        progress: { step: 'Fetching enrolled attendees', divisions: divisions.length, season, syncType },
       });
+
+      enrolledAttendees = await fetchAllPaginated(
+        `${CM_SESSIONS_URL}/attendees`,
+        token,
+        subscriptionKey,
+        { clientid: clientId, seasonid: season, status: 2 }
+      );
+      console.log(`Found ${enrolledAttendees.length} enrolled attendees`);
+
+      if (enrolledAttendees.length > 0) {
+        console.log('[DEBUG] Sample session attendee record:', JSON.stringify(enrolledAttendees[0], null, 2));
+      }
+
+      // Build a map of attendee data for fallback
+      for (const attendee of enrolledAttendees) {
+        const personId = String(attendee.PersonID);
+        attendeeDataMap.set(personId, {
+          PersonID: personId,
+          FirstName: attendee.FirstName || attendee.Name?.First || '',
+          LastName: attendee.LastName || attendee.Name?.Last || '',
+          GenderID: attendee.GenderID,
+          DateOfBirth: attendee.DateOfBirth,
+          DivisionID: attendee.DivisionID,
+          SessionProgramStatus: attendee.SessionProgramStatus,
+        });
+      }
+      console.log(`Built attendee fallback map with ${attendeeDataMap.size} entries`);
+
+      const enrolledPersonIds = new Set(
+        enrolledAttendees.map((a: any) => String(a.PersonID))
+      );
+      enrolledPersonIdArray = Array.from(enrolledPersonIds);
+
+      // Fetch sessions for session NAME lookup
+      console.log('\n--- FETCHING SESSIONS FOR NAME LOOKUP ---');
+      sessions = await fetchAllPaginated(
+        CM_SESSIONS_URL,
+        token,
+        subscriptionKey,
+        { clientid: clientId, seasonid: season }
+      );
+      console.log(`Found ${sessions.length} sessions for name lookup`);
+
+      // =====================================================
+      // PHASE 3: Fetch ONLY enrolled campers person data
+      // =====================================================
+      console.log(`\n--- FETCHING PERSON DATA FOR ${enrolledPersonIdArray.length} ENROLLED CAMPERS ---`);
+      
+      await updateSyncJob(supabase, jobId, {
+        progress: { 
+          step: 'Fetching camper person data', 
+          divisions: divisions.length, 
+          enrolledCampers: enrolledPersonIdArray.length,
+          season,
+          syncType
+        },
+      });
+
+      let fetchedCount = 0;
+      let failedCount = 0;
+      
+      console.log(`\n[Camper Fetch] Starting to fetch ${enrolledPersonIdArray.length} campers individually...`);
+      
+      for (let i = 0; i < enrolledPersonIdArray.length; i++) {
+        const personId = enrolledPersonIdArray[i];
+        const person = await fetchPersonById(personId, token, subscriptionKey);
+        
+        if (person) {
+          personMap.set(personId, person);
+          fetchedCount++;
+          
+          if (fetchedCount === 1 && person.Relatives && person.Relatives.length > 0) {
+            console.log('[DEBUG] Sample camper with Relatives:', JSON.stringify({
+              ID: person.ID,
+              Name: person.Name,
+              Relatives: person.Relatives,
+              ContactDetails: person.ContactDetails
+            }, null, 2));
+          }
+        } else {
+          failedCount++;
+        }
+        
+        if ((i + 1) % 100 === 0 || i === enrolledPersonIdArray.length - 1) {
+          console.log(`[Camper Fetch] Progress: ${i + 1}/${enrolledPersonIdArray.length} (${fetchedCount} success, ${failedCount} failed)`);
+        }
+      }
+      
+      console.log(`\n[Camper Fetch] Completed: ${fetchedCount} fetched, ${failedCount} failed out of ${enrolledPersonIdArray.length}`);
+      console.log(`Built person map with ${personMap.size} camper entries`);
+
+      // Identify missing campers
+      for (const personId of enrolledPersonIdArray) {
+        if (!personMap.has(personId)) {
+          missingCamperIds.push(personId);
+        }
+      }
+
+      // Filter to only enrolled campers with CamperDetails
+      for (const personId of enrolledPersonIdArray) {
+        const person = personMap.get(personId);
+        if (person && person.CamperDetails) {
+          campers.push(person);
+        }
+      }
+      
+      console.log(`✓ Total campers with CamperDetails: ${campers.length}`);
+      console.log(`  Missing camper IDs: ${missingCamperIds.length}`);
+    } else {
+      console.log(`\n--- SKIPPING CAMPER FETCH (syncType=${syncType}) ---`);
     }
-    console.log(`Built attendee fallback map with ${attendeeDataMap.size} entries`);
-
-    const enrolledPersonIds = new Set(
-      enrolledAttendees.map((a: any) => String(a.PersonID))
-    );
-    const enrolledPersonIdArray = Array.from(enrolledPersonIds);
-
-    // NOTE: We'll use CamperDetails.DivisionID directly from persons API instead of /divisions/attendees
-    // The /divisions/attendees endpoint was returning DivisionID: 0 for everyone
-
-    // Fetch sessions for session NAME lookup (used later for session enrollment)
-    console.log('\n--- FETCHING SESSIONS FOR NAME LOOKUP ---');
-    const sessions = await fetchAllPaginated(
-      CM_SESSIONS_URL,
-      token,
-      subscriptionKey,
-      { clientid: clientId, seasonid: season }
-    );
-    console.log(`Found ${sessions.length} sessions for name lookup`);
 
     // =====================================================
-    // PHASE 3: Fetch staff assignments FIRST to get all needed PersonIDs
-    // Then fetch only enrolled campers + hired staff person data
+    // PHASE 3b: Fetch staff assignments (for STAFF sync)
+    // Only run if syncType is 'staff' or 'full'
     // =====================================================
-    console.log('\n--- FETCHING STAFF ASSIGNMENTS (to identify staff PersonIDs) ---');
-    
-    const currentSeason = season; // 2026
-    const fallbackSeason = '2025';
-    
-    // Try current season first with status=1 (Active/Hired staff only)
-    console.log(`[Staff Sync] Trying /staff endpoint with season ${currentSeason}, status=1 (Active)...`);
-    let staffAssignments = await fetchAllPaginated(
-      CM_STAFF_URL,
-      token,
-      subscriptionKey,
-      { clientid: clientId, seasonid: currentSeason, status: 1 }
-    );
-    console.log(`Found ${staffAssignments.length} active staff assignments for season ${currentSeason}`);
-
-    // Fallback to previous season if no results
-    if (staffAssignments.length === 0) {
-      console.log(`[Staff Sync] No staff found for ${currentSeason}, trying ${fallbackSeason} with status=1...`);
+    if (syncType === 'staff' || syncType === 'full') {
+      console.log('\n--- FETCHING STAFF ASSIGNMENTS (staff sync) ---');
+      
+      const currentSeason = season;
+      const fallbackSeason = '2025';
+      
+      console.log(`[Staff Sync] Trying /staff endpoint with season ${currentSeason}, status=1 (Active)...`);
       staffAssignments = await fetchAllPaginated(
         CM_STAFF_URL,
         token,
         subscriptionKey,
-        { clientid: clientId, seasonid: fallbackSeason, status: 1 }
+        { clientid: clientId, seasonid: currentSeason, status: 1 }
       );
-      console.log(`Found ${staffAssignments.length} active staff assignments for season ${fallbackSeason}`);
-    }
+      console.log(`Found ${staffAssignments.length} active staff assignments for season ${currentSeason}`);
 
-    // Debug log first staff assignment to see available fields
-    if (staffAssignments.length > 0) {
-      console.log('[DEBUG] Sample staff assignment with all fields:', JSON.stringify(staffAssignments[0], null, 2));
-    }
-
-    // Build a map of staff assignment data for fallback (when persons API fails)
-    const staffFallbackMap = new Map<string, any>();
-    const staffPersonIdsFromAssignments = new Set<string>();
-    const staffAssignmentMap = new Map<string, any>();
-    
-    for (const assignment of staffAssignments) {
-      if (assignment.PersonID) {
-        const personId = String(assignment.PersonID);
-        staffPersonIdsFromAssignments.add(personId);
-        staffAssignmentMap.set(personId, assignment);
-        staffFallbackMap.set(personId, {
-          PersonID: personId,
-          FirstName: assignment.FirstName || assignment.Name?.First || '',
-          LastName: assignment.LastName || assignment.Name?.Last || '',
-          Email: assignment.Email || '',
-          Phone: assignment.Phone || assignment.PhoneNumber || '',
-          Position1ID: assignment.Position1ID,
-          PositionID: assignment.PositionID,
-          DateOfBirth: assignment.DateOfBirth,
-        });
+      if (staffAssignments.length === 0) {
+        console.log(`[Staff Sync] No staff found for ${currentSeason}, trying ${fallbackSeason} with status=1...`);
+        staffAssignments = await fetchAllPaginated(
+          CM_STAFF_URL,
+          token,
+          subscriptionKey,
+          { clientid: clientId, seasonid: fallbackSeason, status: 1 }
+        );
+        console.log(`Found ${staffAssignments.length} active staff assignments for season ${fallbackSeason}`);
       }
-    }
-    console.log(`Built staff fallback map with ${staffFallbackMap.size} entries`);
 
-    // =====================================================
-    // PHASE 3.5: Fetch ONLY enrolled campers (staff use fallback data from /staff endpoint)
-    // =====================================================
-    console.log(`\n--- FETCHING PERSON DATA FOR ${enrolledPersonIdArray.length} ENROLLED CAMPERS ---`);
-    console.log(`  Enrolled campers: ${enrolledPersonIdArray.length}`);
-    console.log(`  Hired staff: ${staffPersonIdsFromAssignments.size} (using /staff endpoint data directly)`);
-    
-    await updateSyncJob(supabase, jobId, {
-      progress: { 
-        step: 'Fetching camper person data', 
-        divisions: divisions.length, 
-        enrolledCampers: enrolledPersonIdArray.length,
-        hiredStaff: staffPersonIdsFromAssignments.size,
-        season 
-      },
-    });
+      if (staffAssignments.length > 0) {
+        console.log('[DEBUG] Sample staff assignment with all fields:', JSON.stringify(staffAssignments[0], null, 2));
+      }
 
-    // Build person lookup map by fetching only CAMPERS individually
-    // Staff will use the fallback data from /staff endpoint (already has name, email, phone)
-    const personMap = new Map<string, any>();
-    let fetchedCount = 0;
-    let failedCount = 0;
-    
-    console.log(`\n[Camper Fetch] Starting to fetch ${enrolledPersonIdArray.length} campers individually...`);
-    
-    for (let i = 0; i < enrolledPersonIdArray.length; i++) {
-      const personId = enrolledPersonIdArray[i];
-      const person = await fetchPersonById(personId, token, subscriptionKey);
-      
-      if (person) {
-        personMap.set(personId, person);
-        fetchedCount++;
-        
-        // Log first person with relatives for debugging
-        if (fetchedCount === 1 && person.Relatives && person.Relatives.length > 0) {
-          console.log('[DEBUG] Sample camper with Relatives:', JSON.stringify({
-            ID: person.ID,
-            Name: person.Name,
-            Relatives: person.Relatives,
-            ContactDetails: person.ContactDetails
-          }, null, 2));
+      // Build staff fallback map
+      for (const assignment of staffAssignments) {
+        if (assignment.PersonID) {
+          const personId = String(assignment.PersonID);
+          staffPersonIdsFromAssignments.add(personId);
+          staffAssignmentMap.set(personId, assignment);
+          staffFallbackMap.set(personId, {
+            PersonID: personId,
+            FirstName: assignment.FirstName || assignment.Name?.First || '',
+            LastName: assignment.LastName || assignment.Name?.Last || '',
+            Email: assignment.Email || '',
+            Phone: assignment.Phone || assignment.PhoneNumber || '',
+            Position1ID: assignment.Position1ID,
+            PositionID: assignment.PositionID,
+            DateOfBirth: assignment.DateOfBirth,
+          });
         }
-      } else {
-        failedCount++;
       }
-      
-      // Progress update every 100 persons
-      if ((i + 1) % 100 === 0 || i === enrolledPersonIdArray.length - 1) {
-        console.log(`[Camper Fetch] Progress: ${i + 1}/${enrolledPersonIdArray.length} (${fetchedCount} success, ${failedCount} failed)`);
-      }
+      console.log(`Built staff fallback map with ${staffFallbackMap.size} entries`);
+    } else {
+      console.log(`\n--- SKIPPING STAFF FETCH (syncType=${syncType}) ---`);
     }
-    
-    console.log(`\n[Camper Fetch] Completed: ${fetchedCount} fetched, ${failedCount} failed out of ${enrolledPersonIdArray.length}`);
-    console.log(`Built person map with ${personMap.size} camper entries`);
+
+    // Staff use fallback data from /staff endpoint
+    const staffPersonIds = staffPersonIdsFromAssignments;
 
     // =====================================================
-    // PHASE 3.6: Identify any missing persons and create campers array
+    // PHASE 4: Extract parent info from Relatives array (for camper sync)
     // =====================================================
-    
-    // Identify camper PersonIDs that are NOT in personMap (failed to fetch)
-    const missingCamperIds: string[] = [];
-    for (const personId of enrolledPersonIdArray) {
-      if (!personMap.has(personId)) {
-        missingCamperIds.push(personId);
-      }
-    }
-    
-    // Staff use fallback data from /staff endpoint, so we don't need to track missing staff
-const staffPersonIds = staffPersonIdsFromAssignments;
-    
-    console.log(`\n[Post-Fetch Analysis]`);
-    console.log(`  Enrolled campers: ${enrolledPersonIdArray.length}`);
-    console.log(`  Campers fetched: ${enrolledPersonIdArray.length - missingCamperIds.length}`);
-    console.log(`  Campers still missing: ${missingCamperIds.length}`);
-    console.log(`  Staff (using /staff data): ${staffPersonIds.size}`);
-
-    // Filter to only enrolled campers with CamperDetails from personMap
-    const campers: any[] = [];
-    for (const personId of enrolledPersonIdArray) {
-      const person = personMap.get(personId);
-      if (person && person.CamperDetails) {
-        campers.push(person);
-      }
-    }
-    
-    console.log(`✓ Total campers with CamperDetails: ${campers.length}`);
-
-    // =====================================================
-    // PHASE 4: Extract parent info from Relatives array
-    // =====================================================
-    console.log('\n--- EXTRACTING PARENT INFO FROM RELATIVES ---');
-    
-    const camperToParentMap = new Map<string, string>(); // camperPersonId -> parentPersonId
-    const parentPersonIds = new Set<string>();
-    const parentEmailMap = new Map<string, string>();
-    const parentPhoneMap = new Map<string, string>();
-    const parentNameMap = new Map<string, string>();
-    
     let campersWithParents = 0;
     let campersWithoutParents = 0;
+    
+    if (syncType === 'campers' || syncType === 'full') {
+      console.log('\n--- EXTRACTING PARENT INFO FROM RELATIVES ---');
     
     for (const camper of campers) {
       const camperId = String(camper.ID);
@@ -891,26 +892,34 @@ const staffPersonIds = staffPersonIdsFromAssignments;
       console.log(`  Parents with emails: ${parentEmailMap.size}`);
       console.log(`  Parents with phones: ${parentPhoneMap.size}`);
       console.log(`  Parents with names: ${parentNameMap.size}`);
-    }
+    } // End of parent info extraction (camper sync)
 
     // =====================================================
     // PHASE 6: Sync campers to database (including fallback for missing persons)
     // =====================================================
-    console.log('\n--- SYNCING CAMPERS ---');
-    
-    // Identify campers that we still don't have in personMap after fetching missing
-    const stillMissingCamperIds = missingCamperIds.filter(id => !personMap.has(id));
-    console.log(`[Camper Fallback] ${stillMissingCamperIds.length} campers still missing from personMap, will use attendee data`);
-    
-    await updateSyncJob(supabase, jobId, {
-      progress: { step: 'Syncing campers', total: campers.length + stillMissingCamperIds.length, divisions: divisions.length, parentEmails: parentEmailMap.size, season },
-      total_counts: { divisions: divisions.length, campers: campers.length + stillMissingCamperIds.length },
-    });
-
-    // Variables for tracking changes - declared outside if blocks
+    // Variables for tracking camper changes - declared outside if blocks
     let camperChanges: ChangeRecord[] = [];
     let camperInsertedCount = 0;
     let camperUpdatedCount = 0;
+    let usedCamperFallbackData = 0;
+    const camperData: any[] = [];
+
+    if (syncType === 'campers' || syncType === 'full') {
+      console.log('\n--- SYNCING CAMPERS ---');
+      
+      // Identify campers that we still don't have in personMap after fetching missing
+      const stillMissingCamperIds = missingCamperIds.filter(id => !personMap.has(id));
+      console.log(`[Camper Fallback] ${stillMissingCamperIds.length} campers still missing from personMap, will use attendee data`);
+      
+      await updateSyncJob(supabase, jobId, {
+        progress: { step: 'Syncing campers', total: campers.length + stillMissingCamperIds.length, divisions: divisions.length, parentEmails: parentEmailMap.size, season },
+        total_counts: { divisions: divisions.length, campers: campers.length + stillMissingCamperIds.length },
+      });
+
+      const gradeMap: Record<number, string> = {
+        0: 'Pre-K', 1: 'K', 2: '1st', 3: '2nd', 4: '3rd', 5: '4th',
+        6: '5th', 7: '6th', 8: '7th', 9: '8th', 10: '9th', 11: '10th', 12: '11th', 13: '12th'
+      };
 
     const gradeMap: Record<number, string> = {
       0: 'Pre-K', 1: 'K', 2: '1st', 3: '2nd', 4: '3rd', 5: '4th',
@@ -1051,11 +1060,14 @@ const staffPersonIds = staffPersonIdsFromAssignments;
       camperUpdatedCount = camperResult.updated;
       console.log(`Synced ${camperResult.inserted + camperResult.updated} campers (${usedCamperFallbackData} from fallback)`);
     }
+    } // End of camper sync (syncType === 'campers' || syncType === 'full')
 
     // =====================================================
     // PHASE 7: Sync staff with complete person data
+    // Only run if syncType is 'staff' or 'full'
     // =====================================================
-    console.log('\n--- SYNCING STAFF ---');
+    if (syncType === 'staff' || syncType === 'full') {
+      console.log('\n--- SYNCING STAFF ---');
     
     // Fetch staff positions for role mapping (works without season)
     const positions = await fetchAllPaginated(
@@ -1335,9 +1347,13 @@ serve(async (req) => {
   }
 
   try {
-    const { company_id, season_id, incremental } = await req.json().catch(() => ({}));
+  const { company_id, season_id, incremental, sync_type } = await req.json().catch(() => ({}));
     
-    console.log('Sync request received:', { company_id, season_id, incremental });
+    // sync_type can be: 'campers', 'staff', or 'full' (default)
+    // This allows splitting syncs: campers at :00, staff at :30
+    const effectiveSyncType = sync_type || 'full';
+    
+    console.log('Sync request received:', { company_id, season_id, incremental, sync_type: effectiveSyncType });
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
