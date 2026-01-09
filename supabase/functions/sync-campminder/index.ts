@@ -415,7 +415,7 @@ async function performFullSync(
   seasonId?: string,
   isIncremental: boolean = false,
   lastSyncAt?: string,
-  syncType: 'campers' | 'staff' | 'full' = 'full'
+  syncType: string = 'full'
 ): Promise<void> {
   const syncTypeLabel = syncType === 'full' ? 'FULL' : syncType.toUpperCase() + ' ONLY';
   
@@ -573,6 +573,12 @@ async function performFullSync(
     const staffPersonIdsFromAssignments = new Set<string>();
     const staffAssignmentMap = new Map<string, any>();
     const parentPersonIds = new Set<string>();
+    
+    // Staff tracking variables - must be initialized before conditional blocks
+    let staffChanges: ChangeRecord[] = [];
+    let staffInsertedCount = 0;
+    let staffUpdatedCount = 0;
+    let usedFallbackData = 0;
 
     // =====================================================
     // PHASE 2: Fetch enrolled attendees (for CAMPER sync)
@@ -892,7 +898,8 @@ async function performFullSync(
       console.log(`  Parents with emails: ${parentEmailMap.size}`);
       console.log(`  Parents with phones: ${parentPhoneMap.size}`);
       console.log(`  Parents with names: ${parentNameMap.size}`);
-    } // End of parent info extraction (camper sync)
+    } // End of phase 5 (parent fetching)
+    } // End of parent info extraction (camper sync - syncType === 'campers' || syncType === 'full')
 
     // =====================================================
     // PHASE 6: Sync campers to database (including fallback for missing persons)
@@ -920,11 +927,6 @@ async function performFullSync(
         0: 'Pre-K', 1: 'K', 2: '1st', 3: '2nd', 4: '3rd', 5: '4th',
         6: '5th', 7: '6th', 8: '7th', 9: '8th', 10: '9th', 11: '10th', 12: '11th', 13: '12th'
       };
-
-    const gradeMap: Record<number, string> = {
-      0: 'Pre-K', 1: 'K', 2: '1st', 3: '2nd', 4: '3rd', 5: '4th',
-      6: '5th', 7: '6th', 8: '7th', 9: '8th', 10: '9th', 11: '10th', 12: '11th', 13: '12th'
-    };
 
     const camperData: any[] = [];
     let usedCamperFallbackData = 0;
@@ -1090,12 +1092,6 @@ async function performFullSync(
       total_counts: { divisions: divisions.length, campers: campers.length, staff: staffPersonIds.size },
     });
 
-    // Variables for tracking staff changes - declared outside if blocks
-    let staffChanges: ChangeRecord[] = [];
-    let staffInsertedCount = 0;
-    let staffUpdatedCount = 0;
-    let usedFallbackData = 0;
-
     if (staffPersonIds.size > 0) {
       const staffData: any[] = [];
       
@@ -1208,6 +1204,7 @@ async function performFullSync(
     } else {
       console.log('[Staff Sync] No staff found from any source. Check if staff data exists in CampMinder for this season.');
     }
+    } // End of staff sync (syncType === 'staff' || syncType === 'full')
 
     // =====================================================
     // PHASE 8: Sync session enrollments
@@ -1445,7 +1442,8 @@ serve(async (req) => {
             clientId,
             season_id,
             isIncremental,
-            lastSyncAt
+            lastSyncAt,
+            effectiveSyncType
           )
         );
 
