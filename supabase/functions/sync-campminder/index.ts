@@ -1028,42 +1028,49 @@ async function performFullSync(
     }
 
     // Add fallback records for campers not in persons API but in attendees
+    // Create placeholder records even without names - they'll be updated when data is available
     for (const personId of stillMissingCamperIds) {
       const fallbackData = attendeeDataMap.get(personId);
+      
+      // Try to get name from fallback data, otherwise use placeholder
+      let name = '';
       if (fallbackData && (fallbackData.FirstName || fallbackData.LastName)) {
-        const name = `${fallbackData.FirstName || ''} ${fallbackData.LastName || ''}`.trim();
-        
-        if (!name || name.trim() === '') continue;
-        
-        let gender = null;
-        if (fallbackData.GenderID === 0) gender = 'Female';
-        else if (fallbackData.GenderID === 1) gender = 'Male';
-        
-        // Get division from attendee data
-        const cmDivisionId = fallbackData.DivisionID;
-        const divisionId = cmDivisionId ? cmDivisionIdMap.get(cmDivisionId) : null;
-        
-        camperData.push({
-          person_id: personId,
-          name,
-          gender,
-          date_of_birth: fallbackData.DateOfBirth || null,
-          grade: null, // Not available in attendee data
-          guardian_name: null,
-          guardian_email: null,
-          guardian_phone: null,
-          allergies: null,
-          medical_notes: null,
-          company_id: companyId,
-          season: season,
-          status: 'active',
-          division_id: divisionId,
-        });
-        
-        usedCamperFallbackData++;
-        if (usedCamperFallbackData <= 5) {
-          console.log(`[Camper Fallback] Created record for ${name} (${personId}) using attendee data`);
-        }
+        name = `${fallbackData.FirstName || ''} ${fallbackData.LastName || ''}`.trim();
+      }
+      
+      // If still no name, create placeholder - the camper EXISTS in CampMinder enrollment
+      if (!name || name.trim() === '') {
+        name = `Pending Sync (ID: ${personId})`;
+      }
+      
+      let gender = null;
+      if (fallbackData?.GenderID === 0) gender = 'Female';
+      else if (fallbackData?.GenderID === 1) gender = 'Male';
+      
+      // Get division from attendee data if available
+      const cmDivisionId = fallbackData?.DivisionID;
+      const divisionId = cmDivisionId ? cmDivisionIdMap.get(cmDivisionId) : null;
+      
+      camperData.push({
+        person_id: personId,
+        name,
+        gender,
+        date_of_birth: fallbackData?.DateOfBirth || null,
+        grade: null, // Not available in attendee data
+        guardian_name: null,
+        guardian_email: null,
+        guardian_phone: null,
+        allergies: null,
+        medical_notes: null,
+        company_id: companyId,
+        season: season,
+        status: 'pending', // Mark as pending so it's clear data is incomplete
+        division_id: divisionId,
+      });
+      
+      usedCamperFallbackData++;
+      if (usedCamperFallbackData <= 5) {
+        console.log(`[Camper Fallback] Created placeholder for ${name} (${personId})`);
       }
     }
 
@@ -1196,10 +1203,11 @@ async function performFullSync(
           usedFallbackData++;
         }
         
+        // If still no name, create placeholder - the staff EXISTS in CampMinder
         if (!name || name === 'Unknown' || name.trim() === '') {
-          console.log(`Skipping staff ${personId} - no valid name (person: ${!!person}, fallback: ${!!fallbackData})`);
-          skippedNoName++;
-          continue;
+          name = `Pending Sync (ID: ${personId})`;
+          usedFallback = true;
+          usedFallbackData++;
         }
         
         const role = positionMap.get(assignment.Position1ID) || 
