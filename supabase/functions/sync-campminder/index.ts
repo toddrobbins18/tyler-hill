@@ -603,55 +603,10 @@ async function performFullSync(
     console.log(`Found ${sessions.length} sessions for name lookup`);
 
     // =====================================================
-    // PHASE 3: Fetch ALL persons with V2 API including relatives and contact details
-    // This replaces all V1 API calls!
+    // PHASE 3: Fetch staff assignments FIRST to get all needed PersonIDs
+    // Then fetch only enrolled campers + hired staff person data
     // =====================================================
-    console.log('\n--- FETCHING ALL PERSONS WITH V2 API (includerelatives & includecontactdetails) ---');
-    await updateSyncJob(supabase, jobId, {
-      progress: { step: 'Fetching persons with V2 API', divisions: divisions.length, enrolledAttendees: enrolledAttendees.length, season },
-    });
-    
-    // Use V2 API with includerelatives, includecontactdetails, includecamperdetails, includestaffdetails
-    const allPersons = await fetchAllPaginated(
-      CM_PERSONS_URL,
-      token,
-      subscriptionKey,
-      { 
-        clientid: clientId, 
-        includecamperdetails: true,
-        includecontactdetails: true,
-        includerelatives: true,
-        includefamilypersons: true,
-        includestaffdetails: true
-      }
-    );
-    
-    console.log(`Fetched ${allPersons.length} total persons from V2 API`);
-    
-    // Debug: Log sample person with relatives
-    if (allPersons.length > 0) {
-      const sampleWithRelatives = allPersons.find((p: any) => p.Relatives && p.Relatives.length > 0);
-      if (sampleWithRelatives) {
-        console.log('[DEBUG] Sample person with Relatives:', JSON.stringify({
-          ID: sampleWithRelatives.ID,
-          Name: sampleWithRelatives.Name,
-          Relatives: sampleWithRelatives.Relatives,
-          ContactDetails: sampleWithRelatives.ContactDetails
-        }, null, 2));
-      }
-    }
-
-    // Build person lookup map (all persons, not just campers)
-    const personMap = new Map<string, any>();
-    for (const person of allPersons) {
-      personMap.set(String(person.ID), person);
-    }
-    console.log(`Built person map with ${personMap.size} entries`);
-
-    // =====================================================
-    // PHASE 3.5: Fetch staff assignments and identify missing persons
-    // =====================================================
-    console.log('\n--- FETCHING STAFF ASSIGNMENTS ---');
+    console.log('\n--- FETCHING STAFF ASSIGNMENTS (to identify staff PersonIDs) ---');
     
     const currentSeason = season; // 2026
     const fallbackSeason = '2025';
@@ -666,11 +621,6 @@ async function performFullSync(
     );
     console.log(`Found ${staffAssignments.length} active staff assignments for season ${currentSeason}`);
 
-    // Debug log first staff assignment to see available fields
-    if (staffAssignments.length > 0) {
-      console.log('[DEBUG] Sample staff assignment with all fields:', JSON.stringify(staffAssignments[0], null, 2));
-    }
-
     // Fallback to previous season if no results
     if (staffAssignments.length === 0) {
       console.log(`[Staff Sync] No staff found for ${currentSeason}, trying ${fallbackSeason} with status=1...`);
@@ -683,11 +633,21 @@ async function performFullSync(
       console.log(`Found ${staffAssignments.length} active staff assignments for season ${fallbackSeason}`);
     }
 
+    // Debug log first staff assignment to see available fields
+    if (staffAssignments.length > 0) {
+      console.log('[DEBUG] Sample staff assignment with all fields:', JSON.stringify(staffAssignments[0], null, 2));
+    }
+
     // Build a map of staff assignment data for fallback (when persons API fails)
     const staffFallbackMap = new Map<string, any>();
+    const staffPersonIdsFromAssignments = new Set<string>();
+    const staffAssignmentMap = new Map<string, any>();
+    
     for (const assignment of staffAssignments) {
       if (assignment.PersonID) {
         const personId = String(assignment.PersonID);
+        staffPersonIdsFromAssignments.add(personId);
+        staffAssignmentMap.set(personId, assignment);
         staffFallbackMap.set(personId, {
           PersonID: personId,
           FirstName: assignment.FirstName || assignment.Name?.First || '',
@@ -702,45 +662,72 @@ async function performFullSync(
     }
     console.log(`Built staff fallback map with ${staffFallbackMap.size} entries`);
 
-    // Alternative: If /staff endpoint returns nothing, extract staff from persons API
-    if (staffAssignments.length === 0) {
-      console.log('[Staff Sync] No staff from /staff endpoint. Attempting to find staff from persons API (StaffDetails)...');
-      
-      const staffFromPersons = allPersons.filter((p: any) => p.StaffDetails);
-      console.log(`Found ${staffFromPersons.length} persons with StaffDetails`);
-      
-      for (const person of staffFromPersons) {
-        staffAssignments.push({
-          PersonID: person.ID,
-          Position1ID: person.StaffDetails?.PositionID || person.StaffDetails?.Position1ID || null,
-          PositionID: person.StaffDetails?.PositionID || null,
-        });
-      }
-    }
-
-    // Identify staff PersonIDs that are NOT in personMap
-    const staffPersonIds = new Set<string>();
-    const staffAssignmentMap = new Map<string, any>();
-    const missingStaffIds: string[] = [];
+    // =====================================================
+    // PHASE 3.5: Fetch ONLY enrolled campers + hired staff persons (not all 25k+)
+    // =====================================================
+    const allNeededPersonIds = new Set<string>([
+      ...enrolledPersonIdArray,
+      ...staffPersonIdsFromAssignments
+    ]);
     
-    for (const assignment of staffAssignments) {
-      if (assignment.PersonID) {
-        const personId = String(assignment.PersonID);
-        staffPersonIds.add(personId);
-        staffAssignmentMap.set(personId, assignment);
+    console.log(`\n--- FETCHING PERSON DATA FOR ${allNeededPersonIds.size} ENROLLED/HIRED PERSONS ---`);
+    console.log(`  Enrolled campers: ${enrolledPersonIdArray.length}`);
+    console.log(`  Hired staff: ${staffPersonIdsFromAssignments.size}`);
+    
+    await updateSyncJob(supabase, jobId, {
+      progress: { 
+        step: 'Fetching person data for enrolled/hired', 
+        divisions: divisions.length, 
+        enrolledCampers: enrolledPersonIdArray.length,
+        hiredStaff: staffPersonIdsFromAssignments.size,
+        totalPersonsToFetch: allNeededPersonIds.size,
+        season 
+      },
+    });
+
+    // Build person lookup map by fetching each person individually
+    const personMap = new Map<string, any>();
+    const personIdArray = Array.from(allNeededPersonIds);
+    let fetchedCount = 0;
+    let failedCount = 0;
+    
+    console.log(`\n[Person Fetch] Starting to fetch ${personIdArray.length} persons individually...`);
+    
+    for (let i = 0; i < personIdArray.length; i++) {
+      const personId = personIdArray[i];
+      const person = await fetchPersonById(personId, token, subscriptionKey);
+      
+      if (person) {
+        personMap.set(personId, person);
+        fetchedCount++;
         
-        if (!personMap.has(personId)) {
-          missingStaffIds.push(personId);
+        // Log first person with relatives for debugging
+        if (fetchedCount === 1 && person.Relatives && person.Relatives.length > 0) {
+          console.log('[DEBUG] Sample person with Relatives:', JSON.stringify({
+            ID: person.ID,
+            Name: person.Name,
+            Relatives: person.Relatives,
+            ContactDetails: person.ContactDetails
+          }, null, 2));
         }
+      } else {
+        failedCount++;
+      }
+      
+      // Progress update every 50 persons
+      if ((i + 1) % 50 === 0 || i === personIdArray.length - 1) {
+        console.log(`[Person Fetch] Progress: ${i + 1}/${personIdArray.length} (${fetchedCount} success, ${failedCount} failed)`);
       }
     }
     
-    console.log(`\n[Staff Analysis]`);
-    console.log(`  Total staff PersonIDs: ${staffPersonIds.size}`);
-    console.log(`  In personMap: ${staffPersonIds.size - missingStaffIds.length}`);
-    console.log(`  MISSING from personMap: ${missingStaffIds.length}`);
+    console.log(`\n[Person Fetch] Completed: ${fetchedCount} fetched, ${failedCount} failed out of ${personIdArray.length}`);
+    console.log(`Built person map with ${personMap.size} entries`);
 
-    // Identify camper PersonIDs that are NOT in personMap
+    // =====================================================
+    // PHASE 3.6: Identify any missing persons and create campers array
+    // =====================================================
+    
+    // Identify camper PersonIDs that are NOT in personMap (failed to fetch)
     const missingCamperIds: string[] = [];
     for (const personId of enrolledPersonIdArray) {
       if (!personMap.has(personId)) {
@@ -748,58 +735,28 @@ async function performFullSync(
       }
     }
     
-    console.log(`\n[Camper Analysis]`);
-    console.log(`  Total enrolled campers: ${enrolledPersonIdArray.length}`);
-    console.log(`  In personMap: ${enrolledPersonIdArray.length - missingCamperIds.length}`);
-    console.log(`  MISSING from personMap: ${missingCamperIds.length}`);
-
-    // =====================================================
-    // PHASE 3.6: Fetch missing persons individually
-    // =====================================================
-    await updateSyncJob(supabase, jobId, {
-      progress: { 
-        step: 'Fetching missing persons', 
-        missingStaff: missingStaffIds.length,
-        missingCampers: missingCamperIds.length,
-        season 
-      },
-    });
-
-    // Fetch missing staff persons
-    if (missingStaffIds.length > 0) {
-      const staffFetchResult = await fetchMissingPersons(
-        missingStaffIds,
-        personMap,
-        token,
-        subscriptionKey,
-        'Staff'
-      );
-      console.log(`[Staff] Recovered ${staffFetchResult.fetched} missing persons`);
+    // Identify staff PersonIDs that are NOT in personMap
+    const staffPersonIds = staffPersonIdsFromAssignments;
+    const missingStaffIds: string[] = [];
+    for (const personId of staffPersonIds) {
+      if (!personMap.has(personId)) {
+        missingStaffIds.push(personId);
+      }
     }
-
-    // Fetch missing camper persons
-    if (missingCamperIds.length > 0) {
-      const camperFetchResult = await fetchMissingPersons(
-        missingCamperIds,
-        personMap,
-        token,
-        subscriptionKey,
-        'Camper'
-      );
-      console.log(`[Camper] Recovered ${camperFetchResult.fetched} missing persons`);
-    }
-
-    console.log(`\n[Person Map Updated] Now contains ${personMap.size} entries`);
-
-    // Filter to only enrolled campers with CamperDetails
-    const campers = allPersons.filter((p: any) => 
-      enrolledPersonIds.has(String(p.ID)) && p.CamperDetails
-    );
     
-    // Also add any missing campers we fetched individually that have CamperDetails
-    for (const personId of missingCamperIds) {
+    console.log(`\n[Post-Fetch Analysis]`);
+    console.log(`  Enrolled campers: ${enrolledPersonIdArray.length}`);
+    console.log(`  Campers in personMap: ${enrolledPersonIdArray.length - missingCamperIds.length}`);
+    console.log(`  Campers still missing: ${missingCamperIds.length}`);
+    console.log(`  Staff PersonIDs: ${staffPersonIds.size}`);
+    console.log(`  Staff in personMap: ${staffPersonIds.size - missingStaffIds.length}`);
+    console.log(`  Staff still missing: ${missingStaffIds.length}`);
+
+    // Filter to only enrolled campers with CamperDetails from personMap
+    const campers: any[] = [];
+    for (const personId of enrolledPersonIdArray) {
       const person = personMap.get(personId);
-      if (person && person.CamperDetails && !campers.find((c: any) => String(c.ID) === personId)) {
+      if (person && person.CamperDetails) {
         campers.push(person);
       }
     }
