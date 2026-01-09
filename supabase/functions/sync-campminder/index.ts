@@ -568,6 +568,22 @@ async function performFullSync(
       console.log('[DEBUG] Sample session attendee record:', JSON.stringify(enrolledAttendees[0], null, 2));
     }
 
+    // Build a map of attendee data for fallback (when persons API fails)
+    const attendeeDataMap = new Map<string, any>();
+    for (const attendee of enrolledAttendees) {
+      const personId = String(attendee.PersonID);
+      attendeeDataMap.set(personId, {
+        PersonID: personId,
+        FirstName: attendee.FirstName || attendee.Name?.First || '',
+        LastName: attendee.LastName || attendee.Name?.Last || '',
+        GenderID: attendee.GenderID,
+        DateOfBirth: attendee.DateOfBirth,
+        DivisionID: attendee.DivisionID,
+        SessionProgramStatus: attendee.SessionProgramStatus,
+      });
+    }
+    console.log(`Built attendee fallback map with ${attendeeDataMap.size} entries`);
+
     const enrolledPersonIds = new Set(
       enrolledAttendees.map((a: any) => String(a.PersonID))
     );
@@ -650,6 +666,11 @@ async function performFullSync(
     );
     console.log(`Found ${staffAssignments.length} active staff assignments for season ${currentSeason}`);
 
+    // Debug log first staff assignment to see available fields
+    if (staffAssignments.length > 0) {
+      console.log('[DEBUG] Sample staff assignment with all fields:', JSON.stringify(staffAssignments[0], null, 2));
+    }
+
     // Fallback to previous season if no results
     if (staffAssignments.length === 0) {
       console.log(`[Staff Sync] No staff found for ${currentSeason}, trying ${fallbackSeason} with status=1...`);
@@ -661,6 +682,25 @@ async function performFullSync(
       );
       console.log(`Found ${staffAssignments.length} active staff assignments for season ${fallbackSeason}`);
     }
+
+    // Build a map of staff assignment data for fallback (when persons API fails)
+    const staffFallbackMap = new Map<string, any>();
+    for (const assignment of staffAssignments) {
+      if (assignment.PersonID) {
+        const personId = String(assignment.PersonID);
+        staffFallbackMap.set(personId, {
+          PersonID: personId,
+          FirstName: assignment.FirstName || assignment.Name?.First || '',
+          LastName: assignment.LastName || assignment.Name?.Last || '',
+          Email: assignment.Email || '',
+          Phone: assignment.Phone || assignment.PhoneNumber || '',
+          Position1ID: assignment.Position1ID,
+          PositionID: assignment.PositionID,
+          DateOfBirth: assignment.DateOfBirth,
+        });
+      }
+    }
+    console.log(`Built staff fallback map with ${staffFallbackMap.size} entries`);
 
     // Alternative: If /staff endpoint returns nothing, extract staff from persons API
     if (staffAssignments.length === 0) {
@@ -911,12 +951,17 @@ async function performFullSync(
     }
 
     // =====================================================
-    // PHASE 6: Sync campers to database
+    // PHASE 6: Sync campers to database (including fallback for missing persons)
     // =====================================================
     console.log('\n--- SYNCING CAMPERS ---');
+    
+    // Identify campers that we still don't have in personMap after fetching missing
+    const stillMissingCamperIds = missingCamperIds.filter(id => !personMap.has(id));
+    console.log(`[Camper Fallback] ${stillMissingCamperIds.length} campers still missing from personMap, will use attendee data`);
+    
     await updateSyncJob(supabase, jobId, {
-      progress: { step: 'Syncing campers', total: campers.length, divisions: divisions.length, parentEmails: parentEmailMap.size, season },
-      total_counts: { divisions: divisions.length, campers: campers.length },
+      progress: { step: 'Syncing campers', total: campers.length + stillMissingCamperIds.length, divisions: divisions.length, parentEmails: parentEmailMap.size, season },
+      total_counts: { divisions: divisions.length, campers: campers.length + stillMissingCamperIds.length },
     });
 
     // Variables for tracking changes - declared outside if blocks
@@ -924,63 +969,107 @@ async function performFullSync(
     let camperInsertedCount = 0;
     let camperUpdatedCount = 0;
 
-    if (campers.length > 0) {
-      const gradeMap: Record<number, string> = {
-        0: 'Pre-K', 1: 'K', 2: '1st', 3: '2nd', 4: '3rd', 5: '4th',
-        6: '5th', 7: '6th', 8: '7th', 9: '8th', 10: '9th', 11: '10th', 12: '11th', 13: '12th'
-      };
+    const gradeMap: Record<number, string> = {
+      0: 'Pre-K', 1: 'K', 2: '1st', 3: '2nd', 4: '3rd', 5: '4th',
+      6: '5th', 7: '6th', 8: '7th', 9: '8th', 10: '9th', 11: '10th', 12: '11th', 13: '12th'
+    };
 
-      const camperData = campers.map((person: any) => {
-        const name = `${person.Name?.First || ''} ${person.Name?.Last || ''}`.trim() || 'Unknown';
+    const camperData: any[] = [];
+    let usedCamperFallbackData = 0;
+
+    // Process campers from persons API
+    for (const person of campers) {
+      const name = `${person.Name?.First || ''} ${person.Name?.Last || ''}`.trim() || 'Unknown';
+      
+      let gender = null;
+      if (person.GenderID === 0) gender = 'Female';
+      else if (person.GenderID === 1) gender = 'Male';
+      
+      const grade = gradeMap[person.CamperDetails?.CampGradeID] || null;
+      
+      // Get parent contact info
+      const parentPersonId = camperToParentMap.get(String(person.ID));
+      let guardianEmail = parentPersonId ? parentEmailMap.get(parentPersonId) || '' : '';
+      let guardianPhone = parentPersonId ? parentPhoneMap.get(parentPersonId) || '' : '';
+      let guardianName = parentPersonId ? parentNameMap.get(parentPersonId) || '' : '';
+      
+      // Fallback to camper's own contact info if parent not found
+      if (!guardianEmail && person.ContactDetails?.Emails?.length > 0) {
+        guardianEmail = person.ContactDetails.Emails[0].Address;
+      }
+      if (!guardianPhone && person.ContactDetails?.PhoneNumbers?.length > 0) {
+        guardianPhone = person.ContactDetails.PhoneNumbers[0].Number;
+      }
+
+      // Get division directly from CamperDetails.DivisionID (the correct source!)
+      const cmDivisionId = person.CamperDetails?.DivisionID;
+      const divisionId = cmDivisionId ? cmDivisionIdMap.get(cmDivisionId) : null;
+      
+      if (!divisionId && cmDivisionId) {
+        console.log(`[Division Warning] Camper ${name} has CamperDetails.DivisionID=${cmDivisionId} but no matching division in our DB`);
+      }
+
+      camperData.push({
+        person_id: String(person.ID),
+        name,
+        gender,
+        date_of_birth: person.DateOfBirth || null,
+        grade,
+        guardian_name: guardianName || null,
+        guardian_email: guardianEmail || null,
+        guardian_phone: guardianPhone || null,
+        allergies: person.MedicalInfo?.Allergies || null,
+        medical_notes: person.MedicalInfo?.Notes || null,
+        company_id: companyId,
+        season: season,
+        status: 'active',
+        division_id: divisionId,
+      });
+    }
+
+    // Add fallback records for campers not in persons API but in attendees
+    for (const personId of stillMissingCamperIds) {
+      const fallbackData = attendeeDataMap.get(personId);
+      if (fallbackData && (fallbackData.FirstName || fallbackData.LastName)) {
+        const name = `${fallbackData.FirstName || ''} ${fallbackData.LastName || ''}`.trim();
+        
+        if (!name || name.trim() === '') continue;
         
         let gender = null;
-        if (person.GenderID === 0) gender = 'Female';
-        else if (person.GenderID === 1) gender = 'Male';
+        if (fallbackData.GenderID === 0) gender = 'Female';
+        else if (fallbackData.GenderID === 1) gender = 'Male';
         
-        const grade = gradeMap[person.CamperDetails?.CampGradeID] || null;
-        
-        // Get parent contact info
-        const parentPersonId = camperToParentMap.get(String(person.ID));
-        let guardianEmail = parentPersonId ? parentEmailMap.get(parentPersonId) || '' : '';
-        let guardianPhone = parentPersonId ? parentPhoneMap.get(parentPersonId) || '' : '';
-        let guardianName = parentPersonId ? parentNameMap.get(parentPersonId) || '' : '';
-        
-        // Fallback to camper's own contact info if parent not found
-        if (!guardianEmail && person.ContactDetails?.Emails?.length > 0) {
-          guardianEmail = person.ContactDetails.Emails[0].Address;
-        }
-        if (!guardianPhone && person.ContactDetails?.PhoneNumbers?.length > 0) {
-          guardianPhone = person.ContactDetails.PhoneNumbers[0].Number;
-        }
-
-        // Get division directly from CamperDetails.DivisionID (the correct source!)
-        const cmDivisionId = person.CamperDetails?.DivisionID;
+        // Get division from attendee data
+        const cmDivisionId = fallbackData.DivisionID;
         const divisionId = cmDivisionId ? cmDivisionIdMap.get(cmDivisionId) : null;
         
-        if (!divisionId && cmDivisionId) {
-          console.log(`[Division Warning] Camper ${name} has CamperDetails.DivisionID=${cmDivisionId} but no matching division in our DB`);
-        }
-
-        return {
-          person_id: String(person.ID),
+        camperData.push({
+          person_id: personId,
           name,
           gender,
-          date_of_birth: person.DateOfBirth || null,
-          grade,
-          guardian_name: guardianName || null,
-          guardian_email: guardianEmail || null,
-          guardian_phone: guardianPhone || null,
-          allergies: person.MedicalInfo?.Allergies || null,
-          medical_notes: person.MedicalInfo?.Notes || null,
+          date_of_birth: fallbackData.DateOfBirth || null,
+          grade: null, // Not available in attendee data
+          guardian_name: null,
+          guardian_email: null,
+          guardian_phone: null,
+          allergies: null,
+          medical_notes: null,
           company_id: companyId,
           season: season,
           status: 'active',
           division_id: divisionId,
-        };
-      });
+        });
+        
+        usedCamperFallbackData++;
+        if (usedCamperFallbackData <= 5) {
+          console.log(`[Camper Fallback] Created record for ${name} (${personId}) using attendee data`);
+        }
+      }
+    }
 
-      console.log(`Built ${camperData.length} camper records`);
-      
+    console.log(`Built ${camperData.length} camper records (${usedCamperFallbackData} from fallback data)`);
+    
+    if (camperData.length > 0) {
       // Log sample camper data
       const sampleWithParent = camperData.find(c => c.guardian_email);
       if (sampleWithParent) {
@@ -1012,7 +1101,7 @@ async function performFullSync(
       camperChanges = camperResult.changes;
       camperInsertedCount = camperResult.inserted;
       camperUpdatedCount = camperResult.updated;
-      console.log(`Synced ${camperResult.inserted + camperResult.updated} campers`);
+      console.log(`Synced ${camperResult.inserted + camperResult.updated} campers (${usedCamperFallbackData} from fallback)`);
     }
 
     // =====================================================
@@ -1045,6 +1134,7 @@ async function performFullSync(
     let staffChanges: ChangeRecord[] = [];
     let staffInsertedCount = 0;
     let staffUpdatedCount = 0;
+    let usedFallbackData = 0;
 
     if (staffPersonIds.size > 0) {
       const staffData: any[] = [];
@@ -1052,12 +1142,11 @@ async function performFullSync(
       let debugLoggedPerson = false;
       let debugLoggedAssignment = false;
       let skippedNoName = 0;
-      let skippedNoPerson = 0;
-      
       
       for (const personId of staffPersonIds) {
         const person = personMap.get(personId);
         const assignment = staffAssignmentMap.get(personId);
+        const fallbackData = staffFallbackMap.get(personId);
         
         // DEBUG: Log first person object to see full structure
         if (person && !debugLoggedPerson) {
@@ -1079,18 +1168,36 @@ async function performFullSync(
         
         if (!assignment) continue;
         
-        // Skip if no person found in map
-        if (!person) {
-          skippedNoPerson++;
-          continue;
+        // Try to get name from person, or use fallback data from /staff endpoint
+        let name = '';
+        let email = '';
+        let phone = '';
+        let dateOfBirth = null;
+        let usedFallback = false;
+        
+        if (person && person.Name) {
+          // Person data available from persons API
+          name = `${person.Name?.First || ''} ${person.Name?.Last || ''}`.trim();
+          dateOfBirth = person.DateOfBirth || null;
+          
+          if (person.ContactDetails?.Emails?.length > 0) {
+            email = person.ContactDetails.Emails[0].Address;
+          }
+          if (person.ContactDetails?.PhoneNumbers?.length > 0) {
+            phone = person.ContactDetails.PhoneNumbers[0].Number;
+          }
+        } else if (fallbackData && (fallbackData.FirstName || fallbackData.LastName)) {
+          // Use fallback data from /staff endpoint
+          name = `${fallbackData.FirstName || ''} ${fallbackData.LastName || ''}`.trim();
+          email = fallbackData.Email || '';
+          phone = fallbackData.Phone || '';
+          dateOfBirth = fallbackData.DateOfBirth || null;
+          usedFallback = true;
+          usedFallbackData++;
         }
         
-        const name = person 
-          ? `${person.Name?.First || ''} ${person.Name?.Last || ''}`.trim()
-          : '';
-        
         if (!name || name === 'Unknown' || name.trim() === '') {
-          console.log(`Skipping staff ${personId} - no valid name`);
+          console.log(`Skipping staff ${personId} - no valid name (person: ${!!person}, fallback: ${!!fallbackData})`);
           skippedNoName++;
           continue;
         }
@@ -1098,15 +1205,6 @@ async function performFullSync(
         const role = positionMap.get(assignment.Position1ID) || 
                     positionMap.get(assignment.PositionID) || 
                     'Staff';
-        
-        let email = '';
-        let phone = '';
-        if (person?.ContactDetails?.Emails?.length > 0) {
-          email = person.ContactDetails.Emails[0].Address;
-        }
-        if (person?.ContactDetails?.PhoneNumbers?.length > 0) {
-          phone = person.ContactDetails.PhoneNumbers[0].Number;
-        }
 
         staffData.push({
           person_id: personId,
@@ -1114,17 +1212,21 @@ async function performFullSync(
           role,
           email: email || null,
           phone: phone || null,
-          date_of_birth: person?.DateOfBirth || null,
+          date_of_birth: dateOfBirth,
           company_id: companyId,
           season: season,
           status: 'active',
         });
+        
+        if (usedFallback && usedFallbackData <= 5) {
+          console.log(`[Staff Fallback] Created record for ${name} (${personId}) using /staff endpoint data`);
+        }
       }
 
       console.log(`\n[Staff Build Summary]`);
       console.log(`  Total staff IDs: ${staffPersonIds.size}`);
       console.log(`  Built records: ${staffData.length}`);
-      console.log(`  Skipped (no person data): ${skippedNoPerson}`);
+      console.log(`  Used fallback data: ${usedFallbackData}`);
       console.log(`  Skipped (no valid name): ${skippedNoName}`);
 
       if (staffData.length > 0) {
@@ -1207,11 +1309,14 @@ async function performFullSync(
     ];
 
     // Complete the job
+    const totalCampersProcessed = camperData.length;
     const finalStats = {
       step: 'Completed',
       syncType: isIncremental ? 'incremental' : 'full',
       divisions: divisions.length,
-      campers: campers.length,
+      campers: totalCampersProcessed,
+      campers_from_api: campers.length,
+      campers_from_fallback: usedCamperFallbackData,
       campers_inserted: camperInsertedCount,
       campers_updated: camperUpdatedCount,
       staff: staffPersonIds.size,
@@ -1221,9 +1326,13 @@ async function performFullSync(
       parentEmails: parentEmailMap.size,
       parentPhones: parentPhoneMap.size,
       season: season,
-      missing_persons_fetched: {
+      missing_persons_attempted: {
         staff: missingStaffIds.length,
         campers: missingCamperIds.length,
+      },
+      fallback_data_used: {
+        staff: usedFallbackData,
+        campers: usedCamperFallbackData,
       },
       changes_summary: allChanges.slice(0, 50), // Limit to first 50 changes to avoid huge payloads
       total_changes: allChanges.length,
@@ -1235,13 +1344,15 @@ async function performFullSync(
       progress: finalStats,
       total_counts: { 
         divisions: divisions.length, 
-        campers: campers.length, 
+        campers: totalCampersProcessed, 
         staff: staffPersonIds.size,
         staff_synced: staffInsertedCount + staffUpdatedCount,
         campers_inserted: camperInsertedCount,
         campers_updated: camperUpdatedCount,
         staff_inserted: staffInsertedCount,
         staff_updated: staffUpdatedCount,
+        fallback_campers: usedCamperFallbackData,
+        fallback_staff: usedFallbackData,
       },
     });
 
@@ -1249,9 +1360,10 @@ async function performFullSync(
     console.log(`Sync completed successfully!`);
     console.log(`Sync Type: ${isIncremental ? 'INCREMENTAL' : 'FULL'}`);
     console.log(`Divisions: ${divisions.length}`);
-    console.log(`Campers: ${campers.length} (${camperInsertedCount} new, ${camperUpdatedCount} updated)`);
-    console.log(`Staff: ${staffPersonIds.size} total, ${staffInsertedCount + staffUpdatedCount} synced (${staffInsertedCount} new, ${staffUpdatedCount} updated)`);
-    console.log(`Missing persons fetched: ${missingStaffIds.length} staff, ${missingCamperIds.length} campers`);
+    console.log(`Campers: ${totalCampersProcessed} total (${campers.length} from API, ${usedCamperFallbackData} from fallback)`);
+    console.log(`  - Inserted: ${camperInsertedCount}, Updated: ${camperUpdatedCount}`);
+    console.log(`Staff: ${staffPersonIds.size} total, ${staffInsertedCount + staffUpdatedCount} synced`);
+    console.log(`  - Inserted: ${staffInsertedCount}, Updated: ${staffUpdatedCount}, Fallback: ${usedFallbackData}`);
     console.log(`Parent Emails: ${parentEmailMap.size}`);
     console.log(`Parent Phones: ${parentPhoneMap.size}`);
     console.log(`Total changes detected: ${allChanges.length}`);
