@@ -166,6 +166,73 @@ async function fetchAllPaginated(
   return allItems;
 }
 
+// Fetch a single person by ID with full details
+async function fetchPersonById(
+  personId: string,
+  token: string,
+  subscriptionKey: string
+): Promise<any | null> {
+  try {
+    const url = `${CM_PERSONS_URL}/${personId}?includecamperdetails=true&includecontactdetails=true&includerelatives=true&includestaffdetails=true`;
+    const response = await rateLimitedFetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Ocp-Apim-Subscription-Key': subscriptionKey,
+      },
+    });
+    
+    if (response.ok) {
+      return await response.json();
+    } else {
+      console.warn(`[Fetch Person] Failed to fetch person ${personId}: ${response.status}`);
+      return null;
+    }
+  } catch (err) {
+    console.error(`[Fetch Person] Error fetching person ${personId}:`, err);
+    return null;
+  }
+}
+
+// Fetch missing persons in batches (for staff/campers not in main persons API response)
+async function fetchMissingPersons(
+  missingIds: string[],
+  personMap: Map<string, any>,
+  token: string,
+  subscriptionKey: string,
+  entityType: string
+): Promise<{ fetched: number; failed: number }> {
+  let fetched = 0;
+  let failed = 0;
+  
+  console.log(`\n[${entityType}] Fetching ${missingIds.length} missing persons individually...`);
+  
+  for (let i = 0; i < missingIds.length; i++) {
+    const personId = missingIds[i];
+    const person = await fetchPersonById(personId, token, subscriptionKey);
+    
+    if (person && person.Name) {
+      personMap.set(personId, person);
+      fetched++;
+      
+      if (fetched <= 5) {
+        const name = `${person.Name?.First || ''} ${person.Name?.Last || ''}`.trim();
+        console.log(`[${entityType}] Fetched missing person ${personId}: ${name}`);
+      }
+    } else {
+      failed++;
+    }
+    
+    // Progress update every 25 persons
+    if ((i + 1) % 25 === 0) {
+      console.log(`[${entityType}] Fetch progress: ${i + 1}/${missingIds.length} (${fetched} success, ${failed} failed)`);
+    }
+  }
+  
+  console.log(`[${entityType}] Completed fetching missing persons: ${fetched} fetched, ${failed} failed`);
+  return { fetched, failed };
+}
+
 async function updateSyncJob(
   supabase: any,
   jobId: string,
@@ -345,26 +412,31 @@ async function performFullSync(
   token: string,
   subscriptionKey: string,
   clientId: string,
-  seasonId?: string
+  seasonId?: string,
+  isIncremental: boolean = false,
+  lastSyncAt?: string
 ): Promise<void> {
   console.log(`\n========================================`);
-  console.log(`Starting full sync for company ${companyId}`);
+  console.log(`Starting ${isIncremental ? 'INCREMENTAL' : 'FULL'} sync for company ${companyId}`);
   console.log(`Job ID: ${jobId}`);
-  console.log(`[BudgetCode Debug] version=2025-12-18-1`);
+  console.log(`[Sync Debug] version=2025-01-09-missing-persons-fix`);
+  if (isIncremental && lastSyncAt) {
+    console.log(`[Incremental] Last sync: ${lastSyncAt}`);
+  }
   console.log(`========================================\n`);
   
   try {
     await updateSyncJob(supabase, jobId, {
       status: 'running',
       started_at: new Date().toISOString(),
-      progress: { step: 'Starting sync' },
+      progress: { step: 'Starting sync', syncType: isIncremental ? 'incremental' : 'full' },
     });
 
     const season = '2026';
     console.log(`\n[Season] Using season: ${season}\n`);
     
     await updateSyncJob(supabase, jobId, {
-      progress: { step: 'Season detected', season },
+      progress: { step: 'Season detected', season, syncType: isIncremental ? 'incremental' : 'full' },
     });
 
     // 1. Fetch and sync divisions
@@ -560,12 +632,139 @@ async function performFullSync(
     }
     console.log(`Built person map with ${personMap.size} entries`);
 
+    // =====================================================
+    // PHASE 3.5: Fetch staff assignments and identify missing persons
+    // =====================================================
+    console.log('\n--- FETCHING STAFF ASSIGNMENTS ---');
+    
+    const currentSeason = season; // 2026
+    const fallbackSeason = '2025';
+    
+    // Try current season first with status=1 (Active/Hired staff only)
+    console.log(`[Staff Sync] Trying /staff endpoint with season ${currentSeason}, status=1 (Active)...`);
+    let staffAssignments = await fetchAllPaginated(
+      CM_STAFF_URL,
+      token,
+      subscriptionKey,
+      { clientid: clientId, seasonid: currentSeason, status: 1 }
+    );
+    console.log(`Found ${staffAssignments.length} active staff assignments for season ${currentSeason}`);
+
+    // Fallback to previous season if no results
+    if (staffAssignments.length === 0) {
+      console.log(`[Staff Sync] No staff found for ${currentSeason}, trying ${fallbackSeason} with status=1...`);
+      staffAssignments = await fetchAllPaginated(
+        CM_STAFF_URL,
+        token,
+        subscriptionKey,
+        { clientid: clientId, seasonid: fallbackSeason, status: 1 }
+      );
+      console.log(`Found ${staffAssignments.length} active staff assignments for season ${fallbackSeason}`);
+    }
+
+    // Alternative: If /staff endpoint returns nothing, extract staff from persons API
+    if (staffAssignments.length === 0) {
+      console.log('[Staff Sync] No staff from /staff endpoint. Attempting to find staff from persons API (StaffDetails)...');
+      
+      const staffFromPersons = allPersons.filter((p: any) => p.StaffDetails);
+      console.log(`Found ${staffFromPersons.length} persons with StaffDetails`);
+      
+      for (const person of staffFromPersons) {
+        staffAssignments.push({
+          PersonID: person.ID,
+          Position1ID: person.StaffDetails?.PositionID || person.StaffDetails?.Position1ID || null,
+          PositionID: person.StaffDetails?.PositionID || null,
+        });
+      }
+    }
+
+    // Identify staff PersonIDs that are NOT in personMap
+    const staffPersonIds = new Set<string>();
+    const staffAssignmentMap = new Map<string, any>();
+    const missingStaffIds: string[] = [];
+    
+    for (const assignment of staffAssignments) {
+      if (assignment.PersonID) {
+        const personId = String(assignment.PersonID);
+        staffPersonIds.add(personId);
+        staffAssignmentMap.set(personId, assignment);
+        
+        if (!personMap.has(personId)) {
+          missingStaffIds.push(personId);
+        }
+      }
+    }
+    
+    console.log(`\n[Staff Analysis]`);
+    console.log(`  Total staff PersonIDs: ${staffPersonIds.size}`);
+    console.log(`  In personMap: ${staffPersonIds.size - missingStaffIds.length}`);
+    console.log(`  MISSING from personMap: ${missingStaffIds.length}`);
+
+    // Identify camper PersonIDs that are NOT in personMap
+    const missingCamperIds: string[] = [];
+    for (const personId of enrolledPersonIdArray) {
+      if (!personMap.has(personId)) {
+        missingCamperIds.push(personId);
+      }
+    }
+    
+    console.log(`\n[Camper Analysis]`);
+    console.log(`  Total enrolled campers: ${enrolledPersonIdArray.length}`);
+    console.log(`  In personMap: ${enrolledPersonIdArray.length - missingCamperIds.length}`);
+    console.log(`  MISSING from personMap: ${missingCamperIds.length}`);
+
+    // =====================================================
+    // PHASE 3.6: Fetch missing persons individually
+    // =====================================================
+    await updateSyncJob(supabase, jobId, {
+      progress: { 
+        step: 'Fetching missing persons', 
+        missingStaff: missingStaffIds.length,
+        missingCampers: missingCamperIds.length,
+        season 
+      },
+    });
+
+    // Fetch missing staff persons
+    if (missingStaffIds.length > 0) {
+      const staffFetchResult = await fetchMissingPersons(
+        missingStaffIds,
+        personMap,
+        token,
+        subscriptionKey,
+        'Staff'
+      );
+      console.log(`[Staff] Recovered ${staffFetchResult.fetched} missing persons`);
+    }
+
+    // Fetch missing camper persons
+    if (missingCamperIds.length > 0) {
+      const camperFetchResult = await fetchMissingPersons(
+        missingCamperIds,
+        personMap,
+        token,
+        subscriptionKey,
+        'Camper'
+      );
+      console.log(`[Camper] Recovered ${camperFetchResult.fetched} missing persons`);
+    }
+
+    console.log(`\n[Person Map Updated] Now contains ${personMap.size} entries`);
+
     // Filter to only enrolled campers with CamperDetails
     const campers = allPersons.filter((p: any) => 
       enrolledPersonIds.has(String(p.ID)) && p.CamperDetails
     );
     
-    console.log(`✓ Filtered to ${campers.length} enrolled campers with CamperDetails`);
+    // Also add any missing campers we fetched individually that have CamperDetails
+    for (const personId of missingCamperIds) {
+      const person = personMap.get(personId);
+      if (person && person.CamperDetails && !campers.find((c: any) => String(c.ID) === personId)) {
+        campers.push(person);
+      }
+    }
+    
+    console.log(`✓ Total campers with CamperDetails: ${campers.length}`);
 
     // =====================================================
     // PHASE 4: Extract parent info from Relatives array
@@ -817,42 +1016,10 @@ async function performFullSync(
     }
 
     // =====================================================
-    // PHASE 7: Sync staff with season fallback
+    // PHASE 7: Sync staff with complete person data
     // =====================================================
     console.log('\n--- SYNCING STAFF ---');
     
-    const currentSeason = season; // 2026
-    const fallbackSeason = '2025';
-    
-    // Try current season first with status=1 (Active/Hired staff only)
-    // Per API docs: status is REQUIRED. 1=Active, 2=Resigned, 3=Dismissed, 4=Cancelled
-    console.log(`[Staff Sync] Trying /staff endpoint with season ${currentSeason}, status=1 (Active)...`);
-    let staffAssignments = await fetchAllPaginated(
-      CM_STAFF_URL,
-      token,
-      subscriptionKey,
-      { clientid: clientId, seasonid: currentSeason, status: 1 }
-    );
-    console.log(`Found ${staffAssignments.length} active staff assignments for season ${currentSeason}`);
-    
-    // DEBUG: Log sample staffAssignment from /staff endpoint
-    if (staffAssignments.length > 0) {
-      console.log('[DEBUG] Sample staffAssignment from /staff endpoint:', JSON.stringify(staffAssignments[0], null, 2));
-      console.log('[DEBUG] All keys in staffAssignment:', Object.keys(staffAssignments[0]).join(', '));
-    }
-
-    // Fallback to previous season if no results
-    if (staffAssignments.length === 0) {
-      console.log(`[Staff Sync] No staff found for ${currentSeason}, trying ${fallbackSeason} with status=1...`);
-      staffAssignments = await fetchAllPaginated(
-        CM_STAFF_URL,
-        token,
-        subscriptionKey,
-        { clientid: clientId, seasonid: fallbackSeason, status: 1 }
-      );
-      console.log(`Found ${staffAssignments.length} active staff assignments for season ${fallbackSeason}`);
-    }
-
     // Fetch staff positions for role mapping (works without season)
     const positions = await fetchAllPaginated(
       `${CM_STAFF_URL}/positions`,
@@ -867,44 +1034,6 @@ async function performFullSync(
       positionMap.set(pos.ID, pos.Name);
     }
 
-
-    // Alternative: If /staff endpoint returns nothing, extract staff from persons API
-    // Staff members have StaffDetails in their person record
-    if (staffAssignments.length === 0) {
-      console.log('[Staff Sync] No staff from /staff endpoint. Attempting to find staff from persons API (StaffDetails)...');
-      
-      const staffFromPersons = allPersons.filter((p: any) => p.StaffDetails);
-      console.log(`Found ${staffFromPersons.length} persons with StaffDetails`);
-      
-      if (staffFromPersons.length > 0) {
-        console.log('[DEBUG] Sample person with StaffDetails:', JSON.stringify({
-          ID: staffFromPersons[0].ID,
-          Name: staffFromPersons[0].Name,
-          StaffDetails: staffFromPersons[0].StaffDetails,
-        }, null, 2));
-        
-        // Map StaffDetails persons to staff assignment format
-        for (const person of staffFromPersons) {
-          staffAssignments.push({
-            PersonID: person.ID,
-            Position1ID: person.StaffDetails?.PositionID || person.StaffDetails?.Position1ID || null,
-            PositionID: person.StaffDetails?.PositionID || null,
-          });
-        }
-        console.log(`[Staff Sync] Created ${staffAssignments.length} staff assignments from StaffDetails`);
-      }
-    }
-
-    const staffPersonIds = new Set<string>();
-    const staffAssignmentMap = new Map<string, any>();
-    
-    for (const assignment of staffAssignments) {
-      if (assignment.PersonID) {
-        const personId = String(assignment.PersonID);
-        staffPersonIds.add(personId);
-        staffAssignmentMap.set(personId, assignment);
-      }
-    }
     console.log(`Found ${staffPersonIds.size} unique staff person IDs`);
 
     await updateSyncJob(supabase, jobId, {
@@ -922,6 +1051,8 @@ async function performFullSync(
       
       let debugLoggedPerson = false;
       let debugLoggedAssignment = false;
+      let skippedNoName = 0;
+      let skippedNoPerson = 0;
       
       
       for (const personId of staffPersonIds) {
@@ -948,12 +1079,19 @@ async function performFullSync(
         
         if (!assignment) continue;
         
+        // Skip if no person found in map
+        if (!person) {
+          skippedNoPerson++;
+          continue;
+        }
+        
         const name = person 
           ? `${person.Name?.First || ''} ${person.Name?.Last || ''}`.trim()
           : '';
         
         if (!name || name === 'Unknown' || name.trim() === '') {
           console.log(`Skipping staff ${personId} - no valid name`);
+          skippedNoName++;
           continue;
         }
         
@@ -983,7 +1121,11 @@ async function performFullSync(
         });
       }
 
-      console.log(`Built ${staffData.length} staff records with valid names (skipped ${staffPersonIds.size - staffData.length} without names)`);
+      console.log(`\n[Staff Build Summary]`);
+      console.log(`  Total staff IDs: ${staffPersonIds.size}`);
+      console.log(`  Built records: ${staffData.length}`);
+      console.log(`  Skipped (no person data): ${skippedNoPerson}`);
+      console.log(`  Skipped (no valid name): ${skippedNoName}`);
 
       if (staffData.length > 0) {
         const staffResult = await batchUpsert(
@@ -1067,16 +1209,22 @@ async function performFullSync(
     // Complete the job
     const finalStats = {
       step: 'Completed',
+      syncType: isIncremental ? 'incremental' : 'full',
       divisions: divisions.length,
       campers: campers.length,
       campers_inserted: camperInsertedCount,
       campers_updated: camperUpdatedCount,
       staff: staffPersonIds.size,
+      staff_synced: staffInsertedCount + staffUpdatedCount,
       staff_inserted: staffInsertedCount,
       staff_updated: staffUpdatedCount,
       parentEmails: parentEmailMap.size,
       parentPhones: parentPhoneMap.size,
       season: season,
+      missing_persons_fetched: {
+        staff: missingStaffIds.length,
+        campers: missingCamperIds.length,
+      },
       changes_summary: allChanges.slice(0, 50), // Limit to first 50 changes to avoid huge payloads
       total_changes: allChanges.length,
     };
@@ -1089,6 +1237,7 @@ async function performFullSync(
         divisions: divisions.length, 
         campers: campers.length, 
         staff: staffPersonIds.size,
+        staff_synced: staffInsertedCount + staffUpdatedCount,
         campers_inserted: camperInsertedCount,
         campers_updated: camperUpdatedCount,
         staff_inserted: staffInsertedCount,
@@ -1098,9 +1247,11 @@ async function performFullSync(
 
     console.log(`\n========================================`);
     console.log(`Sync completed successfully!`);
+    console.log(`Sync Type: ${isIncremental ? 'INCREMENTAL' : 'FULL'}`);
     console.log(`Divisions: ${divisions.length}`);
     console.log(`Campers: ${campers.length} (${camperInsertedCount} new, ${camperUpdatedCount} updated)`);
-    console.log(`Staff: ${staffPersonIds.size} (${staffInsertedCount} new, ${staffUpdatedCount} updated)`);
+    console.log(`Staff: ${staffPersonIds.size} total, ${staffInsertedCount + staffUpdatedCount} synced (${staffInsertedCount} new, ${staffUpdatedCount} updated)`);
+    console.log(`Missing persons fetched: ${missingStaffIds.length} staff, ${missingCamperIds.length} campers`);
     console.log(`Parent Emails: ${parentEmailMap.size}`);
     console.log(`Parent Phones: ${parentPhoneMap.size}`);
     console.log(`Total changes detected: ${allChanges.length}`);
@@ -1126,9 +1277,9 @@ serve(async (req) => {
   }
 
   try {
-    const { company_id, season_id } = await req.json().catch(() => ({}));
+    const { company_id, season_id, incremental } = await req.json().catch(() => ({}));
     
-    console.log('Sync request received:', { company_id, season_id });
+    console.log('Sync request received:', { company_id, season_id, incremental });
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -1187,13 +1338,17 @@ serve(async (req) => {
           throw new Error('No client ID returned from CampMinder');
         }
 
+        // Determine if this should be an incremental sync
+        const isIncremental = incremental === true && company.campminder_last_sync_at;
+        const lastSyncAt = company.campminder_last_sync_at;
+
         const { data: job, error: jobError } = await supabase
           .from('sync_jobs')
           .insert({
             company_id: company.id,
             entity_type: 'campminder',
             status: 'pending',
-            progress: { step: 'Initializing' },
+            progress: { step: 'Initializing', syncType: isIncremental ? 'incremental' : 'full' },
             total_counts: {},
           })
           .select()
@@ -1204,7 +1359,7 @@ serve(async (req) => {
           throw new Error('Failed to create sync job');
         }
 
-        console.log(`Created sync job: ${job.id}`);
+        console.log(`Created sync job: ${job.id} (${isIncremental ? 'incremental' : 'full'})`);
 
         EdgeRuntime.waitUntil(
           performFullSync(
@@ -1214,7 +1369,9 @@ serve(async (req) => {
             token,
             subKeyData,
             clientId,
-            season_id
+            season_id,
+            isIncremental,
+            lastSyncAt
           )
         );
 
@@ -1223,7 +1380,8 @@ serve(async (req) => {
           company_id: company.id,
           status: 'started',
           job_id: job.id,
-          message: 'Sync running in background. Check sync_jobs table for progress.',
+          sync_type: isIncremental ? 'incremental' : 'full',
+          message: `${isIncremental ? 'Incremental' : 'Full'} sync running in background. Check sync_jobs table for progress.`,
         });
 
       } catch (authError) {
@@ -1241,7 +1399,7 @@ serve(async (req) => {
         success: true,
         message: 'Sync jobs started in background',
         results,
-        note: 'Using V2 API only with includerelatives and includecontactdetails for parent data.',
+        note: 'Now fetches missing persons individually to ensure all staff and campers are synced.',
       }),
       { 
         status: 200, 
