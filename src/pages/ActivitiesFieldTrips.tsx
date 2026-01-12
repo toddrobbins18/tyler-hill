@@ -16,7 +16,8 @@ import { CSVUploader } from "@/components/CSVUploader";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar';
-import { format, parse, startOfWeek, getDay } from 'date-fns';
+import { format, parse, startOfWeek, getDay, addDays } from 'date-fns';
+import { formatTime12Hour } from "@/lib/utils";
 import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -530,9 +531,9 @@ export default function ActivitiesFieldTrips() {
                       </div>
                       {(event.depart_from_camp || event.depart_from_activity) && (
                         <p className="text-sm text-muted-foreground">
-                          ⏰ {event.depart_from_camp && `Depart: ${event.depart_from_camp}`}
+                          ⏰ {event.depart_from_camp && `Depart: ${formatTime12Hour(event.depart_from_camp)}`}
                           {event.depart_from_camp && event.depart_from_activity && ' | '}
-                          {event.depart_from_activity && `Return: ${event.depart_from_activity}`}
+                          {event.depart_from_activity && `Return: ${formatTime12Hour(event.depart_from_activity)}`}
                         </p>
                       )}
                       {event.location && (
@@ -711,7 +712,6 @@ export default function ActivitiesFieldTrips() {
                   ))
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">Leave unchecked for all divisions</p>
             </div>
 
             <div className="space-y-2">

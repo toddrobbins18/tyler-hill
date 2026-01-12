@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CSVUploader } from "@/components/CSVUploader";
 import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar';
-import { format, parse, startOfWeek, getDay } from 'date-fns';
+import { format, parse, startOfWeek, getDay, addDays, eachDayOfInterval } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -484,13 +484,25 @@ export default function MasterCalendar() {
           <CardContent className="p-6">
             <Calendar
               localizer={localizer}
-              events={filteredAndSortedEvents.map(event => ({
-                id: event.id,
-                title: event.title,
-                start: new Date(event.event_date + 'T00:00:00'),
-                end: new Date(event.event_date + 'T23:59:59'),
-                resource: event,
-              }))}
+              events={filteredAndSortedEvents.map(event => {
+                const startDate = new Date(event.event_date + 'T00:00:00');
+                // For multi-day field trips, use end_date; otherwise same day
+                const isMultiDay = event.source === 'activities_field_trips' && 
+                  event.originalData.is_multi_day && 
+                  event.originalData.end_date;
+                const endDate = isMultiDay 
+                  ? addDays(new Date(event.originalData.end_date + 'T00:00:00'), 1) // Add 1 day because react-big-calendar end is exclusive
+                  : new Date(event.event_date + 'T23:59:59');
+                
+                return {
+                  id: event.id,
+                  title: event.title,
+                  start: startDate,
+                  end: endDate,
+                  allDay: isMultiDay,
+                  resource: event,
+                };
+              })}
               startAccessor="start"
               endAccessor="end"
               style={{ height: 600 }}
