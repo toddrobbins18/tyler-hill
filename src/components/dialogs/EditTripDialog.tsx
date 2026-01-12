@@ -3,8 +3,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { CalendarRange } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -22,6 +24,8 @@ export default function EditTripDialog({ tripId, open, onOpenChange, onSuccess }
     type: "",
     destination: "",
     date: "",
+    end_date: "",
+    is_multi_day: false,
     departure_time: "",
     return_time: "",
     chaperone: "",
@@ -53,6 +57,8 @@ export default function EditTripDialog({ tripId, open, onOpenChange, onSuccess }
         type: data.type || "",
         destination: data.destination || "",
         date: data.date || "",
+        end_date: data.end_date || "",
+        is_multi_day: data.is_multi_day || false,
         departure_time: data.departure_time || "",
         return_time: data.return_time || "",
         chaperone: data.chaperone || "",
@@ -67,8 +73,29 @@ export default function EditTripDialog({ tripId, open, onOpenChange, onSuccess }
     }
   };
 
+  // Calculate trip duration for display
+  const getTripDuration = () => {
+    if (!formData.is_multi_day || !formData.date || !formData.end_date) return null;
+    const start = new Date(formData.date);
+    const end = new Date(formData.end_date);
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    return diffDays;
+  };
+
+  const tripDuration = getTripDuration();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate end date if multi-day
+    if (formData.is_multi_day && formData.end_date) {
+      if (new Date(formData.end_date) <= new Date(formData.date)) {
+        toast.error("End date must be after start date");
+        return;
+      }
+    }
+    
     setLoading(true);
 
     const { error } = await supabase
@@ -76,6 +103,7 @@ export default function EditTripDialog({ tripId, open, onOpenChange, onSuccess }
       .update({
         ...formData,
         capacity: formData.capacity ? parseInt(formData.capacity) : null,
+        end_date: formData.is_multi_day ? formData.end_date : null,
       })
       .eq("id", tripId);
 
@@ -130,16 +158,64 @@ export default function EditTripDialog({ tripId, open, onOpenChange, onSuccess }
             />
           </div>
 
-          <div>
-            <Label htmlFor="date">Date</Label>
-            <Input
-              id="date"
-              type="date"
-              value={formData.date}
-              onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-              required
+          {/* Multi-day toggle */}
+          <div className="flex flex-row items-center justify-between rounded-lg border p-4">
+            <div className="space-y-0.5">
+              <Label className="text-base flex items-center gap-2">
+                <CalendarRange className="h-4 w-4" />
+                Multi-Day Trip
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Enable this for trips spanning multiple days
+              </p>
+            </div>
+            <Switch
+              checked={formData.is_multi_day}
+              onCheckedChange={(checked) => {
+                setFormData({ 
+                  ...formData, 
+                  is_multi_day: checked,
+                  end_date: checked ? formData.end_date : ""
+                });
+              }}
             />
           </div>
+
+          {/* Date fields */}
+          <div className={`grid ${formData.is_multi_day ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
+            <div>
+              <Label htmlFor="date">{formData.is_multi_day ? "Start Date" : "Date"}</Label>
+              <Input
+                id="date"
+                type="date"
+                value={formData.date}
+                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                required
+              />
+            </div>
+
+            {formData.is_multi_day && (
+              <div>
+                <Label htmlFor="end_date">End Date</Label>
+                <Input
+                  id="end_date"
+                  type="date"
+                  value={formData.end_date}
+                  onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                  min={formData.date}
+                  required={formData.is_multi_day}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Duration badge */}
+          {formData.is_multi_day && tripDuration && tripDuration > 1 && (
+            <Badge variant="secondary" className="flex items-center gap-1 w-fit">
+              <CalendarRange className="h-3 w-3" />
+              {tripDuration}-Day Trip
+            </Badge>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>

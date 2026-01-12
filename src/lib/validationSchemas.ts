@@ -70,12 +70,22 @@ export const tripSchema = z.object({
   name: z.string().min(1, "Name is required"),
   type: z.string().min(1, "Type is required"),
   date: z.string(),
+  end_date: z.string().optional(),
+  is_multi_day: z.boolean().optional().default(false),
   destination: z.string().optional(),
   departure_time: z.string().optional(),
   return_time: z.string().optional(),
   chaperone: z.string().optional(),
   capacity: z.number().optional(),
   status: z.string().optional(),
+}).refine((data) => {
+  if (data.is_multi_day && data.end_date) {
+    return new Date(data.end_date) > new Date(data.date);
+  }
+  return true;
+}, {
+  message: "End date must be after start date",
+  path: ["end_date"],
 });
 
 // Menu items validation schema
@@ -206,10 +216,16 @@ export function parseDailyNoteRow(row: Record<string, any>) {
 }
 
 export function parseTripRow(row: Record<string, any>) {
+  const endDate = row.end_date || row['End Date'] || '';
+  const startDate = row.date || row.Date || '';
+  const isMultiDay = endDate && endDate !== startDate;
+  
   return {
     name: String(row.name || row.Name || ''),
     type: String(row.type || row.Type || ''),
-    date: String(row.date || row.Date || ''),
+    date: String(startDate),
+    end_date: endDate ? String(endDate) : undefined,
+    is_multi_day: isMultiDay,
     destination: String(row.destination || row.Destination || ''),
     departure_time: String(row.departure_time || row['Departure Time'] || ''),
     return_time: String(row.return_time || row['Return Time'] || ''),

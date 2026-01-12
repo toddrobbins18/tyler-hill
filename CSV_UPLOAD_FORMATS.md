@@ -165,11 +165,12 @@ date,type,description,child_id,severity,reported_by,status
 **Table:** `trips`
 
 **Required Columns:**
-- `date` - Trip date (YYYY-MM-DD)
+- `date` - Trip start date (YYYY-MM-DD)
 - `name` - Trip name
 - `type` - Trip type
 
 **Optional Columns:**
+- `end_date` - Trip end date for multi-day trips (YYYY-MM-DD)
 - `destination` - Destination location
 - `departure_time` - Departure time (HH:MM)
 - `return_time` - Return time (HH:MM)
@@ -182,11 +183,14 @@ date,type,description,child_id,severity,reported_by,status
 - `meal` - Meal information
 - `status` - Status (default: "upcoming")
 
+**Multi-Day Trips:**
+When `end_date` is provided and is different from `date`, the trip is automatically marked as a multi-day trip.
+
 **Example CSV:**
 ```csv
-date,name,type,destination,departure_time,return_time,capacity,driver,chaperone
-2024-06-20,Museum Visit,Field Trip,Science Museum,09:00,15:00,50,John Driver,Jane Leader
-2024-06-22,Baseball Game,Sports Event,City Stadium,14:00,18:00,30,Mike Driver,Tom Coach
+date,name,type,destination,departure_time,return_time,capacity,driver,chaperone,end_date
+2024-06-20,Museum Visit,Field Trip,Science Museum,09:00,15:00,50,John Driver,Jane Leader,
+2024-06-22,Summer Camp Retreat,Field Trip,Mountain Lodge,08:00,18:00,30,Mike Driver,Tom Coach,2024-06-25
 ```
 
 ---
