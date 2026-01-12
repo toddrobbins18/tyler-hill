@@ -898,7 +898,29 @@ export default function SportsCalendar() {
             </div>
 
             <div className="space-y-2">
-              <Label>Divisions (optional)</Label>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <Label>Divisions (optional)</Label>
+                {divisions.length > 0 && (
+                  <div className="flex gap-2 flex-wrap">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setFormData({ ...formData, division_ids: divisions.map(d => d.id) })}
+                    >
+                      Select All
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setFormData({ ...formData, division_ids: [] })}
+                    >
+                      Deselect All
+                    </Button>
+                  </div>
+                )}
+              </div>
               <div className="border rounded-md p-3 space-y-2 max-h-[200px] overflow-y-auto">
                 {divisions.map((div) => (
                   <div key={div.id} className="flex items-center gap-2">
