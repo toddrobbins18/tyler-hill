@@ -294,10 +294,10 @@ export default function SpecialEventsActivities() {
 
   const formatTimeDisplay = (event: any) => {
     if (event.start_time && event.end_time) {
-      return `${event.start_time} - ${event.end_time}`;
+      return `${formatTime12Hour(event.start_time)} - ${formatTime12Hour(event.end_time)}`;
     }
-    if (event.start_time) return event.start_time;
-    if (event.end_time) return event.end_time;
+    if (event.start_time) return formatTime12Hour(event.start_time);
+    if (event.end_time) return formatTime12Hour(event.end_time);
     return event.time_slot || '';
   };
 
