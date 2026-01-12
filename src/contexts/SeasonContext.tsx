@@ -11,7 +11,13 @@ const SeasonContext = createContext<SeasonContextType | undefined>(undefined);
 
 export function SeasonProvider({ children }: { children: ReactNode }) {
   const [currentSeason, setCurrentSeason] = useState<string>(() => {
-    return localStorage.getItem('currentSeason') || '2026';
+    const stored = localStorage.getItem('currentSeason');
+    // Default to 2026 if no stored value or if stored value is outdated
+    if (!stored || stored === '2025') {
+      localStorage.setItem('currentSeason', '2026');
+      return '2026';
+    }
+    return stored;
   });
   
   const [availableSeasons, setAvailableSeasons] = useState<string[]>(['2025', '2026']);
