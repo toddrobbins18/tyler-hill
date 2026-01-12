@@ -1,4 +1,4 @@
-import { Plus, MapPin, Clock, Users, Calendar as CalendarIcon, Pencil, Trash2, Upload, UserCheck, LayoutList, Search, X, Utensils } from "lucide-react";
+import { Plus, MapPin, Clock, Users, Calendar as CalendarIcon, Pencil, Trash2, Upload, UserCheck, LayoutList, Search, X, Utensils, CalendarRange } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +22,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Calendar } from "@/components/ui/calendar";
-import { format, isSameDay } from "date-fns";
+import { format, isSameDay, isWithinInterval, parseISO } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatTime12Hour } from "@/lib/utils";
 import { useSeasonContext } from "@/contexts/SeasonContext";
@@ -246,11 +246,52 @@ export default function Transportation() {
   };
 
   const getDaysWithTrips = () => {
-    return trips.map(trip => new Date(trip.date));
+    const days: Date[] = [];
+    trips.forEach(trip => {
+      if (trip.is_multi_day && trip.end_date) {
+        // For multi-day trips, add all days in the range
+        const start = new Date(trip.date);
+        const end = new Date(trip.end_date);
+        const current = new Date(start);
+        while (current <= end) {
+          days.push(new Date(current));
+          current.setDate(current.getDate() + 1);
+        }
+      } else {
+        days.push(new Date(trip.date));
+      }
+    });
+    return days;
   };
 
   const getTripsForDate = (date: Date) => {
-    return filteredAndSortedTrips.filter(trip => isSameDay(new Date(trip.date), date));
+    return filteredAndSortedTrips.filter(trip => {
+      if (trip.is_multi_day && trip.end_date) {
+        // Check if date falls within the multi-day trip range
+        const start = parseISO(trip.date);
+        const end = parseISO(trip.end_date);
+        return isWithinInterval(date, { start, end }) || isSameDay(date, start) || isSameDay(date, end);
+      }
+      return isSameDay(new Date(trip.date), date);
+    });
+  };
+
+  // Helper to format trip date display
+  const formatTripDate = (trip: any) => {
+    if (trip.is_multi_day && trip.end_date) {
+      const startDate = new Date(trip.date);
+      const endDate = new Date(trip.end_date);
+      const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      return {
+        dateText: `${format(startDate, 'MMM d')} - ${format(endDate, 'MMM d, yyyy')}`,
+        durationBadge: `${diffDays}-Day Trip`
+      };
+    }
+    return {
+      dateText: new Date(trip.date).toLocaleDateString(),
+      durationBadge: null
+    };
   };
 
   const uniqueTypes = Array.from(new Set(trips.map(t => t.type))).filter(Boolean).sort();
@@ -590,11 +631,20 @@ export default function Transportation() {
                 <div className="grid grid-cols-4 gap-6">
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-lg bg-primary/10">
-                      <CalendarIcon className="h-5 w-5 text-primary" />
+                      {trip.is_multi_day ? (
+                        <CalendarRange className="h-5 w-5 text-primary" />
+                      ) : (
+                        <CalendarIcon className="h-5 w-5 text-primary" />
+                      )}
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Date</p>
-                      <p className="text-sm font-semibold">{new Date(trip.date).toLocaleDateString()}</p>
+                      <p className="text-sm font-semibold">{formatTripDate(trip).dateText}</p>
+                      {formatTripDate(trip).durationBadge && (
+                        <Badge variant="secondary" className="mt-1 text-xs">
+                          {formatTripDate(trip).durationBadge}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-3">

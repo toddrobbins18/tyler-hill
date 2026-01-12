@@ -3,7 +3,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Plus, CalendarRange } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useCompany } from "@/contexts/CompanyContext";
@@ -13,6 +14,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { tripSchema } from "@/lib/validationSchemas";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
+import { Badge } from "@/components/ui/badge";
 
 interface AddTripDialogProps {
   onSuccess: () => void;
@@ -30,6 +32,8 @@ export default function AddTripDialog({ onSuccess }: AddTripDialogProps) {
       type: "Field Trip",
       destination: "",
       date: new Date().toISOString().split('T')[0],
+      end_date: "",
+      is_multi_day: false,
       departure_time: "",
       return_time: "",
       chaperone: "",
@@ -38,12 +42,30 @@ export default function AddTripDialog({ onSuccess }: AddTripDialogProps) {
     },
   });
 
+  const isMultiDay = form.watch("is_multi_day");
+  const startDate = form.watch("date");
+  const endDate = form.watch("end_date");
+
+  // Calculate trip duration for display
+  const getTripDuration = () => {
+    if (!isMultiDay || !startDate || !endDate) return null;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    return diffDays;
+  };
+
+  const tripDuration = getTripDuration();
+
   const onSubmit = async (values: z.infer<typeof tripSchema>) => {
     try {
       const insertData: any = {
         name: values.name,
         type: values.type,
         date: values.date,
+        end_date: values.is_multi_day ? values.end_date : null,
+        is_multi_day: values.is_multi_day || false,
         destination: values.destination ?? null,
         departure_time: values.departure_time ?? null,
         return_time: values.return_time ?? null,
@@ -142,19 +164,80 @@ export default function AddTripDialog({ onSuccess }: AddTripDialogProps) {
               )}
             />
 
+            {/* Multi-day toggle */}
             <FormField
               control={form.control}
-              name="date"
+              name="is_multi_day"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Date</FormLabel>
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <div className="space-y-0.5">
+                    <FormLabel className="text-base flex items-center gap-2">
+                      <CalendarRange className="h-4 w-4" />
+                      Multi-Day Trip
+                    </FormLabel>
+                    <FormDescription>
+                      Enable this for trips spanning multiple days
+                    </FormDescription>
+                  </div>
                   <FormControl>
-                    <Input type="date" {...field} />
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={(checked) => {
+                        field.onChange(checked);
+                        if (!checked) {
+                          form.setValue("end_date", "");
+                        }
+                      }}
+                    />
                   </FormControl>
-                  <FormMessage />
                 </FormItem>
               )}
             />
+
+            {/* Date fields */}
+            <div className={`grid ${isMultiDay ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
+              <FormField
+                control={form.control}
+                name="date"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{isMultiDay ? "Start Date" : "Date"}</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {isMultiDay && (
+                <FormField
+                  control={form.control}
+                  name="end_date"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>End Date</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="date" 
+                          {...field} 
+                          min={startDate}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+            </div>
+
+            {/* Duration badge */}
+            {isMultiDay && tripDuration && tripDuration > 1 && (
+              <Badge variant="secondary" className="flex items-center gap-1 w-fit">
+                <CalendarRange className="h-3 w-3" />
+                {tripDuration}-Day Trip
+              </Badge>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <FormField

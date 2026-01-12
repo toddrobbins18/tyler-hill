@@ -2701,9 +2701,11 @@ export type Database = {
           departure_time: string | null
           destination: string | null
           driver: string | null
+          end_date: string | null
           event_length: string | null
           event_type: string | null
           id: string
+          is_multi_day: boolean | null
           meal: string | null
           name: string
           return_time: string | null
@@ -2722,9 +2724,11 @@ export type Database = {
           departure_time?: string | null
           destination?: string | null
           driver?: string | null
+          end_date?: string | null
           event_length?: string | null
           event_type?: string | null
           id?: string
+          is_multi_day?: boolean | null
           meal?: string | null
           name: string
           return_time?: string | null
@@ -2743,9 +2747,11 @@ export type Database = {
           departure_time?: string | null
           destination?: string | null
           driver?: string | null
+          end_date?: string | null
           event_length?: string | null
           event_type?: string | null
           id?: string
+          is_multi_day?: boolean | null
           meal?: string | null
           name?: string
           return_time?: string | null
