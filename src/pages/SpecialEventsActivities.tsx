@@ -483,7 +483,29 @@ export default function SpecialEventsActivities() {
             </div>
 
             <div className="space-y-2">
-              <Label>Divisions (select multiple)</Label>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <Label>Divisions (select multiple)</Label>
+                {divisions.length > 0 && (
+                  <div className="flex gap-2 flex-wrap">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setFormData({ ...formData, division_ids: divisions.map(d => d.id) })}
+                    >
+                      Select All
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setFormData({ ...formData, division_ids: [] })}
+                    >
+                      Deselect All
+                    </Button>
+                  </div>
+                )}
+              </div>
               <div className="border rounded-md p-4 space-y-2 max-h-48 overflow-y-auto">
                 {divisions.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No divisions available</p>
@@ -517,7 +539,6 @@ export default function SpecialEventsActivities() {
                   ))
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">Leave unchecked for all divisions</p>
             </div>
 
             <div className="space-y-2">
