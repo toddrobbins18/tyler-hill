@@ -678,7 +678,29 @@ export default function ActivitiesFieldTrips() {
             </div>
 
             <div className="space-y-2">
-              <Label>Divisions (select multiple)</Label>
+              <div className="flex items-center justify-between">
+                <Label>Divisions (select multiple)</Label>
+                {divisions.length > 0 && (
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setFormData({ ...formData, division_ids: divisions.map(d => d.id) })}
+                    >
+                      Select All
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setFormData({ ...formData, division_ids: [] })}
+                    >
+                      Deselect All
+                    </Button>
+                  </div>
+                )}
+              </div>
               <div className="border rounded-md p-4 space-y-2 max-h-48 overflow-y-auto">
                 {divisions.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No divisions available</p>
