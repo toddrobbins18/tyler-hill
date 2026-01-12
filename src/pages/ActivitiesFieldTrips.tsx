@@ -283,7 +283,7 @@ export default function ActivitiesFieldTrips() {
     });
     setEditingEvent(null);
     setShowDialog(false);
-    fetchEvents();
+    // Note: fetchEvents() is handled by realtime subscription
   };
 
   const handleEdit = async (event: any) => {
