@@ -678,10 +678,10 @@ export default function ActivitiesFieldTrips() {
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <Label>Divisions (select multiple)</Label>
                 {divisions.length > 0 && (
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <Button
                       type="button"
                       variant="outline"
