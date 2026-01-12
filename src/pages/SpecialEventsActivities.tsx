@@ -138,14 +138,23 @@ export default function SpecialEventsActivities() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validate required fields
+    if (!formData.event_type) {
+      toast({ title: "Please select an event type", variant: "destructive" });
+      return;
+    }
+
+    // Build time_slot - ensure it's never empty (required field in DB)
+    const timeSlot = formData.start_time && formData.end_time 
+      ? `${formData.start_time} - ${formData.end_time}` 
+      : formData.start_time || formData.end_time || "TBD";
+
     const submitData = {
       event_date: formData.event_date,
       title: formData.title,
       description: formData.description,
       event_type: formData.event_type,
-      time_slot: formData.start_time && formData.end_time 
-        ? `${formData.start_time} - ${formData.end_time}` 
-        : formData.start_time || formData.end_time || "",
+      time_slot: timeSlot,
       start_time: formData.start_time || null,
       end_time: formData.end_time || null,
       location: formData.location,
