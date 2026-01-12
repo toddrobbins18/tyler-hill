@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Palmtree, Plus, List, Pencil, Trash2, Calendar as CalendarIcon } from "lucide-react";
+import { Palmtree, Plus, List, Pencil, Trash2, Calendar as CalendarIcon, CalendarRange } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CSVUploader } from "@/components/CSVUploader";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { enUS } from 'date-fns/locale';
@@ -41,6 +42,8 @@ export default function ActivitiesFieldTrips() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [formData, setFormData] = useState({
     event_date: new Date().toISOString().split('T')[0],
+    end_date: "",
+    is_multi_day: false,
     title: "",
     description: "",
     activity_type: "",
@@ -151,6 +154,8 @@ export default function ActivitiesFieldTrips() {
 
     const submitData = {
       event_date: formData.event_date,
+      end_date: formData.is_multi_day ? formData.end_date : null,
+      is_multi_day: formData.is_multi_day || false,
       title: formData.title,
       description: formData.description,
       activity_type: formData.activity_type,
@@ -226,6 +231,8 @@ export default function ActivitiesFieldTrips() {
         const tripData = {
           name: formData.title,
           date: formData.event_date,
+          end_date: formData.is_multi_day ? formData.end_date : null,
+          is_multi_day: formData.is_multi_day || false,
           type: "field_trip",
           event_type: formData.activity_type,
           destination: formData.location || null,
@@ -259,6 +266,8 @@ export default function ActivitiesFieldTrips() {
   const resetForm = () => {
     setFormData({
       event_date: new Date().toISOString().split('T')[0],
+      end_date: "",
+      is_multi_day: false,
       title: "",
       description: "",
       activity_type: "",
@@ -288,6 +297,8 @@ export default function ActivitiesFieldTrips() {
     
     setFormData({
       event_date: event.event_date,
+      end_date: event.end_date || "",
+      is_multi_day: event.is_multi_day || false,
       title: event.title,
       description: event.description || "",
       activity_type: event.activity_type,
@@ -424,10 +435,13 @@ export default function ActivitiesFieldTrips() {
               localizer={localizer}
               events={filteredAndSortedEvents.map(event => ({
                 id: event.id,
-                title: `${event.activity_type}: ${event.title}`,
+                title: `${event.activity_type}: ${event.title}${event.is_multi_day ? ' (Multi-Day)' : ''}`,
                 start: new Date(event.event_date + 'T00:00:00'),
-                end: new Date(event.event_date + 'T23:59:59'),
+                end: event.is_multi_day && event.end_date 
+                  ? new Date(event.end_date + 'T23:59:59')
+                  : new Date(event.event_date + 'T23:59:59'),
                 resource: event,
+                allDay: true,
               }))}
               startAccessor="start"
               endAccessor="end"
@@ -456,9 +470,20 @@ export default function ActivitiesFieldTrips() {
                     <CardHeader>
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <CardTitle className="text-lg">{event.title}</CardTitle>
+                          <CardTitle className="text-lg flex items-center gap-2">
+                            {event.title}
+                            {event.is_multi_day && (
+                              <CalendarRange className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </CardTitle>
                           <p className="text-sm text-muted-foreground mt-1">
-                            {new Date(event.event_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                            {event.is_multi_day && event.end_date ? (
+                              <>
+                                {format(new Date(event.event_date), 'MMM d')} - {format(new Date(event.end_date), 'MMM d, yyyy')}
+                              </>
+                            ) : (
+                              new Date(event.event_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+                            )}
                           </p>
                         </div>
                         <div className="flex gap-1">
@@ -482,6 +507,20 @@ export default function ActivitiesFieldTrips() {
                     <CardContent className="space-y-2">
                       <div className="flex gap-2 flex-wrap">
                         <Badge>{event.activity_type}</Badge>
+                        {event.is_multi_day && event.end_date && (
+                          (() => {
+                            const start = new Date(event.event_date);
+                            const end = new Date(event.end_date);
+                            const diffTime = Math.abs(end.getTime() - start.getTime());
+                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                            return (
+                              <Badge variant="secondary" className="flex items-center gap-1">
+                                <CalendarRange className="h-3 w-3" />
+                                {diffDays}-Day
+                              </Badge>
+                            );
+                          })()
+                        )}
                         {event.home_away && (
                           <Badge variant="outline">{event.home_away.toUpperCase()}</Badge>
                         )}
@@ -528,15 +567,73 @@ export default function ActivitiesFieldTrips() {
             <DialogTitle>{editingEvent ? 'Edit Activity/Field Trip' : 'Add Activity/Field Trip'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label>Event Date</Label>
-              <Input
-                type="date"
-                value={formData.event_date}
-                onChange={(e) => setFormData({ ...formData, event_date: e.target.value })}
-                required
+            {/* Multi-day toggle */}
+            <div className="flex flex-row items-center justify-between rounded-lg border p-4">
+              <div className="space-y-0.5">
+                <Label className="text-base flex items-center gap-2">
+                  <CalendarRange className="h-4 w-4" />
+                  Multi-Day Event
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  Enable this for events spanning multiple days
+                </p>
+              </div>
+              <Switch
+                checked={formData.is_multi_day}
+                onCheckedChange={(checked) => {
+                  setFormData({ 
+                    ...formData, 
+                    is_multi_day: checked,
+                    end_date: checked ? formData.end_date : ""
+                  });
+                }}
               />
             </div>
+
+            {/* Date fields */}
+            <div className={`grid ${formData.is_multi_day ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
+              <div className="space-y-2">
+                <Label>{formData.is_multi_day ? "Start Date" : "Event Date"}</Label>
+                <Input
+                  type="date"
+                  value={formData.event_date}
+                  onChange={(e) => setFormData({ ...formData, event_date: e.target.value })}
+                  required
+                />
+              </div>
+
+              {formData.is_multi_day && (
+                <div className="space-y-2">
+                  <Label>End Date</Label>
+                  <Input
+                    type="date"
+                    value={formData.end_date}
+                    onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                    min={formData.event_date}
+                    required={formData.is_multi_day}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Duration badge */}
+            {formData.is_multi_day && formData.event_date && formData.end_date && (
+              (() => {
+                const start = new Date(formData.event_date);
+                const end = new Date(formData.end_date);
+                if (end > start) {
+                  const diffTime = Math.abs(end.getTime() - start.getTime());
+                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                  return (
+                    <Badge variant="secondary" className="flex items-center gap-1 w-fit">
+                      <CalendarRange className="h-3 w-3" />
+                      {diffDays}-Day Event
+                    </Badge>
+                  );
+                }
+                return null;
+              })()
+            )}
 
             <div className="space-y-2">
               <Label>Title</Label>

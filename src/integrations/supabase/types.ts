@@ -26,9 +26,11 @@ export type Database = {
           depart_from_camp: string | null
           description: string | null
           division_id: string | null
+          end_date: string | null
           event_date: string
           home_away: string | null
           id: string
+          is_multi_day: boolean | null
           location: string | null
           meal_notes: string | null
           meal_options: string[] | null
@@ -47,9 +49,11 @@ export type Database = {
           depart_from_camp?: string | null
           description?: string | null
           division_id?: string | null
+          end_date?: string | null
           event_date: string
           home_away?: string | null
           id?: string
+          is_multi_day?: boolean | null
           location?: string | null
           meal_notes?: string | null
           meal_options?: string[] | null
@@ -68,9 +72,11 @@ export type Database = {
           depart_from_camp?: string | null
           description?: string | null
           division_id?: string | null
+          end_date?: string | null
           event_date?: string
           home_away?: string | null
           id?: string
+          is_multi_day?: boolean | null
           location?: string | null
           meal_notes?: string | null
           meal_options?: string[] | null
