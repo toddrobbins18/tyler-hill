@@ -485,21 +485,46 @@ export default function MasterCalendar() {
             <Calendar
               localizer={localizer}
               events={filteredAndSortedEvents.map(event => {
-                const startDate = new Date(event.event_date + 'T00:00:00');
                 // For multi-day field trips, use end_date; otherwise same day
                 const isMultiDay = event.source === 'activities_field_trips' && 
                   event.originalData.is_multi_day && 
                   event.originalData.end_date;
-                const endDate = isMultiDay 
-                  ? addDays(new Date(event.originalData.end_date + 'T00:00:00'), 1) // Add 1 day because react-big-calendar end is exclusive
-                  : new Date(event.event_date + 'T23:59:59');
+                
+                // Check if event has specific start/end times (especially for special events)
+                const hasSpecificTime = event.source === 'special_events_activities' && 
+                  event.originalData.start_time && 
+                  event.originalData.end_time;
+                
+                let startDate: Date;
+                let endDate: Date;
+                let allDay = false;
+                
+                if (hasSpecificTime) {
+                  // Use actual start and end times for the event
+                  startDate = new Date(event.event_date + 'T' + event.originalData.start_time);
+                  endDate = new Date(event.event_date + 'T' + event.originalData.end_time);
+                } else if (isMultiDay) {
+                  startDate = new Date(event.event_date + 'T00:00:00');
+                  endDate = addDays(new Date(event.originalData.end_date + 'T00:00:00'), 1); // Add 1 day because react-big-calendar end is exclusive
+                  allDay = true;
+                } else if (event.time) {
+                  // For sports events and field trips with a time
+                  startDate = new Date(event.event_date + 'T' + event.time);
+                  // Assume 2 hour duration for events with only start time
+                  endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
+                } else {
+                  // No time specified - show as all day
+                  startDate = new Date(event.event_date + 'T00:00:00');
+                  endDate = new Date(event.event_date + 'T23:59:59');
+                  allDay = true;
+                }
                 
                 return {
                   id: event.id,
                   title: event.title,
                   start: startDate,
                   end: endDate,
-                  allDay: isMultiDay,
+                  allDay,
                   resource: event,
                 };
               })}
