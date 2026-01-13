@@ -1087,6 +1087,58 @@ async function performFullSync(
 
     console.log(`Found ${staffPersonIds.size} unique staff person IDs`);
 
+    // =====================================================
+    // PHASE 7a: Fetch missing staff person details
+    // The /staff endpoint often doesn't include name data, so we need to 
+    // fetch individual person records for staff not in personMap
+    // =====================================================
+    const missingStaffIds = Array.from(staffPersonIds).filter(id => {
+      const person = personMap.get(id);
+      const fallback = staffFallbackMap.get(id);
+      // Missing if: not in personMap AND fallback has no name
+      return (!person || !person.Name) && (!fallback || (!fallback.FirstName && !fallback.LastName));
+    });
+
+    if (missingStaffIds.length > 0) {
+      console.log(`\n[Staff] ${missingStaffIds.length} staff missing name data - fetching individually...`);
+      
+      await updateSyncJob(supabase, jobId, {
+        progress: { step: `Fetching ${missingStaffIds.length} missing staff details`, staff: staffPersonIds.size, season },
+      });
+
+      let fetchedCount = 0;
+      let failedCount = 0;
+      
+      for (let i = 0; i < missingStaffIds.length; i++) {
+        const personId = missingStaffIds[i];
+        const person = await fetchPersonById(personId, token, subscriptionKey);
+        
+        if (person && person.Name) {
+          personMap.set(personId, person);
+          fetchedCount++;
+          
+          if (fetchedCount <= 5) {
+            const name = `${person.Name?.First || ''} ${person.Name?.Last || ''}`.trim();
+            console.log(`[Staff Fetch] Got ${personId}: ${name}`);
+          }
+        } else {
+          failedCount++;
+        }
+        
+        // Progress update every 50 persons
+        if ((i + 1) % 50 === 0) {
+          console.log(`[Staff Fetch] Progress: ${i + 1}/${missingStaffIds.length} (${fetchedCount} success, ${failedCount} failed)`);
+          await updateSyncJob(supabase, jobId, {
+            progress: { step: `Fetching staff details: ${i + 1}/${missingStaffIds.length}`, staff: staffPersonIds.size, season },
+          });
+        }
+      }
+      
+      console.log(`[Staff Fetch] Completed: ${fetchedCount} fetched, ${failedCount} failed`);
+    } else {
+      console.log(`[Staff] All ${staffPersonIds.size} staff have name data available`);
+    }
+
     await updateSyncJob(supabase, jobId, {
       progress: { step: 'Syncing staff', total: staffPersonIds.size, campers: campers.length, divisions: divisions.length, season },
       total_counts: { divisions: divisions.length, campers: campers.length, staff: staffPersonIds.size },
