@@ -42,6 +42,7 @@ import SportsAcademy from "./pages/SportsAcademy";
 import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
+import UpdatePassword from "./pages/UpdatePassword";
 
 const queryClient = new QueryClient();
 
@@ -54,6 +55,7 @@ function AppContent() {
       <Sonner />
       <Routes>
                 <Route path="/auth" element={<Auth />} />
+                <Route path="/update-password" element={<UpdatePassword />} />
                 <Route
                   path="*"
                   element={
