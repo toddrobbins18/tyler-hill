@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -11,6 +11,8 @@ import { CompanyProvider } from "@/contexts/CompanyContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useSessionInitialization } from "@/hooks/useSessionInitialization";
 import { AIChatWidget } from "@/components/AIChatWidget";
+import { useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import Dashboard from "./pages/Dashboard";
 import Roster from "./pages/Roster";
 import Staff from "./pages/Staff";
@@ -46,8 +48,34 @@ import UpdatePassword from "./pages/UpdatePassword";
 
 const queryClient = new QueryClient();
 
+// Hook to handle password recovery redirects at app level
+function usePasswordRecoveryRedirect() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    // Check URL hash for recovery token on any page
+    const hash = window.location.hash;
+    if (hash && (hash.includes('type=recovery') || hash.includes('type=signup'))) {
+      // Redirect to update-password page with the hash
+      navigate('/update-password' + hash, { replace: true });
+      return;
+    }
+
+    // Also listen for PASSWORD_RECOVERY event from Supabase
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        navigate('/update-password', { replace: true });
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate, location.pathname]);
+}
+
 function AppContent() {
   useSessionInitialization();
+  usePasswordRecoveryRedirect();
   
   return (
     <>
