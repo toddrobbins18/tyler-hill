@@ -7,7 +7,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { toast } from "sonner";
-import { Shield, UserCog, Eye, Trophy, Users, Trash2, Heart } from "lucide-react";
+import { Shield, UserCog, Eye, Trophy, Users, Trash2, Heart, KeyRound } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import AddUserDialog from "./AddUserDialog";
 
 type UserRole = "super_admin" | "admin" | "staff" | "viewer" | "division_leader" | "specialist" | "health_center";
@@ -112,6 +113,21 @@ export default function UserRoleManagement() {
     }
   };
 
+  const sendPasswordReset = async (userEmail: string) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(userEmail, {
+        redirectTo: `${window.location.origin}/update-password`,
+      });
+
+      if (error) throw error;
+
+      toast.success(`Password reset email sent to ${userEmail}`);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to send password reset email");
+      console.error(error);
+    }
+  };
+
   const getRoleIcon = (role: UserRole) => {
     switch (role) {
       case "super_admin":
@@ -202,6 +218,18 @@ export default function UserRoleManagement() {
                     <SelectItem value="super_admin">Super Admin</SelectItem>
                   </SelectContent>
                 </Select>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => sendPasswordReset(user.email)}
+                    >
+                      <KeyRound className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Send Password Reset</TooltipContent>
+                </Tooltip>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">

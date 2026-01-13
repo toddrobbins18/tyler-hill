@@ -1,12 +1,13 @@
 import { Auth as SupabaseAuth } from "@supabase/auth-ui-react";
 import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Auth() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -16,6 +17,14 @@ export default function Auth() {
   const inviteEmail = searchParams.get('email');
 
   useEffect(() => {
+    // Check if this is a password recovery redirect (has recovery token in hash)
+    const hash = window.location.hash;
+    if (hash && (hash.includes('type=recovery') || hash.includes('type=signup'))) {
+      // Redirect to update-password page with the hash
+      navigate('/update-password' + hash);
+      return;
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         checkUserCompany(session.user.id);
@@ -24,7 +33,13 @@ export default function Auth() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // Handle password recovery event
+      if (event === 'PASSWORD_RECOVERY') {
+        navigate('/update-password');
+        return;
+      }
+      
       if (session) {
         checkUserCompany(session.user.id);
       }
