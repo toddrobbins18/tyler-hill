@@ -1254,14 +1254,14 @@ async function performFullSync(
     
     console.log(`[DEBUG] missingStaffIds count: ${missingStaffIds.length} (out of ${staffPersonIds.size} total)`);
 
-    // Limit individual fetches to prevent timeout - only fetch first 50 missing
-    const MAX_INDIVIDUAL_FETCHES = 50;
+    // For staff-only sync, fetch all missing. For full sync, limit to prevent timeout
+    const MAX_INDIVIDUAL_FETCHES = syncType === 'staff' ? 500 : 100;
     if (missingStaffIds.length > 0) {
       const toFetch = missingStaffIds.slice(0, MAX_INDIVIDUAL_FETCHES);
-      console.log(`\n[Staff] ${missingStaffIds.length} staff missing name data - fetching first ${toFetch.length} individually...`);
+      console.log(`\n[Staff] ${missingStaffIds.length} staff missing name data - fetching ${toFetch.length} individually (syncType=${syncType})...`);
       
       if (missingStaffIds.length > MAX_INDIVIDUAL_FETCHES) {
-        console.log(`[Staff] WARNING: ${missingStaffIds.length - MAX_INDIVIDUAL_FETCHES} staff will be skipped to prevent timeout`);
+        console.log(`[Staff] NOTE: ${missingStaffIds.length - MAX_INDIVIDUAL_FETCHES} additional staff will require another sync`);
       }
       
       await updateSyncJob(supabase, jobId, {

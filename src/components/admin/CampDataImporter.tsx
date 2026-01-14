@@ -83,7 +83,7 @@ export default function CampDataImporter() {
     }
   };
 
-  const handleCampMinderSync = async (companyId: string, companyName: string) => {
+  const handleCampMinderSync = async (companyId: string, companyName: string, syncType: 'full' | 'staff' | 'campers' = 'full') => {
     setSyncingCompanyId(companyId);
     setSyncResults(prev => ({ ...prev, [companyId]: {} }));
 
@@ -93,12 +93,14 @@ export default function CampDataImporter() {
         throw new Error("Not authenticated");
       }
 
-      toast.info(`Starting CampMinder sync for ${companyName}...`);
+      const syncLabel = syncType === 'full' ? 'full' : `${syncType}-only`;
+      toast.info(`Starting ${syncLabel} CampMinder sync for ${companyName}...`);
 
       const response = await supabase.functions.invoke('sync-campminder', {
         body: {
           company_id: companyId,
           season_id: 2026,
+          sync_type: syncType,
         },
       });
 
@@ -126,7 +128,7 @@ export default function CampDataImporter() {
 
       // Refresh companies to get updated last_sync timestamp
       await fetchCompanies();
-      toast.success(`CampMinder sync completed for ${companyName}!`);
+      toast.success(`${syncLabel} CampMinder sync completed for ${companyName}!`);
     } catch (error: any) {
       console.error("Sync error:", error);
       toast.error(`Sync failed for ${companyName}: ${error.message}`);
@@ -316,7 +318,23 @@ export default function CampDataImporter() {
                         </Badge>
                       )}
                       <Button
-                        onClick={() => handleCampMinderSync(company.id, company.name)}
+                        onClick={() => handleCampMinderSync(company.id, company.name, 'staff')}
+                        disabled={!company.campminder_sync_enabled || syncingCompanyId !== null}
+                        size="sm"
+                        variant="outline"
+                        title="Sync only staff members (faster)"
+                      >
+                        {syncingCompanyId === company.id ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                            Syncing...
+                          </>
+                        ) : (
+                          "Staff Only"
+                        )}
+                      </Button>
+                      <Button
+                        onClick={() => handleCampMinderSync(company.id, company.name, 'full')}
                         disabled={!company.campminder_sync_enabled || syncingCompanyId !== null}
                         size="sm"
                       >
@@ -328,7 +346,7 @@ export default function CampDataImporter() {
                         ) : (
                           <>
                             <RefreshCw className="h-4 w-4 mr-2" />
-                            Sync Now
+                            Full Sync
                           </>
                         )}
                       </Button>
