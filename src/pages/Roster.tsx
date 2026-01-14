@@ -56,6 +56,8 @@ export default function Roster() {
   const [isScanning, setIsScanning] = useState(false);
   const [scannerMode, setScannerMode] = useState(false);
   const rfidInputRef = useRef<HTMLInputElement>(null);
+  const lastInputTime = useRef<number>(0);
+  const inputBuffer = useRef<string>("");
 
   const { getDivisionFilter } = usePermissions();
 
@@ -207,46 +209,77 @@ export default function Roster() {
   };
 
   // RFID Scanner handlers
-  const handleRfidScan = async () => {
-    if (!rfidInput.trim()) {
+  const handleRfidScan = async (rfidValue?: string) => {
+    const valueToScan = rfidValue || rfidInput.trim();
+    if (!valueToScan) {
       toast.error("Please scan a wristband");
       return;
     }
 
+    console.log('[RFID] Scanning:', valueToScan);
     setIsScanning(true);
     
     try {
-      // Find child by RFID
+      // Find child by RFID - works for ALL companies
       const { data: child, error } = await supabase
         .from('children')
         .select('id, name, rfid')
-        .eq('rfid', rfidInput.trim())
+        .eq('rfid', valueToScan)
         .eq('company_id', currentCompany?.id)
         .eq('season', currentSeason)
         .single();
 
+      console.log('[RFID] Result:', { child, error });
+
       if (error || !child) {
-        // RFID not found - offer to assign it
         toast.error("Wristband not assigned to any camper", {
-          description: "Scan while editing a camper to assign this wristband",
+          description: `RFID: ${valueToScan.slice(0, 12)}...`,
           duration: 4000
         });
         setRfidInput("");
+        inputBuffer.current = "";
+        // Re-focus for next scan
+        setTimeout(() => rfidInputRef.current?.focus(), 100);
         return;
       }
 
-      // Navigate to camper profile
       toast.success(`Found: ${child.name}`, {
         description: "Opening camper profile..."
       });
       navigate(`/child/${child.id}`);
       
     } catch (error) {
-      console.error('RFID scan error:', error);
+      console.error('[RFID] Scan error:', error);
       toast.error("Scan error occurred");
     } finally {
       setIsScanning(false);
       setRfidInput("");
+      inputBuffer.current = "";
+    }
+  };
+
+  // Handle input changes - detect rapid scanner input vs manual typing
+  const handleRfidInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const now = Date.now();
+    
+    // Bluetooth scanners type very fast (< 50ms between chars)
+    // If we detect rapid input followed by a pause, auto-submit
+    if (now - lastInputTime.current < 50) {
+      inputBuffer.current = value;
+    }
+    lastInputTime.current = now;
+    
+    setRfidInput(value);
+    
+    // Auto-submit after scanner finishes (no input for 100ms after rapid typing)
+    if (value.length > 4) {
+      setTimeout(() => {
+        if (Date.now() - lastInputTime.current >= 100 && rfidInput === value) {
+          console.log('[RFID] Auto-submitting scanner input');
+          handleRfidScan(value);
+        }
+      }, 150);
     }
   };
 
@@ -258,12 +291,29 @@ export default function Roster() {
   };
 
   const toggleScannerMode = () => {
-    setScannerMode(!scannerMode);
-    if (!scannerMode) {
+    const newMode = !scannerMode;
+    setScannerMode(newMode);
+    if (newMode) {
       // Focus the input when enabling scanner mode
-      setTimeout(() => rfidInputRef.current?.focus(), 100);
+      setTimeout(() => {
+        rfidInputRef.current?.focus();
+        // On mobile, also try to select to ensure cursor is ready
+        rfidInputRef.current?.select();
+      }, 150);
     }
   };
+
+  // Keep scanner input focused when in scanner mode
+  useEffect(() => {
+    if (scannerMode) {
+      const interval = setInterval(() => {
+        if (document.activeElement !== rfidInputRef.current && !isScanning) {
+          rfidInputRef.current?.focus();
+        }
+      }, 500);
+      return () => clearInterval(interval);
+    }
+  }, [scannerMode, isScanning]);
 
   return (
     <div className="space-y-6">
@@ -298,16 +348,20 @@ export default function Roster() {
               <Input
                 ref={rfidInputRef}
                 value={rfidInput}
-                onChange={(e) => setRfidInput(e.target.value)}
+                onChange={handleRfidInputChange}
                 onKeyDown={handleRfidKeyPress}
                 placeholder="Scan wristband or enter RFID..."
-                className="bg-white dark:bg-background border-green-300 dark:border-green-700 focus:ring-green-500"
+                className="bg-white dark:bg-background border-green-300 dark:border-green-700 focus:ring-green-500 text-lg"
                 autoFocus
                 disabled={isScanning}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
               />
             </div>
             <Button 
-              onClick={handleRfidScan} 
+              onClick={() => handleRfidScan()} 
               disabled={isScanning || !rfidInput.trim()}
               className="bg-green-600 hover:bg-green-700"
             >
@@ -315,7 +369,7 @@ export default function Roster() {
             </Button>
           </div>
           <p className="text-xs text-green-600 dark:text-green-400 mt-2">
-            Scan a camper's wristband to quickly navigate to their profile. Scanner auto-submits on Enter.
+            Bluetooth scanner ready. Scans auto-submit. Tap input if focus is lost.
           </p>
         </div>
       )}
