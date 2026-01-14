@@ -463,7 +463,8 @@ export default function SportsCalendar() {
     });
 
   const groupedEvents: Record<string, any[]> = filteredAndSortedEvents.reduce((acc, event) => {
-    const date = new Date(event.event_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+    // Append T00:00:00 to prevent timezone issues with date-only strings
+    const date = new Date(event.event_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
     if (!acc[date]) acc[date] = [];
     acc[date].push(event);
     return acc;
@@ -679,7 +680,7 @@ export default function SportsCalendar() {
                         <div className="flex-1">
                           <CardTitle className="text-lg">{event.title}</CardTitle>
                           <p className="text-sm text-muted-foreground mt-1">
-                            {new Date(event.event_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                            {new Date(event.event_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                           </p>
                         </div>
                         <div className="flex gap-1">
