@@ -225,30 +225,16 @@ export default function Staff() {
     }
   };
 
-  // Handle input changes - detect rapid scanner input vs manual typing
+  // Handle input changes - simpler approach matching Nurse page
   const handleRfidInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    const now = Date.now();
-    
-    if (now - lastInputTime.current < 50) {
-      inputBuffer.current = value;
-    }
-    lastInputTime.current = now;
-    
+    console.log('[RFID Staff] Input changed:', value, 'length:', value.length);
     setRfidInput(value);
-    
-    // Auto-submit after scanner finishes
-    if (value.length > 4) {
-      setTimeout(() => {
-        if (Date.now() - lastInputTime.current >= 100 && rfidInput === value) {
-          console.log('[RFID Staff] Auto-submitting scanner input');
-          handleRfidScan(value);
-        }
-      }, 150);
-    }
   };
 
+  // Use onKeyPress like the working Nurse page
   const handleRfidKeyPress = (e: React.KeyboardEvent) => {
+    console.log('[RFID Staff] Key pressed:', e.key);
     if (e.key === 'Enter') {
       e.preventDefault();
       handleRfidScan();
@@ -312,15 +298,11 @@ export default function Staff() {
                 ref={rfidInputRef}
                 value={rfidInput}
                 onChange={handleRfidInputChange}
-                onKeyDown={handleRfidKeyPress}
+                onKeyPress={handleRfidKeyPress}
                 placeholder="Scan wristband or enter RFID..."
                 className="bg-white dark:bg-background border-green-300 dark:border-green-700 focus:ring-green-500 text-lg"
                 autoFocus
                 disabled={isScanning}
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
               />
             </div>
             <Button 
