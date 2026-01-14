@@ -1102,6 +1102,17 @@ async function performFullSync(
     }
 
     console.log(`Found ${staffPersonIds.size} unique staff person IDs`);
+    
+    // DEBUG: Log what we have in maps
+    console.log(`[DEBUG] personMap size: ${personMap.size}, staffFallbackMap size: ${staffFallbackMap.size}`);
+    
+    // Sample the first few staff IDs to debug
+    const sampleStaffIds = Array.from(staffPersonIds).slice(0, 3);
+    for (const sid of sampleStaffIds) {
+      const person = personMap.get(sid);
+      const fallback = staffFallbackMap.get(sid);
+      console.log(`[DEBUG] Staff ${sid}: personMap has=${!!person}, fallbackMap has=${!!fallback}, fallback names="${fallback?.FirstName || ''} ${fallback?.LastName || ''}"`);
+    }
 
     // =====================================================
     // PHASE 7a: Fetch missing staff person details
@@ -1117,6 +1128,8 @@ async function performFullSync(
       // Missing if neither source has both names
       return !personHasBothNames && !fallbackHasBothNames;
     });
+    
+    console.log(`[DEBUG] missingStaffIds count: ${missingStaffIds.length} (out of ${staffPersonIds.size} total)`);
 
     if (missingStaffIds.length > 0) {
       console.log(`\n[Staff] ${missingStaffIds.length} staff missing name data - fetching individually...`);
