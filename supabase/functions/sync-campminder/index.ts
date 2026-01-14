@@ -42,6 +42,59 @@ function normalizeDivisionName(name: string): string {
   return normalized;
 }
 
+// Robust name extraction from any CampMinder record format
+function extractName(record: any): { firstName: string; lastName: string } {
+  let firstName = '';
+  let lastName = '';
+
+  // Try direct fields first (most common)
+  firstName = (record?.FirstName || record?.firstName || '').toString().trim();
+  lastName = (record?.LastName || record?.lastName || '').toString().trim();
+
+  // Try nested Name object
+  if ((!firstName || !lastName) && record?.Name) {
+    if (typeof record.Name === 'string') {
+      // Name is a full string like "John Smith"
+      const parts = record.Name.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        firstName = firstName || parts[0];
+        lastName = lastName || parts.slice(1).join(' ');
+      } else if (parts.length === 1) {
+        firstName = firstName || parts[0];
+      }
+    } else if (typeof record.Name === 'object') {
+      // Name is an object like { First: "John", Last: "Smith" }
+      firstName = firstName || (record.Name.First || record.Name.first || '').toString().trim();
+      lastName = lastName || (record.Name.Last || record.Name.last || '').toString().trim();
+      
+      // Also check Full inside Name object
+      if ((!firstName || !lastName) && record.Name.Full) {
+        const parts = record.Name.Full.trim().split(/\s+/);
+        if (parts.length >= 2) {
+          firstName = firstName || parts[0];
+          lastName = lastName || parts.slice(1).join(' ');
+        }
+      }
+    }
+  }
+
+  // Try FullName, DisplayName, PersonName fields
+  if (!firstName || !lastName) {
+    const fullName = record?.FullName || record?.DisplayName || record?.PersonName || '';
+    if (fullName) {
+      const parts = fullName.toString().trim().split(/\s+/);
+      if (parts.length >= 2) {
+        firstName = firstName || parts[0];
+        lastName = lastName || parts.slice(1).join(' ');
+      } else if (parts.length === 1 && !firstName) {
+        firstName = parts[0];
+      }
+    }
+  }
+
+  return { firstName, lastName };
+}
+
 declare const EdgeRuntime: {
   waitUntil(promise: Promise<any>): void;
 };
@@ -791,25 +844,40 @@ async function performFullSync(
         console.log('[DEBUG] Sample staff assignment:', JSON.stringify(staffAssignments[0], null, 2));
       }
 
-      // Build staff fallback map
+      // Build staff fallback map using robust name extraction
+      let staffWithNames = 0;
+      let staffWithoutNames = 0;
       for (const assignment of staffAssignments) {
         if (assignment.PersonID) {
           const personId = String(assignment.PersonID);
           staffPersonIdsFromAssignments.add(personId);
           staffAssignmentMap.set(personId, assignment);
+          
+          // Use robust name extraction
+          const { firstName, lastName } = extractName(assignment);
+          
+          if (firstName && lastName) {
+            staffWithNames++;
+          } else {
+            staffWithoutNames++;
+            if (staffWithoutNames <= 3) {
+              console.log(`[Staff Name Debug] Missing name for ${personId}, keys: ${Object.keys(assignment).join(', ')}`);
+            }
+          }
+          
           staffFallbackMap.set(personId, {
             PersonID: personId,
-            FirstName: assignment.FirstName || assignment.Name?.First || '',
-            LastName: assignment.LastName || assignment.Name?.Last || '',
-            Email: assignment.Email || '',
-            Phone: assignment.Phone || assignment.PhoneNumber || '',
+            FirstName: firstName,
+            LastName: lastName,
+            Email: assignment.Email || assignment.email || '',
+            Phone: assignment.Phone || assignment.PhoneNumber || assignment.phone || '',
             Position1ID: assignment.Position1ID,
             PositionID: assignment.PositionID,
-            DateOfBirth: assignment.DateOfBirth,
+            DateOfBirth: assignment.DateOfBirth || assignment.DOB || null,
           });
         }
       }
-      console.log(`Built staff fallback map with ${staffFallbackMap.size} entries`);
+      console.log(`Built staff fallback map: ${staffWithNames} with names, ${staffWithoutNames} missing names (total ${staffFallbackMap.size})`);
     } else {
       console.log(`\n--- SKIPPING STAFF FETCH (syncType=${syncType}) ---`);
     }
@@ -1186,18 +1254,25 @@ async function performFullSync(
     
     console.log(`[DEBUG] missingStaffIds count: ${missingStaffIds.length} (out of ${staffPersonIds.size} total)`);
 
+    // Limit individual fetches to prevent timeout - only fetch first 50 missing
+    const MAX_INDIVIDUAL_FETCHES = 50;
     if (missingStaffIds.length > 0) {
-      console.log(`\n[Staff] ${missingStaffIds.length} staff missing name data - fetching individually...`);
+      const toFetch = missingStaffIds.slice(0, MAX_INDIVIDUAL_FETCHES);
+      console.log(`\n[Staff] ${missingStaffIds.length} staff missing name data - fetching first ${toFetch.length} individually...`);
+      
+      if (missingStaffIds.length > MAX_INDIVIDUAL_FETCHES) {
+        console.log(`[Staff] WARNING: ${missingStaffIds.length - MAX_INDIVIDUAL_FETCHES} staff will be skipped to prevent timeout`);
+      }
       
       await updateSyncJob(supabase, jobId, {
-        progress: { step: `Fetching ${missingStaffIds.length} missing staff details`, staff: staffPersonIds.size, season },
+        progress: { step: `Fetching ${toFetch.length} missing staff details`, staff: staffPersonIds.size, season },
       });
 
       let fetchedCount = 0;
       let failedCount = 0;
       
-      for (let i = 0; i < missingStaffIds.length; i++) {
-        const personId = missingStaffIds[i];
+      for (let i = 0; i < toFetch.length; i++) {
+        const personId = toFetch[i];
         const person = await fetchPersonById(personId, token, subscriptionKey, clientId);
         
         if (person && person.Name) {
@@ -1212,18 +1287,18 @@ async function performFullSync(
           failedCount++;
         }
         
-        // Progress update every 50 persons
-        if ((i + 1) % 50 === 0) {
-          console.log(`[Staff Fetch] Progress: ${i + 1}/${missingStaffIds.length} (${fetchedCount} success, ${failedCount} failed)`);
+        // Progress update every 25 persons
+        if ((i + 1) % 25 === 0) {
+          console.log(`[Staff Fetch] Progress: ${i + 1}/${toFetch.length} (${fetchedCount} success, ${failedCount} failed)`);
           await updateSyncJob(supabase, jobId, {
-            progress: { step: `Fetching staff details: ${i + 1}/${missingStaffIds.length}`, staff: staffPersonIds.size, season },
+            progress: { step: `Fetching staff details: ${i + 1}/${toFetch.length}`, staff: staffPersonIds.size, season },
           });
         }
       }
       
       console.log(`[Staff Fetch] Completed: ${fetchedCount} fetched, ${failedCount} failed`);
     } else {
-      console.log(`[Staff] All ${staffPersonIds.size} staff have name data available`);
+      console.log(`[Staff] All ${staffPersonIds.size} staff have name data available - no individual fetches needed`);
     }
 
     await updateSyncJob(supabase, jobId, {
@@ -1273,10 +1348,12 @@ async function performFullSync(
         let firstName = '';
         let lastName = '';
         
+        // Use robust name extraction from all sources
         if (person && person.Name) {
           // Person data available from persons API
-          firstName = (person.Name?.First || '').trim();
-          lastName = (person.Name?.Last || '').trim();
+          const extracted = extractName(person);
+          firstName = extracted.firstName;
+          lastName = extracted.lastName;
           dateOfBirth = person.DateOfBirth || null;
           
           if (person.ContactDetails?.Emails?.length > 0) {
@@ -1285,19 +1362,30 @@ async function performFullSync(
           if (person.ContactDetails?.PhoneNumbers?.length > 0) {
             phone = person.ContactDetails.PhoneNumbers[0].Number;
           }
-        } else if (fallbackData) {
-          // Use fallback data from /staff endpoint
-          firstName = (fallbackData.FirstName || '').trim();
-          lastName = (fallbackData.LastName || '').trim();
-          email = fallbackData.Email || '';
-          phone = fallbackData.Phone || '';
-          dateOfBirth = fallbackData.DateOfBirth || null;
+        }
+        
+        // Fall back to staff assignment data
+        if ((!firstName || !lastName) && fallbackData) {
+          firstName = firstName || (fallbackData.FirstName || '').trim();
+          lastName = lastName || (fallbackData.LastName || '').trim();
+          email = email || fallbackData.Email || '';
+          phone = phone || fallbackData.Phone || '';
+          dateOfBirth = dateOfBirth || fallbackData.DateOfBirth || null;
           usedFallback = true;
+        }
+        
+        // Last resort: try extracting from the assignment itself
+        if ((!firstName || !lastName) && assignment) {
+          const extracted = extractName(assignment);
+          firstName = firstName || extracted.firstName;
+          lastName = lastName || extracted.lastName;
         }
         
         // Skip if missing first OR last name - require both for valid record
         if (!firstName || !lastName) {
-          console.log(`[Staff Skip] Missing first or last name for PersonID ${personId} (first="${firstName}", last="${lastName}") - skipping`);
+          if (skippedNoName < 5) {
+            console.log(`[Staff Skip] Missing name for PersonID ${personId} (first="${firstName}", last="${lastName}")`);
+          }
           skippedNoName++;
           continue;
         }
