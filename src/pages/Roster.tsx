@@ -56,8 +56,6 @@ export default function Roster() {
   const [isScanning, setIsScanning] = useState(false);
   const [scannerMode, setScannerMode] = useState(false);
   const rfidInputRef = useRef<HTMLInputElement>(null);
-  const lastInputTime = useRef<number>(0);
-  const inputBuffer = useRef<string>("");
 
   const { getDivisionFilter } = usePermissions();
 
@@ -237,7 +235,6 @@ export default function Roster() {
           duration: 4000
         });
         setRfidInput("");
-        inputBuffer.current = "";
         // Re-focus for next scan
         setTimeout(() => rfidInputRef.current?.focus(), 100);
         return;
@@ -254,22 +251,12 @@ export default function Roster() {
     } finally {
       setIsScanning(false);
       setRfidInput("");
-      inputBuffer.current = "";
     }
   };
 
-  // Handle input changes - simpler approach matching Nurse page
-  const handleRfidInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    console.log('[RFID] Input changed:', value, 'length:', value.length);
-    setRfidInput(value);
-  };
-
-  // Use onKeyPress like the working Nurse page (deprecated but works better on some devices)
+  // Match Nurse page exactly - no preventDefault, direct handler
   const handleRfidKeyPress = (e: React.KeyboardEvent) => {
-    console.log('[RFID] Key pressed:', e.key);
     if (e.key === 'Enter') {
-      e.preventDefault();
       handleRfidScan();
     }
   };
@@ -332,7 +319,7 @@ export default function Roster() {
               <Input
                 ref={rfidInputRef}
                 value={rfidInput}
-                onChange={handleRfidInputChange}
+                onChange={(e) => setRfidInput(e.target.value)}
                 onKeyPress={handleRfidKeyPress}
                 placeholder="Scan wristband or enter RFID..."
                 className="bg-white dark:bg-background border-green-300 dark:border-green-700 focus:ring-green-500 text-lg"
