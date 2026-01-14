@@ -787,61 +787,51 @@ async function performFullSync(
       const currentSeason = season;
       const fallbackSeason = '2025';
       
-      // Fetch Active staff (status=1) and Hired staff (status=2), then combine
-      console.log(`[Staff Sync] Fetching Active (status=1) and Hired (status=2) staff for season ${currentSeason}...`);
+      // Fetch ALL staff statuses to get complete staff list
+      // Status IDs: 1=Active, 2=Hired, 3=Applied, 4=Pending, 5=Returning, 6=Declined, etc.
+      const allStatuses = [1, 2, 3, 4, 5];
+      console.log(`[Staff Sync] Fetching all staff (statuses: ${allStatuses.join(', ')}) for season ${currentSeason}...`);
       
-      // Fetch Active staff
-      const activeStaff = await fetchAllPaginated(
-        CM_STAFF_URL,
-        token,
-        subscriptionKey,
-        { clientid: clientId, seasonid: currentSeason, status: 1 }
-      );
-      console.log(`Found ${activeStaff.length} Active staff for season ${currentSeason}`);
-      
-      // Fetch Hired staff
-      const hiredStaff = await fetchAllPaginated(
-        CM_STAFF_URL,
-        token,
-        subscriptionKey,
-        { clientid: clientId, seasonid: currentSeason, status: 2 }
-      );
-      console.log(`Found ${hiredStaff.length} Hired staff for season ${currentSeason}`);
-      
-      // Combine and dedupe by PersonID
       const staffMap = new Map<string, any>();
-      for (const s of [...activeStaff, ...hiredStaff]) {
-        if (s.PersonID) {
-          staffMap.set(String(s.PersonID), s);
+      
+      for (const status of allStatuses) {
+        const statusStaff = await fetchAllPaginated(
+          CM_STAFF_URL,
+          token,
+          subscriptionKey,
+          { clientid: clientId, seasonid: currentSeason, status }
+        );
+        console.log(`Found ${statusStaff.length} staff with status=${status} for season ${currentSeason}`);
+        
+        for (const s of statusStaff) {
+          if (s.PersonID) {
+            staffMap.set(String(s.PersonID), s);
+          }
         }
       }
+      
       staffAssignments = Array.from(staffMap.values());
-      console.log(`Combined ${staffAssignments.length} unique staff (Active + Hired) for season ${currentSeason}`);
+      console.log(`Combined ${staffAssignments.length} unique staff (all statuses) for season ${currentSeason}`);
 
       if (staffAssignments.length === 0) {
         console.log(`[Staff Sync] No staff found for ${currentSeason}, trying ${fallbackSeason}...`);
         
-        const activeStaffFallback = await fetchAllPaginated(
-          CM_STAFF_URL,
-          token,
-          subscriptionKey,
-          { clientid: clientId, seasonid: fallbackSeason, status: 1 }
-        );
-        const hiredStaffFallback = await fetchAllPaginated(
-          CM_STAFF_URL,
-          token,
-          subscriptionKey,
-          { clientid: clientId, seasonid: fallbackSeason, status: 2 }
-        );
-        
         const fallbackMap = new Map<string, any>();
-        for (const s of [...activeStaffFallback, ...hiredStaffFallback]) {
-          if (s.PersonID) {
-            fallbackMap.set(String(s.PersonID), s);
+        for (const status of allStatuses) {
+          const fallbackStaff = await fetchAllPaginated(
+            CM_STAFF_URL,
+            token,
+            subscriptionKey,
+            { clientid: clientId, seasonid: fallbackSeason, status }
+          );
+          for (const s of fallbackStaff) {
+            if (s.PersonID) {
+              fallbackMap.set(String(s.PersonID), s);
+            }
           }
         }
         staffAssignments = Array.from(fallbackMap.values());
-        console.log(`Combined ${staffAssignments.length} unique staff (Active + Hired) for fallback season ${fallbackSeason}`);
+        console.log(`Combined ${staffAssignments.length} unique staff (all statuses) for fallback season ${fallbackSeason}`);
       }
 
       if (staffAssignments.length > 0) {
