@@ -30,6 +30,7 @@ export default function Staff() {
   const [staff, setStaff] = useState<any[]>([]);
   const [selectedSession, setSelectedSession] = useState<string>("all");
   const [loading, setLoading] = useState(true);
+  const [staffError, setStaffError] = useState<string | null>(null);
   const [editingStaff, setEditingStaff] = useState<string | null>(null);
   const [deletingStaff, setDeletingStaff] = useState<string | null>(null);
   const [evaluatingStaff, setEvaluatingStaff] = useState<string | null>(null);
@@ -39,54 +40,87 @@ export default function Staff() {
 
   const fetchStaff = async () => {
     setLoading(true);
-    
+    setStaffError(null);
+
     if (!currentCompany?.id) {
       setStaff([]);
       setLoading(false);
       return;
     }
-    
+
     console.log("[Staff] Fetching staff for company:", currentCompany.id, "season:", currentSeason);
-    
-    // Fetch staff with evaluations in a single query using a join
+
+    // NOTE: Avoid PostgREST nested relation joins here.
+    // We fetch staff first, then evaluations in a separate query.
     const { data: staffData, error: staffError } = await supabase
       .from("staff")
-      .select(`
-        *,
-        staff_evaluations(rating, date, comments)
-      `)
+      .select("*")
       .eq("company_id", currentCompany.id)
       .eq("season", currentSeason)
       .neq("name", "Unknown")
       .not("name", "is", null)
       .order("name");
-    
+
     console.log("[Staff] Fetched", staffData?.length || 0, "staff members, error:", staffError);
 
-    if (!staffError && staffData) {
-      const staffWithEvals = staffData.map((member: any) => {
-        const evals = member.staff_evaluations || [];
-        // Sort evaluations by date descending
-        const sortedEvals = [...evals].sort((a, b) => 
-          new Date(b.date).getTime() - new Date(a.date).getTime()
-        );
-        
-        const averageRating = sortedEvals.length
-          ? sortedEvals.reduce((sum: number, e: any) => sum + (Number(e.rating) || 0), 0) / sortedEvals.length
-          : 0;
-
-        return {
-          ...member,
-          staff_evaluations: undefined, // Remove the nested data
-          averageRating: averageRating.toFixed(1),
-          evaluationsCount: sortedEvals.length,
-          recentEvaluation: sortedEvals[0]?.comments || "No evaluations yet",
-          lastEvaluationDate: sortedEvals[0]?.date || null,
-        };
-      });
-
-      setStaff(staffWithEvals);
+    if (staffError) {
+      console.error("[Staff] Failed to fetch staff:", staffError);
+      setStaff([]);
+      setStaffError(staffError.message || "Failed to load staff");
+      setLoading(false);
+      return;
     }
+
+    const staffRows = staffData || [];
+
+    // Fetch evaluations (if any) and map them to staff_id
+    const staffIds = staffRows.map((s: any) => s.id).filter(Boolean);
+    let evalsByStaffId = new Map<string, any[]>();
+
+    if (staffIds.length > 0) {
+      const { data: evalRows, error: evalError } = await supabase
+        .from("staff_evaluations")
+        .select("staff_id, rating, date, comments")
+        .eq("company_id", currentCompany.id)
+        .eq("season", currentSeason)
+        .in("staff_id", staffIds);
+
+      if (evalError) {
+        // Non-fatal: staff can still render.
+        console.warn("[Staff] Failed to fetch staff evaluations:", evalError);
+      }
+
+      for (const row of evalRows || []) {
+        const key = String((row as any).staff_id);
+        const existing = evalsByStaffId.get(key) || [];
+        existing.push(row);
+        evalsByStaffId.set(key, existing);
+      }
+    }
+
+    const staffWithEvals = staffRows.map((member: any) => {
+      const evals = evalsByStaffId.get(String(member.id)) || [];
+
+      // Sort evaluations by date descending
+      const sortedEvals = [...evals].sort(
+        (a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+
+      const averageRating = sortedEvals.length
+        ? sortedEvals.reduce((sum: number, e: any) => sum + (Number(e.rating) || 0), 0) /
+          sortedEvals.length
+        : 0;
+
+      return {
+        ...member,
+        averageRating: averageRating.toFixed(1),
+        evaluationsCount: sortedEvals.length,
+        recentEvaluation: sortedEvals[0]?.comments || "No evaluations yet",
+        lastEvaluationDate: sortedEvals[0]?.date || null,
+      };
+    });
+
+    setStaff(staffWithEvals);
     setLoading(false);
   };
 
@@ -175,6 +209,11 @@ export default function Staff() {
         </div>
       ) : (
         <>
+          {staffError && (
+            <div className="text-sm text-destructive">
+              Couldn’t load staff: {staffError}
+            </div>
+          )}
           <div className="text-sm text-muted-foreground">
             Showing {filteredStaff.length} of {staff.length} staff members for {currentSeason}
           </div>
