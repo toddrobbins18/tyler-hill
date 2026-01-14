@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { staffSchema } from "@/lib/validationSchemas";
 import { z } from "zod";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
+import { Radio, CheckCircle2 } from "lucide-react";
 
 interface EditStaffDialogProps {
   staffId: string;
@@ -28,6 +29,9 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
   const [leaderId, setLeaderId] = useState("");
   const [staffType, setStaffType] = useState<string>("");
   const [session, setSession] = useState<string>("");
+  const [rfidValue, setRfidValue] = useState("");
+  const [rfidJustScanned, setRfidJustScanned] = useState(false);
+  const rfidInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open && staffId) {
@@ -48,6 +52,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
       setLeaderId(data.leader_id || "");
       setStaffType(data.staff_type || "");
       setSession(data.session || "");
+      setRfidValue(data.rfid || "");
     }
   };
 
@@ -84,6 +89,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
         leader_id: leaderId || null,
         staff_type: staffType || null,
         allergies: formData.get("allergies") as string || null,
+        rfid: rfidValue || null,
       };
 
       const validatedData = staffSchema.parse(data);
@@ -211,6 +217,48 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className={`p-3 rounded-lg border-2 transition-all ${rfidJustScanned ? 'border-green-500 bg-green-50 dark:bg-green-950/30' : 'border-transparent'}`}>
+            <Label htmlFor="rfid" className="flex items-center gap-2">
+              <Radio className={`h-4 w-4 ${rfidJustScanned ? 'text-green-600 animate-pulse' : 'text-muted-foreground'}`} />
+              RFID Wristband
+              {rfidValue && <CheckCircle2 className="h-4 w-4 text-green-600" />}
+            </Label>
+            <Input 
+              ref={rfidInputRef}
+              id="rfid" 
+              name="rfid" 
+              value={rfidValue}
+              onChange={(e) => {
+                setRfidValue(e.target.value);
+                if (e.target.value && e.target.value !== staff?.rfid) {
+                  setRfidJustScanned(true);
+                  setTimeout(() => setRfidJustScanned(false), 2000);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const form = e.currentTarget.form;
+                  if (form) {
+                    const inputs = Array.from(form.querySelectorAll('input, textarea, select, button'));
+                    const index = inputs.indexOf(e.currentTarget);
+                    const next = inputs[index + 1] as HTMLElement;
+                    next?.focus();
+                  }
+                  if (rfidValue) {
+                    toast.success("Wristband scanned!", {
+                      description: `RFID: ${rfidValue.slice(0, 8)}...`
+                    });
+                  }
+                }
+              }}
+              placeholder="Scan wristband or enter RFID..." 
+              className={rfidJustScanned ? 'border-green-500 ring-2 ring-green-500/20' : ''}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Scan the staff member's ISO 14443 Type A wristband
+            </p>
           </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

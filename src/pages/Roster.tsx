@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import AddChildDialog from "@/components/dialogs/AddChildDialog";
 import EditChildDialog from "@/components/dialogs/EditChildDialog";
+import { BulkRfidAssignmentDialog } from "@/components/dialogs/BulkRfidAssignmentDialog";
 import CSVUploader from "@/components/CSVUploader";
 import { toast } from "sonner";
 import { useSeasonContext } from "@/contexts/SeasonContext";
@@ -280,6 +281,7 @@ export default function Roster() {
             <Radio className={`h-4 w-4 mr-2 ${scannerMode ? "animate-pulse" : ""}`} />
             {scannerMode ? "Scanner Active" : "Scan Wristband"}
           </Button>
+          <BulkRfidAssignmentDialog type="children" onSuccess={fetchChildren} />
           <CSVUploader tableName="children" onUploadComplete={fetchChildren} />
           <AddChildDialog onSuccess={fetchChildren} />
         </div>
