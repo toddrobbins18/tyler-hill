@@ -151,9 +151,9 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Not Specified</SelectItem>
-                  <SelectItem value="session_1">Session 1</SelectItem>
-                  <SelectItem value="session_2">Session 2</SelectItem>
-                  <SelectItem value="both">Both Sessions</SelectItem>
+                  <SelectItem value="First Session">First Session</SelectItem>
+                  <SelectItem value="Second Session">Second Session</SelectItem>
+                  <SelectItem value="First Session, Second Session">Both Sessions</SelectItem>
                 </SelectContent>
               </Select>
             </div>

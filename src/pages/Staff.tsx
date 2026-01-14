@@ -139,7 +139,8 @@ export default function Staff() {
     const matchesSession = 
       selectedSession === "all" || 
       member.session === selectedSession || 
-      member.session === "both" ||
+      member.session?.includes("First Session") && selectedSession === "First Session" ||
+      member.session?.includes("Second Session") && selectedSession === "Second Session" ||
       !member.session;
     
     // Season filtering now done at query level
@@ -196,9 +197,8 @@ export default function Staff() {
             className="px-4 py-2 border rounded-md bg-background"
           >
             <option value="all">All Sessions</option>
-            <option value="session_1">Session 1</option>
-            <option value="session_2">Session 2</option>
-            <option value="both">Both Sessions</option>
+            <option value="First Session">First Session</option>
+            <option value="Second Session">Second Session</option>
           </select>
         )}
       </div>
