@@ -730,27 +730,35 @@ async function performFullSync(
       const currentSeason = season;
       const fallbackSeason = '2025';
       
-      console.log(`[Staff Sync] Trying /staff endpoint with season ${currentSeason}, status=1 (Active)...`);
+      // Fetch staff with no status filter to get ALL staff (hired, active, pending, etc.)
+      console.log(`[Staff Sync] Trying /staff endpoint with season ${currentSeason} (no status filter - fetching all)...`);
       staffAssignments = await fetchAllPaginated(
         CM_STAFF_URL,
         token,
         subscriptionKey,
-        { clientid: clientId, seasonid: currentSeason, status: 1 }
+        { clientid: clientId, seasonid: currentSeason }
       );
-      console.log(`Found ${staffAssignments.length} active staff assignments for season ${currentSeason}`);
+      console.log(`Found ${staffAssignments.length} total staff assignments for season ${currentSeason}`);
 
       if (staffAssignments.length === 0) {
-        console.log(`[Staff Sync] No staff found for ${currentSeason}, trying ${fallbackSeason} with status=1...`);
+        console.log(`[Staff Sync] No staff found for ${currentSeason}, trying ${fallbackSeason}...`);
         staffAssignments = await fetchAllPaginated(
           CM_STAFF_URL,
           token,
           subscriptionKey,
-          { clientid: clientId, seasonid: fallbackSeason, status: 1 }
+          { clientid: clientId, seasonid: fallbackSeason }
         );
-        console.log(`Found ${staffAssignments.length} active staff assignments for season ${fallbackSeason}`);
+        console.log(`Found ${staffAssignments.length} total staff assignments for season ${fallbackSeason}`);
       }
 
       if (staffAssignments.length > 0) {
+        // Log status distribution
+        const statusCounts = new Map<number, number>();
+        for (const s of staffAssignments) {
+          const status = s.StatusID || s.Status || 0;
+          statusCounts.set(status, (statusCounts.get(status) || 0) + 1);
+        }
+        console.log(`[Staff Status Distribution]`, Object.fromEntries(statusCounts));
         console.log('[DEBUG] Sample staff assignment with all fields:', JSON.stringify(staffAssignments[0], null, 2));
       }
 
