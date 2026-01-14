@@ -176,6 +176,7 @@ async function fetchPersonById(
 ): Promise<any | null> {
   try {
     const url = `${CM_PERSONS_URL}/${personId}?clientid=${clientId}&includecamperdetails=true&includecontactdetails=true&includerelatives=true&includestaffdetails=true`;
+    console.log(`[Fetch Person] Using clientId=${clientId} for person ${personId}`);
     const response = await rateLimitedFetch(url, {
       method: 'GET',
       headers: {
