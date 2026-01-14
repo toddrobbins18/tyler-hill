@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import { childSchema } from "@/lib/validationSchemas";
 import { z } from "zod";
 import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import { Radio, CheckCircle2 } from "lucide-react";
 
 interface EditChildDialogProps {
   childId: string;
@@ -37,6 +38,9 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
   const [birthdayFrostingColors, setBirthdayFrostingColors] = useState<string[]>([]);
   const [birthdayToppings, setBirthdayToppings] = useState<string[]>([]);
   const [birthdayCakeAllergies, setBirthdayCakeAllergies] = useState<string[]>([]);
+  const [rfidValue, setRfidValue] = useState("");
+  const [rfidJustScanned, setRfidJustScanned] = useState(false);
+  const rfidInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open && childId) {
@@ -59,12 +63,13 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
       setSession(data.session || "");
       setLeaderId(data.leader_id || "");
       setDivisionId(data.division_id || "");
-        setBirthdayPartyType(data.birthday_party_type || "");
-        setBirthdayCakeMeal(data.birthday_cake_meal || "");
-        setBirthdayCakeType(data.birthday_cake_type || "");
+      setBirthdayPartyType(data.birthday_party_type || "");
+      setBirthdayCakeMeal(data.birthday_cake_meal || "");
+      setBirthdayCakeType(data.birthday_cake_type || "");
       setBirthdayFrostingColors(data.birthday_frosting_colors || []);
       setBirthdayToppings(data.birthday_toppings || []);
       setBirthdayCakeAllergies(data.birthday_cake_allergies || []);
+      setRfidValue(data.rfid || "");
     }
   };
 
@@ -113,7 +118,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
         emergency_contact: formData.get("emergency_contact") as string || null,
         allergies: formData.get("allergies") as string || null,
         medical_notes: formData.get("medical_notes") as string || null,
-        rfid: formData.get("rfid") as string || null,
+        rfid: rfidValue || null,
       birthday_party_type: birthdayPartyType || null,
       birthday_cake_meal: birthdayCakeMeal || null,
       birthday_party_comments: formData.get("birthday_party_comments") as string || null,
@@ -260,11 +265,47 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
             <Label htmlFor="emergency_contact">Emergency Contact</Label>
             <Input id="emergency_contact" name="emergency_contact" defaultValue={child.emergency_contact || ""} />
           </div>
-          <div>
-            <Label htmlFor="rfid">RFID Bracelet</Label>
-            <Input id="rfid" name="rfid" defaultValue={child.rfid || ""} placeholder="Scan or enter RFID" />
+          <div className={`p-3 rounded-lg border-2 transition-all ${rfidJustScanned ? 'border-green-500 bg-green-50 dark:bg-green-950/30' : 'border-transparent'}`}>
+            <Label htmlFor="rfid" className="flex items-center gap-2">
+              <Radio className={`h-4 w-4 ${rfidJustScanned ? 'text-green-600 animate-pulse' : 'text-muted-foreground'}`} />
+              RFID Wristband
+              {rfidValue && <CheckCircle2 className="h-4 w-4 text-green-600" />}
+            </Label>
+            <Input 
+              ref={rfidInputRef}
+              id="rfid" 
+              name="rfid" 
+              value={rfidValue}
+              onChange={(e) => {
+                setRfidValue(e.target.value);
+                if (e.target.value && e.target.value !== child?.rfid) {
+                  setRfidJustScanned(true);
+                  setTimeout(() => setRfidJustScanned(false), 2000);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  // Move focus to next field after scan
+                  const form = e.currentTarget.form;
+                  if (form) {
+                    const inputs = Array.from(form.querySelectorAll('input, textarea, select, button'));
+                    const index = inputs.indexOf(e.currentTarget);
+                    const next = inputs[index + 1] as HTMLElement;
+                    next?.focus();
+                  }
+                  if (rfidValue) {
+                    toast.success("Wristband scanned!", {
+                      description: `RFID: ${rfidValue.slice(0, 8)}...`
+                    });
+                  }
+                }
+              }}
+              placeholder="Scan wristband or enter RFID..." 
+              className={rfidJustScanned ? 'border-green-500 ring-2 ring-green-500/20' : ''}
+            />
             <p className="text-xs text-muted-foreground mt-1">
-              Scan the camper's RFID bracelet for quick medication check-in
+              Scan the camper's ISO 14443 Type A wristband for quick check-in across the portal
             </p>
           </div>
           <div>
