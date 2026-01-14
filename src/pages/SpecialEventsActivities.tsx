@@ -60,60 +60,51 @@ export default function SpecialEventsActivities() {
   }, [selectedDate, selectedSeason]);
 
   const fetchEvents = async () => {
-    // Fetch first batch (0-999)
-    const { data: batch1, error: error1 } = await supabase
-      .from("special_events_activities")
-      .select(`
-        *,
-        division:divisions(id, name, gender, sort_order)
-      `)
-      .eq("event_date", selectedDate)
-      .eq('company_id', currentCompany.id)
-      .order("event_date", { ascending: true })
-      .order("time_slot", { ascending: true })
-      .range(0, 999);
+    // Fetch events and division associations in parallel
+    const [eventsResult, divisionsResult] = await Promise.all([
+      supabase
+        .from("special_events_activities")
+        .select(`
+          *,
+          division:divisions(id, name, gender, sort_order)
+        `)
+        .eq("event_date", selectedDate)
+        .eq('company_id', currentCompany.id)
+        .order("event_date", { ascending: true })
+        .order("time_slot", { ascending: true }),
+      supabase
+        .from("special_events_divisions")
+        .select("event_id, division_id, divisions(id, name, gender, sort_order)")
+        .eq('company_id', currentCompany.id)
+    ]);
 
-    // Fetch second batch (1000-1999)
-    const { data: batch2, error: error2 } = await supabase
-      .from("special_events_activities")
-      .select(`
-        *,
-        division:divisions(id, name, gender, sort_order)
-      `)
-      .eq("event_date", selectedDate)
-      .eq('company_id', currentCompany.id)
-      .order("event_date", { ascending: true })
-      .order("time_slot", { ascending: true })
-      .range(1000, 1999);
-
-    // Combine batches
-    const allData = [...(batch1 || []), ...(batch2 || [])];
-
-    if (error1 || error2) {
+    if (eventsResult.error || divisionsResult.error) {
       toast({ title: "Error fetching schedule", variant: "destructive" });
       setLoading(false);
       return;
     }
 
-    // Filter by season in JavaScript
-    const filteredData = allData.filter(event => 
+    // Filter by season
+    const filteredData = (eventsResult.data || []).filter(event => 
       event.season === selectedSeason || event.season === null
     );
 
-    // Fetch division associations for each event
-    const eventsWithDivisions = await Promise.all(
-      filteredData.map(async (event) => {
-        const { data: divisionLinks } = await supabase
-          .from("special_events_divisions")
-          .select("division_id, divisions(id, name, gender, sort_order)")
-          .eq("event_id", event.id);
-        
-        return {
-          ...event,
-          divisions: divisionLinks?.map(link => link.divisions).filter(Boolean) || []
-        };
-      })
-    );
+    // Build a map of event_id -> divisions for fast lookup
+    const divisionMap: Record<string, any[]> = {};
+    (divisionsResult.data || []).forEach(link => {
+      if (!divisionMap[link.event_id]) {
+        divisionMap[link.event_id] = [];
+      }
+      if (link.divisions) {
+        divisionMap[link.event_id].push(link.divisions);
+      }
+    });
+
+    // Merge divisions into events
+    const eventsWithDivisions = filteredData.map(event => ({
+      ...event,
+      divisions: divisionMap[event.id] || []
+    }));
 
     setEvents(eventsWithDivisions);
     setLoading(false);
