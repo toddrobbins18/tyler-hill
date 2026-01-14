@@ -258,32 +258,16 @@ export default function Roster() {
     }
   };
 
-  // Handle input changes - detect rapid scanner input vs manual typing
+  // Handle input changes - simpler approach matching Nurse page
   const handleRfidInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    const now = Date.now();
-    
-    // Bluetooth scanners type very fast (< 50ms between chars)
-    // If we detect rapid input followed by a pause, auto-submit
-    if (now - lastInputTime.current < 50) {
-      inputBuffer.current = value;
-    }
-    lastInputTime.current = now;
-    
+    console.log('[RFID] Input changed:', value, 'length:', value.length);
     setRfidInput(value);
-    
-    // Auto-submit after scanner finishes (no input for 100ms after rapid typing)
-    if (value.length > 4) {
-      setTimeout(() => {
-        if (Date.now() - lastInputTime.current >= 100 && rfidInput === value) {
-          console.log('[RFID] Auto-submitting scanner input');
-          handleRfidScan(value);
-        }
-      }, 150);
-    }
   };
 
+  // Use onKeyPress like the working Nurse page (deprecated but works better on some devices)
   const handleRfidKeyPress = (e: React.KeyboardEvent) => {
+    console.log('[RFID] Key pressed:', e.key);
     if (e.key === 'Enter') {
       e.preventDefault();
       handleRfidScan();
@@ -349,15 +333,11 @@ export default function Roster() {
                 ref={rfidInputRef}
                 value={rfidInput}
                 onChange={handleRfidInputChange}
-                onKeyDown={handleRfidKeyPress}
+                onKeyPress={handleRfidKeyPress}
                 placeholder="Scan wristband or enter RFID..."
                 className="bg-white dark:bg-background border-green-300 dark:border-green-700 focus:ring-green-500 text-lg"
                 autoFocus
                 disabled={isScanning}
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
               />
             </div>
             <Button 
