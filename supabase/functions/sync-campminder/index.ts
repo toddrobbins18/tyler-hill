@@ -932,8 +932,19 @@ async function performFullSync(
     let usedCamperFallbackData = 0;
 
     // Process campers from persons API
+    let skippedCampersNoName = 0;
     for (const person of campers) {
-      const name = `${person.Name?.First || ''} ${person.Name?.Last || ''}`.trim() || 'Unknown';
+      const firstName = (person.Name?.First || '').trim();
+      const lastName = (person.Name?.Last || '').trim();
+      
+      // Skip if missing first OR last name - require both for valid record
+      if (!firstName || !lastName) {
+        console.log(`[Camper Skip] Missing first or last name for PersonID ${person.ID} (first="${firstName}", last="${lastName}") - skipping`);
+        skippedCampersNoName++;
+        continue;
+      }
+      
+      const name = `${firstName} ${lastName}`;
       
       let gender = null;
       if (person.GenderID === 0) gender = 'Female';
@@ -980,20 +991,24 @@ async function performFullSync(
         division_id: divisionId,
       });
     }
+    
+    console.log(`[Campers] Skipped ${skippedCampersNoName} campers missing first or last name`);
 
     // Add fallback records for campers not in persons API but in attendees
     // Only create records if we have a valid name from the fallback data
     for (const personId of stillMissingCamperIds) {
       const fallbackData = attendeeDataMap.get(personId);
       
-      // Only proceed if we have a name from fallback data
-      if (!fallbackData || (!fallbackData.FirstName && !fallbackData.LastName)) {
-        console.log(`[Camper Skip] No name available for PersonID ${personId} - skipping`);
+      // Only proceed if we have BOTH first AND last name from fallback data
+      const firstName = (fallbackData?.FirstName || '').trim();
+      const lastName = (fallbackData?.LastName || '').trim();
+      
+      if (!firstName || !lastName) {
+        console.log(`[Camper Skip] Missing first or last name for PersonID ${personId} (first="${firstName}", last="${lastName}") - skipping`);
         continue;
       }
       
-      const name = `${fallbackData.FirstName || ''} ${fallbackData.LastName || ''}`.trim();
-      if (!name) continue;
+      const name = `${firstName} ${lastName}`;
       
       let gender = null;
       if (fallbackData.GenderID === 0) gender = 'Female';
@@ -1095,8 +1110,11 @@ async function performFullSync(
     const missingStaffIds = Array.from(staffPersonIds).filter(id => {
       const person = personMap.get(id);
       const fallback = staffFallbackMap.get(id);
-      // Missing if: not in personMap AND fallback has no name
-      return (!person || !person.Name) && (!fallback || (!fallback.FirstName && !fallback.LastName));
+      // Check if we have BOTH first AND last name from either source
+      const personHasBothNames = person?.Name?.First?.trim() && person?.Name?.Last?.trim();
+      const fallbackHasBothNames = fallback?.FirstName?.trim() && fallback?.LastName?.trim();
+      // Missing if neither source has both names
+      return !personHasBothNames && !fallbackHasBothNames;
     });
 
     if (missingStaffIds.length > 0) {
@@ -1183,9 +1201,13 @@ async function performFullSync(
         let dateOfBirth = null;
         let usedFallback = false;
         
+        let firstName = '';
+        let lastName = '';
+        
         if (person && person.Name) {
           // Person data available from persons API
-          name = `${person.Name?.First || ''} ${person.Name?.Last || ''}`.trim();
+          firstName = (person.Name?.First || '').trim();
+          lastName = (person.Name?.Last || '').trim();
           dateOfBirth = person.DateOfBirth || null;
           
           if (person.ContactDetails?.Emails?.length > 0) {
@@ -1194,22 +1216,25 @@ async function performFullSync(
           if (person.ContactDetails?.PhoneNumbers?.length > 0) {
             phone = person.ContactDetails.PhoneNumbers[0].Number;
           }
-        } else if (fallbackData && (fallbackData.FirstName || fallbackData.LastName)) {
+        } else if (fallbackData) {
           // Use fallback data from /staff endpoint
-          name = `${fallbackData.FirstName || ''} ${fallbackData.LastName || ''}`.trim();
+          firstName = (fallbackData.FirstName || '').trim();
+          lastName = (fallbackData.LastName || '').trim();
           email = fallbackData.Email || '';
           phone = fallbackData.Phone || '';
           dateOfBirth = fallbackData.DateOfBirth || null;
           usedFallback = true;
-          usedFallbackData++;
         }
         
-        // Skip if no valid name - don't create placeholder records
-        if (!name || name === 'Unknown' || name.trim() === '') {
-          console.log(`[Staff Skip] No name available for PersonID ${personId} - skipping`);
+        // Skip if missing first OR last name - require both for valid record
+        if (!firstName || !lastName) {
+          console.log(`[Staff Skip] Missing first or last name for PersonID ${personId} (first="${firstName}", last="${lastName}") - skipping`);
           skippedNoName++;
           continue;
         }
+        
+        name = `${firstName} ${lastName}`;
+        if (usedFallback) usedFallbackData++;
         
         const role = positionMap.get(assignment.Position1ID) || 
                     positionMap.get(assignment.PositionID) || 
