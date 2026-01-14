@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Search, Filter, Pencil, Trash2, ArrowUpDown } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Search, Filter, Pencil, Trash2, ArrowUpDown, Radio } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -49,6 +49,12 @@ export default function Roster() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
   const navigate = useNavigate();
+  
+  // RFID Scanner state
+  const [rfidInput, setRfidInput] = useState("");
+  const [isScanning, setIsScanning] = useState(false);
+  const [scannerMode, setScannerMode] = useState(false);
+  const rfidInputRef = useRef<HTMLInputElement>(null);
 
   const { getDivisionFilter } = usePermissions();
 
@@ -199,6 +205,65 @@ export default function Roster() {
     setDeletingChild(null);
   };
 
+  // RFID Scanner handlers
+  const handleRfidScan = async () => {
+    if (!rfidInput.trim()) {
+      toast.error("Please scan a wristband");
+      return;
+    }
+
+    setIsScanning(true);
+    
+    try {
+      // Find child by RFID
+      const { data: child, error } = await supabase
+        .from('children')
+        .select('id, name, rfid')
+        .eq('rfid', rfidInput.trim())
+        .eq('company_id', currentCompany?.id)
+        .eq('season', currentSeason)
+        .single();
+
+      if (error || !child) {
+        // RFID not found - offer to assign it
+        toast.error("Wristband not assigned to any camper", {
+          description: "Scan while editing a camper to assign this wristband",
+          duration: 4000
+        });
+        setRfidInput("");
+        return;
+      }
+
+      // Navigate to camper profile
+      toast.success(`Found: ${child.name}`, {
+        description: "Opening camper profile..."
+      });
+      navigate(`/child/${child.id}`);
+      
+    } catch (error) {
+      console.error('RFID scan error:', error);
+      toast.error("Scan error occurred");
+    } finally {
+      setIsScanning(false);
+      setRfidInput("");
+    }
+  };
+
+  const handleRfidKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleRfidScan();
+    }
+  };
+
+  const toggleScannerMode = () => {
+    setScannerMode(!scannerMode);
+    if (!scannerMode) {
+      // Focus the input when enabling scanner mode
+      setTimeout(() => rfidInputRef.current?.focus(), 100);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -207,10 +272,51 @@ export default function Roster() {
           <p className="text-muted-foreground">Manage and view all campers in your program</p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant={scannerMode ? "default" : "outline"}
+            onClick={toggleScannerMode}
+            className={scannerMode ? "bg-green-600 hover:bg-green-700" : ""}
+          >
+            <Radio className={`h-4 w-4 mr-2 ${scannerMode ? "animate-pulse" : ""}`} />
+            {scannerMode ? "Scanner Active" : "Scan Wristband"}
+          </Button>
           <CSVUploader tableName="children" onUploadComplete={fetchChildren} />
           <AddChildDialog onSuccess={fetchChildren} />
         </div>
       </div>
+
+      {/* RFID Scanner Input */}
+      {scannerMode && (
+        <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg p-4">
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="text-sm font-medium text-green-800 dark:text-green-200 mb-1 block">
+                Ready to scan wristband (ISO 14443 Type A)
+              </label>
+              <Input
+                ref={rfidInputRef}
+                value={rfidInput}
+                onChange={(e) => setRfidInput(e.target.value)}
+                onKeyDown={handleRfidKeyPress}
+                placeholder="Scan wristband or enter RFID..."
+                className="bg-white dark:bg-background border-green-300 dark:border-green-700 focus:ring-green-500"
+                autoFocus
+                disabled={isScanning}
+              />
+            </div>
+            <Button 
+              onClick={handleRfidScan} 
+              disabled={isScanning || !rfidInput.trim()}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {isScanning ? "Searching..." : "Find Camper"}
+            </Button>
+          </div>
+          <p className="text-xs text-green-600 dark:text-green-400 mt-2">
+            Scan a camper's wristband to quickly navigate to their profile. Scanner auto-submits on Enter.
+          </p>
+        </div>
+      )}
 
       <div className="flex gap-4">
         <div className="relative flex-1">
