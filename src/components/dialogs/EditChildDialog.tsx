@@ -225,9 +225,9 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="">Not Specified</SelectItem>
-                    <SelectItem value="session_1">Session 1</SelectItem>
-                    <SelectItem value="session_2">Session 2</SelectItem>
-                    <SelectItem value="both">Both Sessions</SelectItem>
+                    <SelectItem value="First Session">First Session</SelectItem>
+                    <SelectItem value="Second Session">Second Session</SelectItem>
+                    <SelectItem value="First Session, Second Session">Both Sessions</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
