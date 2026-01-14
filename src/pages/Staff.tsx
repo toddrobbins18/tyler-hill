@@ -46,6 +46,8 @@ export default function Staff() {
       return;
     }
     
+    console.log("[Staff] Fetching staff for company:", currentCompany.id, "season:", currentSeason);
+    
     // Fetch staff with evaluations in a single query using a join
     const { data: staffData, error: staffError } = await supabase
       .from("staff")
@@ -54,9 +56,12 @@ export default function Staff() {
         staff_evaluations(rating, date, comments)
       `)
       .eq("company_id", currentCompany.id)
+      .eq("season", currentSeason)
       .neq("name", "Unknown")
       .not("name", "is", null)
       .order("name");
+    
+    console.log("[Staff] Fetched", staffData?.length || 0, "staff members, error:", staffError);
 
     if (!staffError && staffData) {
       const staffWithEvals = staffData.map((member: any) => {
@@ -89,7 +94,7 @@ export default function Staff() {
     if (currentCompany?.id) {
       fetchStaff();
     }
-  }, [currentCompany?.id]);
+  }, [currentCompany?.id, currentSeason]);
 
   const filteredStaff = staff.filter((member) => {
     const matchesSearch = 
@@ -103,9 +108,8 @@ export default function Staff() {
       member.session === "both" ||
       !member.session;
     
-    const matchesSeason = member.season === currentSeason || member.season === null;
-    
-    return matchesSearch && matchesSession && matchesSeason;
+    // Season filtering now done at query level
+    return matchesSearch && matchesSession;
   });
 
   const getInitials = (name: string) => {
@@ -172,7 +176,7 @@ export default function Staff() {
       ) : (
         <>
           <div className="text-sm text-muted-foreground">
-            Showing {filteredStaff.length} of {staff.filter(s => s.season === currentSeason || s.season === null).length} staff members
+            Showing {filteredStaff.length} of {staff.length} staff members for {currentSeason}
           </div>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredStaff.map((staffMember) => (
