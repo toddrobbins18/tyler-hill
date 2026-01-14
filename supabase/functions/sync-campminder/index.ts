@@ -184,7 +184,15 @@ async function fetchPersonById(
     });
     
     if (response.ok) {
-      return await response.json();
+      const data = await response.json();
+      // Debug: Log structure of returned person data
+      if (data && !data.Name?.First) {
+        console.log(`[Fetch Person DEBUG] Person ${personId} returned but missing Name.First. Keys: ${Object.keys(data).join(', ')}`);
+        if (data.Name) {
+          console.log(`[Fetch Person DEBUG] Name object keys: ${Object.keys(data.Name).join(', ')}, values: First="${data.Name.First || ''}", Last="${data.Name.Last || ''}"`);
+        }
+      }
+      return data;
     } else {
       console.warn(`[Fetch Person] Failed to fetch person ${personId}: ${response.status}`);
       return null;
