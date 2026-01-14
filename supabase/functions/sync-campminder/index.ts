@@ -171,10 +171,11 @@ async function fetchAllPaginated(
 async function fetchPersonById(
   personId: string,
   token: string,
-  subscriptionKey: string
+  subscriptionKey: string,
+  clientId: string
 ): Promise<any | null> {
   try {
-    const url = `${CM_PERSONS_URL}/${personId}?includecamperdetails=true&includecontactdetails=true&includerelatives=true&includestaffdetails=true`;
+    const url = `${CM_PERSONS_URL}/${personId}?clientid=${clientId}&includecamperdetails=true&includecontactdetails=true&includerelatives=true&includestaffdetails=true`;
     const response = await rateLimitedFetch(url, {
       method: 'GET',
       headers: {
@@ -216,6 +217,7 @@ async function fetchMissingPersons(
   personMap: Map<string, any>,
   token: string,
   subscriptionKey: string,
+  clientId: string,
   entityType: string
 ): Promise<{ fetched: number; failed: number }> {
   let fetched = 0;
@@ -225,7 +227,7 @@ async function fetchMissingPersons(
   
   for (let i = 0; i < missingIds.length; i++) {
     const personId = missingIds[i];
-    const person = await fetchPersonById(personId, token, subscriptionKey);
+    const person = await fetchPersonById(personId, token, subscriptionKey, clientId);
     
     if (person && person.Name) {
       personMap.set(personId, person);
@@ -670,7 +672,7 @@ async function performFullSync(
       
       for (let i = 0; i < enrolledPersonIdArray.length; i++) {
         const personId = enrolledPersonIdArray[i];
-        const person = await fetchPersonById(personId, token, subscriptionKey);
+        const person = await fetchPersonById(personId, token, subscriptionKey, clientId);
         
         if (person) {
           personMap.set(personId, person);
@@ -1158,7 +1160,7 @@ async function performFullSync(
       
       for (let i = 0; i < missingStaffIds.length; i++) {
         const personId = missingStaffIds[i];
-        const person = await fetchPersonById(personId, token, subscriptionKey);
+        const person = await fetchPersonById(personId, token, subscriptionKey, clientId);
         
         if (person && person.Name) {
           personMap.set(personId, person);
