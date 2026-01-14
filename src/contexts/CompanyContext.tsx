@@ -90,6 +90,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       }
       console.log('✅ [CompanyContext] User found:', user.email);
 
+
       // Check if super admin
       const { data: roleData, error: roleError } = await supabase
         .from('user_roles')
@@ -106,6 +107,10 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       console.log('🔐 [CompanyContext] Is super admin:', isSuperAdminUser);
       setIsSuperAdmin(isSuperAdminUser);
 
+      // Read saved viewing company early to avoid briefly snapping back to the user's primary company
+      // (which can trigger data fetches + UI to look like it "reverted").
+      const savedViewingId = sessionStorage.getItem('viewing_company_id');
+
       // Get user's company
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
@@ -117,14 +122,16 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         console.error('❌ [CompanyContext] Error fetching profile:', profileError);
       }
 
-      if (profile?.companies) {
+      // For super admins, if they have a saved viewing company, don't set the primary company first.
+      // We'll restore the viewing company after we load the full companies list.
+      if (profile?.companies && (!isSuperAdminUser || !savedViewingId)) {
         console.log('🏢 [CompanyContext] User company:', (profile.companies as any).name);
         setCurrentCompany(profile.companies as any);
         // Apply theme color
         if ((profile.companies as any).theme_color) {
           applyThemeColor((profile.companies as any).theme_color);
         }
-      } else {
+      } else if (!profile?.companies) {
         console.warn('⚠️ [CompanyContext] No company found for user');
       }
 
@@ -144,11 +151,9 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         if (companies) {
           console.log('🏢 [CompanyContext] Found companies:', companies.length, companies.map(c => c.name));
           setAvailableCompanies(companies);
-          
-          // Check if there's a saved viewing company in sessionStorage
-          const savedViewingId = sessionStorage.getItem('viewing_company_id');
+
           console.log('💾 [CompanyContext] Saved viewing ID:', savedViewingId);
-          
+
           if (savedViewingId) {
             const viewingCompany = companies.find(c => c.id === savedViewingId);
             if (viewingCompany) {
@@ -171,6 +176,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
           console.warn('⚠️ [CompanyContext] No companies returned from query');
         }
       }
+
       hasInitializedRef.current = true;
     } catch (error) {
       console.error('Error loading company data:', error);
