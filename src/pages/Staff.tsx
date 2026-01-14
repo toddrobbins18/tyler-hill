@@ -44,6 +44,8 @@ export default function Staff() {
   const [isScanning, setIsScanning] = useState(false);
   const [scannerMode, setScannerMode] = useState(false);
   const rfidInputRef = useRef<HTMLInputElement>(null);
+  const lastInputTime = useRef<number>(0);
+  const inputBuffer = useRef<string>("");
 
   const fetchStaff = async () => {
     setLoading(true);
@@ -175,30 +177,36 @@ export default function Staff() {
   };
 
   // RFID Scanner handlers
-  const handleRfidScan = async () => {
-    if (!rfidInput.trim()) {
+  const handleRfidScan = async (rfidValue?: string) => {
+    const valueToScan = rfidValue || rfidInput.trim();
+    if (!valueToScan) {
       toast.error("Please scan a wristband");
       return;
     }
 
+    console.log('[RFID Staff] Scanning:', valueToScan);
     setIsScanning(true);
     
     try {
-      // Find staff by RFID
+      // Find staff by RFID - works for ALL companies
       const { data: staffMember, error } = await supabase
         .from('staff')
         .select('id, name, rfid')
-        .eq('rfid', rfidInput.trim())
+        .eq('rfid', valueToScan)
         .eq('company_id', currentCompany?.id)
         .eq('season', currentSeason)
         .single();
 
+      console.log('[RFID Staff] Result:', { staffMember, error });
+
       if (error || !staffMember) {
         toast.error("Wristband not assigned to any staff", {
-          description: "Scan while editing a staff member to assign this wristband",
+          description: `RFID: ${valueToScan.slice(0, 12)}...`,
           duration: 4000
         });
         setRfidInput("");
+        inputBuffer.current = "";
+        setTimeout(() => rfidInputRef.current?.focus(), 100);
         return;
       }
 
@@ -208,11 +216,35 @@ export default function Staff() {
       navigate(`/staff/${staffMember.id}`);
       
     } catch (error) {
-      console.error('RFID scan error:', error);
+      console.error('[RFID Staff] Scan error:', error);
       toast.error("Scan error occurred");
     } finally {
       setIsScanning(false);
       setRfidInput("");
+      inputBuffer.current = "";
+    }
+  };
+
+  // Handle input changes - detect rapid scanner input vs manual typing
+  const handleRfidInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const now = Date.now();
+    
+    if (now - lastInputTime.current < 50) {
+      inputBuffer.current = value;
+    }
+    lastInputTime.current = now;
+    
+    setRfidInput(value);
+    
+    // Auto-submit after scanner finishes
+    if (value.length > 4) {
+      setTimeout(() => {
+        if (Date.now() - lastInputTime.current >= 100 && rfidInput === value) {
+          console.log('[RFID Staff] Auto-submitting scanner input');
+          handleRfidScan(value);
+        }
+      }, 150);
     }
   };
 
@@ -224,11 +256,27 @@ export default function Staff() {
   };
 
   const toggleScannerMode = () => {
-    setScannerMode(!scannerMode);
-    if (!scannerMode) {
-      setTimeout(() => rfidInputRef.current?.focus(), 100);
+    const newMode = !scannerMode;
+    setScannerMode(newMode);
+    if (newMode) {
+      setTimeout(() => {
+        rfidInputRef.current?.focus();
+        rfidInputRef.current?.select();
+      }, 150);
     }
   };
+
+  // Keep scanner input focused when in scanner mode
+  useEffect(() => {
+    if (scannerMode) {
+      const interval = setInterval(() => {
+        if (document.activeElement !== rfidInputRef.current && !isScanning) {
+          rfidInputRef.current?.focus();
+        }
+      }, 500);
+      return () => clearInterval(interval);
+    }
+  }, [scannerMode, isScanning]);
 
   return (
     <div className="space-y-6">
@@ -263,16 +311,20 @@ export default function Staff() {
               <Input
                 ref={rfidInputRef}
                 value={rfidInput}
-                onChange={(e) => setRfidInput(e.target.value)}
+                onChange={handleRfidInputChange}
                 onKeyDown={handleRfidKeyPress}
                 placeholder="Scan wristband or enter RFID..."
-                className="bg-white dark:bg-background border-green-300 dark:border-green-700 focus:ring-green-500"
+                className="bg-white dark:bg-background border-green-300 dark:border-green-700 focus:ring-green-500 text-lg"
                 autoFocus
                 disabled={isScanning}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
               />
             </div>
             <Button 
-              onClick={handleRfidScan} 
+              onClick={() => handleRfidScan()} 
               disabled={isScanning || !rfidInput.trim()}
               className="bg-green-600 hover:bg-green-700"
             >
@@ -280,7 +332,7 @@ export default function Staff() {
             </Button>
           </div>
           <p className="text-xs text-green-600 dark:text-green-400 mt-2">
-            Scan a staff member's wristband to quickly navigate to their profile.
+            Bluetooth scanner ready. Scans auto-submit. Tap input if focus is lost.
           </p>
         </div>
       )}
