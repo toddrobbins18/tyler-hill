@@ -194,7 +194,14 @@ async function fetchPersonById(
       }
       return data;
     } else {
-      console.warn(`[Fetch Person] Failed to fetch person ${personId}: ${response.status}`);
+      // Log error response body for debugging
+      let errorBody = '';
+      try {
+        errorBody = await response.text();
+      } catch (e) {
+        errorBody = 'Could not read error body';
+      }
+      console.warn(`[Fetch Person] Failed to fetch person ${personId}: ${response.status} - ${errorBody.substring(0, 500)}`);
       return null;
     }
   } catch (err) {
