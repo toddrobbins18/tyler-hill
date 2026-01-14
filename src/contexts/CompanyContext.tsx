@@ -30,18 +30,20 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => {
-    loadCompanyData();
+  // Track if initial load has happened to prevent re-setting company on token refresh
+  const [hasInitialized, setHasInitialized] = useState(false);
 
-    // Listen for auth state changes and reload company data when user signs in
+  useEffect(() => {
+    loadCompanyData(true); // Initial load
+
+    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         console.log('🔐 [CompanyContext] Auth state changed:', event);
         if (event === 'SIGNED_IN' && session) {
           console.log('✅ [CompanyContext] User signed in, reloading company data...');
-          // Use setTimeout to avoid Supabase auth deadlock
           setTimeout(() => {
-            loadCompanyData();
+            loadCompanyData(true);
           }, 0);
         } else if (event === 'SIGNED_OUT') {
           console.log('👋 [CompanyContext] User signed out, clearing company data');
@@ -49,7 +51,11 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
           setAvailableCompanies([]);
           setIsSuperAdmin(false);
           setLoading(false);
+          setHasInitialized(false);
           sessionStorage.removeItem('viewing_company_id');
+        } else if (event === 'TOKEN_REFRESHED') {
+          // Don't reset company on token refresh - just log it
+          console.log('🔄 [CompanyContext] Token refreshed, keeping current company');
         }
       }
     );
@@ -59,7 +65,13 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const loadCompanyData = async () => {
+  const loadCompanyData = async (isInitialLoad: boolean = false) => {
+    // Skip if already initialized and not initial load (e.g. token refresh)
+    if (hasInitialized && !isInitialLoad) {
+      console.log('🔄 [CompanyContext] Skipping reload - already initialized');
+      return;
+    }
+
     try {
       console.log('🔍 [CompanyContext] Loading company data...');
       const { data: { user } } = await supabase.auth.getUser();
@@ -151,6 +163,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
           console.warn('⚠️ [CompanyContext] No companies returned from query');
         }
       }
+      setHasInitialized(true);
     } catch (error) {
       console.error('Error loading company data:', error);
       toast({
@@ -164,7 +177,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   };
 
   const refetchCompanies = async () => {
-    await loadCompanyData();
+    await loadCompanyData(true);
   };
 
   const switchCompany = async (companyId: string) => {
