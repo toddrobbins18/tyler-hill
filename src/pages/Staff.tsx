@@ -1,15 +1,16 @@
 import { useNavigate } from "react-router-dom";
-import { Search, Star, TrendingUp, Pencil, Trash2, ClipboardCheck } from "lucide-react";
+import { Search, Star, TrendingUp, Pencil, Trash2, ClipboardCheck, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import AddStaffDialog from "@/components/dialogs/AddStaffDialog";
 import EditStaffDialog from "@/components/dialogs/EditStaffDialog";
 import { EvaluateStaffDialog } from "@/components/dialogs/EvaluateStaffDialog";
+import { BulkRfidAssignmentDialog } from "@/components/dialogs/BulkRfidAssignmentDialog";
 import CSVUploader from "@/components/CSVUploader";
 import { toast } from "sonner";
 import { useSeasonContext } from "@/contexts/SeasonContext";
@@ -37,6 +38,12 @@ export default function Staff() {
   const { currentSeason } = useSeasonContext();
   const { currentCompany } = useCompany();
   const navigate = useNavigate();
+  
+  // RFID Scanner state
+  const [rfidInput, setRfidInput] = useState("");
+  const [isScanning, setIsScanning] = useState(false);
+  const [scannerMode, setScannerMode] = useState(false);
+  const rfidInputRef = useRef<HTMLInputElement>(null);
 
   const fetchStaff = async () => {
     setLoading(true);
@@ -167,6 +174,62 @@ export default function Staff() {
     setDeletingStaff(null);
   };
 
+  // RFID Scanner handlers
+  const handleRfidScan = async () => {
+    if (!rfidInput.trim()) {
+      toast.error("Please scan a wristband");
+      return;
+    }
+
+    setIsScanning(true);
+    
+    try {
+      // Find staff by RFID
+      const { data: staffMember, error } = await supabase
+        .from('staff')
+        .select('id, name, rfid')
+        .eq('rfid', rfidInput.trim())
+        .eq('company_id', currentCompany?.id)
+        .eq('season', currentSeason)
+        .single();
+
+      if (error || !staffMember) {
+        toast.error("Wristband not assigned to any staff", {
+          description: "Scan while editing a staff member to assign this wristband",
+          duration: 4000
+        });
+        setRfidInput("");
+        return;
+      }
+
+      toast.success(`Found: ${staffMember.name}`, {
+        description: "Opening staff profile..."
+      });
+      navigate(`/staff/${staffMember.id}`);
+      
+    } catch (error) {
+      console.error('RFID scan error:', error);
+      toast.error("Scan error occurred");
+    } finally {
+      setIsScanning(false);
+      setRfidInput("");
+    }
+  };
+
+  const handleRfidKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleRfidScan();
+    }
+  };
+
+  const toggleScannerMode = () => {
+    setScannerMode(!scannerMode);
+    if (!scannerMode) {
+      setTimeout(() => rfidInputRef.current?.focus(), 100);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -175,10 +238,52 @@ export default function Staff() {
           <p className="text-muted-foreground">Manage team members and performance reviews</p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant={scannerMode ? "default" : "outline"}
+            onClick={toggleScannerMode}
+            className={scannerMode ? "bg-green-600 hover:bg-green-700" : ""}
+          >
+            <Radio className={`h-4 w-4 mr-2 ${scannerMode ? "animate-pulse" : ""}`} />
+            {scannerMode ? "Scanner Active" : "Scan Wristband"}
+          </Button>
+          <BulkRfidAssignmentDialog type="staff" onSuccess={fetchStaff} />
           <CSVUploader tableName="staff" onUploadComplete={fetchStaff} />
           <AddStaffDialog onSuccess={fetchStaff} />
         </div>
       </div>
+
+      {/* RFID Scanner Input */}
+      {scannerMode && (
+        <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg p-4">
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="text-sm font-medium text-green-800 dark:text-green-200 mb-1 block">
+                Ready to scan wristband (ISO 14443 Type A)
+              </label>
+              <Input
+                ref={rfidInputRef}
+                value={rfidInput}
+                onChange={(e) => setRfidInput(e.target.value)}
+                onKeyDown={handleRfidKeyPress}
+                placeholder="Scan wristband or enter RFID..."
+                className="bg-white dark:bg-background border-green-300 dark:border-green-700 focus:ring-green-500"
+                autoFocus
+                disabled={isScanning}
+              />
+            </div>
+            <Button 
+              onClick={handleRfidScan} 
+              disabled={isScanning || !rfidInput.trim()}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {isScanning ? "Searching..." : "Find Staff"}
+            </Button>
+          </div>
+          <p className="text-xs text-green-600 dark:text-green-400 mt-2">
+            Scan a staff member's wristband to quickly navigate to their profile.
+          </p>
+        </div>
+      )}
 
       <div className="flex gap-4">
         <div className="relative flex-1">

@@ -2423,6 +2423,7 @@ export type Database = {
           name: string
           person_id: string | null
           phone: string | null
+          rfid: string | null
           role: string
           season: string | null
           session: string | null
@@ -2445,6 +2446,7 @@ export type Database = {
           name: string
           person_id?: string | null
           phone?: string | null
+          rfid?: string | null
           role: string
           season?: string | null
           session?: string | null
@@ -2467,6 +2469,7 @@ export type Database = {
           name?: string
           person_id?: string | null
           phone?: string | null
+          rfid?: string | null
           role?: string
           season?: string | null
           session?: string | null
