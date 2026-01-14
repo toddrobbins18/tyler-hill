@@ -10,17 +10,24 @@ interface SeasonContextType {
 const SeasonContext = createContext<SeasonContextType | undefined>(undefined);
 
 export function SeasonProvider({ children }: { children: ReactNode }) {
+  // Keep this list small + explicit so we can safely self-heal bad localStorage values
+  const AVAILABLE_SEASONS = ['2025', '2026'] as const;
+  const DEFAULT_SEASON: string = AVAILABLE_SEASONS[AVAILABLE_SEASONS.length - 1];
+
   const [currentSeason, setCurrentSeason] = useState<string>(() => {
     const stored = localStorage.getItem('currentSeason');
-    // Default to 2026 if no stored value or if stored value is outdated
-    if (!stored || stored === '2025') {
-      localStorage.setItem('currentSeason', '2026');
-      return '2026';
+
+    // If preview/live domains have different localStorage (they do), stored values can drift.
+    // Self-heal anything missing or not in our supported list.
+    if (!stored || !AVAILABLE_SEASONS.includes(stored as any)) {
+      localStorage.setItem('currentSeason', DEFAULT_SEASON);
+      return DEFAULT_SEASON;
     }
+
     return stored;
   });
   
-  const [availableSeasons, setAvailableSeasons] = useState<string[]>(['2025', '2026']);
+  const [availableSeasons, setAvailableSeasons] = useState<string[]>([...AVAILABLE_SEASONS]);
 
   useEffect(() => {
     localStorage.setItem('currentSeason', currentSeason);
