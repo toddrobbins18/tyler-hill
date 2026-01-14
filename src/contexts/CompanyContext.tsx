@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { applyThemeColor } from '@/utils/themeUtils';
@@ -31,7 +31,9 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
 
   // Track if initial load has happened to prevent re-setting company on token refresh
-  const [hasInitialized, setHasInitialized] = useState(false);
+  const hasInitializedRef = useRef(false);
+  // Track if a company switch is in progress to prevent race conditions
+  const isSwitchingRef = useRef(false);
 
   useEffect(() => {
     loadCompanyData(true); // Initial load
@@ -51,7 +53,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
           setAvailableCompanies([]);
           setIsSuperAdmin(false);
           setLoading(false);
-          setHasInitialized(false);
+          hasInitializedRef.current = false;
           sessionStorage.removeItem('viewing_company_id');
         } else if (event === 'TOKEN_REFRESHED') {
           // Don't reset company on token refresh - just log it
@@ -67,8 +69,14 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
   const loadCompanyData = async (isInitialLoad: boolean = false) => {
     // Skip if already initialized and not initial load (e.g. token refresh)
-    if (hasInitialized && !isInitialLoad) {
+    if (hasInitializedRef.current && !isInitialLoad) {
       console.log('🔄 [CompanyContext] Skipping reload - already initialized');
+      return;
+    }
+    
+    // Skip if a company switch is in progress
+    if (isSwitchingRef.current) {
+      console.log('🔄 [CompanyContext] Skipping reload - company switch in progress');
       return;
     }
 
@@ -163,7 +171,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
           console.warn('⚠️ [CompanyContext] No companies returned from query');
         }
       }
-      setHasInitialized(true);
+      hasInitializedRef.current = true;
     } catch (error) {
       console.error('Error loading company data:', error);
       toast({
@@ -184,6 +192,9 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     console.log('🔄 [CompanyContext] switchCompany called with ID:', companyId);
     console.log('🔄 [CompanyContext] Available companies:', availableCompanies.map(c => ({ id: c.id, name: c.name })));
     
+    // Set switching flag to prevent race conditions with loadCompanyData
+    isSwitchingRef.current = true;
+    
     try {
       const company = availableCompanies.find(c => c.id === companyId);
       if (!company) {
@@ -193,15 +204,17 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
           description: "Company not found",
           variant: "destructive",
         });
+        isSwitchingRef.current = false;
         return;
       }
 
       console.log('✅ [CompanyContext] Switching to company:', company.name, 'Color:', company.theme_color);
       
-      // Save to sessionStorage for super admins
+      // Save to sessionStorage for super admins FIRST
       sessionStorage.setItem('viewing_company_id', companyId);
       console.log('💾 [CompanyContext] Saved to sessionStorage');
       
+      // Update state synchronously
       setCurrentCompany(company);
       console.log('✅ [CompanyContext] Current company updated');
       
@@ -209,12 +222,6 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       if (company.theme_color) {
         console.log('🎨 [CompanyContext] Applying theme color:', company.theme_color);
         applyThemeColor(company.theme_color);
-        
-        // Force re-render after a brief delay to ensure DOM updates
-        setTimeout(() => {
-          console.log('🔄 [CompanyContext] Re-applying theme after timeout');
-          applyThemeColor(company.theme_color);
-        }, 100);
       }
       
       toast({
@@ -223,8 +230,14 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       });
       
       console.log('✅ [CompanyContext] Company switch completed successfully');
+      
+      // Clear switching flag after a brief delay to allow state to propagate
+      setTimeout(() => {
+        isSwitchingRef.current = false;
+      }, 500);
     } catch (error) {
       console.error('❌ [CompanyContext] Error switching company:', error);
+      isSwitchingRef.current = false;
       toast({
         title: "Error",
         description: "Failed to switch company",
