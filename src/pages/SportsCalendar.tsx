@@ -95,56 +95,39 @@ export default function SportsCalendar() {
       setLoading(false);
       return;
     }
-    const { data: batch1, error: error1 } = await supabase
-      .from("sports_calendar")
-      .select(`
-        *,
-        division:divisions(id, name, gender, sort_order),
-        sports_calendar_divisions(division_id, division:divisions(id, name, gender, sort_order))
-      `)
-      .eq("company_id", currentCompany?.id || '')
-      .order("event_date", { ascending: true })
-      .range(0, 999);
+    
+    // Fetch events and roster counts in parallel
+    const [eventsResult, rosterResult] = await Promise.all([
+      supabase
+        .from("sports_calendar")
+        .select(`
+          *,
+          division:divisions(id, name, gender, sort_order),
+          sports_calendar_divisions(division_id, division:divisions(id, name, gender, sort_order))
+        `)
+        .eq("company_id", currentCompany.id)
+        .eq("season", currentSeason)
+        .order("event_date", { ascending: true }),
+      supabase
+        .from("sports_event_roster")
+        .select("event_id")
+        .eq("company_id", currentCompany.id)
+    ]);
 
-    // Fetch second batch (1000-1999)
-    const { data: batch2, error: error2 } = await supabase
-      .from("sports_calendar")
-      .select(`
-        *,
-        division:divisions(id, name, gender, sort_order),
-        sports_calendar_divisions(division_id, division:divisions(id, name, gender, sort_order))
-      `)
-      .eq("company_id", currentCompany?.id || '')
-      .order("event_date", { ascending: true })
-      .range(1000, 1999);
-
-    // Combine batches
-    const allData = [...(batch1 || []), ...(batch2 || [])];
-
-    if (error1 || error2) {
+    if (eventsResult.error) {
       toast({ title: "Error fetching events", variant: "destructive" });
       setLoading(false);
       return;
     }
 
-    // Filter by season in JavaScript
-    const filteredData = allData.filter(event => 
-      event.season === currentSeason || event.season === null
-    );
-
-    // Fetch roster counts
-    const { data: rosterData } = await supabase
-      .from("sports_event_roster")
-      .select("event_id")
-      .eq("company_id", currentCompany?.id || '');
-
+    // Build roster counts
     const counts: Record<string, number> = {};
-    rosterData?.forEach((item) => {
+    (rosterResult.data || []).forEach((item) => {
       counts[item.event_id] = (counts[item.event_id] || 0) + 1;
     });
     setRosterCounts(counts);
 
-    setEvents(filteredData);
+    setEvents(eventsResult.data || []);
     setLoading(false);
   };
 
