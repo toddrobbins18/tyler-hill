@@ -8,8 +8,9 @@ const CM_DIVISIONS_URL = 'https://api.campminder.com/divisions';
 const CM_SESSIONS_URL = 'https://api.campminder.com/sessions';
 
 
-// Rate limiting: 250ms between calls (4 calls/sec = 240/min)
-const RATE_LIMIT_DELAY_MS = 100; // 100ms = 10 calls/sec (within CampMinder's limits)
+// Rate limiting: 300ms between calls (~3.3 calls/sec = ~200/min)
+// CampMinder enforces strict rate limits - 429 errors occur at higher rates
+const RATE_LIMIT_DELAY_MS = 300;
 let lastApiCallTime = 0;
 
 const corsHeaders = {
