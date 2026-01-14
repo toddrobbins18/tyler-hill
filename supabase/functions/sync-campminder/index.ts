@@ -651,6 +651,10 @@ async function performFullSync(
     let staffInsertedCount = 0;
     let staffUpdatedCount = 0;
     let usedFallbackData = 0;
+    
+    // Camper and staff data arrays - declared here for cleanup phase access
+    let camperData: { person_id: string; [key: string]: any }[] = [];
+    let staffData: { person_id: string; [key: string]: any }[] = [];
 
     // =====================================================
     // PHASE 2: Fetch enrolled attendees (for CAMPER sync)
@@ -1033,7 +1037,6 @@ async function performFullSync(
     let camperInsertedCount = 0;
     let camperUpdatedCount = 0;
     let usedCamperFallbackData = 0;
-    const camperData: any[] = [];
 
     if (syncType === 'campers' || syncType === 'full') {
       console.log('\n--- SYNCING CAMPERS ---');
@@ -1052,8 +1055,7 @@ async function performFullSync(
         6: '5th', 7: '6th', 8: '7th', 9: '8th', 10: '9th', 11: '10th', 12: '11th', 13: '12th'
       };
 
-    const camperData: any[] = [];
-    let usedCamperFallbackData = 0;
+    // Note: camperData is declared in initialization section
 
     // Process campers from persons API
     let skippedCampersNoName = 0;
@@ -1307,7 +1309,7 @@ async function performFullSync(
     });
 
     if (staffPersonIds.size > 0) {
-      const staffData: any[] = [];
+      // Note: staffData is declared in initialization section
       
       let debugLoggedPerson = false;
       let debugLoggedAssignment = false;
@@ -1486,6 +1488,115 @@ async function performFullSync(
       console.log(`Updated session info for ${sessionUpdates.length} campers`);
     } catch (error) {
       console.error('Error syncing sessions:', error);
+    }
+
+    // =====================================================
+    // PHASE 9: Cleanup - Remove records not in CampMinder
+    // =====================================================
+    console.log('\n--- CLEANUP: Removing records not in CampMinder ---');
+    await updateSyncJob(supabase, jobId, {
+      progress: { step: 'Cleaning up old records', staff: staffPersonIds.size, campers: campers.length, divisions: divisions.length, season },
+    });
+
+    let campersDeleted = 0;
+    let staffDeleted = 0;
+
+    try {
+      // Get all person_ids that were synced from CampMinder
+      const syncedCamperPersonIds = camperData.map(c => c.person_id);
+      const syncedStaffPersonIds = staffData.map(s => s.person_id);
+
+      // Delete campers that are no longer in CampMinder (only for full or campers sync)
+      if ((syncType === 'full' || syncType === 'campers') && syncedCamperPersonIds.length > 0) {
+        console.log(`[Cleanup] Checking for campers not in CampMinder sync (${syncedCamperPersonIds.length} valid campers)...`);
+        
+        // Get campers that exist in DB but were NOT in this sync
+        const { data: existingCampers, error: fetchError } = await supabase
+          .from('children')
+          .select('id, person_id, first_name, last_name')
+          .eq('company_id', companyId)
+          .eq('season', season);
+
+        if (fetchError) {
+          console.error('[Cleanup] Error fetching existing campers:', fetchError);
+        } else if (existingCampers) {
+          const camperPersonIdSet = new Set(syncedCamperPersonIds);
+          const campersToDelete = existingCampers.filter((c: { id: string; person_id: string; first_name: string; last_name: string }) => !camperPersonIdSet.has(c.person_id));
+          
+          if (campersToDelete.length > 0) {
+            console.log(`[Cleanup] Found ${campersToDelete.length} campers to remove (not enrolled in CampMinder):`);
+            campersToDelete.slice(0, 10).forEach((c: { id: string; person_id: string; first_name: string; last_name: string }) => {
+              console.log(`  - ${c.first_name} ${c.last_name} (person_id: ${c.person_id})`);
+            });
+            if (campersToDelete.length > 10) {
+              console.log(`  ... and ${campersToDelete.length - 10} more`);
+            }
+
+            const idsToDelete = campersToDelete.map((c: { id: string }) => c.id);
+            const { error: deleteError } = await supabase
+              .from('children')
+              .delete()
+              .in('id', idsToDelete);
+
+            if (deleteError) {
+              console.error('[Cleanup] Error deleting campers:', deleteError);
+            } else {
+              campersDeleted = campersToDelete.length;
+              console.log(`[Cleanup] Successfully deleted ${campersDeleted} campers`);
+            }
+          } else {
+            console.log('[Cleanup] No campers to remove - all match CampMinder data');
+          }
+        }
+      }
+
+      // Delete staff that are no longer in CampMinder (only for full or staff sync)
+      if ((syncType === 'full' || syncType === 'staff') && syncedStaffPersonIds.length > 0) {
+        console.log(`[Cleanup] Checking for staff not in CampMinder sync (${syncedStaffPersonIds.length} valid staff)...`);
+        
+        // Get staff that exist in DB but were NOT in this sync
+        const { data: existingStaff, error: fetchError } = await supabase
+          .from('staff')
+          .select('id, person_id, name')
+          .eq('company_id', companyId)
+          .eq('season', season);
+
+        if (fetchError) {
+          console.error('[Cleanup] Error fetching existing staff:', fetchError);
+        } else if (existingStaff) {
+          const staffPersonIdSet = new Set(syncedStaffPersonIds);
+          const staffToDelete = existingStaff.filter((s: { id: string; person_id: string; name: string }) => !staffPersonIdSet.has(s.person_id));
+          
+          if (staffToDelete.length > 0) {
+            console.log(`[Cleanup] Found ${staffToDelete.length} staff to remove (not hired/active in CampMinder):`);
+            staffToDelete.slice(0, 10).forEach((s: { id: string; person_id: string; name: string }) => {
+              console.log(`  - ${s.name} (person_id: ${s.person_id})`);
+            });
+            if (staffToDelete.length > 10) {
+              console.log(`  ... and ${staffToDelete.length - 10} more`);
+            }
+
+            const idsToDelete = staffToDelete.map((s: { id: string }) => s.id);
+            const { error: deleteError } = await supabase
+              .from('staff')
+              .delete()
+              .in('id', idsToDelete);
+
+            if (deleteError) {
+              console.error('[Cleanup] Error deleting staff:', deleteError);
+            } else {
+              staffDeleted = staffToDelete.length;
+              console.log(`[Cleanup] Successfully deleted ${staffDeleted} staff`);
+            }
+          } else {
+            console.log('[Cleanup] No staff to remove - all match CampMinder data');
+          }
+        }
+      }
+
+      console.log(`[Cleanup Summary] Deleted ${campersDeleted} campers, ${staffDeleted} staff`);
+    } catch (error) {
+      console.error('[Cleanup] Error during cleanup phase:', error);
     }
 
     // Update company sync timestamp
