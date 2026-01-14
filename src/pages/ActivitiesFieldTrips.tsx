@@ -363,7 +363,8 @@ export default function ActivitiesFieldTrips() {
     });
 
   const groupedEvents: Record<string, any[]> = filteredAndSortedEvents.reduce((acc, event) => {
-    const date = new Date(event.event_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+    // Append T00:00:00 to prevent timezone issues with date-only strings
+    const date = new Date(event.event_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
     if (!acc[date]) acc[date] = [];
     acc[date].push(event);
     return acc;
@@ -483,7 +484,7 @@ export default function ActivitiesFieldTrips() {
                                 {format(new Date(event.event_date), 'MMM d')} - {format(new Date(event.end_date), 'MMM d, yyyy')}
                               </>
                             ) : (
-                              new Date(event.event_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+                              new Date(event.event_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
                             )}
                           </p>
                         </div>
