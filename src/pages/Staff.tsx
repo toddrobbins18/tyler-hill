@@ -46,37 +46,39 @@ export default function Staff() {
       return;
     }
     
+    // Fetch staff with evaluations in a single query using a join
     const { data: staffData, error: staffError } = await supabase
       .from("staff")
-      .select("*")
+      .select(`
+        *,
+        staff_evaluations(rating, date, comments)
+      `)
       .eq("company_id", currentCompany.id)
       .neq("name", "Unknown")
       .not("name", "is", null)
       .order("name");
 
     if (!staffError && staffData) {
-      const staffWithEvals = await Promise.all(
-        staffData.map(async (member) => {
-          const { data: evals } = await supabase
-            .from("staff_evaluations")
-            .select("rating, date, comments")
-            .eq("staff_id", member.id)
-            .eq("company_id", currentCompany.id)
-            .order("date", { ascending: false });
+      const staffWithEvals = staffData.map((member: any) => {
+        const evals = member.staff_evaluations || [];
+        // Sort evaluations by date descending
+        const sortedEvals = [...evals].sort((a, b) => 
+          new Date(b.date).getTime() - new Date(a.date).getTime()
+        );
+        
+        const averageRating = sortedEvals.length
+          ? sortedEvals.reduce((sum: number, e: any) => sum + (Number(e.rating) || 0), 0) / sortedEvals.length
+          : 0;
 
-          const averageRating = evals?.length
-            ? evals.reduce((sum, e) => sum + (Number(e.rating) || 0), 0) / evals.length
-            : 0;
-
-          return {
-            ...member,
-            averageRating: averageRating.toFixed(1),
-            evaluationsCount: evals?.length || 0,
-            recentEvaluation: evals?.[0]?.comments || "No evaluations yet",
-            lastEvaluationDate: evals?.[0]?.date || null,
-          };
-        })
-      );
+        return {
+          ...member,
+          staff_evaluations: undefined, // Remove the nested data
+          averageRating: averageRating.toFixed(1),
+          evaluationsCount: sortedEvals.length,
+          recentEvaluation: sortedEvals[0]?.comments || "No evaluations yet",
+          lastEvaluationDate: sortedEvals[0]?.date || null,
+        };
+      });
 
       setStaff(staffWithEvals);
     }
