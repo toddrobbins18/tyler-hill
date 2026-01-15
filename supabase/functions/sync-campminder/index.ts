@@ -1247,7 +1247,9 @@ async function performFullSync(
     console.log(`[DEBUG] missingStaffIds count: ${missingStaffIds.length} (out of ${staffPersonIds.size} total)`);
 
     // For staff-only sync, fetch all missing. For full sync, limit to prevent timeout
-    const MAX_INDIVIDUAL_FETCHES = syncType === 'staff' ? 500 : 100;
+    // Increased limit to handle larger staff counts (e.g., Timber Lake West with ~290 staff)
+    // For staff-only sync, fetch up to 1000 to ensure we get all staff
+    const MAX_INDIVIDUAL_FETCHES = syncType === 'staff' ? 1000 : 200;
     if (missingStaffIds.length > 0) {
       const toFetch = missingStaffIds.slice(0, MAX_INDIVIDUAL_FETCHES);
       console.log(`\n[Staff] ${missingStaffIds.length} staff missing name data - fetching ${toFetch.length} individually (syncType=${syncType})...`);
