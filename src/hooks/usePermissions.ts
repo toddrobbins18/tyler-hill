@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useCompany } from '@/contexts/CompanyContext';
 
 export type AppRole = 'admin' | 'staff' | 'division_leader' | 'specialist' | 'viewer' | 'super_admin' | 'health_center';
-
 /**
  * Division Access Control Model:
  * 
@@ -30,10 +29,18 @@ export function usePermissions() {
   const [loading, setLoading] = useState(true);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const { currentCompany } = useCompany();
+  
+  // Permission cache to avoid repeated DB queries
+  const permissionCacheRef = useRef<Record<string, boolean>>({});
 
   useEffect(() => {
     fetchUserPermissions();
   }, []);
+  
+  // Clear cache when company changes
+  useEffect(() => {
+    permissionCacheRef.current = {};
+  }, [currentCompany?.id]);
 
   const fetchUserPermissions = async () => {
     try {
@@ -83,36 +90,40 @@ export function usePermissions() {
     }
   };
 
-  // Check if user can access a page
-  const canAccessPage = async (
+  // Check if user can access a page (with caching)
+  const canAccessPage = useCallback(async (
     pageName: string,
     options?: { respectPermissions?: boolean }
   ): Promise<boolean> => {
     try {
+      // Build cache key
+      const cacheKey = `${currentCompany?.id}-${pageName}-${options?.respectPermissions ? 'respect' : 'normal'}`;
+      
+      // Check cache first
+      if (permissionCacheRef.current[cacheKey] !== undefined) {
+        return permissionCacheRef.current[cacheKey];
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        console.log(`[usePermissions] canAccessPage(${pageName}): No user`);
         return false;
       }
 
       // Super admins bypass all permission checks UNLESS we're filtering menus
       if (isSuperAdmin && !options?.respectPermissions) {
-        console.log(`[usePermissions] canAccessPage(${pageName}): Super admin bypass`);
+        permissionCacheRef.current[cacheKey] = true;
         return true;
       }
       
       if (!currentCompany) {
-        console.warn(`[usePermissions] canAccessPage(${pageName}): No currentCompany`);
         return false;
       }
 
       // Check if ANY of the user's roles grant access to this page
       const rolesToCheck = userRoles.length > 0 ? userRoles : (userRole ? [userRole] : []);
       
-      console.log(`[usePermissions] canAccessPage(${pageName}): roles=${rolesToCheck.join(',')}, company=${currentCompany.name}`);
-      
       if (rolesToCheck.length === 0) {
-        console.warn(`[usePermissions] canAccessPage(${pageName}): No roles to check`);
+        permissionCacheRef.current[cacheKey] = false;
         return false;
       }
 
@@ -131,13 +142,13 @@ export function usePermissions() {
       }
 
       const hasAccess = data && data.length > 0;
-      console.log(`[usePermissions] canAccessPage(${pageName}): result=${hasAccess}`);
+      permissionCacheRef.current[cacheKey] = hasAccess;
       return hasAccess;
     } catch (error) {
       console.error(`[usePermissions] canAccessPage(${pageName}): Exception`, error);
       return false;
     }
-  };
+  }, [currentCompany?.id, userRoles, userRole, isSuperAdmin]);
 
   // Roles with full division access (can see all divisions in their company)
   const fullDivisionAccessRoles: AppRole[] = ['admin', 'super_admin', 'specialist', 'staff', 'health_center'];
