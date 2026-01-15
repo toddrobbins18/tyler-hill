@@ -1,9 +1,9 @@
 import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, ClipboardEdit, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree, BookOpen, Building2, LogOut, BarChart3, ListChecks, ClipboardCheck, Stethoscope } from "lucide-react";
 import { NavLink } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { usePermissions } from "@/hooks/usePermissions";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useAuth } from "@/contexts/AuthContext";
 import SeasonSelector from "@/components/SeasonSelector";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -114,88 +114,31 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
-  const [isAdmin, setIsAdmin] = useState(false);
-  const { userRole, userRoles, canAccessPage, loading: permissionsLoading } = usePermissions();
-  const { currentCompany, availableCompanies, switchCompany, loading: companyLoading, isSuperAdmin } = useCompany();
-  
-  const items = getMenuItems(currentCompany?.slug);
-  const [visibleItems, setVisibleItems] = useState<typeof items>([]);
-  const [filteringMenus, setFilteringMenus] = useState(false);
 
-  useEffect(() => {
-    checkAdminStatus();
-    
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      checkAdminStatus();
-    });
+  const { userRoles, isSuperAdmin, loading: authLoading, hasPagePermission } = useAuth();
+  const {
+    currentCompany,
+    availableCompanies,
+    switchCompany,
+    loading: companyLoading,
+  } = useCompany();
 
-    return () => subscription.unsubscribe();
-  }, []);
+  const items = useMemo(() => getMenuItems(currentCompany?.slug), [currentCompany?.slug]);
 
-  // Wait for roles AND company to be loaded before filtering
-  useEffect(() => {
-    console.log('[Sidebar] Permission check state:', {
-      permissionsLoading,
-      userRole,
-      userRolesCount: userRoles.length,
-      currentCompany: currentCompany?.name,
-      itemsCount: items.length
-    });
-    
-    if (!permissionsLoading && userRole && userRoles.length > 0 && currentCompany) {
-      filterMenuItems();
-    } else if (!permissionsLoading && !userRole) {
-      // No role found - show all items as fallback
-      console.warn('[Sidebar] No user role found, showing all menu items');
-      setVisibleItems(items);
-    }
-  }, [userRole, userRoles, permissionsLoading, currentCompany, items]);
+  const isAdmin = useMemo(
+    () => userRoles.includes("admin") || userRoles.includes("super_admin"),
+    [userRoles]
+  );
 
-  const checkAdminStatus = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      setIsAdmin(false);
-      return;
-    }
+  const visibleItems = useMemo(() => {
+    // While auth/company are still loading, show the full menu (routes are still protected)
+    if (!currentCompany || authLoading || userRoles.length === 0) return items;
 
-    const { data: roles } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("role", "admin")
-      .maybeSingle();
+    // Super admins see everything
+    if (isSuperAdmin) return items;
 
-    setIsAdmin(!!roles);
-  };
-
-  const filterMenuItems = async () => {
-    setFilteringMenus(true);
-    try {
-      console.log('[Sidebar] Filtering menu items for company:', currentCompany?.name);
-      const filtered = [];
-      for (const item of items) {
-        try {
-          const hasAccess = await canAccessPage(item.menuId, { respectPermissions: true });
-          console.log(`[Sidebar] Menu "${item.menuId}": access=${hasAccess}`);
-          if (hasAccess) {
-            filtered.push(item);
-          }
-        } catch (itemError) {
-          console.error(`[Sidebar] Error checking access for ${item.menuId}:`, itemError);
-          // Include item on error to avoid hiding menu items due to errors
-          filtered.push(item);
-        }
-      }
-      console.log(`[Sidebar] Visible items: ${filtered.length} of ${items.length}`);
-      setVisibleItems(filtered);
-    } catch (error) {
-      console.error('[Sidebar] Error filtering menu items:', error);
-      // Fallback: show all items if permission check fails completely
-      setVisibleItems(items);
-    } finally {
-      setFilteringMenus(false);
-    }
-  };
+    return items.filter((item) => hasPagePermission(currentCompany.id, item.menuId));
+  }, [items, currentCompany?.id, authLoading, userRoles.length, isSuperAdmin, hasPagePermission]);
 
   const handleLogout = async () => {
     sessionStorage.removeItem('viewing_company_id');
@@ -219,15 +162,6 @@ export function AppSidebar() {
             The Nest
           </h1>
         </div>
-        
-        {/* Debug Info */}
-        {!isCollapsed && (
-          <div className="px-4 pb-2 text-xs text-muted-foreground space-y-1">
-            <div>Super Admin: {isSuperAdmin ? '✅' : '❌'}</div>
-            <div>Companies: {availableCompanies.length}</div>
-            <div>Current: {currentCompany?.name || 'None'}</div>
-          </div>
-        )}
         
         {isSuperAdmin && (
           isCollapsed ? (

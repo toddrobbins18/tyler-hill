@@ -94,7 +94,11 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         .single();
 
       const companiesPromise = authIsSuperAdmin 
-        ? supabase.from('companies').select('*').eq('is_active', true).order('name')
+        ? supabase
+            .from('companies')
+            .select('id, name, slug, logo_url, theme_color, zip_code')
+            .eq('is_active', true)
+            .order('name')
         : Promise.resolve({ data: null, error: null });
 
       const [profileResult, companiesResult] = await Promise.all([profilePromise, companiesPromise]);
