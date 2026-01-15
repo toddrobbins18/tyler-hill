@@ -584,6 +584,7 @@ export type Database = {
           birthday_party_comments: string | null
           birthday_party_type: string | null
           birthday_toppings: string[] | null
+          bunk_id: string | null
           category: string | null
           company_id: string | null
           created_at: string | null
@@ -619,6 +620,7 @@ export type Database = {
           birthday_party_comments?: string | null
           birthday_party_type?: string | null
           birthday_toppings?: string[] | null
+          bunk_id?: string | null
           category?: string | null
           company_id?: string | null
           created_at?: string | null
@@ -654,6 +656,7 @@ export type Database = {
           birthday_party_comments?: string | null
           birthday_party_type?: string | null
           birthday_toppings?: string[] | null
+          bunk_id?: string | null
           category?: string | null
           company_id?: string | null
           created_at?: string | null
@@ -678,6 +681,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "children_bunk_id_fkey"
+            columns: ["bunk_id"]
+            isOneToOne: false
+            referencedRelation: "bunks"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "children_company_id_fkey"
             columns: ["company_id"]
