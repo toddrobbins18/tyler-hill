@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { LogOut, User } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { usePermissions } from "@/hooks/usePermissions";
+import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -17,34 +16,10 @@ import { toast } from "sonner";
 
 export function UserProfileDropdown() {
   const navigate = useNavigate();
-  const { userRole, isSuperAdmin, loading } = usePermissions();
-  const [userEmail, setUserEmail] = useState<string>("");
-  const [allRoles, setAllRoles] = useState<string[]>([]);
+  const { user, userRoles, loading } = useAuth();
 
-  useEffect(() => {
-    fetchUserData();
-  }, []);
-
-  const fetchUserData = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      setUserEmail(user.email || "");
-
-      // Fetch all user roles
-      const { data: rolesData } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id);
-
-      if (rolesData) {
-        setAllRoles(rolesData.map(r => r.role));
-      }
-    } catch (error) {
-      console.error('Error fetching user data:', error);
-    }
-  };
+  const userEmail = user?.email || "";
+  const allRoles = userRoles;
 
   const handleLogout = async () => {
     try {
@@ -69,7 +44,7 @@ export function UserProfileDropdown() {
     ).join(' ');
   };
 
-  if (loading) {
+  if (loading || !user) {
     return null;
   }
 

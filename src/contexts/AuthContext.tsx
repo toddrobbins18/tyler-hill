@@ -36,7 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       // Single auth call for the entire app
       const { data: { user: currentUser } } = await supabase.auth.getUser();
-      
+
       if (!currentUser) {
         setUser(null);
         setUserRoles([]);
@@ -47,61 +47,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
         return;
       }
-      
-      setUser(currentUser);
-      
-      // Parallel fetch: roles, divisions, and ALL role_permissions the user might access
-      const [rolesResult, divisionsResult, permissionsResult] = await Promise.all([
-        supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', currentUser.id),
-        supabase
-          .from('division_permissions')
-          .select('division_id')
-          .eq('user_id', currentUser.id)
-          .eq('can_access', true),
-        // Fetch ALL role_permissions - we'll filter client-side by user's roles
-        supabase
-          .from('role_permissions')
-          .select('company_id, menu_item, role, can_access')
-          .eq('can_access', true)
-      ]);
 
-      // Process roles
-      const roles = (rolesResult.data || []).map(r => r.role as AppRole);
+      setUser(currentUser);
+
+      // Fetch roles first (small + needed to scope the rest)
+      const rolesResult = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', currentUser.id);
+
+      const roles = (rolesResult.data || []).map((r) => r.role as AppRole);
       const isSuperAdminUser = roles.includes('super_admin');
-      const effectiveRole = isSuperAdminUser 
-        ? 'super_admin' 
-        : roles.includes('admin') 
-          ? 'admin' 
+      const effectiveRole = isSuperAdminUser
+        ? 'super_admin'
+        : roles.includes('admin')
+          ? 'admin'
           : roles[0] || null;
-      
+
       setUserRoles(roles);
       setUserRole(effectiveRole);
       setIsSuperAdmin(isSuperAdminUser);
-      
-      // Process divisions (only needed for non-admin roles)
+
+      // Fetch only what we need (skip divisions for full-access roles)
+      const emptyResult = { data: [] as any[], error: null };
+
+      const divisionsPromise = (!roles.includes('admin') && !isSuperAdminUser)
+        ? supabase
+            .from('division_permissions')
+            .select('division_id')
+            .eq('user_id', currentUser.id)
+            .eq('can_access', true)
+        : Promise.resolve(emptyResult);
+
+      const permissionsPromise = roles.length > 0
+        ? supabase
+            .from('role_permissions')
+            .select('company_id, menu_item, role, can_access')
+            .eq('can_access', true)
+            .in('role', roles as any)
+        : Promise.resolve(emptyResult);
+
+      const [divisionsResult, permissionsResult] = await Promise.all([
+        divisionsPromise,
+        permissionsPromise,
+      ]);
+
+      // Process divisions
       if (!roles.includes('admin') && !isSuperAdminUser) {
-        setUserDivisions((divisionsResult.data || []).map(d => d.division_id));
+        setUserDivisions((divisionsResult.data || []).map((d: any) => d.division_id));
       } else {
         setUserDivisions([]);
       }
-      
+
       // Build permissions map: companyId -> menuItem -> true
-      // Only include permissions for roles the user actually has
       const permMap: Record<string, Record<string, boolean>> = {};
-      const userRoleSet = new Set(roles);
-      
-      for (const perm of permissionsResult.data || []) {
-        if (userRoleSet.has(perm.role as AppRole)) {
-          if (!permMap[perm.company_id]) {
-            permMap[perm.company_id] = {};
-          }
-          permMap[perm.company_id][perm.menu_item] = true;
+
+      for (const perm of (permissionsResult.data || []) as any[]) {
+        if (!permMap[perm.company_id]) {
+          permMap[perm.company_id] = {};
         }
+        permMap[perm.company_id][perm.menu_item] = true;
       }
-      
+
       setAllPermissions(permMap);
       hasInitializedRef.current = true;
     } catch (error) {
