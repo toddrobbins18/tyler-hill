@@ -43,10 +43,13 @@ export default function ChildProfile() {
 
   const fetchChildData = async () => {
     try {
-      // Fetch child details
+      // Fetch child details with bunk info
       const { data: childData, error: childError } = await supabase
         .from("children")
-        .select("*")
+        .select(`
+          *,
+          bunk:bunk_id(id, bunk_number, bunk_name)
+        `)
         .eq("id", id)
         .single();
 
@@ -340,6 +343,14 @@ export default function ChildProfile() {
                     <div>
                       <p className="text-sm text-muted-foreground">Division</p>
                       <p className="font-medium">{child.category}</p>
+                    </div>
+                  )}
+                  {child.bunk && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Bunk</p>
+                      <p className="font-medium">
+                        {child.bunk.bunk_name || `Bunk ${child.bunk.bunk_number}`}
+                      </p>
                     </div>
                   )}
                 </div>
