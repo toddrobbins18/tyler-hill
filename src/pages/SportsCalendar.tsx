@@ -89,17 +89,27 @@ export default function SportsCalendar() {
           table: 'sports_calendar',
           filter: `company_id=eq.${currentCompany.id}`
         },
-        (payload) => {
+        async (payload) => {
           console.log('Realtime update received:', payload);
-          // Optimistic update for UPDATE events - avoid full refetch
           if (payload.eventType === 'UPDATE' && payload.new) {
-            setEvents(prev => prev.map(event => 
-              event.id === payload.new.id 
-                ? { ...event, ...payload.new }
-                : event
-            ));
+            // Fetch the updated event with all related data (divisions, etc.)
+            const { data: updatedEvent } = await supabase
+              .from("sports_calendar")
+              .select(`
+                *,
+                division:divisions(id, name, gender, sort_order),
+                sports_calendar_divisions(division_id, division:divisions(id, name, gender, sort_order))
+              `)
+              .eq("id", payload.new.id)
+              .single();
+            
+            if (updatedEvent) {
+              setEvents(prev => prev.map(event => 
+                event.id === payload.new.id ? updatedEvent : event
+              ));
+            }
           } else {
-            // Only do full refetch for INSERT/DELETE
+            // Full refetch for INSERT/DELETE
             fetchEvents();
           }
         }
