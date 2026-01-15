@@ -139,25 +139,28 @@ export function usePermissions() {
     }
   };
 
+  // Roles with full division access (can see all divisions in their company)
+  const fullDivisionAccessRoles: AppRole[] = ['admin', 'super_admin', 'specialist', 'staff', 'health_center'];
+
   // Check if user can see data for a division
   const canSeeDivision = (divisionId: string): boolean => {
-    // Admins, super_admins, and specialists can see all divisions
-    if (userRole === 'admin' || userRole === 'super_admin' || userRole === 'specialist') {
+    // Roles with full access can see all divisions
+    if (userRole && fullDivisionAccessRoles.includes(userRole)) {
       return true;
     }
     
-    // Other roles can only see their assigned divisions
+    // Other roles (division_leader, viewer) can only see their assigned divisions
     return userDivisions.includes(divisionId);
   };
 
   // Get division filter for queries
   const getDivisionFilter = (): string[] | null => {
-    // Admins, super_admins, and specialists see all divisions (no filter)
-    if (userRole === 'admin' || userRole === 'super_admin' || userRole === 'specialist') {
+    // Roles with full access see all divisions (no filter)
+    if (userRole && fullDivisionAccessRoles.includes(userRole)) {
       return null;
     }
     
-    // Other roles see only their divisions
+    // Other roles (division_leader, viewer) see only their assigned divisions
     return userDivisions.length > 0 ? userDivisions : [];
   };
 

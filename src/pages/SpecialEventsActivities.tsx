@@ -17,9 +17,11 @@ import { formatTime12Hour } from "@/lib/utils";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function SpecialEventsActivities() {
   const { currentCompany } = useCompany();
+  const { getDivisionFilter } = usePermissions();
   const [events, setEvents] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
   const [selectedDivision, setSelectedDivision] = useState<string>("all");
@@ -106,7 +108,19 @@ export default function SpecialEventsActivities() {
       divisions: divisionMap[event.id] || []
     }));
 
-    setEvents(eventsWithDivisions);
+    // Filter events by user's accessible divisions
+    let filteredEvents = eventsWithDivisions;
+    const divisionFilter = getDivisionFilter();
+    if (divisionFilter !== null && divisionFilter.length > 0) {
+      filteredEvents = eventsWithDivisions.filter(event => {
+        // Check if any of the event's divisions match user's accessible divisions
+        const eventDivisions = event.divisions?.map((d: any) => d.id) || [];
+        if (event.division?.id) eventDivisions.push(event.division.id);
+        return eventDivisions.some((divId: string) => divisionFilter.includes(divId)) || eventDivisions.length === 0;
+      });
+    }
+
+    setEvents(filteredEvents);
     setLoading(false);
   };
 
