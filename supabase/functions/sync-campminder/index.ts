@@ -787,8 +787,10 @@ async function performFullSync(
       const currentSeason = season;
       const fallbackSeason = '2025';
       
-      // Fetch Active, Hired, and Returning staff (skip Applied, Pending)
-      // Status IDs: 1=Active, 2=Hired, 5=Returning
+      // IMPORTANT: Do NOT change these statuses without verifying expected counts!
+      // Expected counts (2026): Tyler Hill=291, Timber Lake Camp=226, Timber Lake West=182
+      // CampMinder Status IDs: 1=Active, 2=Hired, 3=Applied, 4=Pending, 5=Returning
+      // We sync Active, Hired, and Returning staff (skip Applied, Pending)
       const allStatuses = [1, 2, 5];
       console.log(`[Staff Sync] Fetching Active, Hired & Returning staff (statuses: ${allStatuses.join(', ')}) for season ${currentSeason}...`);
       
