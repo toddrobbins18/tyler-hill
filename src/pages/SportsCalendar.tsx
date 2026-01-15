@@ -49,6 +49,7 @@ export default function SportsCalendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showRosterPopup, setShowRosterPopup] = useState<any>(null);
   const [rosterCounts, setRosterCounts] = useState<Record<string, number>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     event_date: new Date().toISOString().split('T')[0],
     title: "",
@@ -155,93 +156,105 @@ export default function SportsCalendar() {
       return;
     }
 
-    const submitData = {
-      event_date: formData.event_date,
-      title: formData.title,
-      description: formData.description,
-      sport_type: formData.sport_type === "Other" ? "Other" : formData.sport_type,
-      custom_sport_type: formData.sport_type === "Other" || formData.event_type === "Other" ? formData.custom_sport_type : null,
-      event_type: formData.event_type || null,
-      depart_time: formData.depart_time || null,
-      start_time_field: formData.start_time_field || null,
-      location: formData.location,
-      team: formData.team,
-      opponent: formData.opponent,
-      home_away: formData.home_away || null,
-      division_id: formData.division_ids.length === 1 ? formData.division_ids[0] : null,
-      division_provides_coach: formData.division_provides_coach,
-      division_provides_ref: formData.division_provides_ref,
-      meal_options: formData.meal_options,
-      meal_notes: formData.meal_notes || null,
-      season: currentSeason,
-      company_id: currentCompany?.id,
-    };
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    if (editingEvent) {
-      const { error } = await supabase
-        .from("sports_calendar")
-        .update(submitData)
-        .eq("id", editingEvent.id);
-
-      if (error) {
-        toast({ title: "Error updating event", variant: "destructive" });
-        return;
-      }
-
-      // Update junction table
-      await supabase.from("sports_calendar_divisions").delete().eq("sports_event_id", editingEvent.id);
-      if (formData.division_ids.length > 0) {
-        const junctionData = formData.division_ids.map(divId => ({
-          sports_event_id: editingEvent.id,
-          division_id: divId,
-          company_id: currentCompany?.id,
-        }));
-        await supabase.from("sports_calendar_divisions").insert(junctionData);
-      }
-
-      toast({ title: "Event updated successfully" });
-    } else {
-      const { data: newEvent, error } = await supabase
-        .from("sports_calendar")
-        .insert(submitData)
-        .select()
-        .single();
-
-      if (error || !newEvent) {
-        toast({ title: "Error adding event", variant: "destructive" });
-        return;
-      }
-
-      // Insert into junction table
-      if (formData.division_ids.length > 0) {
-        const junctionData = formData.division_ids.map(divId => ({
-          sports_event_id: newEvent.id,
-          division_id: divId,
-          company_id: currentCompany?.id,
-        }));
-        await supabase.from("sports_calendar_divisions").insert(junctionData);
-      }
-
-      // Create pending trip in transportation module linked to this sports event
-      const tripData = {
-        name: formData.title,
-        date: formData.event_date,
-        type: "sporting_event",
-        event_type: formData.sport_type === "Other" ? formData.custom_sport_type : formData.sport_type,
-        destination: formData.location || null,
-        departure_time: formData.depart_time || null,
-        status: "pending",
-        sports_event_id: newEvent.id,
+    try {
+      const submitData = {
+        event_date: formData.event_date,
+        title: formData.title,
+        description: formData.description,
+        sport_type: formData.sport_type === "Other" ? "Other" : formData.sport_type,
+        custom_sport_type: formData.sport_type === "Other" || formData.event_type === "Other" ? formData.custom_sport_type : null,
+        event_type: formData.event_type || null,
+        depart_time: formData.depart_time || null,
+        start_time_field: formData.start_time_field || null,
+        location: formData.location,
+        team: formData.team,
+        opponent: formData.opponent,
+        home_away: formData.home_away || null,
+        division_id: formData.division_ids.length === 1 ? formData.division_ids[0] : null,
+        division_provides_coach: formData.division_provides_coach,
+        division_provides_ref: formData.division_provides_ref,
+        meal_options: formData.meal_options,
+        meal_notes: formData.meal_notes || null,
         season: currentSeason,
         company_id: currentCompany?.id,
       };
 
-      await supabase.from("trips").insert(tripData);
+      if (editingEvent) {
+        const { error } = await supabase
+          .from("sports_calendar")
+          .update(submitData)
+          .eq("id", editingEvent.id);
 
-      toast({ title: "Sports event added and pending trip created" });
+        if (error) {
+          console.error("Error updating event:", error);
+          toast({ title: "Error updating event", description: error.message, variant: "destructive" });
+          return;
+        }
+
+        // Update junction table
+        await supabase.from("sports_calendar_divisions").delete().eq("sports_event_id", editingEvent.id);
+        if (formData.division_ids.length > 0) {
+          const junctionData = formData.division_ids.map(divId => ({
+            sports_event_id: editingEvent.id,
+            division_id: divId,
+            company_id: currentCompany?.id,
+          }));
+          await supabase.from("sports_calendar_divisions").insert(junctionData);
+        }
+
+        toast({ title: "Event updated successfully" });
+      } else {
+        const { data: newEvent, error } = await supabase
+          .from("sports_calendar")
+          .insert(submitData)
+          .select()
+          .single();
+
+        if (error || !newEvent) {
+          console.error("Error adding event:", error);
+          toast({ title: "Error adding event", description: error?.message || "Unknown error", variant: "destructive" });
+          return;
+        }
+
+        // Insert into junction table
+        if (formData.division_ids.length > 0) {
+          const junctionData = formData.division_ids.map(divId => ({
+            sports_event_id: newEvent.id,
+            division_id: divId,
+            company_id: currentCompany?.id,
+          }));
+          await supabase.from("sports_calendar_divisions").insert(junctionData);
+        }
+
+        // Create pending trip in transportation module linked to this sports event
+        const tripData = {
+          name: formData.title,
+          date: formData.event_date,
+          type: "sporting_event",
+          event_type: formData.sport_type === "Other" ? formData.custom_sport_type : formData.sport_type,
+          destination: formData.location || null,
+          departure_time: formData.depart_time || null,
+          status: "pending",
+          sports_event_id: newEvent.id,
+          season: currentSeason,
+          company_id: currentCompany?.id,
+        };
+
+        await supabase.from("trips").insert(tripData);
+
+        toast({ title: "Sports event added and pending trip created" });
+      }
+
+      resetForm();
+    } catch (error: any) {
+      console.error("Unexpected error saving event:", error);
+      toast({ title: "Error saving event", description: error?.message || "Please try again", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
     }
-
-    resetForm();
   };
 
   const resetForm = () => {
@@ -1091,8 +1104,8 @@ export default function SportsCalendar() {
               <Button type="button" variant="outline" onClick={() => { setShowDialog(false); resetForm(); }}>
                 Cancel
               </Button>
-              <Button type="submit">
-                {editingEvent ? 'Update Event' : 'Add Event'}
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? 'Saving...' : (editingEvent ? 'Update Event' : 'Add Event')}
               </Button>
             </div>
           </form>
