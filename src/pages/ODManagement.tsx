@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { format, addDays } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
@@ -15,16 +15,17 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CalendarIcon, AlertTriangle, Search, ArrowLeftRight, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarIcon, AlertTriangle, Search, ArrowLeftRight, ChevronLeft, ChevronRight, Radio, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
+import BunkManagement from "@/components/admin/BunkManagement";
 
 interface Staff {
   id: string;
   name: string;
   department: string | null;
   role: string;
+  rfid: string | null;
 }
 
 interface Bunk {
@@ -52,6 +53,8 @@ interface DayOff {
   is_sleeping_out: boolean;
   checked_out: boolean;
   checked_in: boolean;
+  checked_out_at: string | null;
+  checked_in_at: string | null;
   notes: string | null;
   staff?: Staff;
 }
@@ -73,6 +76,13 @@ export default function ODManagement() {
   const [showSwapDialog, setShowSwapDialog] = useState(false);
   const [selectedStaffForSwap, setSelectedStaffForSwap] = useState<string | null>(null);
   const [newSwapDate, setNewSwapDate] = useState<Date | undefined>(undefined);
+  const [showBunkManagement, setShowBunkManagement] = useState(false);
+
+  // RFID Scanner state
+  const [scannerMode, setScannerMode] = useState(false);
+  const [rfidInput, setRfidInput] = useState("");
+  const [isScanning, setIsScanning] = useState(false);
+  const rfidInputRef = useRef<HTMLInputElement>(null);
 
   // Check if this is Tyler Hill Camp
   const isTylerHill = currentCompany?.slug === 'tyler-hill-camp';
@@ -88,6 +98,18 @@ export default function ODManagement() {
     checkUncoveredBunks();
   }, [daysOff, bunkStaff, bunks]);
 
+  // Keep scanner input focused when in scanner mode
+  useEffect(() => {
+    if (scannerMode) {
+      const interval = setInterval(() => {
+        if (document.activeElement !== rfidInputRef.current && !isScanning) {
+          rfidInputRef.current?.focus();
+        }
+      }, 500);
+      return () => clearInterval(interval);
+    }
+  }, [scannerMode, isScanning]);
+
   const fetchData = async () => {
     if (!currentCompany?.id) return;
     setLoading(true);
@@ -99,7 +121,7 @@ export default function ODManagement() {
       const [staffRes, bunksRes, bunkStaffRes, daysOffRes] = await Promise.all([
         supabase
           .from("staff")
-          .select("id, name, department, role")
+          .select("id, name, department, role, rfid")
           .eq("company_id", currentCompany.id)
           .eq("season", currentSeason)
           .order("name"),
@@ -114,7 +136,7 @@ export default function ODManagement() {
           .from("bunk_staff")
           .select(`
             id, bunk_id, staff_id, is_primary,
-            staff:staff_id(id, name, department, role),
+            staff:staff_id(id, name, department, role, rfid),
             bunk:bunk_id(id, bunk_number, bunk_name, division_id)
           `)
           .eq("company_id", currentCompany.id)
@@ -123,8 +145,8 @@ export default function ODManagement() {
           .from("staff_days_off")
           .select(`
             id, staff_id, date, is_day_off, is_night_off, is_sleeping_out, 
-            checked_out, checked_in, notes,
-            staff:staff_id(id, name, department, role)
+            checked_out, checked_in, checked_out_at, checked_in_at, notes,
+            staff:staff_id(id, name, department, role, rfid)
           `)
           .eq("company_id", currentCompany.id)
           .eq("season", currentSeason)
@@ -172,6 +194,122 @@ export default function ODManagement() {
       };
     }).filter(item => item.staff && item.bunk)
       .sort((a, b) => (a.bunk?.bunk_number || 0) - (b.bunk?.bunk_number || 0));
+  };
+
+  // RFID Scanner handler
+  const handleRfidScan = async (rfidValue?: string) => {
+    const valueToScan = rfidValue || rfidInput.trim();
+    if (!valueToScan) {
+      toast({ title: "Please scan a wristband", variant: "destructive" });
+      return;
+    }
+
+    setIsScanning(true);
+
+    try {
+      // Find staff by RFID
+      const { data: staffMember, error } = await supabase
+        .from('staff')
+        .select('id, name, rfid')
+        .eq('rfid', valueToScan)
+        .eq('company_id', currentCompany?.id)
+        .eq('season', currentSeason)
+        .single();
+
+      if (error || !staffMember) {
+        toast({
+          title: "Wristband not recognized",
+          description: `RFID: ${valueToScan.slice(0, 12)}...`,
+          variant: "destructive"
+        });
+        setRfidInput("");
+        setTimeout(() => rfidInputRef.current?.focus(), 100);
+        return;
+      }
+
+      // Check if staff has a day off record for today
+      const dateStr = format(selectedDate, "yyyy-MM-dd");
+      const existingDayOff = daysOff.find(d => d.staff_id === staffMember.id);
+
+      if (!existingDayOff || !existingDayOff.is_day_off) {
+        // Staff is not scheduled off - warn them
+        toast({
+          title: "⚠️ Wrong Day!",
+          description: `${staffMember.name} is NOT scheduled off today. They cannot sign out.`,
+          variant: "destructive"
+        });
+        setRfidInput("");
+        setTimeout(() => rfidInputRef.current?.focus(), 100);
+        return;
+      }
+
+      // Determine action: check out or check in
+      if (!existingDayOff.checked_out) {
+        // Check OUT
+        const { error: updateError } = await supabase
+          .from("staff_days_off")
+          .update({ 
+            checked_out: true, 
+            checked_out_at: new Date().toISOString() 
+          })
+          .eq("id", existingDayOff.id);
+
+        if (updateError) throw updateError;
+
+        toast({
+          title: "✓ Checked Out",
+          description: `${staffMember.name} signed out at ${format(new Date(), "h:mm a")}`,
+        });
+      } else if (!existingDayOff.checked_in) {
+        // Check IN
+        const { error: updateError } = await supabase
+          .from("staff_days_off")
+          .update({ 
+            checked_in: true, 
+            checked_in_at: new Date().toISOString() 
+          })
+          .eq("id", existingDayOff.id);
+
+        if (updateError) throw updateError;
+
+        toast({
+          title: "✓ Checked In",
+          description: `${staffMember.name} signed in at ${format(new Date(), "h:mm a")}`,
+        });
+      } else {
+        toast({
+          title: "Already Completed",
+          description: `${staffMember.name} has already checked out and back in today.`,
+        });
+      }
+
+      await fetchData();
+      setRfidInput("");
+      setTimeout(() => rfidInputRef.current?.focus(), 100);
+
+    } catch (error) {
+      console.error("RFID scan error:", error);
+      toast({ title: "Scan error occurred", variant: "destructive" });
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handleRfidKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleRfidScan();
+    }
+  };
+
+  const toggleScannerMode = () => {
+    const newMode = !scannerMode;
+    setScannerMode(newMode);
+    if (newMode) {
+      setTimeout(() => {
+        rfidInputRef.current?.focus();
+        rfidInputRef.current?.select();
+      }, 150);
+    }
   };
 
   const handleToggleDayOff = async (staffId: string, field: 'is_day_off' | 'is_night_off' | 'is_sleeping_out') => {
@@ -225,7 +363,6 @@ export default function ODManagement() {
   const handleCheckInOut = async (staffId: string, type: 'out' | 'in') => {
     if (!currentCompany?.id) return;
 
-    const dateStr = format(selectedDate, "yyyy-MM-dd");
     const existing = daysOff.find(d => d.staff_id === staffId);
 
     if (!existing) {
@@ -331,8 +468,24 @@ export default function ODManagement() {
           </p>
         </div>
 
-        {/* Date Navigation */}
         <div className="flex items-center gap-2">
+          {/* RFID Scanner Toggle */}
+          <Button
+            variant={scannerMode ? "default" : "outline"}
+            onClick={toggleScannerMode}
+            className={scannerMode ? "bg-green-600 hover:bg-green-700" : ""}
+          >
+            <Radio className={`h-4 w-4 mr-2 ${scannerMode ? "animate-pulse" : ""}`} />
+            {scannerMode ? "Scanner Active" : "Scan Wristband"}
+          </Button>
+
+          {/* Bunk Management */}
+          <Button variant="outline" onClick={() => setShowBunkManagement(true)}>
+            <Settings className="h-4 w-4 mr-2" />
+            Manage Bunks
+          </Button>
+
+          {/* Date Navigation */}
           <Button variant="outline" size="icon" onClick={() => navigateDate(-1)}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -357,6 +510,36 @@ export default function ODManagement() {
           </Button>
         </div>
       </div>
+
+      {/* RFID Scanner Input */}
+      {scannerMode && (
+        <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg p-4">
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="text-sm font-medium text-green-800 dark:text-green-200 mb-1 block">
+                Ready to scan wristband - Staff will be checked in/out automatically
+              </label>
+              <Input
+                ref={rfidInputRef}
+                value={rfidInput}
+                onChange={(e) => setRfidInput(e.target.value)}
+                onKeyPress={handleRfidKeyPress}
+                placeholder="Scan wristband or enter RFID..."
+                className="bg-white dark:bg-background border-green-300 dark:border-green-700 focus:ring-green-500 text-lg"
+                autoFocus
+                disabled={isScanning}
+              />
+            </div>
+            <Button 
+              onClick={() => handleRfidScan()} 
+              disabled={isScanning || !rfidInput.trim()}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {isScanning ? "Scanning..." : "Submit"}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Uncovered Bunks Alert */}
       {uncoveredBunks.length > 0 && (
@@ -420,7 +603,14 @@ export default function ODManagement() {
                           <TableCell className="font-medium">
                             {item.bunk?.bunk_name || item.bunk?.bunk_number}
                           </TableCell>
-                          <TableCell>{item.staff?.name}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {item.staff?.name}
+                              {item.staff?.rfid && (
+                                <Badge variant="outline" className="text-xs">RFID</Badge>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-center">
                             <Checkbox
                               checked={item.dayOff?.checked_out || false}
@@ -453,7 +643,9 @@ export default function ODManagement() {
                     {filteredStaffWithBunk.filter(item => !item.dayOff?.is_day_off).length === 0 && (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                          No staff on duty found
+                          {bunks.length === 0 
+                            ? "No bunks configured. Click 'Manage Bunks' to set up bunks and assign staff."
+                            : "No staff on duty found"}
                         </TableCell>
                       </TableRow>
                     )}
@@ -496,6 +688,7 @@ export default function ODManagement() {
                       <TableHead>Name</TableHead>
                       <TableHead className="text-center">In</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Times</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -507,7 +700,14 @@ export default function ODManagement() {
                           <TableCell className="font-medium">
                             {item.bunk?.bunk_name || item.bunk?.bunk_number}
                           </TableCell>
-                          <TableCell>{item.staff?.name}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {item.staff?.name}
+                              {item.staff?.rfid && (
+                                <Badge variant="outline" className="text-xs">RFID</Badge>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-center">
                             <Checkbox
                               checked={item.dayOff?.checked_in || false}
@@ -515,11 +715,20 @@ export default function ODManagement() {
                             />
                           </TableCell>
                           <TableCell>
-                            <div className="flex gap-1">
+                            <div className="flex gap-1 flex-wrap">
                               {item.dayOff?.is_day_off && <Badge>Day Off</Badge>}
                               {item.dayOff?.is_night_off && <Badge variant="secondary">Night Off</Badge>}
                               {item.dayOff?.checked_out && <Badge variant="outline">Out</Badge>}
+                              {item.dayOff?.checked_in && <Badge variant="outline" className="bg-green-100">In</Badge>}
                             </div>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {item.dayOff?.checked_out_at && (
+                              <div>Out: {format(new Date(item.dayOff.checked_out_at), "h:mm a")}</div>
+                            )}
+                            {item.dayOff?.checked_in_at && (
+                              <div>In: {format(new Date(item.dayOff.checked_in_at), "h:mm a")}</div>
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-2">
@@ -547,7 +756,7 @@ export default function ODManagement() {
                       ))}
                     {filteredStaffWithBunk.filter(item => item.dayOff?.is_day_off).length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                           No staff off today
                         </TableCell>
                       </TableRow>
@@ -605,6 +814,22 @@ export default function ODManagement() {
               Switch Day Off
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bunk Management Dialog */}
+      <Dialog open={showBunkManagement} onOpenChange={setShowBunkManagement}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Bunk Management</DialogTitle>
+            <DialogDescription>
+              Configure bunks and assign staff members to each bunk
+            </DialogDescription>
+          </DialogHeader>
+          <BunkManagement onClose={() => {
+            setShowBunkManagement(false);
+            fetchData();
+          }} />
         </DialogContent>
       </Dialog>
     </div>
