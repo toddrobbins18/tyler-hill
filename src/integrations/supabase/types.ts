@@ -416,6 +416,7 @@ export type Database = {
         Row: {
           bunk_name: string | null
           bunk_number: number
+          cm_bunk_id: number | null
           company_id: string
           created_at: string | null
           division_id: string | null
@@ -427,6 +428,7 @@ export type Database = {
         Insert: {
           bunk_name?: string | null
           bunk_number: number
+          cm_bunk_id?: number | null
           company_id: string
           created_at?: string | null
           division_id?: string | null
@@ -438,6 +440,7 @@ export type Database = {
         Update: {
           bunk_name?: string | null
           bunk_number?: number
+          cm_bunk_id?: number | null
           company_id?: string
           created_at?: string | null
           division_id?: string | null

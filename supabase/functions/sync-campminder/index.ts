@@ -6,6 +6,7 @@ const CM_PERSONS_URL = 'https://api.campminder.com/persons';
 const CM_STAFF_URL = 'https://api.campminder.com/staff';
 const CM_DIVISIONS_URL = 'https://api.campminder.com/divisions';
 const CM_SESSIONS_URL = 'https://api.campminder.com/sessions';
+const CM_BUNKS_URL = 'https://api.campminder.com/bunks';
 
 
 // Rate limiting: 300ms between calls (~3.3 calls/sec = ~200/min)
@@ -515,6 +516,9 @@ async function performFullSync(
       progress: { step: 'Season detected', season, syncType: isIncremental ? 'incremental' : 'full' },
     });
 
+    // Initialize bunk mapping early - needed before bunk sync phase
+    const cmBunkIdMap = new Map<number, string>();
+
     // 1. Fetch and sync divisions
     console.log('\n--- SYNCING DIVISIONS ---');
     await updateSyncJob(supabase, jobId, {
@@ -627,6 +631,119 @@ async function performFullSync(
     });
 
     // =====================================================
+    // PHASE 1b: Fetch and sync bunks from CampMinder
+    // =====================================================
+    console.log('\n--- SYNCING BUNKS ---');
+    await updateSyncJob(supabase, jobId, {
+      progress: { step: 'Fetching bunks', season },
+    });
+
+    const cmBunks = await fetchAllPaginated(
+      CM_BUNKS_URL,
+      token,
+      subscriptionKey,
+      { clientid: clientId, seasonid: season }
+    );
+    console.log(`Found ${cmBunks.length} bunks from CampMinder`);
+
+    if (cmBunks.length > 0) {
+      console.log('[DEBUG] Sample bunk record:', JSON.stringify(cmBunks[0], null, 2));
+      
+      // Fetch existing bunks from our database
+      const { data: existingBunks } = await supabase
+        .from('bunks')
+        .select('id, bunk_number, bunk_name, cm_bunk_id, division_id')
+        .eq('company_id', companyId)
+        .eq('season', season);
+      
+      // Define bunk type for proper typing
+      interface ExistingBunk {
+        id: string;
+        bunk_number: number;
+        bunk_name: string | null;
+        cm_bunk_id: number | null;
+        division_id: string | null;
+      }
+      
+      // Map existing bunks by cm_bunk_id for updates
+      const existingBunkByCmId = new Map<number, ExistingBunk>(
+        (existingBunks as ExistingBunk[] | null)?.filter((b) => b.cm_bunk_id).map((b) => [b.cm_bunk_id!, b]) || []
+      );
+      
+      // Map existing bunks by name for matching
+      const existingBunkByName = new Map<string, ExistingBunk>(
+        (existingBunks as ExistingBunk[] | null)?.map((b) => [(b.bunk_name || `Bunk ${b.bunk_number}`).toLowerCase(), b]) || []
+      );
+      
+      console.log(`[Bunks] Found ${existingBunks?.length || 0} existing bunks in database`);
+      
+      let bunksCreated = 0;
+      let bunksUpdated = 0;
+      
+      for (const cmBunk of cmBunks) {
+        const cmBunkId = cmBunk.ID || cmBunk.BunkID;
+        const bunkName = cmBunk.Name || cmBunk.BunkName || `Bunk ${cmBunkId}`;
+        
+        // Try to find existing bunk by cm_bunk_id first, then by name
+        let existingBunk: ExistingBunk | undefined = existingBunkByCmId.get(cmBunkId);
+        if (!existingBunk) {
+          existingBunk = existingBunkByName.get(bunkName.toLowerCase());
+        }
+        
+        // Map CampMinder division to our division
+        const cmDivisionId = cmBunk.DivisionID;
+        const ourDivisionId = cmDivisionId ? cmDivisionIdMap.get(cmDivisionId) : null;
+        
+        if (existingBunk) {
+          // Update existing bunk with cm_bunk_id if not already set
+          if (!existingBunk.cm_bunk_id || existingBunk.cm_bunk_id !== cmBunkId) {
+            await supabase
+              .from('bunks')
+              .update({ 
+                cm_bunk_id: cmBunkId,
+                bunk_name: bunkName,
+                division_id: ourDivisionId || existingBunk.division_id,
+              })
+              .eq('id', existingBunk.id);
+            bunksUpdated++;
+          }
+          // Store mapping
+          cmBunkIdMap.set(cmBunkId, existingBunk.id);
+        } else {
+          // Create new bunk
+          const { data: newBunk, error } = await supabase
+            .from('bunks')
+            .insert({
+              bunk_number: cmBunkId, // Use CM ID as bunk number
+              bunk_name: bunkName,
+              cm_bunk_id: cmBunkId,
+              company_id: companyId,
+              season: season,
+              division_id: ourDivisionId,
+              is_active: true,
+            })
+            .select()
+            .single();
+          
+          if (newBunk) {
+            cmBunkIdMap.set(cmBunkId, newBunk.id);
+            bunksCreated++;
+          } else if (error) {
+            console.error(`[Bunks] Error creating bunk ${bunkName}:`, error.message);
+          }
+        }
+      }
+      
+      console.log(`[Bunks] Sync complete: ${bunksCreated} created, ${bunksUpdated} updated`);
+      console.log(`[Bunks] Built mapping for ${cmBunkIdMap.size} bunks`);
+    }
+
+    await updateSyncJob(supabase, jobId, {
+      progress: { step: 'Bunks synced', bunks: cmBunks.length, divisions: divisions.length, season },
+      total_counts: { divisions: divisions.length, bunks: cmBunks.length },
+    });
+
+    // =====================================================
     // Initialize all variables needed across sync phases
     // =====================================================
     let enrolledAttendees: any[] = [];
@@ -646,8 +763,7 @@ async function performFullSync(
     const staffAssignmentMap = new Map<string, any>();
     const parentPersonIds = new Set<string>();
     
-    // Bunk mapping - CampMinder BunkID to our bunk UUIDs
-    const cmBunkIdMap = new Map<number, string>();
+    // Note: cmBunkIdMap is declared earlier in the function (line ~520)
     
     // Staff tracking variables - must be initialized before conditional blocks
     let staffChanges: ChangeRecord[] = [];
@@ -1132,9 +1248,11 @@ async function performFullSync(
       // Get bunk from attendee data (BunkID is in attendee, not person)
       const attendeeData = attendeeDataMap.get(String(person.ID));
       const cmBunkId = attendeeData?.BunkID;
-      // For now, we don't have a direct CM BunkID to our bunk mapping
-      // The bunk_id will be null until bunks are set up with matching IDs or manual assignment
-      // In future, we could add cm_bunk_id column to bunks table for proper mapping
+      const bunkId = cmBunkId ? cmBunkIdMap.get(cmBunkId) : null;
+      
+      if (cmBunkId && !bunkId) {
+        console.log(`[Bunk Warning] Camper ${name} has BunkID=${cmBunkId} but no matching bunk in our DB`);
+      }
 
       camperData.push({
         person_id: String(person.ID),
@@ -1151,8 +1269,7 @@ async function performFullSync(
         season: season,
         status: 'active',
         division_id: divisionId,
-        // Note: bunk_id not set here since we need cm_bunk_id on bunks table to map
-        // For now, bunk assignment should be done manually or via CSV import
+        bunk_id: bunkId,
       });
     }
     
@@ -1182,8 +1299,9 @@ async function performFullSync(
       const cmDivisionId = fallbackData.DivisionID;
       const divisionId = cmDivisionId ? cmDivisionIdMap.get(cmDivisionId) : null;
       
-      // Note: BunkID is available in fallbackData but we don't have mapping yet
-      // const cmBunkId = fallbackData.BunkID;
+      // Get bunk from attendee/fallback data
+      const cmBunkId = fallbackData.BunkID;
+      const bunkId = cmBunkId ? cmBunkIdMap.get(cmBunkId) : null;
       
       camperData.push({
         person_id: personId,
@@ -1200,7 +1318,7 @@ async function performFullSync(
         season: season,
         status: 'active',
         division_id: divisionId,
-        // Note: bunk_id not set - requires cm_bunk_id mapping or manual assignment
+        bunk_id: bunkId,
       });
       
       usedCamperFallbackData++;
