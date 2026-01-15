@@ -1,4 +1,4 @@
-import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, ClipboardEdit, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree, BookOpen, Building2, LogOut, BarChart3 } from "lucide-react";
+import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, ClipboardEdit, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree, BookOpen, Building2, LogOut, BarChart3, ListChecks } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -96,6 +96,16 @@ const getMenuItems = (companySlug?: string) => {
     { title: "Incident Reports", url: "/incidents", icon: AlertTriangle, menuId: "incidents" },
     { title: "Sports Academy", url: "/sports-academy", icon: Trophy, menuId: "sports-academy" }
   );
+
+  // Add Roster Templates ONLY for Tyler Hill Camp
+  if (companySlug === 'tyler-hill-camp') {
+    baseItems.push({
+      title: "Roster Templates",
+      url: "/roster-templates",
+      icon: ListChecks,
+      menuId: "roster-templates"
+    });
+  }
 
   return baseItems.sort((a, b) => a.title.localeCompare(b.title));
 };
