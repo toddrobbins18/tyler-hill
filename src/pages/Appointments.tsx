@@ -231,13 +231,29 @@ export default function Appointments() {
           .eq("id", editingAppointment.id);
 
         if (error) throw error;
+        
+        // Send update notification
+        await supabase.functions.invoke('send-appointment-notification', {
+          body: { appointment_id: editingAppointment.id, action: 'update' }
+        });
+        
         toast({ title: "Appointment updated successfully" });
       } else {
-        const { error } = await supabase
+        const { data: newAppointment, error } = await supabase
           .from("appointments")
-          .insert(appointmentData);
+          .insert(appointmentData)
+          .select()
+          .single();
 
         if (error) throw error;
+        
+        // Send create notification
+        if (newAppointment) {
+          await supabase.functions.invoke('send-appointment-notification', {
+            body: { appointment_id: newAppointment.id, action: 'create' }
+          });
+        }
+        
         toast({ title: "Appointment created successfully" });
       }
 
