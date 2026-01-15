@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useSeasonContext } from "@/contexts/SeasonContext";
-import { Calendar as CalendarIcon, Plus, List, Pencil, Trash2, Search, X, Trophy, Users, Star, Sparkles } from "lucide-react";
+import { Calendar as CalendarIcon, Plus, List, Pencil, Trash2, Search, X, Trophy, Users, Star, Sparkles, MapPin, Clock, Home, Plane } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -60,6 +60,7 @@ export default function MasterCalendar() {
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [calendarView, setCalendarView] = useState<View>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedEvent, setSelectedEvent] = useState<UnifiedEvent | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -535,6 +536,7 @@ export default function MasterCalendar() {
               onView={setCalendarView}
               date={currentDate}
               onNavigate={setCurrentDate}
+              onSelectEvent={(event: any) => setSelectedEvent(event.resource)}
               eventPropGetter={eventPropGetter}
             />
           </CardContent>
@@ -546,7 +548,11 @@ export default function MasterCalendar() {
               <h2 className="text-xl font-semibold mb-3">{month}</h2>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {monthEvents.map((event) => (
-                  <Card key={event.id} className="hover:shadow-lg transition-shadow">
+                  <Card 
+                    key={event.id} 
+                    className="hover:shadow-lg transition-shadow cursor-pointer"
+                    onClick={() => setSelectedEvent(event)}
+                  >
                     <CardHeader>
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
@@ -590,6 +596,109 @@ export default function MasterCalendar() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Event Detail Dialog */}
+      {selectedEvent && (
+        <Dialog open={!!selectedEvent} onOpenChange={() => setSelectedEvent(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {getSourceIcon(selectedEvent.source)}
+                {selectedEvent.title}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              {/* Event Type & Source Badge */}
+              <div className="flex gap-2 flex-wrap">
+                <Badge className={getSourceColor(selectedEvent.source)}>
+                  {getSourceLabel(selectedEvent.source)}
+                </Badge>
+                <Badge variant="outline">{selectedEvent.type}</Badge>
+              </div>
+
+              {/* Division */}
+              {(selectedEvent.division || selectedEvent.originalData?.divisions?.length > 0) && (
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex gap-1 flex-wrap">
+                    {selectedEvent.originalData?.divisions?.length > 0 ? (
+                      selectedEvent.originalData.divisions.map((div: any, idx: number) => (
+                        <Badge key={idx} variant="secondary">{div.name}</Badge>
+                      ))
+                    ) : selectedEvent.division ? (
+                      <Badge variant="secondary">{selectedEvent.division.name}</Badge>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+
+              {/* Date & Time */}
+              <div className="flex items-center gap-2">
+                <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">
+                  {new Date(selectedEvent.event_date + 'T00:00:00').toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    month: 'long', 
+                    day: 'numeric', 
+                    year: 'numeric' 
+                  })}
+                </span>
+              </div>
+
+              {selectedEvent.time && (
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">{formatTime12Hour(selectedEvent.time)}</span>
+                </div>
+              )}
+
+              {/* Location */}
+              {selectedEvent.location && (
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">{selectedEvent.location}</span>
+                </div>
+              )}
+
+              {/* Home/Away for sports events */}
+              {selectedEvent.source === 'sports_calendar' && selectedEvent.originalData?.home_away && (
+                <div className="flex items-center gap-2">
+                  {selectedEvent.originalData.home_away === 'home' ? (
+                    <Home className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Plane className="h-4 w-4 text-muted-foreground" />
+                  )}
+                  <span className="text-sm capitalize">{selectedEvent.originalData.home_away}</span>
+                </div>
+              )}
+
+              {/* Sports-specific: Team vs Opponent */}
+              {selectedEvent.source === 'sports_calendar' && selectedEvent.originalData?.team && selectedEvent.originalData?.opponent && (
+                <div className="p-3 bg-muted rounded-lg">
+                  <p className="text-sm font-medium">
+                    {selectedEvent.originalData.team} vs {selectedEvent.originalData.opponent}
+                  </p>
+                </div>
+              )}
+
+              {/* Depart Time for away events */}
+              {selectedEvent.source === 'sports_calendar' && selectedEvent.originalData?.depart_time && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Plane className="h-4 w-4" />
+                  <span>Depart: {formatTime12Hour(selectedEvent.originalData.depart_time)}</span>
+                </div>
+              )}
+
+              {/* Description */}
+              {selectedEvent.description && (
+                <div className="border-t pt-4">
+                  <p className="text-sm text-muted-foreground">{selectedEvent.description}</p>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );
