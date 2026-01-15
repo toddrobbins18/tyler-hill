@@ -56,7 +56,7 @@ export default function BunkManagement({ onClose }: BunkManagementProps) {
   // New bunk form
   const [newBunkNumber, setNewBunkNumber] = useState<number>(1);
   const [newBunkName, setNewBunkName] = useState("");
-  const [newBunkDivision, setNewBunkDivision] = useState<string>("");
+  const [newBunkDivision, setNewBunkDivision] = useState<string>("none");
 
   // Staff assignment
   const [selectedBunkForStaff, setSelectedBunkForStaff] = useState<string | null>(null);
@@ -129,7 +129,7 @@ export default function BunkManagement({ onClose }: BunkManagementProps) {
           company_id: currentCompany.id,
           bunk_number: newBunkNumber,
           bunk_name: newBunkName || null,
-          division_id: newBunkDivision || null,
+          division_id: newBunkDivision === "none" ? null : newBunkDivision,
           season: currentSeason,
           is_active: true
         });
@@ -138,7 +138,7 @@ export default function BunkManagement({ onClose }: BunkManagementProps) {
 
       toast({ title: "Bunk added successfully" });
       setNewBunkName("");
-      setNewBunkDivision("");
+      setNewBunkDivision("none");
       await fetchData();
     } catch (error) {
       console.error("Error adding bunk:", error);
@@ -254,7 +254,7 @@ export default function BunkManagement({ onClose }: BunkManagementProps) {
                 <SelectValue placeholder="Select division..." />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None</SelectItem>
+                <SelectItem value="none">None</SelectItem>
                 {divisions.map(div => (
                   <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
                 ))}
