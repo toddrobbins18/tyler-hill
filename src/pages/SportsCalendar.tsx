@@ -194,7 +194,7 @@ export default function SportsCalendar() {
           return;
         }
 
-        // Update junction table
+        // Update junction table - delete then insert in parallel (can't truly parallelize due to delete dependency)
         await supabase.from("sports_calendar_divisions").delete().eq("sports_event_id", editingEvent.id);
         if (formData.division_ids.length > 0) {
           const junctionData = formData.division_ids.map(divId => ({
@@ -206,6 +206,10 @@ export default function SportsCalendar() {
         }
 
         toast({ title: "Event updated successfully" });
+        
+        // Close dialog immediately - realtime handles list update
+        setShowDialog(false);
+        setEditingEvent(null);
       } else {
         const { data: newEvent, error } = await supabase
           .from("sports_calendar")
@@ -219,6 +223,9 @@ export default function SportsCalendar() {
           return;
         }
 
+        // Run junction table insert and trip creation in parallel
+        const parallelOperations = [];
+
         // Insert into junction table
         if (formData.division_ids.length > 0) {
           const junctionData = formData.division_ids.map(divId => ({
@@ -226,7 +233,9 @@ export default function SportsCalendar() {
             division_id: divId,
             company_id: currentCompany?.id,
           }));
-          await supabase.from("sports_calendar_divisions").insert(junctionData);
+          parallelOperations.push(
+            (async () => await supabase.from("sports_calendar_divisions").insert(junctionData))()
+          );
         }
 
         // Create pending trip in transportation module linked to this sports event
@@ -242,13 +251,38 @@ export default function SportsCalendar() {
           season: currentSeason,
           company_id: currentCompany?.id,
         };
+        parallelOperations.push(
+          (async () => await supabase.from("trips").insert(tripData))()
+        );
 
-        await supabase.from("trips").insert(tripData);
+        // Execute all operations in parallel
+        await Promise.all(parallelOperations);
 
         toast({ title: "Sports event added and pending trip created" });
       }
 
-      resetForm();
+      // Close dialog immediately for better UX - realtime subscription will update the list
+      setShowDialog(false);
+      setEditingEvent(null);
+      setFormData({
+        event_date: new Date().toISOString().split('T')[0],
+        title: "",
+        description: "",
+        sport_type: "",
+        custom_sport_type: "",
+        event_type: "",
+        depart_time: "",
+        start_time_field: "",
+        location: "",
+        team: "",
+        opponent: "",
+        home_away: "",
+        division_ids: [],
+        division_provides_coach: false,
+        division_provides_ref: false,
+        meal_options: [],
+        meal_notes: "",
+      });
     } catch (error: any) {
       console.error("Unexpected error saving event:", error);
       toast({ title: "Error saving event", description: error?.message || "Please try again", variant: "destructive" });
@@ -279,7 +313,7 @@ export default function SportsCalendar() {
     });
     setEditingEvent(null);
     setShowDialog(false);
-    fetchEvents();
+    // Note: Removed fetchEvents() call - realtime subscription handles updates
   };
 
   const handleEdit = (event: any) => {
