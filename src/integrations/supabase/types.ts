@@ -147,6 +147,91 @@ export type Database = {
           },
         ]
       }
+      appointments: {
+        Row: {
+          appointment_date: string
+          appointment_time: string | null
+          appointment_type: string
+          child_id: string | null
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          follow_up_date: string | null
+          follow_up_required: boolean | null
+          id: string
+          location: string | null
+          notes: string | null
+          outcome: string | null
+          provider_name: string | null
+          season: string | null
+          staff_id: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          appointment_date: string
+          appointment_time?: string | null
+          appointment_type: string
+          child_id?: string | null
+          company_id: string
+          created_at?: string | null
+          created_by?: string | null
+          follow_up_date?: string | null
+          follow_up_required?: boolean | null
+          id?: string
+          location?: string | null
+          notes?: string | null
+          outcome?: string | null
+          provider_name?: string | null
+          season?: string | null
+          staff_id?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          appointment_date?: string
+          appointment_time?: string | null
+          appointment_type?: string
+          child_id?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          follow_up_date?: string | null
+          follow_up_required?: boolean | null
+          id?: string
+          location?: string | null
+          notes?: string | null
+          outcome?: string | null
+          provider_name?: string | null
+          season?: string | null
+          staff_id?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointments_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -271,6 +356,109 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bunk_staff: {
+        Row: {
+          bunk_id: string
+          company_id: string
+          created_at: string | null
+          id: string
+          is_primary: boolean | null
+          season: string | null
+          staff_id: string
+        }
+        Insert: {
+          bunk_id: string
+          company_id: string
+          created_at?: string | null
+          id?: string
+          is_primary?: boolean | null
+          season?: string | null
+          staff_id: string
+        }
+        Update: {
+          bunk_id?: string
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          is_primary?: boolean | null
+          season?: string | null
+          staff_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bunk_staff_bunk_id_fkey"
+            columns: ["bunk_id"]
+            isOneToOne: false
+            referencedRelation: "bunks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bunk_staff_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bunk_staff_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bunks: {
+        Row: {
+          bunk_name: string | null
+          bunk_number: number
+          company_id: string
+          created_at: string | null
+          division_id: string | null
+          id: string
+          is_active: boolean | null
+          season: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          bunk_name?: string | null
+          bunk_number: number
+          company_id: string
+          created_at?: string | null
+          division_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          season?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          bunk_name?: string | null
+          bunk_number?: number
+          company_id?: string
+          created_at?: string | null
+          division_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          season?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bunks_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bunks_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
             referencedColumns: ["id"]
           },
         ]
@@ -2490,6 +2678,81 @@ export type Database = {
           {
             foreignKeyName: "staff_leader_id_fkey"
             columns: ["leader_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_days_off: {
+        Row: {
+          checked_in: boolean | null
+          checked_in_at: string | null
+          checked_out: boolean | null
+          checked_out_at: string | null
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          date: string
+          id: string
+          is_day_off: boolean | null
+          is_night_off: boolean | null
+          is_sleeping_out: boolean | null
+          notes: string | null
+          season: string | null
+          staff_id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          checked_in?: boolean | null
+          checked_in_at?: string | null
+          checked_out?: boolean | null
+          checked_out_at?: string | null
+          company_id: string
+          created_at?: string | null
+          created_by?: string | null
+          date: string
+          id?: string
+          is_day_off?: boolean | null
+          is_night_off?: boolean | null
+          is_sleeping_out?: boolean | null
+          notes?: string | null
+          season?: string | null
+          staff_id: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          checked_in?: boolean | null
+          checked_in_at?: string | null
+          checked_out?: boolean | null
+          checked_out_at?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          date?: string
+          id?: string
+          is_day_off?: boolean | null
+          is_night_off?: boolean | null
+          is_sleeping_out?: boolean | null
+          notes?: string | null
+          season?: string | null
+          staff_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_days_off_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_days_off_staff_id_fkey"
+            columns: ["staff_id"]
             isOneToOne: false
             referencedRelation: "staff"
             referencedColumns: ["id"]

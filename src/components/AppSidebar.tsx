@@ -1,4 +1,4 @@
-import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, ClipboardEdit, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree, BookOpen, Building2, LogOut, BarChart3, ListChecks } from "lucide-react";
+import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, ClipboardEdit, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree, BookOpen, Building2, LogOut, BarChart3, ListChecks, ClipboardCheck, Stethoscope } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -45,10 +45,12 @@ const getMenuItems = (companySlug?: string) => {
     );
   }
 
-  // Special Meals only for Tyler Hill Camp
+  // Special Meals, OD Management, and Appointments only for Tyler Hill Camp
   if (companySlug === 'tyler-hill-camp') {
     baseItems.push(
-      { title: "Special Meals", url: "/special-meals", icon: Utensils, menuId: "special-meals" }
+      { title: "Special Meals", url: "/special-meals", icon: Utensils, menuId: "special-meals" },
+      { title: "OD Management", url: "/od-management", icon: ClipboardCheck, menuId: "od-management" },
+      { title: "Appointments", url: "/appointments", icon: Stethoscope, menuId: "appointments" }
     );
   }
 
