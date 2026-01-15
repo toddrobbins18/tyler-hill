@@ -22,6 +22,7 @@ import { formatTime12Hour } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -44,6 +45,7 @@ interface UnifiedEvent {
 export default function MasterCalendar() {
   const { currentSeason } = useSeasonContext();
   const { currentCompany } = useCompany();
+  const { getDivisionFilter } = usePermissions();
   const [events, setEvents] = useState<UnifiedEvent[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
   const [children, setChildren] = useState<any[]>([]);
@@ -169,7 +171,21 @@ export default function MasterCalendar() {
         });
       }
 
-      setEvents(unifiedEvents);
+      // Filter events by user's accessible divisions
+      let filteredUnifiedEvents = unifiedEvents;
+      const divisionFilter = getDivisionFilter();
+      if (divisionFilter !== null && divisionFilter.length > 0) {
+        filteredUnifiedEvents = unifiedEvents.filter(event => {
+          // Check if the event's division matches user's accessible divisions
+          const eventDivisionId = event.division?.id;
+          const eventDivisions = event.originalData?.divisions?.map((d: any) => d.id) || 
+                                 event.originalData?.sports_calendar_divisions?.map((d: any) => d.division_id) || [];
+          if (eventDivisionId) eventDivisions.push(eventDivisionId);
+          return eventDivisions.some((divId: string) => divisionFilter.includes(divId)) || eventDivisions.length === 0;
+        });
+      }
+
+      setEvents(filteredUnifiedEvents);
     } catch (error) {
       console.error("Error fetching events:", error);
       toast({ title: "Error fetching events", variant: "destructive" });
