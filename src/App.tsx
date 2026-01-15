@@ -42,6 +42,7 @@ import IncidentReports from "./pages/IncidentReports";
 import Nurse from "./pages/Nurse";
 import SportsAcademy from "./pages/SportsAcademy";
 import Reports from "./pages/Reports";
+import RosterTemplates from "./pages/RosterTemplates";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 import UpdatePassword from "./pages/UpdatePassword";
@@ -127,6 +128,7 @@ function AppContent() {
                                 <Route path="/nurse" element={<Nurse />} />
                                 <Route path="/sports-academy" element={<SportsAcademy />} />
                                 <Route path="/reports" element={<Reports />} />
+                                <Route path="/roster-templates" element={<RosterTemplates />} />
                                 <Route path="*" element={<NotFound />} />
                               </Routes>
                             </main>
