@@ -24,6 +24,7 @@ export default function StaffProfile() {
   const [evaluations, setEvaluations] = useState<any[]>([]);
   const [staffNotes, setStaffNotes] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
+  const [assignedBunks, setAssignedBunks] = useState<any[]>([]);
   const [newNote, setNewNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -94,6 +95,19 @@ export default function StaffProfile() {
 
       setAppointments(appointmentsData || []);
     }
+
+    // Fetch assigned bunks for this staff member
+    const { data: bunkStaffData } = await supabase
+      .from("bunk_staff")
+      .select(`
+        *,
+        bunk:bunk_id(id, bunk_number, bunk_name)
+      `)
+      .eq("staff_id", id)
+      .eq("company_id", currentCompany?.id || '')
+      .eq("season", currentSeason);
+
+    setAssignedBunks(bunkStaffData || []);
 
     if (!evalsError && evalsData) {
       const averageRating = evalsData.length
@@ -246,6 +260,19 @@ export default function StaffProfile() {
                   <p className="text-sm text-muted-foreground">Hire Date</p>
                   <p className="font-medium">{staff.hire_date ? new Date(staff.hire_date).toLocaleDateString() : "N/A"}</p>
                 </div>
+                {assignedBunks.length > 0 && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Assigned Bunk{assignedBunks.length > 1 ? 's' : ''}</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {assignedBunks.map((bs: any) => (
+                        <Badge key={bs.id} variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                          {bs.bunk?.bunk_name || `Bunk ${bs.bunk?.bunk_number}`}
+                          {bs.is_primary && <span className="ml-1 text-xs">(Primary)</span>}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
