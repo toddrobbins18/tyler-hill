@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef, ReactNode } fro
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { applyThemeColor } from '@/utils/themeUtils';
+import { useAuth } from './AuthContext';
 
 interface Company {
   id: string;
@@ -24,10 +25,10 @@ interface CompanyContextType {
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 
 export function CompanyProvider({ children }: { children: ReactNode }) {
+  const { user, isSuperAdmin: authIsSuperAdmin, loading: authLoading } = useAuth();
   const [currentCompany, setCurrentCompany] = useState<Company | null>(null);
   const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const { toast } = useToast();
 
   // Track if initial load has happened to prevent re-setting company on token refresh
@@ -35,145 +36,99 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   // Track if a company switch is in progress to prevent race conditions
   const isSwitchingRef = useRef(false);
 
+  // Load company data when auth is ready
   useEffect(() => {
-    loadCompanyData(true); // Initial load
+    if (!authLoading && user) {
+      loadCompanyData(true);
+    } else if (!authLoading && !user) {
+      // No user, clear everything
+      setCurrentCompany(null);
+      setAvailableCompanies([]);
+      setLoading(false);
+      hasInitializedRef.current = false;
+      sessionStorage.removeItem('viewing_company_id');
+    }
+  }, [authLoading, user?.id]);
 
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        console.log('🔐 [CompanyContext] Auth state changed:', event);
-        if (event === 'SIGNED_IN' && session) {
-          console.log('✅ [CompanyContext] User signed in, reloading company data...');
-          setTimeout(() => {
-            loadCompanyData(true);
-          }, 0);
-        } else if (event === 'SIGNED_OUT') {
-          console.log('👋 [CompanyContext] User signed out, clearing company data');
-          setCurrentCompany(null);
-          setAvailableCompanies([]);
-          setIsSuperAdmin(false);
-          setLoading(false);
-          hasInitializedRef.current = false;
-          sessionStorage.removeItem('viewing_company_id');
-        } else if (event === 'TOKEN_REFRESHED') {
-          // Don't reset company on token refresh - just log it
-          console.log('🔄 [CompanyContext] Token refreshed, keeping current company');
-        }
+  // Listen for auth state changes (for sign out)
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        setCurrentCompany(null);
+        setAvailableCompanies([]);
+        setLoading(false);
+        hasInitializedRef.current = false;
+        sessionStorage.removeItem('viewing_company_id');
       }
-    );
+    });
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   const loadCompanyData = async (isInitialLoad: boolean = false) => {
-    // Skip if already initialized and not initial load (e.g. token refresh)
+    // Skip if already initialized and not initial load
     if (hasInitializedRef.current && !isInitialLoad) {
-      console.log('🔄 [CompanyContext] Skipping reload - already initialized');
       return;
     }
     
     // Skip if a company switch is in progress
     if (isSwitchingRef.current) {
-      console.log('🔄 [CompanyContext] Skipping reload - company switch in progress');
+      return;
+    }
+
+    // Skip if no user (auth already validated this)
+    if (!user) {
+      setLoading(false);
       return;
     }
 
     try {
-      console.log('🔍 [CompanyContext] Loading company data...');
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.log('❌ [CompanyContext] No user found');
-        setLoading(false);
-        return;
-      }
-      console.log('✅ [CompanyContext] User found:', user.email);
-
-
-      // Check if super admin
-      const { data: roleData, error: roleError } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .eq('role', 'super_admin')
-        .maybeSingle();
-
-      if (roleError) {
-        console.error('❌ [CompanyContext] Error checking super admin:', roleError);
-      }
-
-      const isSuperAdminUser = !!roleData;
-      console.log('🔐 [CompanyContext] Is super admin:', isSuperAdminUser);
-      setIsSuperAdmin(isSuperAdminUser);
-
-      // Read saved viewing company early to avoid briefly snapping back to the user's primary company
-      // (which can trigger data fetches + UI to look like it "reverted").
+      // Read saved viewing company early
       const savedViewingId = sessionStorage.getItem('viewing_company_id');
 
-      // Get user's company
-      const { data: profile, error: profileError } = await supabase
+      // Fetch profile + company data in parallel with companies list for super admins
+      const profilePromise = supabase
         .from('profiles')
         .select('company_id, companies(id, name, slug, logo_url, theme_color, zip_code)')
         .eq('id', user.id)
         .single();
 
-      if (profileError) {
-        console.error('❌ [CompanyContext] Error fetching profile:', profileError);
+      const companiesPromise = authIsSuperAdmin 
+        ? supabase.from('companies').select('*').eq('is_active', true).order('name')
+        : Promise.resolve({ data: null, error: null });
+
+      const [profileResult, companiesResult] = await Promise.all([profilePromise, companiesPromise]);
+
+      const profile = profileResult.data;
+      const companies = companiesResult.data;
+
+      // For super admins, set available companies
+      if (authIsSuperAdmin && companies) {
+        setAvailableCompanies(companies);
       }
 
-      // For super admins, if they have a saved viewing company, don't set the primary company first.
-      // We'll restore the viewing company after we load the full companies list.
-      if (profile?.companies && (!isSuperAdminUser || !savedViewingId)) {
-        console.log('🏢 [CompanyContext] User company:', (profile.companies as any).name);
-        setCurrentCompany(profile.companies as any);
-        // Apply theme color
-        if ((profile.companies as any).theme_color) {
-          applyThemeColor((profile.companies as any).theme_color);
-        }
-      } else if (!profile?.companies) {
-        console.warn('⚠️ [CompanyContext] No company found for user');
+      // Determine which company to set as current
+      let targetCompany: Company | null = null;
+
+      if (authIsSuperAdmin && savedViewingId && companies) {
+        // Super admin with saved viewing company
+        targetCompany = companies.find(c => c.id === savedViewingId) || null;
       }
 
-      // If super admin, load all companies
-      if (isSuperAdminUser) {
-        console.log('👑 [CompanyContext] Loading all companies for super admin...');
-        const { data: companies, error: companiesError } = await supabase
-          .from('companies')
-          .select('*')
-          .eq('is_active', true)
-          .order('name');
+      if (!targetCompany && authIsSuperAdmin && companies && profile?.company_id) {
+        // Super admin fallback to their primary company
+        targetCompany = companies.find(c => c.id === profile.company_id) || null;
+      }
 
-        if (companiesError) {
-          console.error('❌ [CompanyContext] Error fetching companies:', companiesError);
-        }
+      if (!targetCompany && profile?.companies) {
+        // Regular user or fallback
+        targetCompany = profile.companies as unknown as Company;
+      }
 
-        if (companies) {
-          console.log('🏢 [CompanyContext] Found companies:', companies.length, companies.map(c => c.name));
-          setAvailableCompanies(companies);
-
-          console.log('💾 [CompanyContext] Saved viewing ID:', savedViewingId);
-
-          if (savedViewingId) {
-            const viewingCompany = companies.find(c => c.id === savedViewingId);
-            if (viewingCompany) {
-              console.log('✅ [CompanyContext] Restoring saved company:', viewingCompany.name);
-              setCurrentCompany(viewingCompany);
-              applyThemeColor(viewingCompany.theme_color);
-            } else {
-              console.warn('⚠️ [CompanyContext] Saved company ID not found in companies list');
-            }
-          } else if (profile?.company_id) {
-            // No saved viewing company, set to user's primary company with full record including zip_code
-            const defaultCompany = companies.find(c => c.id === profile.company_id);
-            if (defaultCompany) {
-              console.log('✅ [CompanyContext] Setting default company with zip_code:', defaultCompany.name);
-              setCurrentCompany(defaultCompany);
-              applyThemeColor(defaultCompany.theme_color);
-            }
-          }
-        } else {
-          console.warn('⚠️ [CompanyContext] No companies returned from query');
+      if (targetCompany) {
+        setCurrentCompany(targetCompany);
+        if (targetCompany.theme_color) {
+          applyThemeColor(targetCompany.theme_color);
         }
       }
 
@@ -195,16 +150,11 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   };
 
   const switchCompany = async (companyId: string) => {
-    console.log('🔄 [CompanyContext] switchCompany called with ID:', companyId);
-    console.log('🔄 [CompanyContext] Available companies:', availableCompanies.map(c => ({ id: c.id, name: c.name })));
-    
-    // Set switching flag to prevent race conditions with loadCompanyData
     isSwitchingRef.current = true;
     
     try {
       const company = availableCompanies.find(c => c.id === companyId);
       if (!company) {
-        console.error('❌ [CompanyContext] Company not found in available companies!');
         toast({
           title: "Error",
           description: "Company not found",
@@ -214,19 +164,14 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      console.log('✅ [CompanyContext] Switching to company:', company.name, 'Color:', company.theme_color);
-      
       // Save to sessionStorage for super admins FIRST
       sessionStorage.setItem('viewing_company_id', companyId);
-      console.log('💾 [CompanyContext] Saved to sessionStorage');
       
       // Update state synchronously
       setCurrentCompany(company);
-      console.log('✅ [CompanyContext] Current company updated');
       
       // Apply theme color immediately
       if (company.theme_color) {
-        console.log('🎨 [CompanyContext] Applying theme color:', company.theme_color);
         applyThemeColor(company.theme_color);
       }
       
@@ -235,14 +180,12 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         description: `Now viewing ${company.name}`,
       });
       
-      console.log('✅ [CompanyContext] Company switch completed successfully');
-      
-      // Clear switching flag after a brief delay to allow state to propagate
+      // Clear switching flag after a brief delay
       setTimeout(() => {
         isSwitchingRef.current = false;
       }, 500);
     } catch (error) {
-      console.error('❌ [CompanyContext] Error switching company:', error);
+      console.error('Error switching company:', error);
       isSwitchingRef.current = false;
       toast({
         title: "Error",
@@ -258,8 +201,8 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         currentCompany,
         availableCompanies,
         switchCompany,
-        loading,
-        isSuperAdmin,
+        loading: loading || authLoading,
+        isSuperAdmin: authIsSuperAdmin,
         refetchCompanies,
       }}
     >
