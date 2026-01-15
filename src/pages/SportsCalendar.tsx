@@ -91,12 +91,20 @@ export default function SportsCalendar() {
         },
         (payload) => {
           console.log('Realtime update received:', payload);
-          fetchEvents();
+          // Optimistic update for UPDATE events - avoid full refetch
+          if (payload.eventType === 'UPDATE' && payload.new) {
+            setEvents(prev => prev.map(event => 
+              event.id === payload.new.id 
+                ? { ...event, ...payload.new }
+                : event
+            ));
+          } else {
+            // Only do full refetch for INSERT/DELETE
+            fetchEvents();
+          }
         }
       )
-      .subscribe((status) => {
-        console.log('Realtime subscription status:', status);
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
