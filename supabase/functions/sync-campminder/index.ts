@@ -787,10 +787,10 @@ async function performFullSync(
       const currentSeason = season;
       const fallbackSeason = '2025';
       
-      // Only fetch Active and Hired staff (skip Applied, Pending, Returning)
-      // Status IDs: 1=Active, 2=Hired
-      const allStatuses = [1, 2];
-      console.log(`[Staff Sync] Fetching Active & Hired staff (statuses: ${allStatuses.join(', ')}) for season ${currentSeason}...`);
+      // Fetch Active, Hired, and Returning staff (skip Applied, Pending)
+      // Status IDs: 1=Active, 2=Hired, 5=Returning
+      const allStatuses = [1, 2, 5];
+      console.log(`[Staff Sync] Fetching Active, Hired & Returning staff (statuses: ${allStatuses.join(', ')}) for season ${currentSeason}...`);
       
       const staffMap = new Map<string, any>();
       
@@ -811,7 +811,7 @@ async function performFullSync(
       }
       
       staffAssignments = Array.from(staffMap.values());
-      console.log(`Combined ${staffAssignments.length} unique staff (Active & Hired) for season ${currentSeason}`);
+      console.log(`Combined ${staffAssignments.length} unique staff (Active, Hired & Returning) for season ${currentSeason}`);
 
       if (staffAssignments.length === 0) {
         console.log(`[Staff Sync] No staff found for ${currentSeason}, trying ${fallbackSeason}...`);
@@ -831,7 +831,7 @@ async function performFullSync(
           }
         }
         staffAssignments = Array.from(fallbackMap.values());
-        console.log(`Combined ${staffAssignments.length} unique staff (Active & Hired) for fallback season ${fallbackSeason}`);
+        console.log(`Combined ${staffAssignments.length} unique staff (Active, Hired & Returning) for fallback season ${fallbackSeason}`);
       }
 
       if (staffAssignments.length > 0) {
