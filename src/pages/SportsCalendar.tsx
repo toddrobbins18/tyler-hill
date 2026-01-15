@@ -244,9 +244,13 @@ export default function SportsCalendar() {
 
         toast({ title: "Event updated successfully" });
         
-        // Close dialog immediately - realtime handles list update
+        // Close dialog immediately for better UX
         setShowDialog(false);
         setEditingEvent(null);
+
+        // Also refresh locally (realtime can be flaky for the authoring client)
+        void fetchEvents();
+
       } else {
         const { data: newEvent, error } = await supabase
           .from("sports_calendar")
@@ -261,18 +265,16 @@ export default function SportsCalendar() {
         }
 
         // Run junction table insert and trip creation in parallel
-        const parallelOperations = [];
+        const parallelOperations: Promise<unknown>[] = [];
 
         // Insert into junction table
         if (formData.division_ids.length > 0) {
-          const junctionData = formData.division_ids.map(divId => ({
+          const junctionData = formData.division_ids.map((divId) => ({
             sports_event_id: newEvent.id,
             division_id: divId,
             company_id: currentCompany?.id,
           }));
-          parallelOperations.push(
-            (async () => await supabase.from("sports_calendar_divisions").insert(junctionData))()
-          );
+          parallelOperations.push(supabase.from("sports_calendar_divisions").insert(junctionData) as unknown as Promise<unknown>);
         }
 
         // Create pending trip in transportation module linked to this sports event
@@ -288,14 +290,15 @@ export default function SportsCalendar() {
           season: currentSeason,
           company_id: currentCompany?.id,
         };
-        parallelOperations.push(
-          (async () => await supabase.from("trips").insert(tripData))()
-        );
+        parallelOperations.push(supabase.from("trips").insert(tripData) as unknown as Promise<unknown>);
 
         // Execute all operations in parallel
         await Promise.all(parallelOperations);
 
         toast({ title: "Sports event added and pending trip created" });
+
+        // Also refresh locally (realtime can be flaky for the authoring client)
+        void fetchEvents();
       }
 
       // Close dialog immediately for better UX - realtime subscription will update the list
