@@ -81,10 +81,20 @@ export default function SportsCalendar() {
       .channel('sports-calendar-changes')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'sports_calendar' },
-        () => fetchEvents()
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'sports_calendar',
+          filter: `company_id=eq.${currentCompany.id}`
+        },
+        (payload) => {
+          console.log('Realtime update received:', payload);
+          fetchEvents();
+        }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Realtime subscription status:', status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
