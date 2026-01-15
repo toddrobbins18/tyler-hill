@@ -1464,17 +1464,26 @@ async function performFullSync(
         }
       }
 
-      for (let i = 0; i < sessionUpdates.length; i += 100) {
-        const batch = sessionUpdates.slice(i, i + 100);
-        for (const update of batch) {
-          await supabase
-            .from('children')
-            .update({ session: update.session })
-            .eq('company_id', companyId)
-            .eq('person_id', update.person_id)
-            .eq('season', season);
+      // Use parallel batch updates for efficiency (avoid timeout with 500+ campers)
+      const BATCH_SIZE = 50;
+      for (let i = 0; i < sessionUpdates.length; i += BATCH_SIZE) {
+        const batch = sessionUpdates.slice(i, i + BATCH_SIZE);
+        
+        // Execute batch updates in parallel
+        await Promise.all(
+          batch.map(update => 
+            supabase
+              .from('children')
+              .update({ session: update.session })
+              .eq('company_id', companyId)
+              .eq('person_id', update.person_id)
+              .eq('season', season)
+          )
+        );
+        
+        if ((i + BATCH_SIZE) % 200 === 0 || i + BATCH_SIZE >= sessionUpdates.length) {
+          console.log(`Updated sessions: ${Math.min(i + BATCH_SIZE, sessionUpdates.length)}/${sessionUpdates.length}`);
         }
-        console.log(`Updated sessions for batch ${Math.floor(i / 100) + 1}/${Math.ceil(sessionUpdates.length / 100)}`);
       }
       
       console.log(`Updated session info for ${sessionUpdates.length} campers`);
