@@ -646,6 +646,9 @@ async function performFullSync(
     const staffAssignmentMap = new Map<string, any>();
     const parentPersonIds = new Set<string>();
     
+    // Bunk mapping - CampMinder BunkID to our bunk UUIDs
+    const cmBunkIdMap = new Map<number, string>();
+    
     // Staff tracking variables - must be initialized before conditional blocks
     let staffChanges: ChangeRecord[] = [];
     let staffInsertedCount = 0;
@@ -689,9 +692,43 @@ async function performFullSync(
           DateOfBirth: attendee.DateOfBirth,
           DivisionID: attendee.DivisionID,
           SessionProgramStatus: attendee.SessionProgramStatus,
+          BunkID: attendee.BunkID || null,
+          BunkPlanID: attendee.BunkPlanID || null,
         });
       }
       console.log(`Built attendee fallback map with ${attendeeDataMap.size} entries`);
+
+      // Log unique BunkIDs found in attendee data
+      const uniqueBunkIds = new Set<number>();
+      for (const attendee of enrolledAttendees) {
+        if (attendee.BunkID) {
+          uniqueBunkIds.add(attendee.BunkID);
+        }
+      }
+      console.log(`[Bunk Sync] Found ${uniqueBunkIds.size} unique BunkIDs in attendee data`);
+      if (uniqueBunkIds.size > 0) {
+        console.log(`[Bunk Sync] BunkIDs: ${Array.from(uniqueBunkIds).slice(0, 10).join(', ')}${uniqueBunkIds.size > 10 ? '...' : ''}`);
+      }
+
+      // Fetch existing bunks from our database to map by bunk_number
+      // CampMinder BunkID appears to be their internal ID - we'll need to create bunks
+      // and store the CM BunkID for future reference, or map by name/number
+      const { data: existingBunks } = await supabase
+        .from('bunks')
+        .select('id, bunk_number, bunk_name')
+        .eq('company_id', companyId)
+        .eq('is_active', true);
+      
+      if (existingBunks) {
+        console.log(`[Bunk Sync] Found ${existingBunks.length} existing bunks in database`);
+        // For now, we'll map CampMinder BunkID directly to our bunk IDs
+        // In a full implementation, you might want to store cm_bunk_id on bunks table
+        for (const bunk of existingBunks) {
+          // Map bunk_number to itself as a simple mapping
+          cmBunkIdMap.set(bunk.bunk_number, bunk.id);
+        }
+      }
+
 
       const enrolledPersonIds = new Set(
         enrolledAttendees.map((a: any) => String(a.PersonID))
@@ -1092,6 +1129,13 @@ async function performFullSync(
         console.log(`[Division Warning] Camper ${name} has CamperDetails.DivisionID=${cmDivisionId} but no matching division in our DB`);
       }
 
+      // Get bunk from attendee data (BunkID is in attendee, not person)
+      const attendeeData = attendeeDataMap.get(String(person.ID));
+      const cmBunkId = attendeeData?.BunkID;
+      // For now, we don't have a direct CM BunkID to our bunk mapping
+      // The bunk_id will be null until bunks are set up with matching IDs or manual assignment
+      // In future, we could add cm_bunk_id column to bunks table for proper mapping
+
       camperData.push({
         person_id: String(person.ID),
         name,
@@ -1107,6 +1151,8 @@ async function performFullSync(
         season: season,
         status: 'active',
         division_id: divisionId,
+        // Note: bunk_id not set here since we need cm_bunk_id on bunks table to map
+        // For now, bunk assignment should be done manually or via CSV import
       });
     }
     
@@ -1136,6 +1182,9 @@ async function performFullSync(
       const cmDivisionId = fallbackData.DivisionID;
       const divisionId = cmDivisionId ? cmDivisionIdMap.get(cmDivisionId) : null;
       
+      // Note: BunkID is available in fallbackData but we don't have mapping yet
+      // const cmBunkId = fallbackData.BunkID;
+      
       camperData.push({
         person_id: personId,
         name,
@@ -1151,6 +1200,7 @@ async function performFullSync(
         season: season,
         status: 'active',
         division_id: divisionId,
+        // Note: bunk_id not set - requires cm_bunk_id mapping or manual assignment
       });
       
       usedCamperFallbackData++;
