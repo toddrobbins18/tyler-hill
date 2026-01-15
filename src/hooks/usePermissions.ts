@@ -23,24 +23,27 @@ export type AppRole = 'admin' | 'staff' | 'division_leader' | 'specialist' | 'vi
  * - Returns array of division IDs for division_leader and viewer roles
  */
 export function usePermissions() {
+  const { currentCompany } = useCompany();
   const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [userRoles, setUserRoles] = useState<AppRole[]>([]);
   const [userDivisions, setUserDivisions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-  const { currentCompany } = useCompany();
   
-  // Permission cache to avoid repeated DB queries
+  // Permission cache to avoid repeated DB queries - using ref to persist across renders
   const permissionCacheRef = useRef<Record<string, boolean>>({});
+  // Track company ID to clear cache on change
+  const lastCompanyIdRef = useRef<string | null>(null);
+  
+  // Clear cache when company changes (inline check to avoid extra useEffect)
+  if (currentCompany?.id !== lastCompanyIdRef.current) {
+    permissionCacheRef.current = {};
+    lastCompanyIdRef.current = currentCompany?.id ?? null;
+  }
 
   useEffect(() => {
     fetchUserPermissions();
   }, []);
-  
-  // Clear cache when company changes
-  useEffect(() => {
-    permissionCacheRef.current = {};
-  }, [currentCompany?.id]);
 
   const fetchUserPermissions = async () => {
     try {
