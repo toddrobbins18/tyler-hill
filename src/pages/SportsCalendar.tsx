@@ -90,28 +90,23 @@ export default function SportsCalendar() {
           filter: `company_id=eq.${currentCompany.id}`
         },
         async (payload) => {
-          console.log('Realtime update received:', payload);
-          if (payload.eventType === 'UPDATE' && payload.new) {
-            // Fetch the updated event with all related data (divisions, etc.)
-            const { data: updatedEvent } = await supabase
-              .from("sports_calendar")
-              .select(`
-                *,
-                division:divisions(id, name, gender, sort_order),
-                sports_calendar_divisions(division_id, division:divisions(id, name, gender, sort_order))
-              `)
-              .eq("id", payload.new.id)
-              .single();
-            
-            if (updatedEvent) {
-              setEvents(prev => prev.map(event => 
-                event.id === payload.new.id ? updatedEvent : event
-              ));
-            }
-          } else {
-            // Full refetch for INSERT/DELETE
-            fetchEvents();
-          }
+          console.log('Realtime sports_calendar update received:', payload);
+          // Always refetch to ensure we get complete data with relations
+          fetchEvents();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'sports_calendar_divisions',
+          filter: `company_id=eq.${currentCompany.id}`
+        },
+        (payload) => {
+          console.log('Realtime sports_calendar_divisions update received:', payload);
+          // Refetch when division assignments change
+          fetchEvents();
         }
       )
       .subscribe();
