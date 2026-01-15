@@ -28,8 +28,10 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
   const [child, setChild] = useState<any>(null);
   const [staff, setStaff] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
+  const [bunks, setBunks] = useState<any[]>([]);
   const [leaderId, setLeaderId] = useState("");
   const [divisionId, setDivisionId] = useState("");
+  const [bunkId, setBunkId] = useState("");
   const [gender, setGender] = useState("");
   const [session, setSession] = useState("");
   const [birthdayPartyType, setBirthdayPartyType] = useState("");
@@ -47,6 +49,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
       fetchChild();
       fetchStaff();
       fetchDivisions();
+      fetchBunks();
     }
   }, [open, childId]);
 
@@ -70,6 +73,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
       setBirthdayToppings(data.birthday_toppings || []);
       setBirthdayCakeAllergies(data.birthday_cake_allergies || []);
       setRfidValue(data.rfid || "");
+      setBunkId(data.bunk_id || "");
     }
   };
 
@@ -94,6 +98,17 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
     setDivisions(sortDivisionsGirlsFirst(data || []));
   };
 
+  const fetchBunks = async () => {
+    if (!currentCompany?.id) return;
+    const { data } = await supabase
+      .from("bunks")
+      .select("*")
+      .eq("company_id", currentCompany.id)
+      .eq("is_active", true)
+      .order("bunk_number");
+    setBunks(data || []);
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
@@ -112,6 +127,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
         season: formData.get("season") as string || null,
         session: session || null,
         division_id: divisionId || null,
+        bunk_id: bunkId && bunkId !== "none" ? bunkId : null,
         leader_id: leaderId || null,
         guardian_email: formData.get("guardian_email") as string || null,
         guardian_phone: formData.get("guardian_phone") as string || null,
@@ -204,6 +220,22 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
                   {divisions.map((division) => (
                     <SelectItem key={division.id} value={division.id}>
                       {division.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Bunk</Label>
+              <Select value={bunkId} onValueChange={setBunkId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select bunk" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Bunk Assigned</SelectItem>
+                  {bunks.map((bunk) => (
+                    <SelectItem key={bunk.id} value={bunk.id}>
+                      {bunk.bunk_name || `Bunk ${bunk.bunk_number}`}
                     </SelectItem>
                   ))}
                 </SelectContent>
