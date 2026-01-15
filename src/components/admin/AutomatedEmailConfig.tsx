@@ -62,6 +62,10 @@ const EMAIL_TYPE_LABELS: Record<string, { label: string; description: string }> 
   user_approval_request: {
     label: "User Approval Requests",
     description: "When new users request access to the system"
+  },
+  appointment: {
+    label: "Appointments",
+    description: "Medical and therapy appointments - division leaders see only their divisions"
   }
 };
 
@@ -113,7 +117,7 @@ const TIMING_OPTIONS: Record<string, {
     value: 'day_before',
     label: 'Day Before',
     description: 'Send 24 hours before the event',
-    applicableTo: ['sports_event_home', 'sports_event_away', 'trip_update', 'transportation_events', 'tutoring_therapy', 'sports_academy']
+    applicableTo: ['sports_event_home', 'sports_event_away', 'trip_update', 'transportation_events', 'tutoring_therapy', 'sports_academy', 'appointment']
   },
   morning_of: {
     value: 'morning_of',

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Star, Calendar, TrendingUp, Award, Pencil, ClipboardCheck, FileText, Plus } from "lucide-react";
+import { ArrowLeft, Star, Calendar, TrendingUp, Award, Pencil, ClipboardCheck, FileText, Plus, Stethoscope, Clock, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,7 @@ export default function StaffProfile() {
   const [staff, setStaff] = useState<any>(null);
   const [evaluations, setEvaluations] = useState<any[]>([]);
   const [staffNotes, setStaffNotes] = useState<any[]>([]);
+  const [appointments, setAppointments] = useState<any[]>([]);
   const [newNote, setNewNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -81,6 +82,18 @@ export default function StaffProfile() {
       .eq("company_id", currentCompany?.id || '');
 
     setConflicts(conflictsData || []);
+
+    // Fetch appointments for this staff member (Tyler Hill only)
+    if (currentCompany?.slug === 'tyler-hill-camp') {
+      const { data: appointmentsData } = await supabase
+        .from("appointments")
+        .select("*")
+        .eq("staff_id", id)
+        .eq("company_id", currentCompany?.id || '')
+        .order("appointment_date", { ascending: false });
+
+      setAppointments(appointmentsData || []);
+    }
 
     if (!evalsError && evalsData) {
       const averageRating = evalsData.length
@@ -204,6 +217,9 @@ export default function StaffProfile() {
           <TabsTrigger value="notes">Notes</TabsTrigger>
           <TabsTrigger value="evaluations">Evaluations</TabsTrigger>
           <TabsTrigger value="achievements">Achievements</TabsTrigger>
+          {currentCompany?.slug === 'tyler-hill-camp' && (
+            <TabsTrigger value="appointments">Appointments</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -461,6 +477,87 @@ export default function StaffProfile() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {currentCompany?.slug === 'tyler-hill-camp' && (
+          <TabsContent value="appointments" className="space-y-4">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm text-muted-foreground">
+                {appointments.length} total appointments
+              </p>
+            </div>
+
+            {appointments.length === 0 ? (
+              <Card className="shadow-card">
+                <CardContent className="py-8 text-center text-muted-foreground">
+                  No appointments recorded
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4">
+                {appointments.map((apt: any) => (
+                  <Card key={apt.id} className="shadow-card">
+                    <CardContent className="p-6">
+                      <div className="flex items-start gap-4">
+                        <div className="p-3 rounded-xl bg-primary/10">
+                          <Stethoscope className="h-6 w-6 text-primary" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <h3 className="font-semibold text-lg mb-1">{apt.appointment_type}</h3>
+                              {apt.provider_name && (
+                                <p className="text-sm text-muted-foreground">{apt.provider_name}</p>
+                              )}
+                            </div>
+                            <Badge variant={
+                              apt.status === 'completed' ? 'secondary' :
+                              apt.status === 'cancelled' ? 'destructive' :
+                              apt.status === 'no_show' ? 'outline' :
+                              'default'
+                            }>
+                              {apt.status}
+                            </Badge>
+                          </div>
+                          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-2">
+                            <div className="flex items-center gap-1">
+                              <Calendar className="h-4 w-4" />
+                              <span>{new Date(apt.appointment_date).toLocaleDateString()}</span>
+                            </div>
+                            {apt.appointment_time && (
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-4 w-4" />
+                                <span>{apt.appointment_time}</span>
+                              </div>
+                            )}
+                            {apt.location && (
+                              <div className="flex items-center gap-1">
+                                <MapPin className="h-4 w-4" />
+                                <span>{apt.location}</span>
+                              </div>
+                            )}
+                          </div>
+                          {apt.notes && (
+                            <p className="text-sm text-muted-foreground">{apt.notes}</p>
+                          )}
+                          {apt.outcome && (
+                            <div className="mt-2 p-2 bg-muted/50 rounded text-sm">
+                              <span className="font-medium">Outcome:</span> {apt.outcome}
+                            </div>
+                          )}
+                          {apt.follow_up_required && apt.follow_up_date && (
+                            <Badge variant="outline" className="mt-2">
+                              Follow-up: {new Date(apt.follow_up_date).toLocaleDateString()}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        )}
       </Tabs>
 
       <EditStaffDialog

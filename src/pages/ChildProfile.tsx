@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Award, Trophy, Star, Calendar, AlertTriangle, FileText, Pencil, Users, MapPin, Shield } from "lucide-react";
+import { ArrowLeft, Award, Trophy, Star, Calendar, AlertTriangle, FileText, Pencil, Users, MapPin, Shield, Stethoscope, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +29,7 @@ export default function ChildProfile() {
   const [sportsRoster, setSportsRoster] = useState<any[]>([]);
   const [tripAttendance, setTripAttendance] = useState<any[]>([]);
   const [sportsAcademy, setSportsAcademy] = useState<any[]>([]);
+  const [appointments, setAppointments] = useState<any[]>([]);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [allergyText, setAllergyText] = useState("");
   const [savingAllergies, setSavingAllergies] = useState(false);
@@ -190,6 +191,18 @@ export default function ChildProfile() {
         .eq("company_id", currentCompany?.id || '');
 
       setConflicts(conflictsData || []);
+
+      // Fetch appointments for this child (Tyler Hill only)
+      if (currentCompany?.slug === 'tyler-hill-camp') {
+        const { data: appointmentsData } = await supabase
+          .from("appointments")
+          .select("*")
+          .eq("child_id", id)
+          .eq("company_id", currentCompany?.id || '')
+          .order("appointment_date", { ascending: false });
+
+        setAppointments(appointmentsData || []);
+      }
     } catch (error) {
       console.error("Error fetching child data:", error);
       toast({ title: "Error loading child profile", variant: "destructive" });
@@ -285,6 +298,9 @@ export default function ChildProfile() {
           <TabsTrigger value="activities">Activities</TabsTrigger>
           <TabsTrigger value="sports-academy">Sports Academy</TabsTrigger>
           <TabsTrigger value="incidents">Incident Reports</TabsTrigger>
+          {currentCompany?.slug === 'tyler-hill-camp' && (
+            <TabsTrigger value="appointments">Appointments</TabsTrigger>
+          )}
           {currentCompany?.slug === 'timber-lake-camp' && (
             <>
               <TabsTrigger value="10-day-report">10-Day Report</TabsTrigger>
@@ -869,6 +885,87 @@ export default function ChildProfile() {
             </div>
           )}
         </TabsContent>
+
+        {currentCompany?.slug === 'tyler-hill-camp' && (
+          <TabsContent value="appointments" className="space-y-4">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm text-muted-foreground">
+                {appointments.length} total appointments
+              </p>
+            </div>
+
+            {appointments.length === 0 ? (
+              <Card className="shadow-card">
+                <CardContent className="py-8 text-center text-muted-foreground">
+                  No appointments recorded
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4">
+                {appointments.map((apt: any) => (
+                  <Card key={apt.id} className="shadow-card">
+                    <CardContent className="p-6">
+                      <div className="flex items-start gap-4">
+                        <div className="p-3 rounded-xl bg-primary/10">
+                          <Stethoscope className="h-6 w-6 text-primary" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <h3 className="font-semibold text-lg mb-1">{apt.appointment_type}</h3>
+                              {apt.provider_name && (
+                                <p className="text-sm text-muted-foreground">{apt.provider_name}</p>
+                              )}
+                            </div>
+                            <Badge variant={
+                              apt.status === 'completed' ? 'secondary' :
+                              apt.status === 'cancelled' ? 'destructive' :
+                              apt.status === 'no_show' ? 'outline' :
+                              'default'
+                            }>
+                              {apt.status}
+                            </Badge>
+                          </div>
+                          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-2">
+                            <div className="flex items-center gap-1">
+                              <Calendar className="h-4 w-4" />
+                              <span>{new Date(apt.appointment_date).toLocaleDateString()}</span>
+                            </div>
+                            {apt.appointment_time && (
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-4 w-4" />
+                                <span>{apt.appointment_time}</span>
+                              </div>
+                            )}
+                            {apt.location && (
+                              <div className="flex items-center gap-1">
+                                <MapPin className="h-4 w-4" />
+                                <span>{apt.location}</span>
+                              </div>
+                            )}
+                          </div>
+                          {apt.notes && (
+                            <p className="text-sm text-muted-foreground">{apt.notes}</p>
+                          )}
+                          {apt.outcome && (
+                            <div className="mt-2 p-2 bg-muted/50 rounded text-sm">
+                              <span className="font-medium">Outcome:</span> {apt.outcome}
+                            </div>
+                          )}
+                          {apt.follow_up_required && apt.follow_up_date && (
+                            <Badge variant="outline" className="mt-2">
+                              Follow-up: {new Date(apt.follow_up_date).toLocaleDateString()}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        )}
 
         {currentCompany?.slug === 'timber-lake-camp' && (
           <>
