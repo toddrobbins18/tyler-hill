@@ -97,15 +97,13 @@ const getMenuItems = (companySlug?: string) => {
     { title: "Sports Academy", url: "/sports-academy", icon: Trophy, menuId: "sports-academy" }
   );
 
-  // Add Roster Templates ONLY for Tyler Hill Camp
-  if (companySlug === 'tyler-hill-camp') {
-    baseItems.push({
-      title: "Roster Templates",
-      url: "/roster-templates",
-      icon: ListChecks,
-      menuId: "roster-templates"
-    });
-  }
+  // Add Roster Templates for all camps
+  baseItems.push({
+    title: "Roster Templates",
+    url: "/roster-templates",
+    icon: ListChecks,
+    menuId: "roster-templates"
+  });
 
   return baseItems.sort((a, b) => a.title.localeCompare(b.title));
 };
