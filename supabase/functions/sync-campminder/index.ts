@@ -1011,6 +1011,13 @@ async function performFullSync(
       staffAssignments = Array.from(staffMap.values());
       console.log(`Combined ${staffAssignments.length} unique staff (Active, Hired & Returning) for season ${currentSeason}`);
 
+      // SAFEGUARD: Warn if count looks like pagination truncation (common caps: 200, 500, 1000)
+      const suspiciousCounts = [100, 200, 500, 1000];
+      if (suspiciousCounts.includes(staffAssignments.length)) {
+        console.warn(`⚠️ [PAGINATION WARNING] Staff count is exactly ${staffAssignments.length} - this may indicate API pagination truncation!`);
+        console.warn(`   Expected counts: Tyler Hill=291, Timber Lake Camp=226+. If count is lower, investigate pagination.`);
+      }
+
       if (staffAssignments.length === 0) {
         console.log(`[Staff Sync] No staff found for ${currentSeason}, trying ${fallbackSeason}...`);
         
