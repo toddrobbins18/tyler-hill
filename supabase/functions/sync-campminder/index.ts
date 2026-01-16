@@ -172,9 +172,17 @@ async function fetchAllPaginated(
   params: Record<string, string | number | boolean> = {}
 ): Promise<any[]> {
   const allItems: any[] = [];
+
   let pageNumber = 1;
-  const pageSize = 500;
+
+  // CampMinder appears to cap pagesize (often at 200). If we request a larger size
+  // and then stop when we get less than requested, we will *silently* truncate.
+  // So we adapt to the API’s effective page size after the first response.
+  let pageSize = 500;
+
   let hasMore = true;
+
+  const maxPages = 200; // safety guard against infinite loops
 
   while (hasMore) {
     const queryParams = new URLSearchParams({
@@ -184,7 +192,7 @@ async function fetchAllPaginated(
     });
 
     const url = `${baseUrl}?${queryParams}`;
-    
+
     const response = await rateLimitedFetch(url, {
       method: 'GET',
       headers: {
@@ -200,20 +208,55 @@ async function fetchAllPaginated(
     }
 
     const data = await response.json();
-    const items = data.Results || data.data || data.items || data || [];
-    
-    if (Array.isArray(items)) {
-      allItems.push(...items);
-      console.log(`Fetched page ${pageNumber}: ${items.length} items (total: ${allItems.length})`);
-      
-      hasMore = items.length === pageSize;
-      pageNumber++;
-    } else {
-      hasMore = false;
+    const items = (data?.Results ?? data?.data ?? data?.items ?? data) || [];
+
+    if (!Array.isArray(items)) {
+      console.warn(`[Pagination] Non-array response for ${baseUrl} page=${pageNumber}. Keys=${data ? Object.keys(data).join(',') : 'none'}`);
+      break;
     }
 
-    if (pageNumber > 50) {
-      console.warn('Reached maximum page limit (50)');
+    allItems.push(...items);
+
+    // Try to detect server-provided pagination metadata
+    const metaPageNumber = Number(data?.PageNumber ?? data?.pageNumber ?? data?.pagenumber ?? pageNumber);
+    const metaPageSize = Number(data?.PageSize ?? data?.pageSize ?? data?.pagesize ?? NaN);
+    const metaTotalPages = Number(data?.TotalPages ?? data?.totalPages ?? data?.PageCount ?? data?.pageCount ?? NaN);
+    const metaTotalResults = Number(data?.TotalResults ?? data?.totalResults ?? data?.TotalCount ?? data?.totalCount ?? NaN);
+
+    console.log(
+      `Fetched page ${pageNumber}: ${items.length} items (total: ${allItems.length})` +
+        (Number.isFinite(metaTotalPages) ? ` | TotalPages=${metaTotalPages}` : '') +
+        (Number.isFinite(metaTotalResults) ? ` | TotalResults=${metaTotalResults}` : '') +
+        (Number.isFinite(metaPageSize) ? ` | PageSize=${metaPageSize}` : '')
+    );
+
+    // If the API caps pagesize (common: 200), adapt our comparison so we keep paging.
+    if (pageNumber === 1) {
+      if (Number.isFinite(metaPageSize) && metaPageSize > 0) {
+        if (metaPageSize !== pageSize) {
+          console.log(`[Pagination] API reports PageSize=${metaPageSize}; adapting from requested=${pageSize}`);
+        }
+        pageSize = metaPageSize;
+      } else if (items.length > 0 && items.length < pageSize) {
+        console.log(`[Pagination] API returned ${items.length} on first page with requested pagesize=${pageSize}; assuming cap and adapting.`);
+        pageSize = items.length;
+      }
+    }
+
+    // Decide whether there are more pages
+    if (Number.isFinite(metaTotalPages) && metaTotalPages > 0) {
+      hasMore = metaPageNumber < metaTotalPages;
+    } else if (Number.isFinite(metaTotalResults) && metaTotalResults >= 0 && pageSize > 0) {
+      hasMore = allItems.length < metaTotalResults;
+    } else {
+      // Fallback: continue if we got a "full" page
+      hasMore = pageSize > 0 && items.length === pageSize;
+    }
+
+    pageNumber++;
+
+    if (pageNumber > maxPages) {
+      console.warn(`Reached maximum page limit (${maxPages}) for ${baseUrl}`);
       break;
     }
   }
