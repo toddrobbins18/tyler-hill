@@ -1464,10 +1464,9 @@ async function performFullSync(
       let guardianPhone = parentPersonId ? parentPhoneMap.get(parentPersonId) || '' : '';
       let guardianName = parentPersonId ? parentNameMap.get(parentPersonId) || '' : '';
       
-      // Fallback to camper's own contact info if parent not found
-      if (!guardianEmail && person.ContactDetails?.Emails?.length > 0) {
-        guardianEmail = person.ContactDetails.Emails[0].Address;
-      }
+      // NO FALLBACK to camper's own contact info - we only want P1 parent email
+      // If no P1 parent email found, leave guardian_email empty (do not use camper's email)
+      // Phone fallback is acceptable since it's less critical than email
       if (!guardianPhone && person.ContactDetails?.PhoneNumbers?.length > 0) {
         guardianPhone = person.ContactDetails.PhoneNumbers[0].Number;
       }
