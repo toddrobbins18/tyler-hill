@@ -1100,7 +1100,7 @@ async function performFullSync(
       const camperId = String(camper.ID);
       const relatives = camper.Relatives || [];
       
-      // Log sample relatives to understand structure
+      // Log sample relatives to understand structure (first 5 campers with relatives)
       if (sampleCount < 5 && relatives.length > 0) {
         console.log(`[Sample Relative Data] Camper ${camperId}:`, JSON.stringify(relatives.slice(0, 2), null, 2));
         sampleCount++;
@@ -1108,6 +1108,7 @@ async function performFullSync(
       
       // Find P1 (Parent 1) from Relatives array
       // CampMinder typically uses RelativeTypeID: 1 for P1 (Parent 1) or RelativeType containing "P1" or "Parent 1"
+      // Also check for "Login" field which contains the P1 login email directly
       // Priority order: P1 > Guardian > Primary > First relative
       const p1Parent = relatives.find((r: any) => 
         r.RelativeTypeID === 1 || 
@@ -1129,32 +1130,60 @@ async function performFullSync(
         parentPersonIds.add(parentId);
         campersWithParents++;
         
-        // Get parent details from personMap (if available)
-        const parentPerson = personMap.get(parentId);
-        if (parentPerson) {
-          // Extract parent name
-          const parentName = `${parentPerson.Name?.First || ''} ${parentPerson.Name?.Last || ''}`.trim();
-          if (parentName) {
-            parentNameMap.set(parentId, parentName);
-          }
-          
-          // Extract parent email from ContactDetails
-          if (parentPerson.ContactDetails?.Emails?.length > 0) {
-            const loginEmail = parentPerson.ContactDetails.Emails.find((e: any) => e.IsLogin);
-            const email = loginEmail?.Address || parentPerson.ContactDetails.Emails[0]?.Address;
-            if (email) {
-              parentEmailMap.set(parentId, email);
+        // FIRST: Check if email is directly on the Relative object (P1 Login Info)
+        // CampMinder often includes Login, LoginEmail, Email, EmailAddress fields directly on relatives
+        const directEmail = guardian.Login || guardian.LoginEmail || guardian.Email || 
+                           guardian.EmailAddress || guardian.PrimaryEmail || guardian.ParentEmail ||
+                           guardian.P1Login || guardian.P1Email;
+        if (directEmail) {
+          parentEmailMap.set(parentId, directEmail);
+          console.log(`[Direct Relative Email] Found for parent ${parentId}: ${directEmail.substring(0, 20)}...`);
+        }
+        
+        // Extract name from relative object
+        const directName = guardian.Name || guardian.FullName || 
+                          `${guardian.FirstName || guardian.First || ''} ${guardian.LastName || guardian.Last || ''}`.trim();
+        if (directName) {
+          parentNameMap.set(parentId, directName);
+        }
+        
+        // Extract phone from relative object
+        const directPhone = guardian.Phone || guardian.PhoneNumber || guardian.MobilePhone || 
+                           guardian.CellPhone || guardian.PrimaryPhone;
+        if (directPhone) {
+          parentPhoneMap.set(parentId, directPhone);
+        }
+        
+        // SECOND: If no direct email, try to get from personMap (for fetched persons)
+        if (!directEmail) {
+          const parentPerson = personMap.get(parentId);
+          if (parentPerson) {
+            // Extract parent name if not already set
+            if (!parentNameMap.has(parentId)) {
+              const parentName = `${parentPerson.Name?.First || ''} ${parentPerson.Name?.Last || ''}`.trim();
+              if (parentName) {
+                parentNameMap.set(parentId, parentName);
+              }
             }
-          }
-          
-          // Extract parent phone from ContactDetails
-          if (parentPerson.ContactDetails?.PhoneNumbers?.length > 0) {
-            const mobilePhone = parentPerson.ContactDetails.PhoneNumbers.find((p: any) => 
-              p.Type === 'Mobile' || p.Type === 'Cell' || p.TypeID === 0 || p.TypeID === 2
-            );
-            const phone = mobilePhone?.Number || parentPerson.ContactDetails.PhoneNumbers[0]?.Number;
-            if (phone) {
-              parentPhoneMap.set(parentId, phone);
+            
+            // Extract parent email from ContactDetails
+            if (parentPerson.ContactDetails?.Emails?.length > 0) {
+              const loginEmail = parentPerson.ContactDetails.Emails.find((e: any) => e.IsLogin);
+              const email = loginEmail?.Address || parentPerson.ContactDetails.Emails[0]?.Address;
+              if (email) {
+                parentEmailMap.set(parentId, email);
+              }
+            }
+            
+            // Extract parent phone from ContactDetails if not already set
+            if (!parentPhoneMap.has(parentId) && parentPerson.ContactDetails?.PhoneNumbers?.length > 0) {
+              const mobilePhone = parentPerson.ContactDetails.PhoneNumbers.find((p: any) => 
+                p.Type === 'Mobile' || p.Type === 'Cell' || p.TypeID === 0 || p.TypeID === 2
+              );
+              const phone = mobilePhone?.Number || parentPerson.ContactDetails.PhoneNumbers[0]?.Number;
+              if (phone) {
+                parentPhoneMap.set(parentId, phone);
+              }
             }
           }
         }
