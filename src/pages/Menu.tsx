@@ -143,7 +143,7 @@ export default function Menu() {
     return acc;
   }, {} as Record<string, any[]>);
 
-  const sortedDates = Object.keys(groupedByDate).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+  const sortedDates = Object.keys(groupedByDate).sort((a, b) => new Date(b + 'T00:00:00').getTime() - new Date(a + 'T00:00:00').getTime());
 
   return (
     <div className="space-y-8">
@@ -246,7 +246,7 @@ export default function Menu() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Utensils className="h-5 w-5" />
-                    {new Date(date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    {new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">

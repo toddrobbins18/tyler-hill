@@ -625,9 +625,9 @@ const TutoringTherapy = () => {
 
                           {(enrollment.start_date || enrollment.end_date) && (
                             <div className="text-sm text-muted-foreground">
-                              {enrollment.start_date && format(new Date(enrollment.start_date), "MMM d")}
+                              {enrollment.start_date && format(new Date(enrollment.start_date + 'T00:00:00'), "MMM d")}
                               {enrollment.start_date && enrollment.end_date && " - "}
-                              {enrollment.end_date && format(new Date(enrollment.end_date), "MMM d, yyyy")}
+                              {enrollment.end_date && format(new Date(enrollment.end_date + 'T00:00:00'), "MMM d, yyyy")}
                             </div>
                           )}
 

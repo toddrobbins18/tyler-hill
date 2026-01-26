@@ -594,8 +594,8 @@ export default function SportsAcademy() {
                       )}
                       {enrollment.start_date && (
                         <p className="text-sm text-muted-foreground">
-                          📆 {new Date(enrollment.start_date).toLocaleDateString()} 
-                          {enrollment.end_date && ` - ${new Date(enrollment.end_date).toLocaleDateString()}`}
+                          📆 {new Date(enrollment.start_date + 'T00:00:00').toLocaleDateString()} 
+                          {enrollment.end_date && ` - ${new Date(enrollment.end_date + 'T00:00:00').toLocaleDateString()}`}
                         </p>
                       )}
                       {enrollment.notes && (

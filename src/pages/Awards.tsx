@@ -198,7 +198,7 @@ export default function Awards() {
                       <p className="text-sm text-muted-foreground mb-2">{achievement.description}</p>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Calendar className="h-3 w-3" />
-                        <span>{new Date(achievement.date).toLocaleDateString()}</span>
+                        <span>{new Date(achievement.date + 'T00:00:00').toLocaleDateString()}</span>
                         {achievement.category && (
                           <>
                             <span>•</span>

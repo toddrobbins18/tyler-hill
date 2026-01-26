@@ -273,7 +273,7 @@ export default function Dashboard() {
     const eventsData = trips?.map(trip => ({
       id: trip.id,
       title: trip.name,
-      date: new Date(trip.date).toLocaleDateString(),
+      date: new Date(trip.date + 'T00:00:00').toLocaleDateString(),
       type: trip.type
     })) || [];
     setUpcomingEvents(eventsData);

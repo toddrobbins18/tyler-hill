@@ -680,7 +680,7 @@ export default function ChildProfile() {
                               {roster.sports_calendar?.event_date && (
                                 <div className="flex items-center gap-1">
                                   <Calendar className="h-4 w-4" />
-                                  <span>{new Date(roster.sports_calendar.event_date).toLocaleDateString()}</span>
+                                  <span>{new Date(roster.sports_calendar.event_date + 'T00:00:00').toLocaleDateString()}</span>
                                 </div>
                               )}
                               {roster.sports_calendar?.time && (
@@ -741,7 +741,7 @@ export default function ChildProfile() {
                               {attendance.trips?.date && (
                                 <div className="flex items-center gap-1">
                                   <Calendar className="h-4 w-4" />
-                                  <span>{new Date(attendance.trips.date).toLocaleDateString()}</span>
+                                  <span>{new Date(attendance.trips.date + 'T00:00:00').toLocaleDateString()}</span>
                                 </div>
                               )}
                               {attendance.trips?.departure_time && (

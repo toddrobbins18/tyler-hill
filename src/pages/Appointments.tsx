@@ -292,7 +292,7 @@ export default function Appointments() {
   const filteredAppointments = appointments.filter(apt => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const aptDate = new Date(apt.appointment_date);
+    const aptDate = new Date(apt.appointment_date + 'T00:00:00');
 
     // Tab filter
     if (activeTab === "upcoming" && aptDate < today) return false;
@@ -414,7 +414,7 @@ export default function Appointments() {
                         <TableCell>
                           <div className="flex flex-col">
                             <span className="font-medium">
-                              {format(new Date(apt.appointment_date), "MMM d, yyyy")}
+                              {format(new Date(apt.appointment_date + 'T00:00:00'), "MMM d, yyyy")}
                             </span>
                             {apt.appointment_time && (
                               <span className="text-sm text-muted-foreground flex items-center gap-1">

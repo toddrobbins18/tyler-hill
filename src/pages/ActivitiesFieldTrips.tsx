@@ -484,7 +484,7 @@ export default function ActivitiesFieldTrips() {
                           <p className="text-sm text-muted-foreground mt-1">
                             {event.is_multi_day && event.end_date ? (
                               <>
-                                {format(new Date(event.event_date), 'MMM d')} - {format(new Date(event.end_date), 'MMM d, yyyy')}
+                                {format(new Date(event.event_date + 'T00:00:00'), 'MMM d')} - {format(new Date(event.end_date + 'T00:00:00'), 'MMM d, yyyy')}
                               </>
                             ) : (
                               new Date(event.event_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
@@ -514,8 +514,8 @@ export default function ActivitiesFieldTrips() {
                         <Badge>{event.activity_type}</Badge>
                         {event.is_multi_day && event.end_date && (
                           (() => {
-                            const start = new Date(event.event_date);
-                            const end = new Date(event.end_date);
+                            const start = new Date(event.event_date + 'T00:00:00');
+                            const end = new Date(event.end_date + 'T00:00:00');
                             const diffTime = Math.abs(end.getTime() - start.getTime());
                             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
                             return (

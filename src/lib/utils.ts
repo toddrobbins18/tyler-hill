@@ -32,3 +32,33 @@ export function formatTime24Hour(time12: string): string {
   
   return `${hour.toString().padStart(2, '0')}:${minutes}`;
 }
+
+/**
+ * Parse a date string (YYYY-MM-DD) into a Date object without timezone shifting.
+ * This prevents the common issue where dates are interpreted as UTC and shift 
+ * to the previous/next day when displayed in local time.
+ * 
+ * @param dateString - A date string in YYYY-MM-DD format
+ * @returns A Date object representing midnight local time on that date
+ */
+export function parseLocalDate(dateString: string): Date {
+  if (!dateString) return new Date();
+  return new Date(dateString + 'T00:00:00');
+}
+
+/**
+ * Format a date string for display, handling timezone correctly.
+ * 
+ * @param dateString - A date string in YYYY-MM-DD format
+ * @param options - Intl.DateTimeFormat options
+ * @returns Formatted date string
+ */
+export function formatLocalDate(dateString: string, options?: Intl.DateTimeFormatOptions): string {
+  if (!dateString) return '';
+  const defaultOptions: Intl.DateTimeFormatOptions = { 
+    year: 'numeric', 
+    month: 'short', 
+    day: 'numeric' 
+  };
+  return parseLocalDate(dateString).toLocaleDateString('en-US', options || defaultOptions);
+}
