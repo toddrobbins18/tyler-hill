@@ -279,8 +279,8 @@ export default function Transportation() {
   // Helper to format trip date display
   const formatTripDate = (trip: any) => {
     if (trip.is_multi_day && trip.end_date) {
-      const startDate = new Date(trip.date);
-      const endDate = new Date(trip.end_date);
+      const startDate = new Date(trip.date + 'T00:00:00');
+      const endDate = new Date(trip.end_date + 'T00:00:00');
       const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
       return {
@@ -289,7 +289,7 @@ export default function Transportation() {
       };
     }
     return {
-      dateText: new Date(trip.date).toLocaleDateString(),
+      dateText: new Date(trip.date + 'T00:00:00').toLocaleDateString(),
       durationBadge: null
     };
   };

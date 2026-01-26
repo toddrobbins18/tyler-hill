@@ -77,7 +77,7 @@ export default function ConflictWarningDialog({
                   <div className="flex items-center gap-4 text-muted-foreground">
                     <div className="flex items-center gap-1.5">
                       <Calendar className="h-3.5 w-3.5" />
-                      <span>{new Date(conflict.event2_date).toLocaleDateString()}</span>
+                      <span>{new Date(conflict.event2_date + 'T00:00:00').toLocaleDateString()}</span>
                     </div>
                     {conflict.event2_time && (
                       <div className="flex items-center gap-1.5">

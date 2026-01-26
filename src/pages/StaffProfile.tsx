@@ -482,7 +482,7 @@ export default function StaffProfile() {
                       </div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Calendar className="h-3 w-3" />
-                        <span>{new Date(evaluation.date).toLocaleDateString()}</span>
+                        <span>{new Date(evaluation.date + 'T00:00:00').toLocaleDateString()}</span>
                       </div>
                     </div>
 
@@ -548,7 +548,7 @@ export default function StaffProfile() {
                           <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-2">
                             <div className="flex items-center gap-1">
                               <Calendar className="h-4 w-4" />
-                              <span>{new Date(apt.appointment_date).toLocaleDateString()}</span>
+                              <span>{new Date(apt.appointment_date + 'T00:00:00').toLocaleDateString()}</span>
                             </div>
                             {apt.appointment_time && (
                               <div className="flex items-center gap-1">
@@ -573,7 +573,7 @@ export default function StaffProfile() {
                           )}
                           {apt.follow_up_required && apt.follow_up_date && (
                             <Badge variant="outline" className="mt-2">
-                              Follow-up: {new Date(apt.follow_up_date).toLocaleDateString()}
+                              Follow-up: {new Date(apt.follow_up_date + 'T00:00:00').toLocaleDateString()}
                             </Badge>
                           )}
                         </div>

@@ -307,7 +307,7 @@ export default function MasterCalendar() {
       }
       
       // Default: sort by date
-      const dateCompare = new Date(a.event_date).getTime() - new Date(b.event_date).getTime();
+      const dateCompare = new Date(a.event_date + 'T00:00:00').getTime() - new Date(b.event_date + 'T00:00:00').getTime();
       if (dateCompare !== 0) return dateCompare;
       
       // If same date, sort by time
@@ -318,7 +318,7 @@ export default function MasterCalendar() {
     });
 
   const groupedEvents: Record<string, UnifiedEvent[]> = filteredAndSortedEvents.reduce((acc, event) => {
-    const date = new Date(event.event_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+    const date = new Date(event.event_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
     if (!acc[date]) acc[date] = [];
     acc[date].push(event);
     return acc;
@@ -577,7 +577,7 @@ export default function MasterCalendar() {
                             {event.title}
                           </CardTitle>
                           <p className="text-sm text-muted-foreground mt-1">
-                            {new Date(event.event_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                            {new Date(event.event_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                           </p>
                         </div>
                       </div>

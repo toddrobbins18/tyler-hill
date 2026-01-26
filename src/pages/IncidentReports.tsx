@@ -193,7 +193,7 @@ export default function IncidentReports() {
                     <CardTitle className="text-lg">
                       {incident.incident_children?.map((ic: any) => ic.children?.name).join(", ") || "No children assigned"}
                     </CardTitle>
-                    <CardDescription>{new Date(incident.date).toLocaleDateString()}</CardDescription>
+                    <CardDescription>{new Date(incident.date + 'T00:00:00').toLocaleDateString()}</CardDescription>
                   </div>
                   <div className="flex gap-1">
                     <Button
