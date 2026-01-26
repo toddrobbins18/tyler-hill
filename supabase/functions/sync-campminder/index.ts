@@ -7,6 +7,7 @@ const CM_STAFF_URL = 'https://api.campminder.com/staff';
 const CM_DIVISIONS_URL = 'https://api.campminder.com/divisions';
 const CM_SESSIONS_URL = 'https://api.campminder.com/sessions';
 const CM_BUNKS_URL = 'https://api.campminder.com/bunks';
+const CM_FAMILIES_URL = 'https://api.campminder.com/families';
 
 
 // Rate limiting: 300ms between calls (~3.3 calls/sec = ~200/min)
@@ -1222,7 +1223,134 @@ async function performFullSync(
       console.log(`  Parents with phones: ${parentPhoneMap.size}`);
       console.log(`  Parents with names: ${parentNameMap.size}`);
     } // End of phase 5 (parent fetching)
+    
+    // =====================================================
+    // PHASE 5b: Use Family API for campers without parent info
+    // CampMinder's Family API provides family/household groupings
+    // =====================================================
+    const campersWithoutParentInfo = Array.from(personMap.keys()).filter(id => !camperToParentMap.has(id));
+    console.log(`\n--- FETCHING FAMILY DATA FOR ${campersWithoutParentInfo.length} CAMPERS WITHOUT PARENT INFO ---`);
+    
+    if (campersWithoutParentInfo.length > 0) {
+      let familyFetchSuccess = 0;
+      let familyFetchFailed = 0;
+      
+      // Process in batches to avoid timeouts
+      for (let i = 0; i < campersWithoutParentInfo.length; i++) {
+        const camperId = campersWithoutParentInfo[i];
+        
+        try {
+          // Fetch family members for this camper using the Families API
+          const familyUrl = `${CM_FAMILIES_URL}?personid=${camperId}&clientid=${clientId}`;
+          const response = await rateLimitedFetch(familyUrl, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Ocp-Apim-Subscription-Key': subscriptionKey,
+            },
+          });
+          
+          if (response.ok) {
+            const familyData = await response.json();
+            const familyMembers = familyData?.Results || familyData?.data || familyData || [];
+            
+            if (Array.isArray(familyMembers) && familyMembers.length > 0) {
+              // Look for adult family members (parents/guardians)
+              for (const member of familyMembers) {
+                // Skip the camper themselves
+                if (String(member.PersonID || member.ID) === camperId) continue;
+                
+                const personId = String(member.PersonID || member.ID);
+                const isAdult = member.IsAdult === true || member.PersonType === 'Adult' || member.PersonTypeID === 2;
+                const isPrimary = member.IsPrimary === true || member.IsGuardian === true;
+                
+                // Get contact info from family member
+                let email = member.Email || member.EmailAddress || '';
+                let phone = member.Phone || member.PhoneNumber || member.MobilePhone || '';
+                let name = '';
+                
+                if (member.Name) {
+                  name = `${member.Name.First || ''} ${member.Name.Last || ''}`.trim();
+                } else {
+                  name = `${member.FirstName || member.First || ''} ${member.LastName || member.Last || ''}`.trim();
+                }
+                
+                // If we don't have email from family member, fetch their person record
+                if ((isAdult || isPrimary) && !email) {
+                  try {
+                    const parentPersonUrl = `${CM_PERSONS_URL}/${personId}?clientid=${clientId}&includecontactdetails=true`;
+                    const parentResponse = await rateLimitedFetch(parentPersonUrl, {
+                      method: 'GET',
+                      headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Ocp-Apim-Subscription-Key': subscriptionKey,
+                      },
+                    });
+                    
+                    if (parentResponse.ok) {
+                      const parentPerson = await parentResponse.json();
+                      
+                      if (parentPerson.ContactDetails?.Emails?.length > 0) {
+                        const loginEmail = parentPerson.ContactDetails.Emails.find((e: any) => e.IsLogin);
+                        email = loginEmail?.Address || parentPerson.ContactDetails.Emails[0]?.Address || '';
+                      }
+                      
+                      if (!phone && parentPerson.ContactDetails?.PhoneNumbers?.length > 0) {
+                        const mobilePhone = parentPerson.ContactDetails.PhoneNumbers.find((p: any) => 
+                          p.Type === 'Mobile' || p.Type === 'Cell' || p.TypeID === 0 || p.TypeID === 2
+                        );
+                        phone = mobilePhone?.Number || parentPerson.ContactDetails.PhoneNumbers[0]?.Number || '';
+                      }
+                      
+                      if (!name && parentPerson.Name) {
+                        name = `${parentPerson.Name.First || ''} ${parentPerson.Name.Last || ''}`.trim();
+                      }
+                    }
+                  } catch (err) {
+                    console.error(`[Family API] Error fetching parent ${personId}:`, err);
+                  }
+                }
+                
+                // Store the found parent info
+                if ((isAdult || isPrimary) && (email || phone || name)) {
+                  camperToParentMap.set(camperId, personId);
+                  if (email) parentEmailMap.set(personId, email);
+                  if (phone) parentPhoneMap.set(personId, phone);
+                  if (name) parentNameMap.set(personId, name);
+                  familyFetchSuccess++;
+                  
+                  if (familyFetchSuccess <= 5) {
+                    console.log(`[Family API] Found parent for camper ${camperId}: ${name}, email=${!!email}, phone=${!!phone}`);
+                  }
+                  break; // Found a parent, move to next camper
+                }
+              }
+            }
+          } else {
+            familyFetchFailed++;
+            if (familyFetchFailed <= 3) {
+              console.log(`[Family API] Failed to fetch family for camper ${camperId}: ${response.status}`);
+            }
+          }
+        } catch (err) {
+          familyFetchFailed++;
+          console.error(`[Family API] Error fetching family for camper ${camperId}:`, err);
+        }
+        
+        // Progress logging
+        if ((i + 1) % 100 === 0 || i === campersWithoutParentInfo.length - 1) {
+          console.log(`[Family API] Progress: ${i + 1}/${campersWithoutParentInfo.length} (${familyFetchSuccess} found parents, ${familyFetchFailed} failed)`);
+        }
+      }
+      
+      console.log(`\n[Family API Summary]`);
+      console.log(`  Found parents via Family API: ${familyFetchSuccess}`);
+      console.log(`  Failed/No data: ${familyFetchFailed}`);
+      console.log(`  Total parents with emails now: ${parentEmailMap.size}`);
+      console.log(`  Total parents with phones now: ${parentPhoneMap.size}`);
+    }
     } // End of parent info extraction (camper sync - syncType === 'campers' || syncType === 'full')
+
 
     // =====================================================
     // PHASE 6: Sync campers to database (including fallback for missing persons)
