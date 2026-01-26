@@ -1094,12 +1094,32 @@ async function performFullSync(
     if (syncType === 'campers' || syncType === 'full') {
       console.log('\n--- EXTRACTING PARENT INFO FROM RELATIVES ---');
     
+    // Log first 5 campers' relative structures to understand the data
+    let sampleCount = 0;
     for (const camper of campers) {
       const camperId = String(camper.ID);
       const relatives = camper.Relatives || [];
       
-      // Find guardian from Relatives array (IsGuardian=true or IsPrimary=true)
-      const guardian = relatives.find((r: any) => 
+      // Log sample relatives to understand structure
+      if (sampleCount < 5 && relatives.length > 0) {
+        console.log(`[Sample Relative Data] Camper ${camperId}:`, JSON.stringify(relatives.slice(0, 2), null, 2));
+        sampleCount++;
+      }
+      
+      // Find P1 (Parent 1) from Relatives array
+      // CampMinder typically uses RelativeTypeID: 1 for P1 (Parent 1) or RelativeType containing "P1" or "Parent 1"
+      // Priority order: P1 > Guardian > Primary > First relative
+      const p1Parent = relatives.find((r: any) => 
+        r.RelativeTypeID === 1 || 
+        r.RelativeType === 'P1' || 
+        r.RelativeType === 'Parent 1' ||
+        r.RelativeType?.includes?.('P1') ||
+        r.RelativeType?.toLowerCase?.()?.includes?.('parent 1') ||
+        r.TypeID === 1 ||
+        r.Type === 'P1'
+      );
+      
+      const guardian = p1Parent || relatives.find((r: any) => 
         r.IsGuardian === true || r.IsPrimary === true
       ) || relatives[0]; // Fallback to first relative
       
@@ -1262,7 +1282,15 @@ async function performFullSync(
                 
                 const personId = String(member.PersonID || member.ID);
                 const isAdult = member.IsAdult === true || member.PersonType === 'Adult' || member.PersonTypeID === 2;
-                const isPrimary = member.IsPrimary === true || member.IsGuardian === true;
+                // Check for P1 (Parent 1) designation
+                const isP1 = member.RelativeTypeID === 1 || 
+                             member.RelativeType === 'P1' || 
+                             member.RelativeType === 'Parent 1' ||
+                             member.RelativeType?.includes?.('P1') ||
+                             member.RelativeType?.toLowerCase?.()?.includes?.('parent 1') ||
+                             member.TypeID === 1 ||
+                             member.Type === 'P1';
+                const isPrimary = isP1 || member.IsPrimary === true || member.IsGuardian === true;
                 
                 // Get contact info from family member
                 let email = member.Email || member.EmailAddress || '';
