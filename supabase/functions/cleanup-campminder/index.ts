@@ -95,9 +95,12 @@ serve(async (req) => {
         }
 
         // Fetch active staff from CampMinder
-        console.log(`[Cleanup] Fetching active staff from CampMinder for ${company.name}...`);
+        console.log(`[Cleanup] Fetching active staff from CampMinder for ${company.name}, season ${season}, clientId ${clientId}...`);
         
-        const staffUrl = `https://api.campminder.com/staff?clientid=${clientId}&status=1&pagesize=1000`;
+        // Must include seasonid parameter - CampMinder requires it for staff endpoint
+        const staffUrl = `https://api.campminder.com/staff?clientid=${clientId}&seasonid=${season}&status=1&pagenumber=1&pagesize=500`;
+        console.log(`[Cleanup] Staff URL: ${staffUrl}`);
+        
         const staffResponse = await fetch(staffUrl, {
           method: 'GET',
           headers: {
@@ -107,8 +110,9 @@ serve(async (req) => {
         });
 
         if (!staffResponse.ok) {
-          console.error(`[Cleanup] Failed to fetch staff for ${company.name}`);
-          results.push({ company: company.name, status: 'error', reason: 'Staff fetch failed' });
+          const errorText = await staffResponse.text();
+          console.error(`[Cleanup] Failed to fetch staff for ${company.name}: ${staffResponse.status} - ${errorText}`);
+          results.push({ company: company.name, status: 'error', reason: 'Staff fetch failed', details: errorText.substring(0, 200) });
           continue;
         }
 
