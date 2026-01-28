@@ -126,7 +126,8 @@ export default function RolePermissions() {
         can_access: !currentValue,
         company_id: currentCompany!.id
       }, {
-        onConflict: 'role,menu_item'
+        // Must match DB unique constraint: (company_id, role, menu_item)
+        onConflict: 'company_id,role,menu_item'
       });
 
     if (updateError) {
