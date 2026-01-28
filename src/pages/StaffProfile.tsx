@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Star, Calendar, TrendingUp, Award, Pencil, ClipboardCheck, FileText, Plus, Stethoscope, Clock, MapPin } from "lucide-react";
+import { ArrowLeft, Star, Calendar, TrendingUp, Award, Pencil, ClipboardCheck, FileText, Plus, Stethoscope, Clock, MapPin, Hospital } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import { EvaluateStaffDialog } from "@/components/dialogs/EvaluateStaffDialog";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import ConflictIndicator from "@/components/ConflictIndicator";
+import { HealthCenterTab } from "@/components/HealthCenterTab";
 
 export default function StaffProfile() {
   const { id } = useParams();
@@ -224,10 +225,14 @@ export default function StaffProfile() {
       </div>
 
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="birthday">Birthday</TabsTrigger>
           <TabsTrigger value="allergies">Allergies</TabsTrigger>
+          <TabsTrigger value="health-center">
+            <Hospital className="h-4 w-4 mr-1" />
+            Health Center
+          </TabsTrigger>
           <TabsTrigger value="notes">Notes</TabsTrigger>
           <TabsTrigger value="evaluations">Evaluations</TabsTrigger>
           <TabsTrigger value="achievements">Achievements</TabsTrigger>
@@ -585,6 +590,10 @@ export default function StaffProfile() {
             )}
           </TabsContent>
         )}
+
+        <TabsContent value="health-center">
+          <HealthCenterTab entityId={id || ''} entityType="staff" />
+        </TabsContent>
       </Tabs>
 
       <EditStaffDialog

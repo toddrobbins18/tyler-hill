@@ -48,6 +48,7 @@ export default function Nurse() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDivision, setSelectedDivision] = useState("all");
   const [sortBy, setSortBy] = useState<'name' | 'division'>('name');
+  const [medSortBy, setMedSortBy] = useState<'meal_time' | 'name' | 'status'>('meal_time');
   const [rfidInput, setRfidInput] = useState("");
   const [scannedChild, setScannedChild] = useState<any>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -209,6 +210,37 @@ export default function Nurse() {
       const priorityB = getMealTimePriority(b.meal_time);
       return priorityA - priorityB;
     });
+  };
+
+  const sortMedicationsByName = (meds: any[]) => {
+    return [...meds].sort((a, b) => {
+      const nameA = a.children?.name || '';
+      const nameB = b.children?.name || '';
+      return nameA.localeCompare(nameB);
+    });
+  };
+
+  const sortMedicationsByStatus = (meds: any[]) => {
+    return [...meds].sort((a, b) => {
+      // Pending first (false < true in this context, so we reverse)
+      if (a.administered !== b.administered) {
+        return a.administered ? 1 : -1;
+      }
+      // Then by meal time
+      return getMealTimePriority(a.meal_time) - getMealTimePriority(b.meal_time);
+    });
+  };
+
+  const getSortedMedications = (meds: any[]) => {
+    switch (medSortBy) {
+      case 'name':
+        return sortMedicationsByName(meds);
+      case 'status':
+        return sortMedicationsByStatus(meds);
+      case 'meal_time':
+      default:
+        return sortMedicationsByMealTime(meds);
+    }
   };
 
   const fetchMedications = async (date?: Date) => {
@@ -1076,8 +1108,23 @@ export default function Nurse() {
         <TabsContent value="today">
           <Card>
             <CardHeader>
-              <CardTitle>Today's Medications</CardTitle>
-              <CardDescription>Track medication administration</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Today's Medications</CardTitle>
+                  <CardDescription>Track medication administration</CardDescription>
+                </div>
+                <Select value={medSortBy} onValueChange={(value: 'meal_time' | 'name' | 'status') => setMedSortBy(value)}>
+                  <SelectTrigger className="w-[180px]">
+                    <ArrowUpDown className="h-4 w-4 mr-2" />
+                    <SelectValue placeholder="Sort by..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="meal_time">Sort by Meal Time</SelectItem>
+                    <SelectItem value="name">Sort by Name</SelectItem>
+                    <SelectItem value="status">Sort by Status</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </CardHeader>
             <CardContent>
               {/* RFID Scanner Section */}
@@ -1157,7 +1204,7 @@ export default function Nurse() {
                 <p className="text-muted-foreground">No medications scheduled for today</p>
               ) : (
                 <div className="space-y-3">
-                  {medications.map((med) => (
+                  {getSortedMedications(medications).map((med) => (
                     <div
                       key={med.id}
                       className="p-4 rounded-lg border bg-card"
