@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList, Hospital, Clock, UserCheck, Search, ArrowUpDown, Users, Loader2, Scan } from "lucide-react";
+import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList, Hospital, Clock, UserCheck, Search, ArrowUpDown, Users, Loader2, Scan, Pencil, CalendarDays } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CSVUploader } from "@/components/CSVUploader";
 import { Calendar } from "@/components/ui/calendar";
@@ -18,6 +18,7 @@ import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
+import { EditMedicationDialog } from "@/components/dialogs/EditMedicationDialog";
 
 // Helper to check if we should show limited features for Timber Lake
 const useTimberLakeMode = () => {
@@ -59,7 +60,15 @@ export default function Nurse() {
   const [admissionReason, setAdmissionReason] = useState("");
   const [admissionNotes, setAdmissionNotes] = useState("");
   
+  // Edit medication state
+  const [editingMedication, setEditingMedication] = useState<any>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  
   const { toast } = useToast();
+  const { userRole, isSuperAdmin } = usePermissions();
+  
+  // Check if user can edit/delete medications (admin or health_center)
+  const canManageMedications = isSuperAdmin || userRole === 'admin' || userRole === 'health_center';
 
   const [formData, setFormData] = useState({
     medication_name: "",
@@ -176,6 +185,32 @@ export default function Nurse() {
     setDivisions(sortDivisionsGirlsFirst(data || []));
   };
 
+  // Meal time order for sorting
+  const MEAL_TIME_ORDER = [
+    "Before Breakfast",
+    "After Breakfast",
+    "Before Lunch",
+    "After Lunch",
+    "Before Dinner",
+    "After Dinner",
+    "Bedtime"
+  ];
+
+  const getMealTimePriority = (mealTime: string[] | string | null): number => {
+    if (!mealTime) return 999;
+    const time = Array.isArray(mealTime) ? mealTime[0] : mealTime;
+    const index = MEAL_TIME_ORDER.findIndex(mt => time?.includes(mt));
+    return index >= 0 ? index : 999;
+  };
+
+  const sortMedicationsByMealTime = (meds: any[]) => {
+    return [...meds].sort((a, b) => {
+      const priorityA = getMealTimePriority(a.meal_time);
+      const priorityB = getMealTimePriority(b.meal_time);
+      return priorityA - priorityB;
+    });
+  };
+
   const fetchMedications = async (date?: Date) => {
     const dateStr = date ? format(date, 'yyyy-MM-dd') : new Date().toISOString().split('T')[0];
     const { data, error } = await supabase
@@ -183,14 +218,14 @@ export default function Nurse() {
       .select("*, children(name), staff(name)")
       .eq("date", dateStr)
       .eq("season", currentSeason)
-      .eq("company_id", currentCompany?.id || '')
-      .order("meal_time");
+      .eq("company_id", currentCompany?.id || '');
 
     if (error) {
       toast({ title: "Error fetching medications", variant: "destructive" });
       return;
     }
-    setMedications(data || []);
+    // Sort medications by meal time using custom order
+    setMedications(sortMedicationsByMealTime(data || []));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -958,7 +993,7 @@ export default function Nurse() {
                             )}
                           </div>
                           <div className="space-y-2">
-                            {childMeds.map((med) => (
+                            {sortMedicationsByMealTime(childMeds).map((med) => (
                               <div key={med.id} className="flex items-start gap-3 p-3 bg-muted/50 rounded">
                                 <Checkbox
                                   checked={med.administered}
@@ -974,10 +1009,25 @@ export default function Nurse() {
                                         Given
                                       </Badge>
                                     )}
+                                    {med.is_recurring && (
+                                      <Badge variant="secondary" className="text-xs">
+                                        Recurring
+                                      </Badge>
+                                    )}
                                   </div>
                                   <p className="text-sm text-muted-foreground">
-                                    {med.dosage} - {med.meal_time}
+                                    {med.dosage} - {Array.isArray(med.meal_time) ? med.meal_time.join(", ") : med.meal_time}
                                   </p>
+                                  {/* Show start/end date info */}
+                                  {(med.date || med.end_date) && (
+                                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                                      <CalendarDays className="h-3 w-3" />
+                                      <span>
+                                        {med.date && `Started: ${format(new Date(med.date + 'T00:00:00'), 'MMM d')}`}
+                                        {med.end_date && ` • Ends: ${format(new Date(med.end_date + 'T00:00:00'), 'MMM d')}`}
+                                      </span>
+                                    </div>
+                                  )}
                                   {med.notes && (
                                     <p className="text-xs text-muted-foreground mt-1">{med.notes}</p>
                                   )}
@@ -987,14 +1037,30 @@ export default function Nurse() {
                                     </p>
                                   )}
                                 </div>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDelete(med.id)}
-                                  className="text-destructive hover:text-destructive"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                                <div className="flex gap-1">
+                                  {canManageMedications && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        setEditingMedication(med);
+                                        setIsEditDialogOpen(true);
+                                      }}
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                  {canManageMedications && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleDelete(med.id)}
+                                      className="text-destructive hover:text-destructive"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -1097,14 +1163,29 @@ export default function Nurse() {
                       className="p-4 rounded-lg border bg-card"
                     >
                       <div className="flex items-start justify-between mb-2">
-                        <div>
+                        <div className="flex-1">
                           <p className="font-medium">{med.children?.name}</p>
                           <p className="text-sm text-muted-foreground">
                             {med.medication_name} - {med.dosage}
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            {med.meal_time}
+                            {Array.isArray(med.meal_time) ? med.meal_time.join(", ") : med.meal_time}
                           </p>
+                          {/* Show start/end date info */}
+                          {(med.date || med.end_date) && (
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                              <CalendarDays className="h-3 w-3" />
+                              <span>
+                                {med.date && `Started: ${format(new Date(med.date + 'T00:00:00'), 'MMM d')}`}
+                                {med.end_date && ` • Ends: ${format(new Date(med.end_date + 'T00:00:00'), 'MMM d')}`}
+                              </span>
+                            </div>
+                          )}
+                          {med.is_recurring && (
+                            <Badge variant="secondary" className="text-xs mt-1">
+                              Recurring {med.frequency !== 'daily' ? `(${med.frequency})` : ''}
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex items-center gap-2">
                           {med.administered ? (
@@ -1118,14 +1199,28 @@ export default function Nurse() {
                               Pending
                             </Badge>
                           )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDelete(med.id)}
-                            className="text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {canManageMedications && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setEditingMedication(med);
+                                setIsEditDialogOpen(true);
+                              }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {canManageMedications && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDelete(med.id)}
+                              className="text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                       {!med.administered && (
@@ -1729,6 +1824,14 @@ export default function Nurse() {
       </Tabs>
         </>
       )}
+
+      {/* Edit Medication Dialog */}
+      <EditMedicationDialog
+        medication={editingMedication}
+        open={isEditDialogOpen}
+        onOpenChange={setIsEditDialogOpen}
+        onSuccess={() => fetchMedications(selectedDate)}
+      />
     </div>
   );
 }
