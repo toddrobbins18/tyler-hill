@@ -60,9 +60,12 @@ export default function UserApprovals() {
       .eq("approved", false)
       .order("approval_requested_at", { ascending: false });
 
-    // Super admins see all pending users, regular admins only see their company's users
+    // Super admins see all pending users.
+    // Company admins should see BOTH:
+    //  - users already tied to their company, AND
+    //  - users with no company assigned yet (so an admin can assign + approve)
     if (!isSuperAdmin && currentCompany?.id) {
-      query = query.eq("company_id", currentCompany.id);
+      query = query.or(`company_id.eq.${currentCompany.id},company_id.is.null`);
     }
 
     const { data, error } = await query;
