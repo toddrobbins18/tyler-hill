@@ -984,12 +984,12 @@ async function performFullSync(
       const currentSeason = season;
       const fallbackSeason = '2025';
       
-      // IMPORTANT: Do NOT change these statuses without verifying expected counts!
-      // Expected counts (2026): Tyler Hill=291, Timber Lake Camp=226, Timber Lake West=182
-      // CampMinder Status IDs: 1=Active, 2=Hired, 3=Applied, 4=Pending, 5=Returning
-      // We sync Active, Hired, and Returning staff (skip Applied, Pending)
-      const allStatuses = [1, 2, 5];
-      console.log(`[Staff Sync] Fetching Active, Hired & Returning staff (statuses: ${allStatuses.join(', ')}) for season ${currentSeason}...`);
+      // IMPORTANT: Per CampMinder Staff API docs, status IDs are:
+      // 1=Active, 2=Resigned, 3=Dismissed, 4=Cancelled
+      // We ONLY sync Active staff (status=1) - Resigned/Dismissed/Cancelled are not current staff
+      // Expected counts (2026): Tyler Hill~290, Timber Lake Camp~230, Timber Lake West~180
+      const allStatuses = [1]; // Only Active staff
+      console.log(`[Staff Sync] Fetching Active staff (status: 1) for season ${currentSeason}...`);
       
       const staffMap = new Map<string, any>();
       
@@ -1010,13 +1010,11 @@ async function performFullSync(
       }
       
       staffAssignments = Array.from(staffMap.values());
-      console.log(`Combined ${staffAssignments.length} unique staff (Active, Hired & Returning) for season ${currentSeason}`);
+      console.log(`Combined ${staffAssignments.length} unique Active staff for season ${currentSeason}`);
 
-      // SAFEGUARD: Warn if count looks like pagination truncation (common caps: 200, 500, 1000)
-      const suspiciousCounts = [100, 200, 500, 1000];
-      if (suspiciousCounts.includes(staffAssignments.length)) {
-        console.warn(`⚠️ [PAGINATION WARNING] Staff count is exactly ${staffAssignments.length} - this may indicate API pagination truncation!`);
-        console.warn(`   Expected counts: Tyler Hill=291, Timber Lake Camp=226+. If count is lower, investigate pagination.`);
+      // SAFEGUARD: Warn if count looks unusually low (expected ~250-300 for camps)
+      if (staffAssignments.length < 100) {
+        console.warn(`⚠️ [LOW COUNT WARNING] Only ${staffAssignments.length} Active staff found - expected 200-300 for camps`);
       }
 
       if (staffAssignments.length === 0) {
@@ -1037,7 +1035,7 @@ async function performFullSync(
           }
         }
         staffAssignments = Array.from(fallbackMap.values());
-        console.log(`Combined ${staffAssignments.length} unique staff (Active, Hired & Returning) for fallback season ${fallbackSeason}`);
+        console.log(`Combined ${staffAssignments.length} unique Active staff for fallback season ${fallbackSeason}`);
       }
 
       if (staffAssignments.length > 0) {
@@ -1141,9 +1139,17 @@ async function performFullSync(
         }
         
         // Extract name from relative object
-        const directName = guardian.Name || guardian.FullName || 
-                          `${guardian.FirstName || guardian.First || ''} ${guardian.LastName || guardian.Last || ''}`.trim();
-        if (directName) {
+        // Handle Name as object {First, Last} or as string
+        let directName = '';
+        if (guardian.Name && typeof guardian.Name === 'object') {
+          directName = `${guardian.Name.First || guardian.Name.first || ''} ${guardian.Name.Last || guardian.Name.last || ''}`.trim();
+        } else if (guardian.Name && typeof guardian.Name === 'string') {
+          directName = guardian.Name;
+        } else {
+          directName = guardian.FullName || 
+                      `${guardian.FirstName || guardian.First || ''} ${guardian.LastName || guardian.Last || ''}`.trim();
+        }
+        if (directName && typeof directName === 'string' && directName.trim()) {
           parentNameMap.set(parentId, directName);
         }
         
