@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Award, Trophy, Star, Calendar, AlertTriangle, FileText, Pencil, Users, MapPin, Shield, Stethoscope, Clock } from "lucide-react";
+import { ArrowLeft, Award, Trophy, Star, Calendar, AlertTriangle, FileText, Pencil, Users, MapPin, Shield, Stethoscope, Clock, Hospital } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import { useCompany } from "@/contexts/CompanyContext";
 import CamperReportsTab from "@/components/CamperReportsTab";
 import ConflictIndicator from "@/components/ConflictIndicator";
 import { usePermissions } from "@/hooks/usePermissions";
+import { HealthCenterTab } from "@/components/HealthCenterTab";
 
 export default function ChildProfile() {
   const { id } = useParams();
@@ -293,10 +294,14 @@ export default function ChildProfile() {
       </div>
 
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="birthday">Birthday</TabsTrigger>
           <TabsTrigger value="allergies">Allergies</TabsTrigger>
+          <TabsTrigger value="health-center">
+            <Hospital className="h-4 w-4 mr-1" />
+            Health Center
+          </TabsTrigger>
           <TabsTrigger value="achievements">Achievements</TabsTrigger>
           <TabsTrigger value="activities">Activities</TabsTrigger>
           <TabsTrigger value="sports-academy">Sports Academy</TabsTrigger>
@@ -988,6 +993,10 @@ export default function ChildProfile() {
             </TabsContent>
           </>
         )}
+
+        <TabsContent value="health-center">
+          <HealthCenterTab entityId={id || ''} entityType="child" />
+        </TabsContent>
       </Tabs>
 
       <EditChildDialog

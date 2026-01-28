@@ -6,9 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, CalendarIcon } from "lucide-react";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface EditMedicationDialogProps {
   medication: any;
@@ -43,7 +47,8 @@ export function EditMedicationDialog({
     is_recurring: false,
     frequency: "daily",
     days_of_week: [] as string[],
-    end_date: "",
+    start_date: null as Date | null,
+    end_date: null as Date | null,
   });
 
   useEffect(() => {
@@ -56,7 +61,8 @@ export function EditMedicationDialog({
         is_recurring: medication.is_recurring || false,
         frequency: medication.frequency || "daily",
         days_of_week: medication.days_of_week || [],
-        end_date: medication.end_date || "",
+        start_date: medication.date ? new Date(medication.date + "T00:00:00") : null,
+        end_date: medication.end_date ? new Date(medication.end_date + "T00:00:00") : null,
       });
     }
   }, [medication]);
@@ -75,7 +81,8 @@ export function EditMedicationDialog({
         is_recurring: formData.is_recurring,
         frequency: formData.frequency,
         days_of_week: formData.days_of_week,
-        end_date: formData.end_date || null,
+        date: formData.start_date ? format(formData.start_date, 'yyyy-MM-dd') : medication.date,
+        end_date: formData.end_date ? format(formData.end_date, 'yyyy-MM-dd') : null,
       })
       .eq("id", medication.id);
 
@@ -119,6 +126,62 @@ export function EditMedicationDialog({
               onChange={(e) => setFormData({ ...formData, dosage: e.target.value })}
               placeholder="e.g., 5ml, 1 tablet"
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Start Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !formData.start_date && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {formData.start_date ? format(formData.start_date, "PPP") : <span>Pick a date</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={formData.start_date || undefined}
+                    onSelect={(date) => setFormData({ ...formData, start_date: date || null })}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="space-y-2">
+              <Label>End Date (optional)</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !formData.end_date && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {formData.end_date ? format(formData.end_date, "PPP") : <span>No end date</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={formData.end_date || undefined}
+                    onSelect={(date) => setFormData({ ...formData, end_date: date || null })}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -209,16 +272,6 @@ export function EditMedicationDialog({
                   </div>
                 </div>
               )}
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-end_date">End Date (optional)</Label>
-                <Input
-                  id="edit-end_date"
-                  type="date"
-                  value={formData.end_date}
-                  onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                />
-              </div>
             </>
           )}
 
