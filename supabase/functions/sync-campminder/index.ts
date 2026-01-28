@@ -1105,22 +1105,14 @@ async function performFullSync(
       }
       
       // Find P1 (Parent 1) from Relatives array
-      // CampMinder typically uses RelativeTypeID: 1 for P1 (Parent 1) or RelativeType containing "P1" or "Parent 1"
-      // Also check for "Login" field which contains the P1 login email directly
-      // Priority order: P1 > Guardian > Primary > First relative
-      const p1Parent = relatives.find((r: any) => 
-        r.RelativeTypeID === 1 || 
-        r.RelativeType === 'P1' || 
-        r.RelativeType === 'Parent 1' ||
-        r.RelativeType?.includes?.('P1') ||
-        r.RelativeType?.toLowerCase?.()?.includes?.('parent 1') ||
-        r.TypeID === 1 ||
-        r.Type === 'P1'
-      );
-      
-      const guardian = p1Parent || relatives.find((r: any) => 
-        r.IsGuardian === true || r.IsPrimary === true
-      ) || relatives[0]; // Fallback to first relative
+      // Per CampMinder Persons API docs, Relative schema has: ID, IsPrimary, IsGuardian, IsWard
+      // IsPrimary: true = "parent 1" (P1)
+      // IsGuardian: true = guardian
+      // Priority: IsPrimary > IsGuardian > first relative
+      const p1Parent = relatives.find((r: any) => r.IsPrimary === true);
+      const guardian = p1Parent || 
+                      relatives.find((r: any) => r.IsGuardian === true) || 
+                      relatives[0]; // Fallback to first relative
       
       if (guardian && guardian.ID) {
         const parentId = String(guardian.ID);
@@ -1839,6 +1831,44 @@ async function performFullSync(
         staffChanges = staffResult.changes;
         staffInsertedCount = staffResult.inserted;
         staffUpdatedCount = staffResult.updated;
+        
+        // CLEANUP: Delete staff not in current active list
+        // This handles staff who were Resigned, Dismissed, or Cancelled
+        const activePersonIds = staffData.map(s => s.person_id);
+        console.log(`[Staff Cleanup] Removing staff not in active list (${activePersonIds.length} active)`);
+        
+        const { data: existingStaff, error: fetchError } = await supabase
+          .from('staff')
+          .select('id, person_id, name')
+          .eq('company_id', companyId)
+          .eq('season', season);
+        
+        if (!fetchError && existingStaff) {
+          const staffToRemove = existingStaff.filter((s: { id: string; person_id: string; name: string }) => !activePersonIds.includes(s.person_id));
+          
+          if (staffToRemove.length > 0) {
+            console.log(`[Staff Cleanup] Found ${staffToRemove.length} staff to remove (not in active list)`);
+            
+            // Log first 5 for debugging
+            staffToRemove.slice(0, 5).forEach((s: { id: string; person_id: string; name: string }) => {
+              console.log(`  - Removing: ${s.name} (person_id: ${s.person_id})`);
+            });
+            
+            const idsToRemove = staffToRemove.map((s: { id: string }) => s.id);
+            const { error: deleteError } = await supabase
+              .from('staff')
+              .delete()
+              .in('id', idsToRemove);
+            
+            if (deleteError) {
+              console.error('[Staff Cleanup] Error removing inactive staff:', deleteError);
+            } else {
+              console.log(`[Staff Cleanup] Removed ${staffToRemove.length} inactive staff`);
+            }
+          } else {
+            console.log('[Staff Cleanup] No inactive staff to remove');
+          }
+        }
       }
     } else {
       console.log('[Staff Sync] No staff found from any source. Check if staff data exists in CampMinder for this season.');
