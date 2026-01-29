@@ -36,21 +36,25 @@ const getMenuItems = (companySlug?: string) => {
     { title: "Tutoring & Therapy", url: "/tutoring-therapy", icon: BookOpen, menuId: "tutoring-therapy" },
   ];
 
-  // Add items for specific companies
-  if (companySlug !== 'timber-lake-camp') {
+  // Add common items for all companies
+  baseItems.push(
+    { title: "Activities & Field Trips", url: "/activities", icon: Palmtree, menuId: "activities" },
+    { title: "Messages", url: "/messages", icon: Mail, menuId: "messages" },
+    { title: "Transportation", url: "/transportation", icon: Truck, menuId: "transportation" }
+  );
+
+  // OD Management and Appointments for Tyler Hill Camp and Timber Lake Camp
+  if (companySlug === 'tyler-hill-camp' || companySlug === 'timber-lake-camp') {
     baseItems.push(
-      { title: "Activities & Field Trips", url: "/activities", icon: Palmtree, menuId: "activities" },
-      { title: "Messages", url: "/messages", icon: Mail, menuId: "messages" },
-      { title: "Transportation", url: "/transportation", icon: Truck, menuId: "transportation" }
+      { title: "OD Management", url: "/od-management", icon: ClipboardCheck, menuId: "od-management" },
+      { title: "Appointments", url: "/appointments", icon: Stethoscope, menuId: "appointments" }
     );
   }
 
-  // Special Meals, OD Management, and Appointments only for Tyler Hill Camp
+  // Special Meals only for Tyler Hill Camp
   if (companySlug === 'tyler-hill-camp') {
     baseItems.push(
-      { title: "Special Meals", url: "/special-meals", icon: Utensils, menuId: "special-meals" },
-      { title: "OD Management", url: "/od-management", icon: ClipboardCheck, menuId: "od-management" },
-      { title: "Appointments", url: "/appointments", icon: Stethoscope, menuId: "appointments" }
+      { title: "Special Meals", url: "/special-meals", icon: Utensils, menuId: "special-meals" }
     );
   }
 
