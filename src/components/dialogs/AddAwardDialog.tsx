@@ -26,6 +26,15 @@ const YEAR_END_AWARDS = [
   "Color War Captain"
 ];
 
+const WEEKLY_CAMPER_AWARDS = [
+  "Most Improved",
+  "Best Sportsmanship",
+  "Camper of the Week",
+  "Kindness Award",
+  "Leadership Award",
+  "Team Player"
+];
+
 const STARFISH_VALUES = [
   "Sportsmanship",
   "Tolerance",
@@ -43,6 +52,7 @@ export default function AddAwardDialog({ onSuccess, open, onOpenChange }: AddAwa
   const [loading, setLoading] = useState(false);
   const [children, setChildren] = useState<any[]>([]);
   const [weeklyStarfishValues, setWeeklyStarfishValues] = useState<string[]>([]);
+  const [weeklyCamperAward, setWeeklyCamperAward] = useState("");
   const [yearEndAward, setYearEndAward] = useState("");
   const [yearEndStarfishValues, setYearEndStarfishValues] = useState<string[]>([]);
   const [formData, setFormData] = useState({
@@ -90,9 +100,10 @@ export default function AddAwardDialog({ onSuccess, open, onOpenChange }: AddAwa
     e.preventDefault();
     
     const hasWeeklyStarfish = weeklyStarfishValues.length > 0;
+    const hasWeeklyCamperAward = weeklyCamperAward !== "";
     const hasYearEnd = yearEndAward !== "";
 
-    if (!hasWeeklyStarfish && !hasYearEnd) {
+    if (!hasWeeklyStarfish && !hasWeeklyCamperAward && !hasYearEnd) {
       toast.error("Please select at least one award type");
       return;
     }
@@ -100,19 +111,19 @@ export default function AddAwardDialog({ onSuccess, open, onOpenChange }: AddAwa
     setLoading(true);
 
     // Build title based on selections
-    let title = "";
-    if (hasWeeklyStarfish && hasYearEnd) {
-      title = `Weekly Starfish, ${yearEndAward}`;
-    } else if (hasWeeklyStarfish) {
-      title = "Weekly Starfish";
-    } else {
-      title = yearEndAward;
-    }
+    const titleParts: string[] = [];
+    if (hasWeeklyStarfish) titleParts.push("Weekly Starfish");
+    if (hasWeeklyCamperAward) titleParts.push(weeklyCamperAward);
+    if (hasYearEnd) titleParts.push(yearEndAward);
+    const title = titleParts.join(", ");
 
     // Store values in category field as JSON
     const categoryData: any = {};
     if (hasWeeklyStarfish) {
       categoryData.weekly_starfish_values = weeklyStarfishValues;
+    }
+    if (hasWeeklyCamperAward) {
+      categoryData.weekly_camper_award = weeklyCamperAward;
     }
     if (yearEndAward === "Starfish" && yearEndStarfishValues.length > 0) {
       categoryData.year_end_starfish_values = yearEndStarfishValues;
@@ -148,6 +159,7 @@ export default function AddAwardDialog({ onSuccess, open, onOpenChange }: AddAwa
 
   const resetForm = () => {
     setWeeklyStarfishValues([]);
+    setWeeklyCamperAward("");
     setYearEndAward("");
     setYearEndStarfishValues([]);
     setFormData({
@@ -194,6 +206,22 @@ export default function AddAwardDialog({ onSuccess, open, onOpenChange }: AddAwa
                 </div>
               ))}
             </div>
+          </div>
+
+          <div>
+            <Label htmlFor="weeklyCamperAward">Weekly Camper Award</Label>
+            <Select value={weeklyCamperAward} onValueChange={setWeeklyCamperAward}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select weekly award..." />
+              </SelectTrigger>
+              <SelectContent>
+                {WEEKLY_CAMPER_AWARDS.map((award) => (
+                  <SelectItem key={award} value={award}>
+                    {award}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div>
