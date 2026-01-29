@@ -45,6 +45,7 @@ import SportsAcademy from "./pages/SportsAcademy";
 import Reports from "./pages/Reports";
 import RosterTemplates from "./pages/RosterTemplates";
 import ODManagement from "./pages/ODManagement";
+import DailySchedule from "./pages/DailySchedule";
 import Appointments from "./pages/Appointments";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
@@ -134,6 +135,7 @@ function AppContent() {
                                 <Route path="/roster-templates" element={<RosterTemplates />} />
                                 <Route path="/od-management" element={<ODManagement />} />
                                 <Route path="/appointments" element={<Appointments />} />
+                                <Route path="/daily-schedule" element={<DailySchedule />} />
                                 <Route path="*" element={<NotFound />} />
                               </Routes>
                             </main>

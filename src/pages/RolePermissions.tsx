@@ -32,8 +32,20 @@ const getCompanyMenuItems = (companySlug?: string) => {
       { id: "daily-wolf-printable", label: "Daily Wolf Printable", icon: "📰" },
       { id: "daily-wolf-management", label: "Daily Wolf Management", icon: "✏️" }
     );
+  } else if (companySlug === 'timber-lake-camp') {
+    // Timber Lake Camp specific
+    baseItems.push(
+      { id: "awards", label: "Awards", icon: "🏆" },
+      { id: "incidents", label: "Incident Reports", icon: "⚠️" },
+      { id: "nurse", label: "Nurse Dashboard", icon: "💊" },
+      { id: "sports-academy", label: "Sports Academy", icon: "⚽" },
+      { id: "sports-calendar", label: "Sports Calendar", icon: "🏅" },
+      { id: "od-management", label: "OD Management", icon: "📋" },
+      { id: "appointments", label: "Appointments", icon: "🩺" },
+      { id: "daily-schedule", label: "Daily Schedule", icon: "📅" }
+    );
   } else {
-    // Tyler Hill & Timber Lake Camp
+    // Tyler Hill & other camps
     baseItems.push(
       { id: "notes", label: companySlug === 'tyler-hill-camp' ? "Daily News" : "Daily Notes", icon: "📝" },
       { id: "awards", label: "Awards", icon: "🏆" },
