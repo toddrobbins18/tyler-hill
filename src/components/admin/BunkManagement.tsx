@@ -9,7 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Trash2, UserPlus, X } from "lucide-react";
+import BunkStaffCSVUploader from "./BunkStaffCSVUploader";
 
 interface Staff {
   id: string;
@@ -225,7 +227,13 @@ export default function BunkManagement({ onClose }: BunkManagementProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <Tabs defaultValue="manage" className="space-y-6">
+      <TabsList className="grid w-full grid-cols-2">
+        <TabsTrigger value="manage">Manage Bunks</TabsTrigger>
+        <TabsTrigger value="upload">CSV Upload</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="manage" className="space-y-6">
       {/* Add New Bunk */}
       <div className="border rounded-lg p-4 space-y-4">
         <h3 className="font-semibold">Add New Bunk</h3>
@@ -375,6 +383,14 @@ export default function BunkManagement({ onClose }: BunkManagementProps) {
       <div className="flex justify-end pt-4 border-t">
         <Button onClick={onClose}>Done</Button>
       </div>
-    </div>
+      </TabsContent>
+
+      <TabsContent value="upload" className="space-y-6">
+        <BunkStaffCSVUploader onUploadComplete={fetchData} />
+        <div className="flex justify-end pt-4 border-t">
+          <Button onClick={onClose}>Done</Button>
+        </div>
+      </TabsContent>
+    </Tabs>
   );
 }
