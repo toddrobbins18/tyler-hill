@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Camera, Upload, X, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -14,6 +14,18 @@ interface ProfilePhotoUploadProps {
   size?: "sm" | "md" | "lg";
 }
 
+// Helper to extract the file path from a stored URL or path
+const getFilePath = (photoUrl: string | null | undefined): string | null => {
+  if (!photoUrl) return null;
+  // If it's already a path (stored as path, not full URL)
+  if (photoUrl.startsWith('camper/') || photoUrl.startsWith('staff/')) {
+    return photoUrl;
+  }
+  // Extract path from full URL
+  const match = photoUrl.match(/profile-photos\/(.+?)(?:\?|$)/);
+  return match ? match[1] : null;
+};
+
 export default function ProfilePhotoUpload({
   currentPhotoUrl,
   entityType,
@@ -24,6 +36,7 @@ export default function ProfilePhotoUpload({
 }: ProfilePhotoUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
+  const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -34,6 +47,30 @@ export default function ProfilePhotoUpload({
     md: "h-24 w-24",
     lg: "h-32 w-32"
   };
+
+  // Fetch signed URL when currentPhotoUrl changes
+  useEffect(() => {
+    const fetchSignedUrl = async () => {
+      const filePath = getFilePath(currentPhotoUrl);
+      if (!filePath) {
+        setSignedUrl(null);
+        return;
+      }
+
+      const { data, error } = await supabase.storage
+        .from('profile-photos')
+        .createSignedUrl(filePath, 3600); // 1 hour expiry
+
+      if (error) {
+        console.error("Error getting signed URL:", error);
+        setSignedUrl(null);
+      } else {
+        setSignedUrl(data.signedUrl);
+      }
+    };
+
+    fetchSignedUrl();
+  }, [currentPhotoUrl]);
 
   const getInitials = (name: string) => {
     return name
@@ -51,11 +88,9 @@ export default function ProfilePhotoUpload({
       const fileName = `${entityType}/${entityId}/${Date.now()}.${fileExt}`;
 
       // Delete old photo if exists
-      if (currentPhotoUrl) {
-        const oldPath = currentPhotoUrl.split('/profile-photos/')[1];
-        if (oldPath) {
-          await supabase.storage.from('profile-photos').remove([oldPath]);
-        }
+      const oldPath = getFilePath(currentPhotoUrl);
+      if (oldPath) {
+        await supabase.storage.from('profile-photos').remove([oldPath]);
       }
 
       // Upload new photo
@@ -65,21 +100,16 @@ export default function ProfilePhotoUpload({
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('profile-photos')
-        .getPublicUrl(fileName);
-
-      // Update database record
+      // Store the file path (not URL) in the database
       const table = entityType === 'camper' ? 'children' : 'staff';
       const { error: updateError } = await supabase
         .from(table)
-        .update({ photo_url: publicUrl })
+        .update({ photo_url: fileName })
         .eq('id', entityId);
 
       if (updateError) throw updateError;
 
-      onPhotoUpdated(publicUrl);
+      onPhotoUpdated(fileName);
       toast.success("Photo updated successfully");
     } catch (error: any) {
       console.error("Error uploading photo:", error);
@@ -156,7 +186,7 @@ export default function ProfilePhotoUpload({
     
     setUploading(true);
     try {
-      const oldPath = currentPhotoUrl.split('/profile-photos/')[1];
+      const oldPath = getFilePath(currentPhotoUrl);
       if (oldPath) {
         await supabase.storage.from('profile-photos').remove([oldPath]);
       }
@@ -170,6 +200,7 @@ export default function ProfilePhotoUpload({
       if (error) throw error;
 
       onPhotoUpdated(null);
+      setSignedUrl(null);
       toast.success("Photo removed");
     } catch (error: any) {
       console.error("Error removing photo:", error);
@@ -209,7 +240,7 @@ export default function ProfilePhotoUpload({
     <div className="flex flex-col items-center gap-4">
       <div className="relative group">
         <Avatar className={`${sizeClasses[size]} border-2 border-border`}>
-          <AvatarImage src={currentPhotoUrl || undefined} alt={entityName} />
+          <AvatarImage src={signedUrl || undefined} alt={entityName} />
           <AvatarFallback className="text-lg bg-primary/10 text-primary">
             {getInitials(entityName)}
           </AvatarFallback>
