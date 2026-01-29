@@ -182,6 +182,32 @@ export default function DivisionPermissions() {
                        user.role}
                     </Badge>
                   </div>
+                  <div className="flex gap-2 ml-auto">
+                    <button
+                      onClick={async () => {
+                        for (const division of divisions) {
+                          if (!permissions[user.id]?.[division.id]) {
+                            await togglePermission(user.id, division.id, false);
+                          }
+                        }
+                      }}
+                      className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      onClick={async () => {
+                        for (const division of divisions) {
+                          if (permissions[user.id]?.[division.id]) {
+                            await togglePermission(user.id, division.id, true);
+                          }
+                        }
+                      }}
+                      className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground hover:bg-muted/80"
+                    >
+                      Deselect All
+                    </button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>

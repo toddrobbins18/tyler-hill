@@ -174,8 +174,38 @@ export default function SpecialistSportAssignments() {
             return (
               <Card key={specialist.user_id}>
                 <CardHeader>
-                  <CardTitle>{profile.full_name}</CardTitle>
-                  <CardDescription>{profile.email}</CardDescription>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>{profile.full_name}</CardTitle>
+                      <CardDescription>{profile.email}</CardDescription>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={async () => {
+                          for (const sport of AVAILABLE_SPORTS) {
+                            if (!assignments[specialist.user_id]?.includes(sport)) {
+                              await toggleSportAssignment(specialist.user_id, sport, false);
+                            }
+                          }
+                        }}
+                        className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90"
+                      >
+                        Select All
+                      </button>
+                      <button
+                        onClick={async () => {
+                          for (const sport of AVAILABLE_SPORTS) {
+                            if (assignments[specialist.user_id]?.includes(sport)) {
+                              await toggleSportAssignment(specialist.user_id, sport, true);
+                            }
+                          }
+                        }}
+                        className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground hover:bg-muted/80"
+                      >
+                        Deselect All
+                      </button>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">

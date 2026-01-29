@@ -183,9 +183,35 @@ export default function RolePermissions() {
                 <CardHeader>
                   <div className="flex items-center gap-2">
                     <RoleIcon className="h-5 w-5 text-primary" />
-                    <div>
+                    <div className="flex-1">
                       <CardTitle>{role.label}</CardTitle>
                       <CardDescription>{role.description}</CardDescription>
+                    </div>
+                    <div className="flex gap-2 ml-auto">
+                      <button
+                        onClick={async () => {
+                          for (const item of menuItems) {
+                            if (!permissions[role.id]?.[item.id]) {
+                              await togglePermission(role.id, item.id, false);
+                            }
+                          }
+                        }}
+                        className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90"
+                      >
+                        Select All
+                      </button>
+                      <button
+                        onClick={async () => {
+                          for (const item of menuItems) {
+                            if (permissions[role.id]?.[item.id]) {
+                              await togglePermission(role.id, item.id, true);
+                            }
+                          }
+                        }}
+                        className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground hover:bg-muted/80"
+                      >
+                        Deselect All
+                      </button>
                     </div>
                   </div>
                 </CardHeader>
