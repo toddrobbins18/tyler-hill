@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -15,6 +16,7 @@ import CamperReportsTab from "@/components/CamperReportsTab";
 import ConflictIndicator from "@/components/ConflictIndicator";
 import { usePermissions } from "@/hooks/usePermissions";
 import { HealthCenterTab } from "@/components/HealthCenterTab";
+import ProfilePhotoUpload from "@/components/ProfilePhotoUpload";
 
 export default function ChildProfile() {
   const { id } = useParams();
@@ -271,6 +273,12 @@ export default function ChildProfile() {
         <Button variant="ghost" size="icon" onClick={() => navigate("/roster")}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
+        <Avatar className="h-16 w-16 border-2 border-border">
+          <AvatarImage src={child.photo_url || undefined} alt={child.name} />
+          <AvatarFallback className="bg-primary/10 text-primary font-bold text-xl">
+            {child.name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
+          </AvatarFallback>
+        </Avatar>
         <div className="flex-1">
           <h1 className="text-3xl font-bold text-foreground mb-1">{child.name}</h1>
           <p className="text-muted-foreground">
@@ -325,6 +333,15 @@ export default function ChildProfile() {
                 <CardDescription>Basic details and contact information</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="flex justify-center pb-4 border-b">
+                  <ProfilePhotoUpload
+                    currentPhotoUrl={child.photo_url}
+                    entityType="camper"
+                    entityId={child.id}
+                    entityName={child.name}
+                    onPhotoUpdated={(newUrl) => setChild((prev: any) => ({ ...prev, photo_url: newUrl }))}
+                  />
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   {child.age && (
                     <div>

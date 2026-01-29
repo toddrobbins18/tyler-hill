@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import ConflictIndicator from "@/components/ConflictIndicator";
 import { HealthCenterTab } from "@/components/HealthCenterTab";
+import ProfilePhotoUpload from "@/components/ProfilePhotoUpload";
 
 export default function StaffProfile() {
   const { id } = useParams();
@@ -182,7 +183,8 @@ export default function StaffProfile() {
         <Button variant="ghost" size="icon" onClick={() => navigate("/staff")}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <Avatar className="h-16 w-16">
+        <Avatar className="h-16 w-16 border-2 border-border">
+          <AvatarImage src={staff.photo_url || undefined} alt={staff.name} />
           <AvatarFallback className="bg-primary/10 text-primary font-bold text-xl">
             {getInitials(staff.name)}
           </AvatarFallback>
@@ -249,6 +251,15 @@ export default function StaffProfile() {
                 <CardDescription>Professional details</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
+                <div className="flex justify-center pb-4 border-b">
+                  <ProfilePhotoUpload
+                    currentPhotoUrl={staff.photo_url}
+                    entityType="staff"
+                    entityId={staff.id}
+                    entityName={staff.name}
+                    onPhotoUpdated={(newUrl) => setStaff((prev: any) => ({ ...prev, photo_url: newUrl }))}
+                  />
+                </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Email</p>
                   <p className="font-medium">{staff.email || "N/A"}</p>
