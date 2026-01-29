@@ -107,8 +107,7 @@ export default function ODManagement() {
   const [lateOverrideStaffId, setLateOverrideStaffId] = useState<string | null>(null);
   const [lateOverrideReason, setLateOverrideReason] = useState("");
 
-  // Check if this company has OD management
-  const hasODManagement = currentCompany?.slug === 'tyler-hill-camp' || currentCompany?.slug === 'timber-lake-camp';
+  // OD Management is available globally for all camps
 
   useEffect(() => {
     if (currentCompany?.id) {
@@ -555,17 +554,6 @@ export default function ODManagement() {
   const navigateDate = (days: number) => {
     setSelectedDate(addDays(selectedDate, days));
   };
-
-  if (!hasODManagement) {
-    return (
-      <div className="space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">OD Management</h1>
-          <p className="text-muted-foreground">This feature is not available for your camp.</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">

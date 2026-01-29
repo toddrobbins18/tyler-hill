@@ -40,16 +40,11 @@ const getMenuItems = (companySlug?: string) => {
   baseItems.push(
     { title: "Activities & Field Trips", url: "/activities", icon: Palmtree, menuId: "activities" },
     { title: "Messages", url: "/messages", icon: Mail, menuId: "messages" },
-    { title: "Transportation", url: "/transportation", icon: Truck, menuId: "transportation" }
+    { title: "Transportation", url: "/transportation", icon: Truck, menuId: "transportation" },
+    // OD Management available for all camps
+    { title: "OD Management", url: "/od-management", icon: ClipboardCheck, menuId: "od-management" },
+    { title: "Appointments", url: "/appointments", icon: Stethoscope, menuId: "appointments" }
   );
-
-  // OD Management and Appointments for Tyler Hill Camp and Timber Lake Camp
-  if (companySlug === 'tyler-hill-camp' || companySlug === 'timber-lake-camp') {
-    baseItems.push(
-      { title: "OD Management", url: "/od-management", icon: ClipboardCheck, menuId: "od-management" },
-      { title: "Appointments", url: "/appointments", icon: Stethoscope, menuId: "appointments" }
-    );
-  }
 
   // Daily Schedule for Timber Lake Camp only
   if (companySlug === 'timber-lake-camp') {
