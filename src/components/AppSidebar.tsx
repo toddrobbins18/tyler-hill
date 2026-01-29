@@ -51,6 +51,13 @@ const getMenuItems = (companySlug?: string) => {
     );
   }
 
+  // Daily Schedule for Timber Lake Camp only
+  if (companySlug === 'timber-lake-camp') {
+    baseItems.push(
+      { title: "Daily Schedule", url: "/daily-schedule", icon: Calendar, menuId: "daily-schedule" }
+    );
+  }
+
   // Special Meals only for Tyler Hill Camp
   if (companySlug === 'tyler-hill-camp') {
     baseItems.push(
