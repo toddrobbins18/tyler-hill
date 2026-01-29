@@ -605,6 +605,7 @@ export type Database = {
           medical_notes: string | null
           name: string
           person_id: string
+          photo_url: string | null
           rfid: string | null
           season: string | null
           session: string | null
@@ -641,6 +642,7 @@ export type Database = {
           medical_notes?: string | null
           name: string
           person_id: string
+          photo_url?: string | null
           rfid?: string | null
           season?: string | null
           session?: string | null
@@ -677,6 +679,7 @@ export type Database = {
           medical_notes?: string | null
           name?: string
           person_id?: string
+          photo_url?: string | null
           rfid?: string | null
           season?: string | null
           session?: string | null
@@ -2624,6 +2627,7 @@ export type Database = {
           name: string
           person_id: string | null
           phone: string | null
+          photo_url: string | null
           rfid: string | null
           role: string
           season: string | null
@@ -2647,6 +2651,7 @@ export type Database = {
           name: string
           person_id?: string | null
           phone?: string | null
+          photo_url?: string | null
           rfid?: string | null
           role: string
           season?: string | null
@@ -2670,6 +2675,7 @@ export type Database = {
           name?: string
           person_id?: string | null
           phone?: string | null
+          photo_url?: string | null
           rfid?: string | null
           role?: string
           season?: string | null
