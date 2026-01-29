@@ -30,6 +30,7 @@ export default function Staff() {
   const [searchTerm, setSearchTerm] = useState("");
   const [staff, setStaff] = useState<any[]>([]);
   const [selectedSession, setSelectedSession] = useState<string>("all");
+  const [selectedGender, setSelectedGender] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [staffError, setStaffError] = useState<string | null>(null);
   const [editingStaff, setEditingStaff] = useState<string | null>(null);
@@ -150,8 +151,12 @@ export default function Staff() {
       member.session?.includes("Second Session") && selectedSession === "Second Session" ||
       !member.session;
     
+    const matchesGender = 
+      selectedGender === "all" ||
+      member.gender?.toLowerCase() === selectedGender.toLowerCase();
+    
     // Season filtering now done at query level
-    return matchesSearch && matchesSession;
+    return matchesSearch && matchesSession && matchesGender;
   });
 
   const getInitials = (name: string) => {
@@ -306,8 +311,8 @@ export default function Staff() {
         </div>
       )}
 
-      <div className="flex gap-4">
-        <div className="relative flex-1">
+      <div className="flex gap-4 flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search staff by name, role, or department..."
@@ -316,6 +321,15 @@ export default function Staff() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+        <select
+          value={selectedGender}
+          onChange={(e) => setSelectedGender(e.target.value)}
+          className="px-4 py-2 border rounded-md bg-background"
+        >
+          <option value="all">All Genders</option>
+          <option value="male">Male</option>
+          <option value="female">Female</option>
+        </select>
         {currentCompany?.slug === 'timber-lake-west' && (
           <select
             value={selectedSession}

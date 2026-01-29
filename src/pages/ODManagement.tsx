@@ -15,10 +15,13 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CalendarIcon, AlertTriangle, Search, ArrowLeftRight, ChevronLeft, ChevronRight, Radio, Settings } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CalendarIcon, AlertTriangle, Search, ArrowLeftRight, ChevronLeft, ChevronRight, Radio, Settings, Clock, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import BunkManagement from "@/components/admin/BunkManagement";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Staff {
   id: string;
@@ -26,6 +29,7 @@ interface Staff {
   department: string | null;
   role: string;
   rfid: string | null;
+  gender: string | null;
 }
 
 interface Bunk {
@@ -33,6 +37,11 @@ interface Bunk {
   bunk_number: number;
   bunk_name: string | null;
   division_id: string | null;
+  divisions?: {
+    id: string;
+    name: string;
+    gender: string;
+  };
 }
 
 interface BunkStaff {
@@ -56,6 +65,10 @@ interface DayOff {
   checked_out_at: string | null;
   checked_in_at: string | null;
   notes: string | null;
+  late_override: boolean;
+  late_override_reason: string | null;
+  late_override_approved_by: string | null;
+  late_override_approved_at: string | null;
   staff?: Staff;
 }
 
@@ -63,6 +76,7 @@ export default function ODManagement() {
   const { currentCompany } = useCompany();
   const { selectedSeason: currentSeason } = useSeason();
   const { toast } = useToast();
+  const { user } = useAuth();
   
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [activeTab, setActiveTab] = useState("od");
@@ -77,6 +91,10 @@ export default function ODManagement() {
   const [selectedStaffForSwap, setSelectedStaffForSwap] = useState<string | null>(null);
   const [newSwapDate, setNewSwapDate] = useState<Date | undefined>(undefined);
   const [showBunkManagement, setShowBunkManagement] = useState(false);
+  
+  // Filters
+  const [genderFilter, setGenderFilter] = useState<string>("all");
+  const [signInStatusFilter, setSignInStatusFilter] = useState<string>("all");
 
   // RFID Scanner state
   const [scannerMode, setScannerMode] = useState(false);
@@ -84,8 +102,13 @@ export default function ODManagement() {
   const [isScanning, setIsScanning] = useState(false);
   const rfidInputRef = useRef<HTMLInputElement>(null);
 
-  // Check if this is Tyler Hill Camp
-  const isTylerHill = currentCompany?.slug === 'tyler-hill-camp';
+  // Late override state
+  const [showLateOverrideDialog, setShowLateOverrideDialog] = useState(false);
+  const [lateOverrideStaffId, setLateOverrideStaffId] = useState<string | null>(null);
+  const [lateOverrideReason, setLateOverrideReason] = useState("");
+
+  // Check if this company has OD management
+  const hasODManagement = currentCompany?.slug === 'tyler-hill-camp' || currentCompany?.slug === 'timber-lake-camp';
 
   useEffect(() => {
     if (currentCompany?.id) {
@@ -121,13 +144,13 @@ export default function ODManagement() {
       const [staffRes, bunksRes, bunkStaffRes, daysOffRes] = await Promise.all([
         supabase
           .from("staff")
-          .select("id, name, department, role, rfid")
+          .select("id, name, department, role, rfid, gender")
           .eq("company_id", currentCompany.id)
           .eq("season", currentSeason)
           .order("name"),
         supabase
           .from("bunks")
-          .select("id, bunk_number, bunk_name, division_id")
+          .select("id, bunk_number, bunk_name, division_id, divisions:division_id(id, name, gender)")
           .eq("company_id", currentCompany.id)
           .eq("season", currentSeason)
           .eq("is_active", true)
@@ -136,8 +159,8 @@ export default function ODManagement() {
           .from("bunk_staff")
           .select(`
             id, bunk_id, staff_id, is_primary,
-            staff:staff_id(id, name, department, role, rfid),
-            bunk:bunk_id(id, bunk_number, bunk_name, division_id)
+            staff:staff_id(id, name, department, role, rfid, gender),
+            bunk:bunk_id(id, bunk_number, bunk_name, division_id, divisions:division_id(id, name, gender))
           `)
           .eq("company_id", currentCompany.id)
           .eq("season", currentSeason),
@@ -146,7 +169,8 @@ export default function ODManagement() {
           .select(`
             id, staff_id, date, is_day_off, is_night_off, is_sleeping_out, 
             checked_out, checked_in, checked_out_at, checked_in_at, notes,
-            staff:staff_id(id, name, department, role, rfid)
+            late_override, late_override_reason, late_override_approved_by, late_override_approved_at,
+            staff:staff_id(id, name, department, role, rfid, gender)
           `)
           .eq("company_id", currentCompany.id)
           .eq("season", currentSeason)
@@ -154,7 +178,7 @@ export default function ODManagement() {
       ]);
 
       if (staffRes.data) setStaff(staffRes.data);
-      if (bunksRes.data) setBunks(bunksRes.data);
+      if (bunksRes.data) setBunks(bunksRes.data as unknown as Bunk[]);
       if (bunkStaffRes.data) setBunkStaff(bunkStaffRes.data as unknown as BunkStaff[]);
       if (daysOffRes.data) setDaysOff(daysOffRes.data as unknown as DayOff[]);
     } catch (error) {
@@ -196,6 +220,12 @@ export default function ODManagement() {
       .sort((a, b) => (a.bunk?.bunk_number || 0) - (b.bunk?.bunk_number || 0));
   };
 
+  // Get bunk gender from division
+  const getBunkGender = (bunk: Bunk | undefined): string | null => {
+    if (!bunk) return null;
+    return (bunk as any).divisions?.gender || null;
+  };
+
   // RFID Scanner handler
   const handleRfidScan = async (rfidValue?: string) => {
     const valueToScan = rfidValue || rfidInput.trim();
@@ -232,12 +262,9 @@ export default function ODManagement() {
       const existingDayOff = daysOff.find(d => d.staff_id === staffMember.id);
 
       if (!existingDayOff || !existingDayOff.is_day_off) {
-        // Staff is not scheduled off - warn them
-        toast({
-          title: "⚠️ Wrong Day!",
-          description: `${staffMember.name} is NOT scheduled off today. They cannot sign out.`,
-          variant: "destructive"
-        });
+        // Staff is not scheduled off - prompt for late override
+        setLateOverrideStaffId(staffMember.id);
+        setShowLateOverrideDialog(true);
         setRfidInput("");
         setTimeout(() => rfidInputRef.current?.focus(), 100);
         return;
@@ -312,6 +339,50 @@ export default function ODManagement() {
     }
   };
 
+  const handleLateOverrideSubmit = async () => {
+    if (!lateOverrideStaffId || !currentCompany?.id || !lateOverrideReason.trim()) {
+      toast({ title: "Please provide an override reason", variant: "destructive" });
+      return;
+    }
+
+    const dateStr = format(selectedDate, "yyyy-MM-dd");
+    
+    try {
+      // Create a new day off record with late override
+      const { error } = await supabase
+        .from("staff_days_off")
+        .insert({
+          company_id: currentCompany.id,
+          staff_id: lateOverrideStaffId,
+          date: dateStr,
+          season: currentSeason,
+          is_day_off: true,
+          is_night_off: true,
+          checked_out: true,
+          checked_out_at: new Date().toISOString(),
+          late_override: true,
+          late_override_reason: lateOverrideReason,
+          late_override_approved_by: user?.id,
+          late_override_approved_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+
+      toast({ 
+        title: "Late Override Approved", 
+        description: `Staff signed out with override`
+      });
+
+      setShowLateOverrideDialog(false);
+      setLateOverrideStaffId(null);
+      setLateOverrideReason("");
+      await fetchData();
+    } catch (error) {
+      console.error("Late override error:", error);
+      toast({ title: "Failed to apply late override", variant: "destructive" });
+    }
+  };
+
   const handleToggleDayOff = async (staffId: string, field: 'is_day_off' | 'is_night_off' | 'is_sleeping_out') => {
     if (!currentCompany?.id) return;
 
@@ -366,17 +437,20 @@ export default function ODManagement() {
     const existing = daysOff.find(d => d.staff_id === staffId);
 
     if (!existing) {
+      // Prompt for late override if trying to sign out without being scheduled off
+      if (type === 'out') {
+        setLateOverrideStaffId(staffId);
+        setShowLateOverrideDialog(true);
+        return;
+      }
       toast({ title: "Please set day off first", variant: "destructive" });
       return;
     }
 
     // Check if signing out on wrong day
     if (type === 'out' && !existing.is_day_off) {
-      toast({ 
-        title: "Warning: Signing out on wrong day", 
-        description: "This staff member is not scheduled off today.",
-        variant: "destructive" 
-      });
+      setLateOverrideStaffId(staffId);
+      setShowLateOverrideDialog(true);
       return;
     }
 
@@ -438,21 +512,56 @@ export default function ODManagement() {
     }
   };
 
-  const filteredStaffWithBunk = getStaffWithBunk().filter(item => 
-    item.staff?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.bunk?.bunk_name?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Filter staff with bunk based on gender and search
+  const filteredStaffWithBunk = getStaffWithBunk().filter(item => {
+    const matchesSearch = 
+      item.staff?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.bunk?.bunk_name?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const bunkGender = getBunkGender(item.bunk);
+    const matchesGender = genderFilter === "all" || 
+      (genderFilter === "girls" && bunkGender === "girls") ||
+      (genderFilter === "boys" && bunkGender === "boys");
+    
+    return matchesSearch && matchesGender;
+  });
+
+  // Filter for sign-in status in Off tab
+  const getFilteredOffStaff = () => {
+    const offStaff = filteredStaffWithBunk.filter(item => item.dayOff?.is_day_off);
+    
+    if (signInStatusFilter === "all") return offStaff;
+    if (signInStatusFilter === "signed_out") return offStaff.filter(item => item.dayOff?.checked_out && !item.dayOff?.checked_in);
+    if (signInStatusFilter === "signed_in") return offStaff.filter(item => item.dayOff?.checked_in);
+    if (signInStatusFilter === "not_signed_out") return offStaff.filter(item => !item.dayOff?.checked_out);
+    
+    return offStaff;
+  };
+
+  // Get staff who are due back (checked out but not checked in)
+  const getDueBackStaff = () => {
+    return filteredStaffWithBunk.filter(item => 
+      item.dayOff?.is_day_off && 
+      item.dayOff?.checked_out && 
+      !item.dayOff?.checked_in
+    );
+  };
+
+  // Get Free Play staff (sleeping out)
+  const getFreePlayStaff = () => {
+    return filteredStaffWithBunk.filter(item => item.dayOff?.is_sleeping_out);
+  };
 
   const navigateDate = (days: number) => {
     setSelectedDate(addDays(selectedDate, days));
   };
 
-  if (!isTylerHill) {
+  if (!hasODManagement) {
     return (
       <div className="space-y-8">
         <div>
           <h1 className="text-3xl font-bold mb-2">OD Management</h1>
-          <p className="text-muted-foreground">This feature is only available for Tyler Hill Camp.</p>
+          <p className="text-muted-foreground">This feature is not available for your camp.</p>
         </div>
       </div>
     );
@@ -553,10 +662,40 @@ export default function ODManagement() {
         </Alert>
       )}
 
+      {/* Due Back Alert */}
+      {getDueBackStaff().length > 0 && (
+        <Alert className="border-warning bg-warning/10">
+          <Clock className="h-4 w-4 text-warning" />
+          <AlertTitle className="text-warning">Due Back</AlertTitle>
+          <AlertDescription>
+            The following staff have not signed back in: {" "}
+            {getDueBackStaff().map(item => item.staff?.name).join(", ")}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-4">
+        <div>
+          <Label>Filter by Gender</Label>
+          <Select value={genderFilter} onValueChange={setGenderFilter}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="girls">Girls</SelectItem>
+              <SelectItem value="boys">Boys</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="od">OD</TabsTrigger>
           <TabsTrigger value="off">Off</TabsTrigger>
+          <TabsTrigger value="freeplay">Free Play</TabsTrigger>
         </TabsList>
 
         <TabsContent value="od" className="space-y-4">
@@ -590,7 +729,7 @@ export default function ODManagement() {
                       <TableHead>Bunk</TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead className="text-center">Out</TableHead>
-                      <TableHead className="text-center">Sleeping Out</TableHead>
+                      <TableHead className="text-center">Free Play</TableHead>
                       <TableHead className="text-center">In</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
@@ -601,7 +740,14 @@ export default function ODManagement() {
                       .map((item) => (
                         <TableRow key={item.id}>
                           <TableCell className="font-medium">
-                            {item.bunk?.bunk_name || item.bunk?.bunk_number}
+                            <div className="flex items-center gap-2">
+                              {item.bunk?.bunk_name || item.bunk?.bunk_number}
+                              {getBunkGender(item.bunk) && (
+                                <Badge variant="outline" className="text-xs">
+                                  {getBunkGender(item.bunk) === 'girls' ? 'G' : 'B'}
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
@@ -666,14 +812,27 @@ export default function ODManagement() {
                     Staff members off for {format(selectedDate, "MMMM d, yyyy")}
                   </CardDescription>
                 </div>
-                <div className="relative w-full sm:w-64">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search by name or bunk..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
+                <div className="flex gap-2">
+                  <Select value={signInStatusFilter} onValueChange={setSignInStatusFilter}>
+                    <SelectTrigger className="w-40">
+                      <SelectValue placeholder="Filter status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="signed_out">Signed Out</SelectItem>
+                      <SelectItem value="signed_in">Signed In</SelectItem>
+                      <SelectItem value="not_signed_out">Not Signed Out</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="relative w-full sm:w-64">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by name or bunk..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
                 </div>
               </div>
             </CardHeader>
@@ -693,12 +852,17 @@ export default function ODManagement() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredStaffWithBunk
-                      .filter(item => item.dayOff?.is_day_off)
-                      .map((item) => (
+                    {getFilteredOffStaff().map((item) => (
                         <TableRow key={item.id}>
                           <TableCell className="font-medium">
-                            {item.bunk?.bunk_name || item.bunk?.bunk_number}
+                            <div className="flex items-center gap-2">
+                              {item.bunk?.bunk_name || item.bunk?.bunk_number}
+                              {getBunkGender(item.bunk) && (
+                                <Badge variant="outline" className="text-xs">
+                                  {getBunkGender(item.bunk) === 'girls' ? 'G' : 'B'}
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
@@ -720,6 +884,12 @@ export default function ODManagement() {
                               {item.dayOff?.is_night_off && <Badge variant="secondary">Night Off</Badge>}
                               {item.dayOff?.checked_out && <Badge variant="outline">Out</Badge>}
                               {item.dayOff?.checked_in && <Badge variant="outline" className="bg-green-100">In</Badge>}
+                              {item.dayOff?.late_override && (
+                                <Badge variant="outline" className="bg-yellow-100 text-yellow-800">
+                                  <AlertCircle className="h-3 w-3 mr-1" />
+                                  Override
+                                </Badge>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
@@ -728,6 +898,11 @@ export default function ODManagement() {
                             )}
                             {item.dayOff?.checked_in_at && (
                               <div>In: {format(new Date(item.dayOff.checked_in_at), "h:mm a")}</div>
+                            )}
+                            {item.dayOff?.late_override_reason && (
+                              <div className="text-yellow-600 text-xs mt-1">
+                                Override: {item.dayOff.late_override_reason}
+                              </div>
                             )}
                           </TableCell>
                           <TableCell>
@@ -754,10 +929,80 @@ export default function ODManagement() {
                           </TableCell>
                         </TableRow>
                       ))}
-                    {filteredStaffWithBunk.filter(item => item.dayOff?.is_day_off).length === 0 && (
+                    {getFilteredOffStaff().length === 0 && (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                           No staff off today
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="freeplay" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Free Play Shifts</CardTitle>
+              <CardDescription>
+                Staff scheduled for Free Play for {format(selectedDate, "MMMM d, yyyy")}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="text-center py-8 text-muted-foreground">Loading...</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Bunk</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {getFreePlayStaff().map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            {item.bunk?.bunk_name || item.bunk?.bunk_number}
+                            {getBunkGender(item.bunk) && (
+                              <Badge variant="outline" className="text-xs">
+                                {getBunkGender(item.bunk) === 'girls' ? 'G' : 'B'}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {item.staff?.name}
+                            {item.staff?.rfid && (
+                              <Badge variant="outline" className="text-xs">RFID</Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">Free Play</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleToggleDayOff(item.staff_id, 'is_sleeping_out')}
+                          >
+                            Remove
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {getFreePlayStaff().length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                          No staff scheduled for Free Play today
                         </TableCell>
                       </TableRow>
                     )}
@@ -812,6 +1057,48 @@ export default function ODManagement() {
             </Button>
             <Button onClick={handleSwapDayOff} disabled={!newSwapDate}>
               Switch Day Off
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Late Override Dialog */}
+      <Dialog open={showLateOverrideDialog} onOpenChange={setShowLateOverrideDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Late Sign-Out Override</DialogTitle>
+            <DialogDescription>
+              This staff member is not scheduled off today. Provide a reason to approve their late sign-out.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Override Reason *</Label>
+              <Textarea
+                value={lateOverrideReason}
+                onChange={(e) => setLateOverrideReason(e.target.value)}
+                placeholder="Enter the reason for approving this late sign-out..."
+                rows={3}
+              />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              This override will be recorded with your user ID
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowLateOverrideDialog(false);
+              setLateOverrideStaffId(null);
+              setLateOverrideReason("");
+            }}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleLateOverrideSubmit} 
+              disabled={!lateOverrideReason.trim()}
+              className="bg-yellow-600 hover:bg-yellow-700"
+            >
+              Approve Override
             </Button>
           </DialogFooter>
         </DialogContent>

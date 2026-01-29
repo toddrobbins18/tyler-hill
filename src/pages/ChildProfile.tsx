@@ -401,15 +401,27 @@ export default function ChildProfile() {
                 <CardDescription>Emergency contacts and guardian information</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
+                {child.guardian_name && (
+                  <div className="p-3 rounded-lg bg-muted/50">
+                    <p className="text-sm text-muted-foreground">Parent 1 (P1)</p>
+                    <p className="font-medium">{child.guardian_name}</p>
+                  </div>
+                )}
+                {child.guardian_name_p2 && (
+                  <div className="p-3 rounded-lg bg-muted/50">
+                    <p className="text-sm text-muted-foreground">Parent 2 (P2)</p>
+                    <p className="font-medium">{child.guardian_name_p2}</p>
+                  </div>
+                )}
                 {child.guardian_email && (
                   <div className="p-3 rounded-lg bg-muted/50">
-                    <p className="text-sm text-muted-foreground">Guardian Email</p>
+                    <p className="text-sm text-muted-foreground">P1 Email</p>
                     <p className="font-medium">{child.guardian_email}</p>
                   </div>
                 )}
                 {child.guardian_phone && (
                   <div className="p-3 rounded-lg bg-muted/50">
-                    <p className="text-sm text-muted-foreground">Guardian Phone</p>
+                    <p className="text-sm text-muted-foreground">P1 Phone</p>
                     <p className="font-medium">{child.guardian_phone}</p>
                   </div>
                 )}
@@ -419,7 +431,7 @@ export default function ChildProfile() {
                     <p className="font-medium">{child.emergency_contact}</p>
                   </div>
                 )}
-                {!child.guardian_email && !child.guardian_phone && !child.emergency_contact && (
+                {!child.guardian_name && !child.guardian_name_p2 && !child.guardian_email && !child.guardian_phone && !child.emergency_contact && (
                   <p className="text-sm text-muted-foreground">No contact information available</p>
                 )}
               </CardContent>

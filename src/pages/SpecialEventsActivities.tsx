@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Sun, Moon, Plus, Pencil, Trash2, Calendar as CalendarIcon } from "lucide-react";
+import { Sun, Moon, Plus, Pencil, Trash2, Calendar as CalendarIcon, Paperclip, FileText, Download, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -18,6 +18,7 @@ import { useSeason } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
+import { toast as sonnerToast } from "sonner";
 
 export default function SpecialEventsActivities() {
   const { currentCompany } = useCompany();
@@ -28,8 +29,12 @@ export default function SpecialEventsActivities() {
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
+  const [showEventDetailDialog, setShowEventDetailDialog] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [editingEvent, setEditingEvent] = useState<any>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     event_date: new Date().toISOString().split('T')[0],
     title: "",
@@ -39,6 +44,8 @@ export default function SpecialEventsActivities() {
     end_time: "",
     location: "",
     division_ids: [] as string[],
+    file_url: "",
+    file_name: "",
   });
   const { toast } = useToast();
   const { selectedSeason } = useSeason();
@@ -165,6 +172,8 @@ export default function SpecialEventsActivities() {
       location: formData.location,
       season: selectedSeason,
       company_id: currentCompany?.id,
+      file_url: formData.file_url || null,
+      file_name: formData.file_name || null,
     };
 
     if (editingEvent) {
@@ -238,10 +247,61 @@ export default function SpecialEventsActivities() {
       end_time: "",
       location: "",
       division_ids: [],
+      file_url: "",
+      file_name: "",
     });
     setEditingEvent(null);
     setShowDialog(false);
     fetchEvents();
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentCompany?.id) return;
+
+    setUploadingFile(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${currentCompany.id}/${Date.now()}.${fileExt}`;
+      
+      // Upload to a special-events bucket (reusing rainy-day-documents bucket for now)
+      const { data, error } = await supabase.storage
+        .from('rainy-day-documents')
+        .upload(fileName, file);
+
+      if (error) throw error;
+
+      // Get signed URL
+      const { data: signedUrlData } = await supabase.storage
+        .from('rainy-day-documents')
+        .createSignedUrl(fileName, 60 * 60 * 24 * 365); // 1 year
+
+      setFormData({
+        ...formData,
+        file_url: signedUrlData?.signedUrl || '',
+        file_name: file.name
+      });
+
+      sonnerToast.success("File uploaded successfully");
+    } catch (error) {
+      console.error("File upload error:", error);
+      sonnerToast.error("Failed to upload file");
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setFormData({
+      ...formData,
+      file_url: "",
+      file_name: ""
+    });
+  };
+
+  const handleViewEvent = (event: any) => {
+    setSelectedEvent(event);
+    setShowEventDetailDialog(true);
   };
 
   const handleEdit = async (event: any) => {
@@ -262,6 +322,8 @@ export default function SpecialEventsActivities() {
       end_time: event.end_time || "",
       location: event.location || "",
       division_ids: divisionLinks?.map(link => link.division_id) || [],
+      file_url: event.file_url || "",
+      file_name: event.file_name || "",
     });
     setShowDialog(true);
   };
@@ -376,55 +438,56 @@ export default function SpecialEventsActivities() {
                 {new Date(date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
               </h2>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {dateEvents.map((event) => (
-                  <Card key={event.id} className="hover:shadow-lg transition-shadow">
-                    <CardHeader>
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <CardTitle className="text-lg flex items-center gap-2">
-                            {getTimeSlotIcon(event)}
-                            {event.title}
-                          </CardTitle>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {formatTimeDisplay(event)}
-                          </p>
-                        </div>
-                        <div className="flex gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEdit(event)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setDeletingId(event.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      <div className="flex gap-2 flex-wrap">
-                        <Badge>{event.event_type}</Badge>
-                        {event.divisions?.map((div: any) => (
-                          <Badge key={div.id} variant="secondary">{div.name}</Badge>
-                        ))}
-                      </div>
-                      {event.location && (
-                        <p className="text-sm text-muted-foreground">📍 {event.location}</p>
-                      )}
-                      {event.description && (
-                        <p className="text-sm text-muted-foreground line-clamp-2">
-                          {event.description}
-                        </p>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
+                    {dateEvents.map((event) => (
+                      <Card key={event.id} className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => handleViewEvent(event)}>
+                        <CardHeader>
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <CardTitle className="text-lg flex items-center gap-2">
+                                {getTimeSlotIcon(event)}
+                                {event.title}
+                                {event.file_url && <Paperclip className="h-4 w-4 text-muted-foreground" />}
+                              </CardTitle>
+                              <p className="text-sm text-muted-foreground mt-1">
+                                {formatTimeDisplay(event)}
+                              </p>
+                            </div>
+                            <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEdit(event)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setDeletingId(event.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          <div className="flex gap-2 flex-wrap">
+                            <Badge>{event.event_type}</Badge>
+                            {event.divisions?.map((div: any) => (
+                              <Badge key={div.id} variant="secondary">{div.name}</Badge>
+                            ))}
+                          </div>
+                          {event.location && (
+                            <p className="text-sm text-muted-foreground">📍 {event.location}</p>
+                          )}
+                          {event.description && (
+                            <p className="text-sm text-muted-foreground line-clamp-2">
+                              {event.description}
+                            </p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
               </div>
             </div>
           ))}
@@ -572,6 +635,42 @@ export default function SpecialEventsActivities() {
               />
             </div>
 
+            <div className="space-y-2">
+              <Label>Attachment (optional)</Label>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                className="hidden"
+                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+              />
+              {formData.file_name ? (
+                <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/50">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <span className="flex-1 text-sm truncate">{formData.file_name}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleRemoveFile}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingFile}
+                  className="w-full"
+                >
+                  <Paperclip className="h-4 w-4 mr-2" />
+                  {uploadingFile ? "Uploading..." : "Attach File"}
+                </Button>
+              )}
+            </div>
+
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => {
                 setShowDialog(false);
@@ -599,6 +698,62 @@ export default function SpecialEventsActivities() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Event Detail Dialog */}
+      <Dialog open={showEventDetailDialog} onOpenChange={setShowEventDetailDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{selectedEvent?.title}</DialogTitle>
+          </DialogHeader>
+          {selectedEvent && (
+            <div className="space-y-4">
+              <div className="flex gap-2 flex-wrap">
+                <Badge>{selectedEvent.event_type}</Badge>
+                {selectedEvent.divisions?.map((div: any) => (
+                  <Badge key={div.id} variant="secondary">{div.name}</Badge>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Date</p>
+                  <p className="font-medium">{new Date(selectedEvent.event_date).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Time</p>
+                  <p className="font-medium">{formatTimeDisplay(selectedEvent)}</p>
+                </div>
+                {selectedEvent.location && (
+                  <div className="col-span-2">
+                    <p className="text-muted-foreground">Location</p>
+                    <p className="font-medium">📍 {selectedEvent.location}</p>
+                  </div>
+                )}
+              </div>
+              {selectedEvent.description && (
+                <div>
+                  <p className="text-muted-foreground text-sm">Description</p>
+                  <p>{selectedEvent.description}</p>
+                </div>
+              )}
+              {selectedEvent.file_url && (
+                <div className="border-t pt-4">
+                  <p className="text-muted-foreground text-sm mb-2">Attachment</p>
+                  <a
+                    href={selectedEvent.file_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-3 border rounded-md bg-muted/50 hover:bg-muted transition-colors"
+                  >
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span className="flex-1 text-sm">{selectedEvent.file_name || 'Download Attachment'}</span>
+                    <Download className="h-4 w-4 text-muted-foreground" />
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

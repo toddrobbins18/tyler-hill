@@ -599,6 +599,7 @@ export type Database = {
           group_name: string | null
           guardian_email: string | null
           guardian_name: string | null
+          guardian_name_p2: string | null
           guardian_phone: string | null
           id: string
           leader_id: string | null
@@ -636,6 +637,7 @@ export type Database = {
           group_name?: string | null
           guardian_email?: string | null
           guardian_name?: string | null
+          guardian_name_p2?: string | null
           guardian_phone?: string | null
           id?: string
           leader_id?: string | null
@@ -673,6 +675,7 @@ export type Database = {
           group_name?: string | null
           guardian_email?: string | null
           guardian_name?: string | null
+          guardian_name_p2?: string | null
           guardian_phone?: string | null
           id?: string
           leader_id?: string | null
@@ -2138,6 +2141,8 @@ export type Database = {
           end_time: string | null
           event_date: string
           event_type: string
+          file_name: string | null
+          file_url: string | null
           id: string
           location: string | null
           season: string | null
@@ -2154,6 +2159,8 @@ export type Database = {
           end_time?: string | null
           event_date: string
           event_type: string
+          file_name?: string | null
+          file_url?: string | null
           id?: string
           location?: string | null
           season?: string | null
@@ -2170,6 +2177,8 @@ export type Database = {
           end_time?: string | null
           event_date?: string
           event_type?: string
+          file_name?: string | null
+          file_url?: string | null
           id?: string
           location?: string | null
           season?: string | null
@@ -2621,6 +2630,7 @@ export type Database = {
           date_of_birth: string | null
           department: string | null
           email: string | null
+          gender: string | null
           hire_date: string | null
           id: string
           leader_id: string | null
@@ -2645,6 +2655,7 @@ export type Database = {
           date_of_birth?: string | null
           department?: string | null
           email?: string | null
+          gender?: string | null
           hire_date?: string | null
           id?: string
           leader_id?: string | null
@@ -2669,6 +2680,7 @@ export type Database = {
           date_of_birth?: string | null
           department?: string | null
           email?: string | null
+          gender?: string | null
           hire_date?: string | null
           id?: string
           leader_id?: string | null
@@ -2717,6 +2729,10 @@ export type Database = {
           is_day_off: boolean | null
           is_night_off: boolean | null
           is_sleeping_out: boolean | null
+          late_override: boolean | null
+          late_override_approved_at: string | null
+          late_override_approved_by: string | null
+          late_override_reason: string | null
           notes: string | null
           season: string | null
           staff_id: string
@@ -2736,6 +2752,10 @@ export type Database = {
           is_day_off?: boolean | null
           is_night_off?: boolean | null
           is_sleeping_out?: boolean | null
+          late_override?: boolean | null
+          late_override_approved_at?: string | null
+          late_override_approved_by?: string | null
+          late_override_reason?: string | null
           notes?: string | null
           season?: string | null
           staff_id: string
@@ -2755,6 +2775,10 @@ export type Database = {
           is_day_off?: boolean | null
           is_night_off?: boolean | null
           is_sleeping_out?: boolean | null
+          late_override?: boolean | null
+          late_override_approved_at?: string | null
+          late_override_approved_by?: string | null
+          late_override_reason?: string | null
           notes?: string | null
           season?: string | null
           staff_id?: string
