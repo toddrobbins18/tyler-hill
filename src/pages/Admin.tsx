@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Shield, Users, Database, FileText, Tag, Mail, Building2, Upload } from "lucide-react";
+import { Shield, Users, Database, FileText, Tag, Mail, Building2, Upload, Download } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -14,6 +14,7 @@ import AutomatedEmailConfig from "@/components/admin/AutomatedEmailConfig";
 import CompanyEmailConfig from "@/components/admin/CompanyEmailConfig";
 import CompanyManagement from "@/pages/admin/CompanyManagement";
 import CampDataImporter from "@/components/admin/CampDataImporter";
+import DataExporter from "@/components/admin/DataExporter";
 
 export default function Admin() {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -93,7 +94,7 @@ export default function Admin() {
       )}
 
       <Tabs defaultValue="users" className="space-y-6">
-        <TabsList className={`grid w-full ${isSuperAdmin ? 'grid-cols-8' : 'grid-cols-5'} lg:w-auto`}>
+        <TabsList className={`grid w-full ${isSuperAdmin ? 'grid-cols-9' : 'grid-cols-6'} lg:w-auto`}>
           <TabsTrigger value="users" className="gap-2">
             <Users className="h-4 w-4" />
             User Management
@@ -127,6 +128,10 @@ export default function Admin() {
           <TabsTrigger value="import" className="gap-2">
             <Upload className="h-4 w-4" />
             Data Import
+          </TabsTrigger>
+          <TabsTrigger value="export" className="gap-2">
+            <Download className="h-4 w-4" />
+            Data Export
           </TabsTrigger>
           <TabsTrigger value="history" className="gap-2">
             <FileText className="h-4 w-4" />
@@ -166,6 +171,10 @@ export default function Admin() {
 
         <TabsContent value="import" className="space-y-6">
           <CampDataImporter />
+        </TabsContent>
+
+        <TabsContent value="export" className="space-y-6">
+          <DataExporter />
         </TabsContent>
 
         <TabsContent value="history" className="space-y-6">
