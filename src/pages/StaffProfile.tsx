@@ -257,6 +257,7 @@ export default function StaffProfile() {
                     entityType="staff"
                     entityId={staff.id}
                     entityName={staff.name}
+                    companyId={currentCompany?.id || ''}
                     onPhotoUpdated={(newUrl) => setStaff((prev: any) => ({ ...prev, photo_url: newUrl }))}
                   />
                 </div>

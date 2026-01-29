@@ -236,6 +236,7 @@ export type Database = {
         Row: {
           action: string
           changed_at: string
+          company_id: string | null
           created_at: string | null
           id: string
           new_data: Json | null
@@ -247,6 +248,7 @@ export type Database = {
         Insert: {
           action: string
           changed_at?: string
+          company_id?: string | null
           created_at?: string | null
           id?: string
           new_data?: Json | null
@@ -258,6 +260,7 @@ export type Database = {
         Update: {
           action?: string
           changed_at?: string
+          company_id?: string | null
           created_at?: string | null
           id?: string
           new_data?: Json | null
@@ -266,7 +269,15 @@ export type Database = {
           table_name?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "audit_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       automated_email_config: {
         Row: {

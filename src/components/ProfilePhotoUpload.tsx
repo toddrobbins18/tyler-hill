@@ -10,6 +10,7 @@ interface ProfilePhotoUploadProps {
   entityType: "camper" | "staff";
   entityId: string;
   entityName: string;
+  companyId: string;
   onPhotoUpdated: (newUrl: string | null) => void;
   size?: "sm" | "md" | "lg";
 }
@@ -31,6 +32,7 @@ export default function ProfilePhotoUpload({
   entityType,
   entityId,
   entityName,
+  companyId,
   onPhotoUpdated,
   size = "lg"
 }: ProfilePhotoUploadProps) {
@@ -85,7 +87,8 @@ export default function ProfilePhotoUpload({
     setUploading(true);
     try {
       const fileExt = file instanceof File ? file.name.split('.').pop() : 'jpg';
-      const fileName = `${entityType}/${entityId}/${Date.now()}.${fileExt}`;
+      // Include companyId prefix for company-level storage isolation
+      const fileName = `${companyId}/${entityType}/${entityId}/${Date.now()}.${fileExt}`;
 
       // Delete old photo if exists
       const oldPath = getFilePath(currentPhotoUrl);

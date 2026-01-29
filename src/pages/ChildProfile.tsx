@@ -339,6 +339,7 @@ export default function ChildProfile() {
                     entityType="camper"
                     entityId={child.id}
                     entityName={child.name}
+                    companyId={currentCompany?.id || ''}
                     onPhotoUpdated={(newUrl) => setChild((prev: any) => ({ ...prev, photo_url: newUrl }))}
                   />
                 </div>
