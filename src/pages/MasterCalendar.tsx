@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useSeasonContext } from "@/contexts/SeasonContext";
-import { Calendar as CalendarIcon, Plus, List, Pencil, Trash2, Search, X, Trophy, Users, Star, Sparkles, MapPin, Clock, Home, Plane } from "lucide-react";
+import { Calendar as CalendarIcon, Plus, List, Pencil, Trash2, Search, X, Trophy, Users, Star, Sparkles, MapPin, Clock, Home, Plane, FileText, Download } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -710,6 +710,22 @@ export default function MasterCalendar() {
               {selectedEvent.description && (
                 <div className="border-t pt-4">
                   <p className="text-sm text-muted-foreground">{selectedEvent.description}</p>
+                </div>
+              )}
+
+              {/* File Attachment for Special Events */}
+              {selectedEvent.source === 'special_events_activities' && selectedEvent.originalData?.file_url && (
+                <div className="border-t pt-4">
+                  <a 
+                    href={selectedEvent.originalData.file_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-primary hover:underline"
+                  >
+                    <FileText className="h-4 w-4" />
+                    <span>{selectedEvent.originalData.file_name || 'View Attachment'}</span>
+                    <Download className="h-3 w-3" />
+                  </a>
                 </div>
               )}
             </div>
