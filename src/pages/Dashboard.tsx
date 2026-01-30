@@ -723,7 +723,7 @@ export default function Dashboard() {
 
       {/* Kanban Notes Board for Tyler Hill */}
       {isTylerHillCamp && (
-        <KanbanBoard />
+        <KanbanBoard className={glassCardClass} />
       )}
 
       {/* Daily Wolf Content for Timber Lake West - at the bottom */}
