@@ -23,9 +23,10 @@ interface WeatherData {
 
 interface WeatherWidgetProps {
   zipCode: string;
+  className?: string;
 }
 
-export function WeatherWidget({ zipCode }: WeatherWidgetProps) {
+export function WeatherWidget({ zipCode, className }: WeatherWidgetProps) {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +58,7 @@ export function WeatherWidget({ zipCode }: WeatherWidgetProps) {
 
   if (loading) {
     return (
-      <Card className="shadow-sm">
+      <Card className={`shadow-sm ${className || ''}`}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             <Cloud className="h-5 w-5" />
@@ -77,7 +78,7 @@ export function WeatherWidget({ zipCode }: WeatherWidgetProps) {
   }
 
   return (
-    <Card className="shadow-sm">
+    <Card className={`shadow-sm ${className || ''}`}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-lg">
           <Cloud className="h-5 w-5 text-primary" />
