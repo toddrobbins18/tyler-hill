@@ -10,6 +10,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { WeatherWidget } from "@/components/WeatherWidget";
+import timberLakeWestBg from "@/assets/timber-lake-west-bg.jpeg";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -294,6 +295,7 @@ export default function Dashboard() {
   };
 
   const isTimberLakeCamp = currentCompany?.slug === 'timber-lake-camp';
+  const isTimberLakeWest = currentCompany?.slug === 'timber-lake-west';
   const isTylerHillCamp = currentCompany?.slug === 'tyler-hill-camp';
   const dashboardTitle = isTimberLakeCamp ? "Tiger Times" : "Dashboard";
   
@@ -319,13 +321,23 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground mb-2">{dashboardTitle}</h1>
+    <div 
+      className="space-y-8 min-h-screen relative"
+      style={isTimberLakeWest ? {
+        backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.4), rgba(0,0,0,0.6)), url(${timberLakeWestBg})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed',
+        margin: '-2rem',
+        padding: '2rem',
+      } : undefined}
+    >
+      <div className={isTimberLakeWest ? 'text-white' : ''}>
+        <h1 className={`text-3xl font-bold mb-2 ${isTimberLakeWest ? 'text-white drop-shadow-lg' : 'text-foreground'}`}>{dashboardTitle}</h1>
         {isTimberLakeCamp ? (
-          <p className="text-muted-foreground">{formattedDate}</p>
+          <p className={isTimberLakeWest ? 'text-white/80 drop-shadow' : 'text-muted-foreground'}>{formattedDate}</p>
         ) : (
-          <p className="text-muted-foreground">Welcome back! Here's what's happening today.</p>
+          <p className={isTimberLakeWest ? 'text-white/80 drop-shadow' : 'text-muted-foreground'}>Welcome back! Here's what's happening today.</p>
         )}
       </div>
 
