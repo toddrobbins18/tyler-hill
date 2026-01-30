@@ -569,7 +569,7 @@ export default function Dashboard() {
                   <CalendarIcon className="h-5 w-5 text-purple-500" />
                 </div>
                 <div>
-                  <CardTitle>Evening/Night Activities</CardTitle>
+                  <CardTitle>Evening Activities</CardTitle>
                   <CardDescription>Tonight's schedule</CardDescription>
                 </div>
               </div>
