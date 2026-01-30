@@ -33,9 +33,10 @@ export const childSchema = z.object({
   rfid: z.string().nullable().optional(),
 });
 
-// Staff validation schema
+// Staff validation schema - person_id REQUIRED for CSV matching
 export const staffSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(100, "Name must be less than 100 characters"),
+  person_id: z.string().trim().min(1, "Person ID is required").max(50, "Person ID must be less than 50 characters"),
   role: z.string().trim().min(1, "Role is required").max(100, "Role must be less than 100 characters"),
   department: z.string().trim().max(100, "Department must be less than 100 characters").nullable().optional(),
   email: z.union([z.string().trim().email("Invalid email address").max(255), z.literal("")]).nullable().optional(),
@@ -45,18 +46,18 @@ export const staffSchema = z.object({
   staff_type: z.enum(["general_counselor", "specialist", "both"]).nullable().optional(),
 });
 
-// Award validation schema
+// Award validation schema - uses person_id for CSV matching
 export const awardSchema = z.object({
   title: z.string().min(1, "Title is required"),
-  child_id: z.string().uuid("Invalid child ID"),
+  person_id: z.string().trim().min(1, "Person ID is required"),
   date: z.string(),
   category: z.string().optional(),
   description: z.string().optional(),
 });
 
-// Daily note validation schema
+// Daily note validation schema - uses person_id for CSV matching
 export const dailyNoteSchema = z.object({
-  child_id: z.string().uuid("Invalid child ID"),
+  person_id: z.string().trim().min(1, "Person ID is required"),
   date: z.string(),
   mood: z.string().optional(),
   activities: z.string().optional(),
@@ -99,23 +100,23 @@ export const menuItemSchema = z.object({
   allergens: z.string().nullable().optional(),
 });
 
-// Incident report validation schema
+// Incident report validation schema - uses person_ids for CSV matching
 export const incidentReportSchema = z.object({
-  child_ids: z.array(z.string().uuid()).default([]),
+  person_ids: z.array(z.string().trim()).default([]),
   date: z.string().min(1, "Date is required"),
   type: z.string().min(1, "Type is required"),
   description: z.string().min(1, "Description is required"),
   severity: z.string().optional(),
   tags: z.array(z.string()).optional(),
   reported_by: z.string().optional(),
-  reporter_id: z.string().uuid().optional(),
+  reporter_person_id: z.string().optional(),
   status: z.string().optional(),
   season: z.string().optional(),
 });
 
-// Medication validation schema
+// Medication validation schema - uses person_id for CSV matching
 export const medicationSchema = z.object({
-  child_id: z.string().uuid("Invalid child ID"),
+  person_id: z.string().trim().min(1, "Person ID is required"),
   date: z.string().min(1, "Date is required"),
   medication_name: z.string().min(1, "Medication name is required"),
   dosage: z.string().optional(),
@@ -206,31 +207,39 @@ export function parseChildRow(row: Record<string, any>) {
   };
 }
 
-// Convert CSV row to typed object for staff
+// Convert CSV row to typed object for staff - requires person_id
 export function parseStaffRow(row: Record<string, any>) {
+  // Construct full name from first and last name if available
+  const firstName = row.first_name || row['First Name'] || row.firstname || '';
+  const lastName = row.last_name || row['Last Name'] || row.lastname || '';
+  const fullName = `${firstName} ${lastName}`.trim() || row.name || row.Name || '';
+  
   return {
-    name: row.name,
-    role: row.role,
-    department: row.department || null,
-    email: row.email || null,
-    phone: row.phone || null,
-    hire_date: row.hire_date || null,
+    name: fullName,
+    person_id: String(row.person_id || row['Person ID'] || row.PersonID || row.personid || '').trim(),
+    role: row.role || row.Role || '',
+    department: row.department || row.Department || null,
+    email: row.email || row.Email || null,
+    phone: row.phone || row.Phone || null,
+    hire_date: row.hire_date || row['Hire Date'] || null,
   };
 }
 
+// Award CSV parser - uses person_id for matching
 export function parseAwardRow(row: Record<string, any>) {
   return {
     title: String(row.title || row.Title || ''),
-    child_id: String(row.child_id || row['Child ID'] || ''),
+    person_id: String(row.person_id || row['Person ID'] || row.PersonID || row.personid || '').trim(),
     date: String(row.date || row.Date || ''),
     category: String(row.category || row.Category || ''),
     description: String(row.description || row.Description || ''),
   };
 }
 
+// Daily note CSV parser - uses person_id for matching
 export function parseDailyNoteRow(row: Record<string, any>) {
   return {
-    child_id: String(row.child_id || row['Child ID'] || ''),
+    person_id: String(row.person_id || row['Person ID'] || row.PersonID || row.personid || '').trim(),
     date: String(row.date || row.Date || ''),
     mood: String(row.mood || row.Mood || ''),
     activities: String(row.activities || row.Activities || ''),
@@ -269,21 +278,28 @@ export function parseMenuItemRow(row: Record<string, any>) {
   };
 }
 
+// Incident report CSV parser - uses person_ids for matching
 export function parseIncidentReportRow(row: Record<string, any>) {
+  // Support single person_id or comma-separated list
+  const personIdString = String(row.person_id || row['Person ID'] || row.PersonID || row.person_ids || row['Person IDs'] || '').trim();
+  const personIds = personIdString ? personIdString.split(',').map(id => id.trim()).filter(Boolean) : [];
+  
   return {
-    child_id: String(row.child_id || row['Child ID'] || ''),
+    person_ids: personIds,
     date: String(row.date || row.Date || ''),
     type: String(row.type || row.Type || ''),
     description: String(row.description || row.Description || ''),
     severity: String(row.severity || row.Severity || ''),
     reported_by: String(row.reported_by || row['Reported By'] || ''),
+    reporter_person_id: String(row.reporter_person_id || row['Reporter Person ID'] || '').trim() || undefined,
     status: String(row.status || row.Status || 'open'),
   };
 }
 
+// Medication CSV parser - uses person_id for matching
 export function parseMedicationRow(row: Record<string, any>) {
   return {
-    child_id: String(row.child_id || row['Child ID'] || ''),
+    person_id: String(row.person_id || row['Person ID'] || row.PersonID || row.personid || '').trim(),
     date: String(row.date || row.Date || ''),
     medication_name: String(row.medication_name || row['Medication Name'] || ''),
     dosage: String(row.dosage || row.Dosage || ''),
@@ -294,7 +310,6 @@ export function parseMedicationRow(row: Record<string, any>) {
     days_of_week: row.days_of_week ? String(row.days_of_week).split(',') : [],
     end_date: String(row.end_date || row['End Date'] || '') || null,
   };
-}
 
 export function parseCalendarEventRow(row: Record<string, any>) {
   return {

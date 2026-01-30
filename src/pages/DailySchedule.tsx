@@ -13,8 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CalendarIcon, Clock, MapPin, Users, ChevronLeft, ChevronRight, Filter, Loader2 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CalendarIcon, Clock, MapPin, Users, ChevronLeft, ChevronRight, Filter, Loader2, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
+import DivisionScheduleUploader from "@/components/admin/DivisionScheduleUploader";
 
 interface Division {
   id: string;
@@ -305,156 +307,175 @@ export default function DailySchedule() {
         </div>
       </div>
 
-      {/* Controls */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-            {/* Date Navigation */}
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" onClick={() => navigateDate('prev')}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-[200px] justify-start text-left font-normal">
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {format(selectedDate, "EEEE, MMM d, yyyy")}
+      <Tabs defaultValue="schedule" className="w-full">
+        <TabsList>
+          <TabsTrigger value="schedule" className="flex items-center gap-2">
+            <CalendarIcon className="h-4 w-4" />
+            Schedule View
+          </TabsTrigger>
+          <TabsTrigger value="uploads" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Upload Schedules
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="schedule" className="space-y-6 mt-6">
+          {/* Controls */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                {/* Date Navigation */}
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="icon" onClick={() => navigateDate('prev')}>
+                    <ChevronLeft className="h-4 w-4" />
                   </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={(date) => date && setSelectedDate(date)}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+                  
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-[200px] justify-start text-left font-normal">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {format(selectedDate, "EEEE, MMM d, yyyy")}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={(date) => date && setSelectedDate(date)}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
 
-              <Button variant="outline" size="icon" onClick={() => navigateDate('next')}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+                  <Button variant="outline" size="icon" onClick={() => navigateDate('next')}>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
 
-              <Button variant="ghost" size="sm" onClick={() => setSelectedDate(new Date())}>
-                Today
-              </Button>
-            </div>
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedDate(new Date())}>
+                    Today
+                  </Button>
+                </div>
 
-            {/* Division Filter */}
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-muted-foreground" />
-              <Select value={selectedDivision} onValueChange={setSelectedDivision}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Filter by division" />
-                </SelectTrigger>
-                <SelectContent>
-                  {!hasDivisionRestriction && (
-                    <SelectItem value="all">All Divisions</SelectItem>
-                  )}
-                  {accessibleDivisions.map((division) => (
-                    <SelectItem key={division.id} value={division.id}>
-                      {division.name} ({division.gender === 'male' ? 'Boys' : 'Girls'})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Schedule Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CalendarIcon className="h-5 w-5" />
-            Schedule for {format(selectedDate, "EEEE, MMMM d, yyyy")}
-          </CardTitle>
-          <CardDescription>
-            {filteredEvents.length} event{filteredEvents.length !== 1 ? 's' : ''} scheduled
-            {selectedDivision !== 'all' && accessibleDivisions.find(d => d.id === selectedDivision) && (
-              <> for {accessibleDivisions.find(d => d.id === selectedDivision)?.name}</>
-            )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loadingEvents ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : filteredEvents.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <CalendarIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p className="text-lg font-medium">No events scheduled</p>
-              <p className="text-sm">There are no events for this date and division.</p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[100px]">Time</TableHead>
-                  <TableHead>Event</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Divisions</TableHead>
-                  <TableHead>Source</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredEvents.map((event) => (
-                  <TableRow key={`${event.source}-${event.id}`}>
-                    <TableCell className="font-medium">
-                      {event.time ? (
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-3 w-3 text-muted-foreground" />
-                          {event.time}
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">All Day</span>
+                {/* Division Filter */}
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-muted-foreground" />
+                  <Select value={selectedDivision} onValueChange={setSelectedDivision}>
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder="Filter by division" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {!hasDivisionRestriction && (
+                        <SelectItem value="all">All Divisions</SelectItem>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{event.title}</p>
-                        {event.description && (
-                          <p className="text-sm text-muted-foreground line-clamp-1">
-                            {event.description}
-                          </p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{event.type}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      {event.location ? (
-                        <div className="flex items-center gap-1">
-                          <MapPin className="h-3 w-3 text-muted-foreground" />
-                          {event.location}
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Users className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-sm">{getDivisionNames(event.divisions)}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={cn("text-xs", getSourceBadgeColor(event.source))}>
-                        {getSourceLabel(event.source)}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                      {accessibleDivisions.map((division) => (
+                        <SelectItem key={division.id} value={division.id}>
+                          {division.name} ({division.gender === 'male' ? 'Boys' : 'Girls'})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Schedule Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CalendarIcon className="h-5 w-5" />
+                Schedule for {format(selectedDate, "EEEE, MMMM d, yyyy")}
+              </CardTitle>
+              <CardDescription>
+                {filteredEvents.length} event{filteredEvents.length !== 1 ? 's' : ''} scheduled
+                {selectedDivision !== 'all' && accessibleDivisions.find(d => d.id === selectedDivision) && (
+                  <> for {accessibleDivisions.find(d => d.id === selectedDivision)?.name}</>
+                )}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingEvents ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredEvents.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <CalendarIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p className="text-lg font-medium">No events scheduled</p>
+                  <p className="text-sm">There are no events for this date and division.</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[100px]">Time</TableHead>
+                      <TableHead>Event</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Location</TableHead>
+                      <TableHead>Divisions</TableHead>
+                      <TableHead>Source</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredEvents.map((event) => (
+                      <TableRow key={`${event.source}-${event.id}`}>
+                        <TableCell className="font-medium">
+                          {event.time ? (
+                            <div className="flex items-center gap-1">
+                              <Clock className="h-3 w-3 text-muted-foreground" />
+                              {event.time}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">All Day</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{event.title}</p>
+                            {event.description && (
+                              <p className="text-sm text-muted-foreground line-clamp-1">
+                                {event.description}
+                              </p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{event.type}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {event.location ? (
+                            <div className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3 text-muted-foreground" />
+                              {event.location}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Users className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-sm">{getDivisionNames(event.divisions)}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={cn("text-xs", getSourceBadgeColor(event.source))}>
+                            {getSourceLabel(event.source)}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="uploads" className="mt-6">
+          <DivisionScheduleUploader />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
