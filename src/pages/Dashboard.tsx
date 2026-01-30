@@ -392,92 +392,6 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Daily Wolf Content for Timber Lake West - at the top */}
-      {isTimberLakeWest && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0">
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <User className="h-4 w-4 text-primary" />
-                </div>
-                <CardTitle className="text-base">Officer of the Day</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-lg font-semibold text-foreground">
-                {dailyWolfContent?.officer_of_day || 'Not set'}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0">
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-amber-500/10">
-                  <Quote className="h-4 w-4 text-amber-600" />
-                </div>
-                <CardTitle className="text-base">Quote of the Day</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm italic text-muted-foreground">
-                {dailyWolfContent?.quote_of_the_day ? `"${dailyWolfContent.quote_of_the_day}"` : 'No quote set'}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0">
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-blue-500/10">
-                  <Shirt className="h-4 w-4 text-blue-600" />
-                </div>
-                <CardTitle className="text-base">Laundry</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground whitespace-pre-line">
-                {dailyWolfContent?.laundry_info || 'No laundry info'}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0">
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-green-500/10">
-                  <Phone className="h-4 w-4 text-green-600" />
-                </div>
-                <CardTitle className="text-base">Phone Calls</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground whitespace-pre-line">
-                {dailyWolfContent?.phone_calls_info || 'No phone call info'}
-              </p>
-            </CardContent>
-          </Card>
-
-          {dailyWolfContent?.notes && (
-            <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0 md:col-span-2 lg:col-span-4">
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-lg bg-purple-500/10">
-                    <FileText className="h-4 w-4 text-purple-600" />
-                  </div>
-                  <CardTitle className="text-base">Daily Notes</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground whitespace-pre-line">
-                  {dailyWolfContent.notes}
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
 
       {!isTimberLakeCamp && !isTylerHillCamp && !isTimberLakeWest && (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -768,61 +682,90 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Stat Cards at the bottom for Timber Lake West */}
+      {/* Daily Wolf Content for Timber Lake West - at the bottom */}
       {isTimberLakeWest && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-lg bg-primary/10">
-                  <Users className="h-6 w-6 text-primary" />
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <User className="h-4 w-4 text-primary" />
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-foreground">{stats.totalChildren}</p>
-                  <p className="text-xs text-muted-foreground">Total Campers</p>
-                </div>
+                <CardTitle className="text-base">OD of the Day</CardTitle>
               </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-lg font-semibold text-foreground">
+                {dailyWolfContent?.officer_of_day || 'Not set'}
+              </p>
             </CardContent>
           </Card>
+
           <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-lg bg-green-500/10">
-                  <Truck className="h-6 w-6 text-green-600" />
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-amber-500/10">
+                  <Quote className="h-4 w-4 text-amber-600" />
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-foreground">{stats.activeRoutes}</p>
-                  <p className="text-xs text-muted-foreground">Today's Transportation</p>
-                </div>
+                <CardTitle className="text-base">Quote of the Day</CardTitle>
               </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm italic text-muted-foreground">
+                {dailyWolfContent?.quote_of_the_day ? `"${dailyWolfContent.quote_of_the_day}"` : 'No quote set'}
+              </p>
             </CardContent>
           </Card>
+
           <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-lg bg-blue-500/10">
-                  <FileText className="h-6 w-6 text-blue-600" />
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-blue-500/10">
+                  <Shirt className="h-4 w-4 text-blue-600" />
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-foreground">{stats.todayNotes}</p>
-                  <p className="text-xs text-muted-foreground">Today's Notes</p>
-                </div>
+                <CardTitle className="text-base">Laundry</CardTitle>
               </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">
+                {dailyWolfContent?.laundry_info || 'No laundry info'}
+              </p>
             </CardContent>
           </Card>
+
           <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-lg bg-amber-500/10">
-                  <Award className="h-6 w-6 text-amber-600" />
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-green-500/10">
+                  <Phone className="h-4 w-4 text-green-600" />
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-foreground">{stats.weekAwards}</p>
-                  <p className="text-xs text-muted-foreground">Achievements This Week</p>
-                </div>
+                <CardTitle className="text-base">Phone Calls</CardTitle>
               </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">
+                {dailyWolfContent?.phone_calls_info || 'No phone call info'}
+              </p>
             </CardContent>
           </Card>
+
+          {dailyWolfContent?.notes && (
+            <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0 md:col-span-2 lg:col-span-4">
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-purple-500/10">
+                    <FileText className="h-4 w-4 text-purple-600" />
+                  </div>
+                  <CardTitle className="text-base">Daily Notes</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground whitespace-pre-line">
+                  {dailyWolfContent.notes}
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
     </div>
