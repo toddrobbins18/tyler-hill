@@ -262,7 +262,7 @@ export default function KanbanBoard({ className }: KanbanBoardProps) {
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, column.id)}
             >
-              <h4 className="font-medium text-sm text-muted-foreground mb-2 px-1">
+              <h4 className="font-semibold text-sm text-foreground/80 mb-2 px-1">
                 {column.title} ({getColumnNotes(column.id).length})
               </h4>
               <div className="space-y-2">
@@ -300,11 +300,11 @@ export default function KanbanBoard({ className }: KanbanBoardProps) {
                     ) : (
                       <>
                         <div className="flex items-start gap-1">
-                          <GripVertical className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                          <GripVertical className="h-4 w-4 text-foreground/60 flex-shrink-0 mt-0.5" />
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm truncate">{note.title}</p>
+                            <p className="font-semibold text-sm truncate text-foreground">{note.title}</p>
                             {note.content && (
-                              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{note.content}</p>
+                              <p className="text-xs text-foreground/70 mt-1 line-clamp-2">{note.content}</p>
                             )}
                           </div>
                         </div>
