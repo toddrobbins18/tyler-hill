@@ -662,6 +662,7 @@ export default function ActivitiesFieldTrips() {
                   <SelectItem value="water">Water Activity</SelectItem>
                   <SelectItem value="outdoor">Outdoor Adventure</SelectItem>
                   <SelectItem value="cultural">Cultural Activity</SelectItem>
+                  <SelectItem value="staff-bus">Staff Bus</SelectItem>
                   <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </Select>
