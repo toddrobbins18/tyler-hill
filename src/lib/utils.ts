@@ -62,3 +62,16 @@ export function formatLocalDate(dateString: string, options?: Intl.DateTimeForma
   };
   return parseLocalDate(dateString).toLocaleDateString('en-US', options || defaultOptions);
 }
+
+/**
+ * Format a date as MM/DD/YYYY for consistent US date display
+ */
+export function formatDateUS(dateString: string): string {
+  if (!dateString) return '';
+  const date = parseLocalDate(dateString);
+  return date.toLocaleDateString('en-US', { 
+    month: '2-digit', 
+    day: '2-digit', 
+    year: 'numeric' 
+  });
+}

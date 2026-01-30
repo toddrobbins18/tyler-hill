@@ -289,7 +289,7 @@ export default function Transportation() {
       };
     }
     return {
-      dateText: new Date(trip.date + 'T00:00:00').toLocaleDateString(),
+      dateText: new Date(trip.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       durationBadge: null
     };
   };

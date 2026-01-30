@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { CalendarRange } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import TripAttachments from "@/components/TripAttachments";
 
 interface EditTripDialogProps {
   tripId: string;
@@ -336,6 +337,9 @@ export default function EditTripDialog({ tripId, open, onOpenChange, onSuccess }
               placeholder="Driver name"
             />
           </div>
+
+          {/* Attachments section for multi-day trips */}
+          <TripAttachments tripId={tripId} isMultiDay={formData.is_multi_day} />
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
