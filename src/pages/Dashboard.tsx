@@ -560,6 +560,40 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
+        {/* Evening/Night Activities Card - Timber Lake West only */}
+        {isTimberLakeWest && (
+          <Card className="shadow-card h-full flex flex-col">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-purple-500/10">
+                  <CalendarIcon className="h-5 w-5 text-purple-500" />
+                </div>
+                <div>
+                  <CardTitle>Evening/Night Activities</CardTitle>
+                  <CardDescription>Tonight's schedule</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3 flex-1 flex flex-col">
+              {specialEvents.filter(e => e.event_type === 'evening-activity').length === 0 ? (
+                <p className="text-muted-foreground text-sm">No evening activities tonight</p>
+              ) : (
+                <div className="space-y-3 flex-1">
+                  {specialEvents.filter(e => e.event_type === 'evening-activity').map((event) => (
+                    <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer" onClick={() => navigate('/special-events')}>
+                      <div className="flex-1">
+                        <p className="font-medium text-sm mb-1">{event.title}</p>
+                        <span className="text-xs text-muted-foreground">{event.time_slot || 'All day'}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Button variant="outline" className="w-full mt-auto" onClick={() => navigate('/special-events')}>View All Events</Button>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Special Events & Activities Card */}
         <Card className="shadow-card h-full flex flex-col">
           <CardHeader>
@@ -574,11 +608,11 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent className="space-y-3 flex-1 flex flex-col">
-            {specialEvents.length === 0 ? (
+            {(isTimberLakeWest ? specialEvents.filter(e => e.event_type !== 'evening-activity') : specialEvents).length === 0 ? (
               <p className="text-muted-foreground text-sm">No special events today</p>
             ) : (
               <div className="space-y-3 flex-1">
-                {specialEvents.map((event) => (
+                {(isTimberLakeWest ? specialEvents.filter(e => e.event_type !== 'evening-activity') : specialEvents).map((event) => (
                   <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer" onClick={() => navigate('/special-events')}>
                     <div className="flex-1">
                       <p className="font-medium text-sm mb-1">{event.title}</p>
