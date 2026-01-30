@@ -145,6 +145,7 @@ export default function EditTripDialog({ tripId, open, onOpenChange, onSuccess }
               <SelectContent>
                 <SelectItem value="Field Trip">Field Trip</SelectItem>
                 <SelectItem value="Sporting Event">Sporting Event</SelectItem>
+                <SelectItem value="Staff Bus">Staff Bus</SelectItem>
                 <SelectItem value="Other">Other</SelectItem>
               </SelectContent>
             </Select>
