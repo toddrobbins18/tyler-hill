@@ -227,9 +227,8 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
             baseRow.reporter_id = staffPersonIdMap.get(row.reporter_person_id);
             delete baseRow.reporter_person_id;
           }
-}
-
-export { CSVUploader };
+        }
+        
         return baseRow;
       });
 

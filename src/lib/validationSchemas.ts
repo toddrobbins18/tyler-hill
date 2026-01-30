@@ -310,6 +310,7 @@ export function parseMedicationRow(row: Record<string, any>) {
     days_of_week: row.days_of_week ? String(row.days_of_week).split(',') : [],
     end_date: String(row.end_date || row['End Date'] || '') || null,
   };
+}
 
 export function parseCalendarEventRow(row: Record<string, any>) {
   return {
