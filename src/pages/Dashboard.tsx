@@ -348,6 +348,9 @@ export default function Dashboard() {
   const isTylerHillCamp = currentCompany?.slug === 'tyler-hill-camp';
   const dashboardTitle = isTimberLakeCamp ? "Tiger Times" : isTimberLakeWest ? "The Daily Wolf" : "Dashboard";
   
+  // Glass card styles for Timber Lake West
+  const glassCardClass = isTimberLakeWest ? 'bg-card/80 backdrop-blur-sm border-white/20' : '';
+  
   const today = new Date();
   const formattedDate = today.toLocaleDateString('en-US', { 
     weekday: 'long', 
@@ -435,7 +438,7 @@ export default function Dashboard() {
         )}
 
         {/* Today's Menu Card */}
-        <Card className="shadow-card h-full flex flex-col">
+        <Card className={`shadow-card h-full flex flex-col ${glassCardClass}`}>
           <CardHeader>
             <div className="flex items-center gap-2">
               <div className="p-2 rounded-lg bg-orange-500/10">
@@ -481,7 +484,7 @@ export default function Dashboard() {
         </Card>
 
         {/* Athletics Schedule Card */}
-        <Card className={`shadow-card h-full flex flex-col ${isTylerHillCamp && threeDayOutlook.length > 0 ? 'lg:col-span-2 lg:row-span-1' : ''}`}>
+        <Card className={`shadow-card h-full flex flex-col ${isTylerHillCamp && threeDayOutlook.length > 0 ? 'lg:col-span-2 lg:row-span-1' : ''} ${glassCardClass}`}>
           <CardHeader>
             <div className="flex items-center gap-2">
               <div className="p-2 rounded-lg bg-warning/10">
@@ -561,7 +564,7 @@ export default function Dashboard() {
         </Card>
 
         {/* Today's Birthdays Card */}
-        <Card className="shadow-card h-full flex flex-col">
+        <Card className={`shadow-card h-full flex flex-col ${glassCardClass}`}>
           <CardHeader>
             <div className="flex items-center gap-2">
               <div className="p-2 rounded-lg bg-success/10">
@@ -605,7 +608,7 @@ export default function Dashboard() {
 
         {/* Evening Activities Card - Timber Lake West only */}
         {isTimberLakeWest && (
-          <Card className="shadow-card h-full flex flex-col">
+          <Card className={`shadow-card h-full flex flex-col ${glassCardClass}`}>
             <CardHeader>
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-lg bg-purple-500/10">
@@ -638,7 +641,7 @@ export default function Dashboard() {
         )}
 
         {/* Special Events & Activities Card */}
-        <Card className="shadow-card h-full flex flex-col">
+        <Card className={`shadow-card h-full flex flex-col ${glassCardClass}`}>
           <CardHeader>
             <div className="flex items-center gap-2">
               <div className="p-2 rounded-lg bg-primary/10">
@@ -672,7 +675,7 @@ export default function Dashboard() {
 
         {/* Health Center Card - Timber Lake only */}
         {isTimberLakeCamp && healthCenterAdmissions.length > 0 && (
-          <Card className="shadow-card h-full flex flex-col">
+          <Card className={`shadow-card h-full flex flex-col ${glassCardClass}`}>
             <CardHeader>
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-lg bg-destructive/10">
@@ -719,7 +722,7 @@ export default function Dashboard() {
       {/* Daily Wolf Content for Timber Lake West - at the bottom */}
       {isTimberLakeWest && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0">
+          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20">
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-lg bg-primary/10">
@@ -735,7 +738,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0">
+          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20">
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-lg bg-amber-500/10">
@@ -751,7 +754,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0">
+          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20">
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-lg bg-blue-500/10">
@@ -767,7 +770,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0">
+          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20">
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-lg bg-green-500/10">
@@ -784,7 +787,7 @@ export default function Dashboard() {
           </Card>
 
           {dailyWolfContent?.notes && (
-            <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0 md:col-span-2 lg:col-span-4">
+            <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20 md:col-span-2 lg:col-span-4">
               <CardHeader className="pb-2">
                 <div className="flex items-center gap-2">
                   <div className="p-2 rounded-lg bg-purple-500/10">
