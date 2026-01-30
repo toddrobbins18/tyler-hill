@@ -1,4 +1,4 @@
-import { Users, Truck, FileText, Award, Utensils, Calendar as CalendarIcon, CalendarDays, MapPin, Cake, Trophy, Activity } from "lucide-react";
+import { Users, Truck, FileText, Award, Utensils, Calendar as CalendarIcon, CalendarDays, MapPin, Cake, Trophy, Activity, Quote, Phone, Shirt, User } from "lucide-react";
 import { StatCard } from "@/components/StatCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,15 @@ import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { WeatherWidget } from "@/components/WeatherWidget";
 import timberLakeWestBg from "@/assets/timber-lake-west-bg.jpeg";
+import { format } from "date-fns";
+
+interface DailyWolfContent {
+  officer_of_day: string;
+  laundry_info: string;
+  phone_calls_info: string;
+  quote_of_the_day: string;
+  notes: string;
+}
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -30,6 +39,7 @@ export default function Dashboard() {
   const [todaysBirthdays, setTodaysBirthdays] = useState<any[]>([]);
   const [staffBirthdays, setStaffBirthdays] = useState<any[]>([]);
   const [healthCenterAdmissions, setHealthCenterAdmissions] = useState<any[]>([]);
+  const [dailyWolfContent, setDailyWolfContent] = useState<DailyWolfContent | null>(null);
   const [todaysMenu, setTodaysMenu] = useState<any>({
     breakfast: "",
     lunch: "",
@@ -41,6 +51,9 @@ export default function Dashboard() {
   useEffect(() => {
     if (currentCompany?.id) {
       fetchDashboardData();
+      if (currentCompany.slug === 'timber-lake-west') {
+        fetchDailyWolfContent();
+      }
     }
 
     // Realtime subscriptions for live updates
@@ -89,6 +102,15 @@ export default function Dashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'staff' }, fetchDashboardData)
       .subscribe();
 
+    const dailyWolfChannel = supabase
+      .channel('dashboard-daily-wolf')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_wolf_content' }, () => {
+        if (currentCompany?.slug === 'timber-lake-west') {
+          fetchDailyWolfContent();
+        }
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(childrenChannel);
       supabase.removeChannel(notesChannel);
@@ -99,8 +121,35 @@ export default function Dashboard() {
       supabase.removeChannel(sportsChannel);
       supabase.removeChannel(healthCenterChannel);
       supabase.removeChannel(staffChannel);
+      supabase.removeChannel(dailyWolfChannel);
     };
-  }, [currentCompany?.id]);
+  }, [currentCompany?.id, currentCompany?.slug]);
+
+  const fetchDailyWolfContent = async () => {
+    if (!currentCompany) return;
+    
+    const today = format(new Date(), 'yyyy-MM-dd');
+    
+    const { data, error } = await supabase
+      .from('daily_wolf_content')
+      .select('*')
+      .eq('company_id', currentCompany.id)
+      .eq('date', today)
+      .eq('season', currentSeason)
+      .maybeSingle();
+    
+    if (data) {
+      setDailyWolfContent({
+        officer_of_day: data.officer_of_day || '',
+        laundry_info: data.laundry_info || '',
+        phone_calls_info: data.phone_calls_info || '',
+        quote_of_the_day: data.quote_of_the_day || '',
+        notes: data.notes || '',
+      });
+    } else {
+      setDailyWolfContent(null);
+    }
+  };
 
   const fetchDashboardData = async () => {
     if (!currentCompany?.id) return;
@@ -297,7 +346,7 @@ export default function Dashboard() {
   const isTimberLakeCamp = currentCompany?.slug === 'timber-lake-camp';
   const isTimberLakeWest = currentCompany?.slug === 'timber-lake-west';
   const isTylerHillCamp = currentCompany?.slug === 'tyler-hill-camp';
-  const dashboardTitle = isTimberLakeCamp ? "Tiger Times" : "Dashboard";
+  const dashboardTitle = isTimberLakeCamp ? "Tiger Times" : isTimberLakeWest ? "The Daily Wolf" : "Dashboard";
   
   const today = new Date();
   const formattedDate = today.toLocaleDateString('en-US', { 
@@ -336,12 +385,101 @@ export default function Dashboard() {
         <h1 className={`text-3xl font-bold mb-2 ${isTimberLakeWest ? 'text-white drop-shadow-lg' : 'text-foreground'}`}>{dashboardTitle}</h1>
         {isTimberLakeCamp ? (
           <p className={isTimberLakeWest ? 'text-white/80 drop-shadow' : 'text-muted-foreground'}>{formattedDate}</p>
+        ) : isTimberLakeWest ? (
+          <p className="text-white/80 drop-shadow">{formattedDate}</p>
         ) : (
           <p className={isTimberLakeWest ? 'text-white/80 drop-shadow' : 'text-muted-foreground'}>Welcome back! Here's what's happening today.</p>
         )}
       </div>
 
-      {!isTimberLakeCamp && !isTylerHillCamp && (
+      {/* Daily Wolf Content for Timber Lake West - at the top */}
+      {isTimberLakeWest && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0">
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <User className="h-4 w-4 text-primary" />
+                </div>
+                <CardTitle className="text-base">Officer of the Day</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-lg font-semibold text-foreground">
+                {dailyWolfContent?.officer_of_day || 'Not set'}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0">
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-amber-500/10">
+                  <Quote className="h-4 w-4 text-amber-600" />
+                </div>
+                <CardTitle className="text-base">Quote of the Day</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm italic text-muted-foreground">
+                {dailyWolfContent?.quote_of_the_day ? `"${dailyWolfContent.quote_of_the_day}"` : 'No quote set'}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0">
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-blue-500/10">
+                  <Shirt className="h-4 w-4 text-blue-600" />
+                </div>
+                <CardTitle className="text-base">Laundry</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">
+                {dailyWolfContent?.laundry_info || 'No laundry info'}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0">
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-green-500/10">
+                  <Phone className="h-4 w-4 text-green-600" />
+                </div>
+                <CardTitle className="text-base">Phone Calls</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">
+                {dailyWolfContent?.phone_calls_info || 'No phone call info'}
+              </p>
+            </CardContent>
+          </Card>
+
+          {dailyWolfContent?.notes && (
+            <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0 md:col-span-2 lg:col-span-4">
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-purple-500/10">
+                    <FileText className="h-4 w-4 text-purple-600" />
+                  </div>
+                  <CardTitle className="text-base">Daily Notes</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground whitespace-pre-line">
+                  {dailyWolfContent.notes}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {!isTimberLakeCamp && !isTylerHillCamp && !isTimberLakeWest && (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title="Total Children"
@@ -629,6 +767,64 @@ export default function Dashboard() {
           </Card>
         )}
       </div>
+
+      {/* Stat Cards at the bottom for Timber Lake West */}
+      {isTimberLakeWest && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-lg bg-primary/10">
+                  <Users className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-foreground">{stats.totalChildren}</p>
+                  <p className="text-xs text-muted-foreground">Total Campers</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-lg bg-green-500/10">
+                  <Truck className="h-6 w-6 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-foreground">{stats.activeRoutes}</p>
+                  <p className="text-xs text-muted-foreground">Today's Transportation</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-lg bg-blue-500/10">
+                  <FileText className="h-6 w-6 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-foreground">{stats.todayNotes}</p>
+                  <p className="text-xs text-muted-foreground">Today's Notes</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-white/90 backdrop-blur-sm shadow-lg border-0">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-lg bg-amber-500/10">
+                  <Award className="h-6 w-6 text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-foreground">{stats.weekAwards}</p>
+                  <p className="text-xs text-muted-foreground">Achievements This Week</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
