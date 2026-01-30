@@ -10,7 +10,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { WeatherWidget } from "@/components/WeatherWidget";
-import KanbanBoard from "@/components/dashboard/KanbanBoard";
+import NotesBoard from "@/components/dashboard/NotesBoard";
 import timberLakeWestBg from "@/assets/timber-lake-west-bg.jpeg";
 import { format } from "date-fns";
 
@@ -721,9 +721,9 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Kanban Notes Board for Tyler Hill */}
+      {/* Notes Board for Tyler Hill */}
       {isTylerHillCamp && (
-        <KanbanBoard className={glassCardClass} />
+        <NotesBoard className={glassCardClass} />
       )}
 
       {/* Daily Wolf Content for Timber Lake West - at the bottom */}
