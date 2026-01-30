@@ -560,7 +560,50 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Evening/Night Activities Card - Timber Lake West only */}
+        {/* Today's Birthdays Card */}
+        <Card className="shadow-card h-full flex flex-col">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-success/10">
+                <Cake className="h-5 w-5 text-success" />
+              </div>
+              <div>
+                <CardTitle>Today's Birthdays</CardTitle>
+                <CardDescription>Celebrate with them!</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3 flex-1 flex flex-col">
+            {todaysBirthdays.length === 0 && staffBirthdays.length === 0 ? (
+              <p className="text-muted-foreground text-sm">No birthdays today</p>
+            ) : (
+              <div className="space-y-3 flex-1">
+                {todaysBirthdays.map((child: any) => (
+                  <div key={child.id} className="flex items-center gap-3 p-3 rounded-lg bg-success/10 border border-success/20">
+                    <Cake className="h-5 w-5 text-success" />
+                    <div>
+                      <p className="font-medium text-sm">{child.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Turning {calculateAge(child.date_of_birth)} today! 🎂
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                {staffBirthdays.map((staff: any) => (
+                  <div key={staff.id} className="flex items-center gap-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                    <Cake className="h-5 w-5 text-primary" />
+                    <div>
+                      <p className="font-medium text-sm">{staff.name}</p>
+                      <p className="text-xs text-muted-foreground">Staff Member 🎉</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Evening Activities Card - Timber Lake West only */}
         {isTimberLakeWest && (
           <Card className="shadow-card h-full flex flex-col">
             <CardHeader>
@@ -624,49 +667,6 @@ export default function Dashboard() {
               </div>
             )}
             <Button variant="outline" className="w-full mt-auto" onClick={() => navigate('/special-events')}>View All Events</Button>
-          </CardContent>
-        </Card>
-
-        {/* Today's Birthdays Card */}
-        <Card className="shadow-card h-full flex flex-col">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-success/10">
-                <Cake className="h-5 w-5 text-success" />
-              </div>
-              <div>
-                <CardTitle>Today's Birthdays</CardTitle>
-                <CardDescription>Celebrate with them!</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3 flex-1 flex flex-col">
-            {todaysBirthdays.length === 0 && staffBirthdays.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No birthdays today</p>
-            ) : (
-              <div className="space-y-3 flex-1">
-                {todaysBirthdays.map((child: any) => (
-                  <div key={child.id} className="flex items-center gap-3 p-3 rounded-lg bg-success/10 border border-success/20">
-                    <Cake className="h-5 w-5 text-success" />
-                    <div>
-                      <p className="font-medium text-sm">{child.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Turning {calculateAge(child.date_of_birth)} today! 🎂
-                      </p>
-                    </div>
-                  </div>
-                ))}
-                {staffBirthdays.map((staff: any) => (
-                  <div key={staff.id} className="flex items-center gap-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
-                    <Cake className="h-5 w-5 text-primary" />
-                    <div>
-                      <p className="font-medium text-sm">{staff.name}</p>
-                      <p className="text-xs text-muted-foreground">Staff Member 🎉</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </CardContent>
         </Card>
 
