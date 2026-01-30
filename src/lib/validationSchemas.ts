@@ -160,9 +160,9 @@ export const dailyWolfContentSchema = z.object({
   season: z.string().optional(),
 });
 
-// Bunk staff assignment validation schema (for CSV upload)
+// Bunk staff assignment validation schema (for CSV upload) - requires person_id for matching
 export const bunkStaffSchema = z.object({
-  staff_name: z.string().min(1, "Staff name is required"),
+  person_id: z.string().min(1, "Person ID is required"),
   bunk_number: z.number().int().min(1, "Bunk number is required"),
   bunk_name: z.string().optional(),
   is_primary: z.boolean().optional().default(false),
@@ -178,7 +178,7 @@ export function parseBunkStaffRow(row: Record<string, any>) {
   isPrimary = ['true', 'yes', '1', 'primary'].includes(String(isPrimary).toLowerCase().trim());
   
   return {
-    staff_name: String(row.staff_name || row['Staff Name'] || row.name || row.Name || '').trim(),
+    person_id: String(row.person_id || row['Person ID'] || row.PersonID || row.personid || '').trim(),
     bunk_number: isNaN(bunkNumber) ? 0 : bunkNumber,
     bunk_name: String(row.bunk_name || row['Bunk Name'] || '').trim() || undefined,
     is_primary: isPrimary,

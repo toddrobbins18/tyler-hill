@@ -18,7 +18,7 @@ interface UploadResult {
   success: number;
   failed: number;
   errors: string[];
-  created: { staffName: string; bunkNumber: number }[];
+  created: { personId: string; bunkNumber: number }[];
 }
 
 export default function BunkStaffCSVUploader({ onUploadComplete }: BunkStaffCSVUploaderProps) {
@@ -69,7 +69,7 @@ export default function BunkStaffCSVUploader({ onUploadComplete }: BunkStaffCSVU
       const [staffRes, bunksRes] = await Promise.all([
         supabase
           .from("staff")
-          .select("id, name")
+          .select("id, name, person_id")
           .eq("company_id", currentCompany.id)
           .eq("season", currentSeason),
         supabase
@@ -83,10 +83,12 @@ export default function BunkStaffCSVUploader({ onUploadComplete }: BunkStaffCSVU
       const staffList = staffRes.data || [];
       const bunksList = bunksRes.data || [];
 
-      // Create maps for lookup
-      const staffByName = new Map<string, string>();
+      // Create maps for lookup - use person_id as the primary key
+      const staffByPersonId = new Map<string, string>();
       for (const s of staffList) {
-        staffByName.set(s.name.toLowerCase().trim(), s.id);
+        if (s.person_id) {
+          staffByPersonId.set(s.person_id.toLowerCase().trim(), s.id);
+        }
       }
       
       const bunkByNumber = new Map<number, string>();
@@ -107,11 +109,11 @@ export default function BunkStaffCSVUploader({ onUploadComplete }: BunkStaffCSVU
           const parsed = parseBunkStaffRow(rawRows[i]);
           const validated = bunkStaffSchema.parse(parsed);
           
-          // Find staff by name (case-insensitive)
-          const staffId = staffByName.get(validated.staff_name.toLowerCase());
+          // Find staff by person_id (case-insensitive)
+          const staffId = staffByPersonId.get(validated.person_id.toLowerCase());
           if (!staffId) {
             uploadResult.failed++;
-            uploadResult.errors.push(`Row ${i + 2}: Staff "${validated.staff_name}" not found`);
+            uploadResult.errors.push(`Row ${i + 2}: Staff with Person ID "${validated.person_id}" not found`);
             continue;
           }
 
@@ -156,7 +158,7 @@ export default function BunkStaffCSVUploader({ onUploadComplete }: BunkStaffCSVU
 
           uploadResult.success++;
           uploadResult.created.push({
-            staffName: validated.staff_name,
+            personId: validated.person_id,
             bunkNumber: validated.bunk_number
           });
 
@@ -191,10 +193,10 @@ export default function BunkStaffCSVUploader({ onUploadComplete }: BunkStaffCSVU
   };
 
   const downloadTemplate = () => {
-    const csv = `Staff Name,Bunk Number,Is Primary
-John Smith,1,true
-Jane Doe,2,false
-Bob Johnson,1,false`;
+    const csv = `Person ID,Bunk Number,Is Primary
+12345,1,true
+67890,2,false
+11111,1,false`;
     
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -245,7 +247,7 @@ Bob Johnson,1,false`;
         <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md">
           <p className="font-medium mb-1">CSV Format:</p>
           <ul className="list-disc list-inside space-y-1">
-            <li><strong>Staff Name</strong> - Must match exactly with existing staff names</li>
+            <li><strong>Person ID</strong> - The CampMinder Person ID (required for matching)</li>
             <li><strong>Bunk Number</strong> - The bunk number (must exist)</li>
             <li><strong>Is Primary</strong> - Optional: true/false, yes/no, or 1/0</li>
           </ul>
