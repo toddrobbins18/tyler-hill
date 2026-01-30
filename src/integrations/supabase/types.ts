@@ -1498,6 +1498,53 @@ export type Database = {
           },
         ]
       }
+      kanban_notes: {
+        Row: {
+          column_status: string
+          company_id: string
+          content: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          season: string
+          sort_order: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          column_status?: string
+          company_id: string
+          content?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          season?: string
+          sort_order?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          column_status?: string
+          company_id?: string
+          content?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          season?: string
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kanban_notes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       master_calendar: {
         Row: {
           company_id: string | null
