@@ -675,6 +675,11 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
+        {/* Notes Board for Tyler Hill - next to Special Events */}
+        {isTylerHillCamp && (
+          <NotesBoard className={glassCardClass} />
+        )}
+
         {/* Health Center Card - Timber Lake only */}
         {isTimberLakeCamp && healthCenterAdmissions.length > 0 && (
           <Card className={`shadow-card h-full flex flex-col ${glassCardClass}`}>
@@ -720,11 +725,6 @@ export default function Dashboard() {
           </Card>
         )}
       </div>
-
-      {/* Notes Board for Tyler Hill */}
-      {isTylerHillCamp && (
-        <NotesBoard className={glassCardClass} />
-      )}
 
       {/* Daily Wolf Content for Timber Lake West - at the bottom */}
       {isTimberLakeWest && (
