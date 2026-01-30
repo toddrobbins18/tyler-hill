@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import CSVFormatGuide from "./dialogs/CSVFormatGuide";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeason } from "@/contexts/SeasonContext";
 import { 
   childSchema, staffSchema, awardSchema, dailyNoteSchema, tripSchema, menuItemSchema,
   incidentReportSchema, medicationSchema, calendarEventSchema, sportsCalendarSchema, dailyWolfContentSchema,
@@ -19,10 +20,50 @@ interface CSVUploaderProps {
   onUploadComplete?: () => void;
 }
 
+// Tables that require person_id resolution to child UUIDs
+const CHILD_PERSON_ID_TABLES = ['awards', 'daily_notes', 'incident_reports', 'medication_logs'];
+// Tables that require person_id resolution to staff UUIDs
+const STAFF_PERSON_ID_TABLES = ['staff'];
+
 export default function CSVUploader({ tableName, onUploadComplete }: CSVUploaderProps) {
   const [uploading, setUploading] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const { currentCompany } = useCompany();
+  const { selectedSeason } = useSeason();
+
+  // Resolve person_id to child UUID
+  const resolveChildPersonIds = async (personIds: string[]): Promise<Map<string, string>> => {
+    if (!currentCompany?.id || personIds.length === 0) return new Map();
+    
+    const { data } = await supabase
+      .from('children')
+      .select('id, person_id')
+      .eq('company_id', currentCompany.id)
+      .in('person_id', personIds);
+    
+    const mapping = new Map<string, string>();
+    (data || []).forEach(child => {
+      if (child.person_id) mapping.set(child.person_id, child.id);
+    });
+    return mapping;
+  };
+
+  // Resolve person_id to staff UUID (for staff table, this is for updating existing records)
+  const resolveStaffPersonIds = async (personIds: string[]): Promise<Map<string, string>> => {
+    if (!currentCompany?.id || personIds.length === 0) return new Map();
+    
+    const { data } = await supabase
+      .from('staff')
+      .select('id, person_id')
+      .eq('company_id', currentCompany.id)
+      .in('person_id', personIds);
+    
+    const mapping = new Map<string, string>();
+    (data || []).forEach(staff => {
+      if (staff.person_id) mapping.set(staff.person_id, staff.id);
+    });
+    return mapping;
+  };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -129,13 +170,68 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
         return;
       }
 
-      // Add company_id and season to each row if needed
-      const rowsWithCompany = validatedRows.map(row => ({
-        ...row,
-        company_id: currentCompany?.id,
-        // Add season if table supports it and not already provided
-        ...(tableName === 'daily_wolf_content' && !row.season ? { season: new Date().getFullYear().toString() } : {})
-      }));
+      // Resolve person_ids to UUIDs for tables that need it
+      let childPersonIdMap = new Map<string, string>();
+      let staffPersonIdMap = new Map<string, string>();
+
+      if (CHILD_PERSON_ID_TABLES.includes(tableName)) {
+        // Extract all person_ids from validated rows
+        const personIds = new Set<string>();
+        validatedRows.forEach(row => {
+          if (row.person_id) personIds.add(row.person_id);
+          if (row.person_ids) row.person_ids.forEach((id: string) => personIds.add(id));
+        });
+        childPersonIdMap = await resolveChildPersonIds(Array.from(personIds));
+        
+        // Validate all person_ids were found
+        const missingIds: string[] = [];
+        validatedRows.forEach((row, i) => {
+          if (row.person_id && !childPersonIdMap.has(row.person_id)) {
+            missingIds.push(`Row ${i + 2}: Person ID "${row.person_id}" not found`);
+          }
+          if (row.person_ids) {
+            row.person_ids.forEach((id: string) => {
+              if (!childPersonIdMap.has(id)) {
+                missingIds.push(`Row ${i + 2}: Person ID "${id}" not found`);
+              }
+            });
+          }
+        });
+        
+        if (missingIds.length > 0) {
+          toast.error(`Person ID errors:\n${missingIds.slice(0, 5).join("\n")}${missingIds.length > 5 ? `\n...and ${missingIds.length - 5} more` : ""}`);
+          setUploading(false);
+          return;
+        }
+      }
+
+      // Add company_id and resolve person_ids to UUIDs
+      const rowsWithCompany = validatedRows.map(row => {
+        const baseRow: any = {
+          ...row,
+          company_id: currentCompany?.id,
+          season: selectedSeason,
+        };
+
+        // Resolve person_id to child_id for child-related tables
+        if (CHILD_PERSON_ID_TABLES.includes(tableName)) {
+          if (row.person_id) {
+            baseRow.child_id = childPersonIdMap.get(row.person_id);
+            delete baseRow.person_id;
+          }
+          if (row.person_ids) {
+            baseRow.child_ids = row.person_ids.map((id: string) => childPersonIdMap.get(id)).filter(Boolean);
+            delete baseRow.person_ids;
+          }
+          if (row.reporter_person_id && staffPersonIdMap.has(row.reporter_person_id)) {
+            baseRow.reporter_id = staffPersonIdMap.get(row.reporter_person_id);
+            delete baseRow.reporter_person_id;
+          }
+}
+
+export { CSVUploader };
+        return baseRow;
+      });
 
       const { error } = await supabase.from(tableName as any).insert(rowsWithCompany as any);
 

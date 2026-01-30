@@ -1036,6 +1036,63 @@ export type Database = {
           },
         ]
       }
+      division_schedules: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          description: string | null
+          division_id: string
+          file_name: string
+          file_url: string
+          id: string
+          schedule_date: string
+          season: string
+          updated_at: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          description?: string | null
+          division_id: string
+          file_name: string
+          file_url: string
+          id?: string
+          schedule_date: string
+          season?: string
+          updated_at?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          description?: string | null
+          division_id?: string
+          file_name?: string
+          file_url?: string
+          id?: string
+          schedule_date?: string
+          season?: string
+          updated_at?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "division_schedules_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "division_schedules_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       divisions: {
         Row: {
           company_id: string
