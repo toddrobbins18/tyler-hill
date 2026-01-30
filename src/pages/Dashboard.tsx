@@ -349,9 +349,9 @@ export default function Dashboard() {
   const isTylerHillCamp = currentCompany?.slug === 'tyler-hill-camp';
   const dashboardTitle = isTimberLakeCamp ? "Tiger Times" : isTimberLakeWest ? "The Daily Wolf" : "Dashboard";
   
-  // Glass card styles for Timber Lake West - increased transparency
-  const glassCardClass = isTimberLakeWest ? 'bg-card/50 backdrop-blur-md border-white/30' : '';
-  const glassButtonClass = isTimberLakeWest ? 'bg-card/50 backdrop-blur-md border-white/40 hover:bg-card/70' : '';
+  // Glass card styles for Timber Lake West and Tyler Hill - increased transparency
+  const glassCardClass = (isTimberLakeWest || isTylerHillCamp) ? 'bg-card/50 backdrop-blur-md border-white/30' : '';
+  const glassButtonClass = (isTimberLakeWest || isTylerHillCamp) ? 'bg-card/50 backdrop-blur-md border-white/40 hover:bg-card/70' : '';
   
   const today = new Date();
   const formattedDate = today.toLocaleDateString('en-US', { 
