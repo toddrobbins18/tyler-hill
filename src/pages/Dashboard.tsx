@@ -350,6 +350,7 @@ export default function Dashboard() {
   
   // Glass card styles for Timber Lake West
   const glassCardClass = isTimberLakeWest ? 'bg-card/80 backdrop-blur-sm border-white/20' : '';
+  const glassButtonClass = isTimberLakeWest ? 'bg-card/80 backdrop-blur-sm border-white/30 hover:bg-card/90' : '';
   
   const today = new Date();
   const formattedDate = today.toLocaleDateString('en-US', { 
@@ -434,7 +435,7 @@ export default function Dashboard() {
 
         {/* Weather Widget */}
         {currentCompany?.zip_code && (
-          <WeatherWidget zipCode={currentCompany.zip_code} />
+          <WeatherWidget zipCode={currentCompany.zip_code} className={glassCardClass} />
         )}
 
         {/* Today's Menu Card */}
@@ -477,7 +478,7 @@ export default function Dashboard() {
                 </p>
               </div>
             )}
-            <Button variant="outline" className="w-full mt-auto" onClick={() => navigate('/menu')}>
+            <Button variant="outline" className={`w-full mt-auto ${glassButtonClass}`} onClick={() => navigate('/menu')}>
               View Full Menu
             </Button>
           </CardContent>
@@ -559,7 +560,7 @@ export default function Dashboard() {
               </div>
             )}
 
-            <Button variant="outline" className="w-full mt-auto" onClick={() => navigate('/athletics')}>View Full Schedule</Button>
+            <Button variant="outline" className={`w-full mt-auto ${glassButtonClass}`} onClick={() => navigate('/athletics')}>View Full Schedule</Button>
           </CardContent>
         </Card>
 
@@ -635,7 +636,7 @@ export default function Dashboard() {
                   ))}
                 </div>
               )}
-              <Button variant="outline" className="w-full mt-auto" onClick={() => navigate('/special-events')}>View All Events</Button>
+              <Button variant="outline" className={`w-full mt-auto ${glassButtonClass}`} onClick={() => navigate('/special-events')}>View All Events</Button>
             </CardContent>
           </Card>
         )}
@@ -669,7 +670,7 @@ export default function Dashboard() {
                 ))}
               </div>
             )}
-            <Button variant="outline" className="w-full mt-auto" onClick={() => navigate('/special-events')}>View All Events</Button>
+            <Button variant="outline" className={`w-full mt-auto ${glassButtonClass}`} onClick={() => navigate('/special-events')}>View All Events</Button>
           </CardContent>
         </Card>
 
