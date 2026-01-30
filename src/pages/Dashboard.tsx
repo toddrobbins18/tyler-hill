@@ -691,7 +691,7 @@ export default function Dashboard() {
                 <div className="p-2 rounded-lg bg-primary/10">
                   <User className="h-4 w-4 text-primary" />
                 </div>
-                <CardTitle className="text-base">OD of the Day</CardTitle>
+                <CardTitle className="text-base">Super OD</CardTitle>
               </div>
             </CardHeader>
             <CardContent>
@@ -707,7 +707,7 @@ export default function Dashboard() {
                 <div className="p-2 rounded-lg bg-amber-500/10">
                   <Quote className="h-4 w-4 text-amber-600" />
                 </div>
-                <CardTitle className="text-base">Quote of the Day</CardTitle>
+                <CardTitle className="text-base">Starfish Quote of the Day</CardTitle>
               </div>
             </CardHeader>
             <CardContent>
