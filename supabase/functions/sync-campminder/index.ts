@@ -1678,6 +1678,121 @@ async function performFullSync(
     } else {
       console.log('[Staff Sync] No staff found from any source. Check if staff data exists in CampMinder for this season.');
     }
+    // =====================================================
+    // PHASE 7b: Sync staff bunk assignments from CampMinder
+    // Only run if syncType is 'staff' or 'full'
+    // =====================================================
+    if (staffAssignments.length > 0) {
+      console.log('\n--- SYNCING STAFF BUNK ASSIGNMENTS ---');
+      await updateSyncJob(supabase, jobId, {
+        progress: { step: 'Syncing staff bunk assignments', staff: staffPersonIds.size, season },
+      });
+
+      // First, fetch existing staff IDs for lookup
+      const { data: staffRecords } = await supabase
+        .from('staff')
+        .select('id, person_id')
+        .eq('company_id', companyId)
+        .eq('season', season);
+
+      const staffPersonIdToId = new Map<string, string>();
+      if (staffRecords) {
+        for (const staff of staffRecords) {
+          staffPersonIdToId.set(staff.person_id, staff.id);
+        }
+      }
+      console.log(`[Staff Bunks] Found ${staffPersonIdToId.size} staff records for bunk mapping`);
+
+      // Collect staff bunk assignments from CampMinder data
+      let bunkAssignmentsToSync: { staff_id: string; bunk_id: string; person_id: string }[] = [];
+      let staffWithBunks = 0;
+      let staffWithoutBunks = 0;
+      let unmappedBunks = 0;
+
+      for (const assignment of staffAssignments) {
+        const personId = String(assignment.PersonID);
+        const staffId = staffPersonIdToId.get(personId);
+        
+        if (!staffId) {
+          continue; // Staff not in our database
+        }
+
+        // BunkAssignments is an array of bunk IDs from CampMinder Staff API
+        const bunkAssignments = assignment.BunkAssignments || [];
+        
+        if (bunkAssignments.length === 0) {
+          staffWithoutBunks++;
+          continue;
+        }
+
+        staffWithBunks++;
+
+        for (const bunkAssignment of bunkAssignments) {
+          // The bunk assignment contains an ID field (the CM BunkID)
+          const cmBunkId = bunkAssignment.ID || bunkAssignment.BunkID || bunkAssignment;
+          const ourBunkId = cmBunkIdMap.get(cmBunkId);
+          
+          if (ourBunkId) {
+            bunkAssignmentsToSync.push({
+              staff_id: staffId,
+              bunk_id: ourBunkId,
+              person_id: personId,
+            });
+          } else {
+            unmappedBunks++;
+            if (unmappedBunks <= 5) {
+              console.log(`[Staff Bunks] Warning: CM BunkID ${cmBunkId} not mapped to our bunks`);
+            }
+          }
+        }
+      }
+
+      console.log(`[Staff Bunks] ${staffWithBunks} staff have bunk assignments, ${staffWithoutBunks} without`);
+      console.log(`[Staff Bunks] ${bunkAssignmentsToSync.length} total assignments to sync (${unmappedBunks} unmapped)`);
+
+      // Clear existing staff bunk assignments for this company/season and re-insert
+      if (bunkAssignmentsToSync.length > 0) {
+        // Delete existing assignments for this company/season
+        const { error: deleteError } = await supabase
+          .from('bunk_staff')
+          .delete()
+          .eq('company_id', companyId)
+          .eq('season', season);
+
+        if (deleteError) {
+          console.error('[Staff Bunks] Error clearing existing assignments:', deleteError);
+        } else {
+          console.log('[Staff Bunks] Cleared existing assignments');
+        }
+
+        // Insert new assignments
+        const assignments = bunkAssignmentsToSync.map(a => ({
+          company_id: companyId,
+          season: season,
+          staff_id: a.staff_id,
+          bunk_id: a.bunk_id,
+          is_primary: false, // CampMinder doesn't provide this info, default to false
+        }));
+
+        // Insert in batches
+        const BATCH_SIZE = 100;
+        let insertedCount = 0;
+        for (let i = 0; i < assignments.length; i += BATCH_SIZE) {
+          const batch = assignments.slice(i, i + BATCH_SIZE);
+          const { error: insertError } = await supabase
+            .from('bunk_staff')
+            .insert(batch);
+
+          if (insertError) {
+            console.error('[Staff Bunks] Error inserting batch:', insertError);
+          } else {
+            insertedCount += batch.length;
+          }
+        }
+
+        console.log(`[Staff Bunks] Synced ${insertedCount} staff bunk assignments from CampMinder`);
+      }
+    }
     } // End of staff sync (syncType === 'staff' || syncType === 'full')
 
     // =====================================================
