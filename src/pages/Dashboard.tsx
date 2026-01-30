@@ -10,6 +10,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { WeatherWidget } from "@/components/WeatherWidget";
+import KanbanBoard from "@/components/dashboard/KanbanBoard";
 import timberLakeWestBg from "@/assets/timber-lake-west-bg.jpeg";
 import { format } from "date-fns";
 
@@ -719,6 +720,11 @@ export default function Dashboard() {
           </Card>
         )}
       </div>
+
+      {/* Kanban Notes Board for Tyler Hill */}
+      {isTylerHillCamp && (
+        <KanbanBoard />
+      )}
 
       {/* Daily Wolf Content for Timber Lake West - at the bottom */}
       {isTimberLakeWest && (
