@@ -218,7 +218,7 @@ export default function RainyDaySchedule() {
                   <div>
                     <p className="font-medium">{doc.file_name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {new Date(doc.date + 'T00:00:00').toLocaleDateString()} • Uploaded {new Date(doc.created_at).toLocaleDateString()}
+                      {new Date(doc.date + 'T00:00:00').toLocaleDateString('en-US')} • Uploaded {new Date(doc.created_at).toLocaleDateString('en-US')}
                     </p>
                   </div>
                 </div>

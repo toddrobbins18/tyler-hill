@@ -324,7 +324,7 @@ export default function Dashboard() {
     const eventsData = trips?.map(trip => ({
       id: trip.id,
       title: trip.name,
-      date: new Date(trip.date + 'T00:00:00').toLocaleDateString(),
+      date: new Date(trip.date + 'T00:00:00').toLocaleDateString('en-US'),
       type: trip.type
     })) || [];
     setUpcomingEvents(eventsData);
@@ -544,7 +544,7 @@ export default function Dashboard() {
                     <div className="flex-1">
                       <p className="font-medium text-sm mb-1">{event.title}</p>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{new Date(event.event_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                        <span>{new Date(event.event_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
                         <span>•</span>
                         <span>{event.time || 'TBD'}</span>
                         {event.location && (
