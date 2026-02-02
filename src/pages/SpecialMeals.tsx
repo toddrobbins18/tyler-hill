@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { formatLocalDate } from "@/lib/utils";
 import { Calendar as CalendarIcon, Plus, List, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -266,7 +267,7 @@ export default function SpecialMeals() {
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <CalendarIcon className="h-5 w-5 text-primary" />
-                  <CardTitle>{new Date(date).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</CardTitle>
+                  <CardTitle>{formatLocalDate(date, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</CardTitle>
                 </div>
               </CardHeader>
               <CardContent>
