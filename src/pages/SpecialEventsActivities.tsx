@@ -435,7 +435,7 @@ export default function SpecialEventsActivities() {
           {Object.entries(groupedByDate).map(([date, dateEvents]: [string, any[]]) => (
             <div key={date}>
               <h2 className="text-xl font-semibold mb-3">
-                {new Date(date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                {new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
               </h2>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {dateEvents.map((event) => (

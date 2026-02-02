@@ -470,7 +470,7 @@ export default function Staff() {
                       <p className="text-xs text-muted-foreground">{staffMember.recentEvaluation}</p>
                       {staffMember.lastEvaluationDate && (
                         <p className="text-xs text-muted-foreground mt-1">
-                          {new Date(staffMember.lastEvaluationDate).toLocaleDateString()}
+                          {new Date(staffMember.lastEvaluationDate).toLocaleDateString('en-US')}
                         </p>
                       )}
                     </div>

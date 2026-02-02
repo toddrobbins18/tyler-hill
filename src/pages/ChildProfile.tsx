@@ -663,7 +663,7 @@ export default function ChildProfile() {
                         )}
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <Calendar className="h-3 w-3" />
-                          <span>{new Date(award.date).toLocaleDateString()}</span>
+                          <span>{new Date(award.date + 'T00:00:00').toLocaleDateString('en-US')}</span>
                         </div>
                       </div>
                     </div>
@@ -716,7 +716,7 @@ export default function ChildProfile() {
                               {roster.sports_calendar?.event_date && (
                                 <div className="flex items-center gap-1">
                                   <Calendar className="h-4 w-4" />
-                                  <span>{new Date(roster.sports_calendar.event_date + 'T00:00:00').toLocaleDateString()}</span>
+                                  <span>{new Date(roster.sports_calendar.event_date + 'T00:00:00').toLocaleDateString('en-US')}</span>
                                 </div>
                               )}
                               {roster.sports_calendar?.time && (
@@ -777,7 +777,7 @@ export default function ChildProfile() {
                               {attendance.trips?.date && (
                                 <div className="flex items-center gap-1">
                                   <Calendar className="h-4 w-4" />
-                                  <span>{new Date(attendance.trips.date + 'T00:00:00').toLocaleDateString()}</span>
+                                  <span>{new Date(attendance.trips.date + 'T00:00:00').toLocaleDateString('en-US')}</span>
                                 </div>
                               )}
                               {attendance.trips?.departure_time && (
@@ -836,8 +836,8 @@ export default function ChildProfile() {
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Calendar className="h-3 w-3" />
                             <span>
-                              {enrollment.start_date && new Date(enrollment.start_date).toLocaleDateString()}
-                              {enrollment.end_date && ` - ${new Date(enrollment.end_date).toLocaleDateString()}`}
+                              {enrollment.start_date && new Date(enrollment.start_date + 'T00:00:00').toLocaleDateString('en-US')}
+                              {enrollment.end_date && ` - ${new Date(enrollment.end_date + 'T00:00:00').toLocaleDateString('en-US')}`}
                             </span>
                           </div>
                         )}
@@ -922,7 +922,7 @@ export default function ChildProfile() {
                         )}
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <Calendar className="h-3 w-3" />
-                          <span>{new Date(report.date).toLocaleDateString()}</span>
+                          <span>{new Date(report.date + 'T00:00:00').toLocaleDateString('en-US')}</span>
                         </div>
                       </div>
                     </div>
@@ -976,7 +976,7 @@ export default function ChildProfile() {
                           <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-2">
                             <div className="flex items-center gap-1">
                               <Calendar className="h-4 w-4" />
-                              <span>{new Date(apt.appointment_date).toLocaleDateString()}</span>
+                              <span>{new Date(apt.appointment_date + 'T00:00:00').toLocaleDateString('en-US')}</span>
                             </div>
                             {apt.appointment_time && (
                               <div className="flex items-center gap-1">
@@ -1001,7 +1001,7 @@ export default function ChildProfile() {
                           )}
                           {apt.follow_up_required && apt.follow_up_date && (
                             <Badge variant="outline" className="mt-2">
-                              Follow-up: {new Date(apt.follow_up_date).toLocaleDateString()}
+                              Follow-up: {new Date(apt.follow_up_date + 'T00:00:00').toLocaleDateString('en-US')}
                             </Badge>
                           )}
                         </div>
