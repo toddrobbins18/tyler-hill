@@ -3388,6 +3388,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_access_child: { Args: { _child_id: string }; Returns: boolean }
       can_access_page: {
         Args: { _page_name: string; _user_id: string }
         Returns: boolean
