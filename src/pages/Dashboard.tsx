@@ -498,34 +498,26 @@ export default function Dashboard() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4 flex-1 flex flex-col">
+          <CardContent className="space-y-2 flex-1 flex flex-col">
             {/* Today's Events */}
-            <div className="space-y-3 p-3 rounded-lg bg-info/5 dark:bg-info/10 border-l-4 border-info">
+            <div className="space-y-1 p-2 rounded-lg bg-info/5 dark:bg-info/10 border-l-4 border-info">
               {sportsEvents.length === 0 ? (
                 <p className="text-muted-foreground text-sm">No sports events today</p>
               ) : (
                 <>
                   {isTylerHillCamp && (
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-1">
                       <CalendarIcon className="h-4 w-4 text-info" />
                       <p className="text-sm font-semibold text-info uppercase tracking-wide">Today</p>
                     </div>
                   )}
                   {sportsEvents.map((event) => (
-                    <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-card hover:bg-muted/50 transition-colors cursor-pointer" onClick={() => navigate('/athletics')}>
-                      <div className="flex-1">
-                        <p className="font-medium text-sm mb-1">{event.title}</p>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>{event.time || 'TBD'}</span>
-                          {event.location && (
-                            <>
-                              <span>•</span>
-                              <span>{event.location}</span>
-                            </>
-                          )}
-                        </div>
+                    <div key={event.id} className="flex items-center gap-2 p-2 rounded-lg bg-card hover:bg-muted/50 transition-colors cursor-pointer" onClick={() => navigate('/athletics')}>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm">{event.title}</p>
+                        <p className="text-xs text-muted-foreground truncate">{event.time || 'TBD'}</p>
                       </div>
-                      <Badge variant="outline" className="text-xs">{event.sport_type}</Badge>
+                      <Badge variant="outline" className="text-xs shrink-0">{event.sport_type}</Badge>
                     </div>
                   ))}
                 </>
@@ -534,28 +526,20 @@ export default function Dashboard() {
 
             {/* Three Day Outlook - Tyler Hill Camp only */}
             {isTylerHillCamp && threeDayOutlook.length > 0 && (
-              <div className="space-y-3 p-3 rounded-lg bg-warning/5 dark:bg-warning/10 border-l-4 border-warning">
-                <div className="flex items-center gap-2 mb-2">
+              <div className="space-y-1 p-2 rounded-lg bg-warning/5 dark:bg-warning/10 border-l-4 border-warning">
+                <div className="flex items-center gap-2 mb-1">
                   <CalendarDays className="h-4 w-4 text-warning" />
                   <p className="text-sm font-semibold text-warning uppercase tracking-wide">Three Day Outlook</p>
                 </div>
                 {threeDayOutlook.map((event) => (
-                  <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-card hover:bg-muted/50 transition-colors cursor-pointer" onClick={() => navigate('/athletics')}>
-                    <div className="flex-1">
-                      <p className="font-medium text-sm mb-1">{event.title}</p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{new Date(event.event_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-                        <span>•</span>
-                        <span>{event.time || 'TBD'}</span>
-                        {event.location && (
-                          <>
-                            <span>•</span>
-                            <span>{event.location}</span>
-                          </>
-                        )}
-                      </div>
+                  <div key={event.id} className="flex items-center gap-2 p-2 rounded-lg bg-card hover:bg-muted/50 transition-colors cursor-pointer" onClick={() => navigate('/athletics')}>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">{event.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {new Date(event.event_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} • {event.time || 'TBD'}
+                      </p>
                     </div>
-                    <Badge variant="outline" className="text-xs">{event.sport_type}</Badge>
+                    <Badge variant="outline" className="text-xs shrink-0">{event.sport_type}</Badge>
                   </div>
                 ))}
               </div>
