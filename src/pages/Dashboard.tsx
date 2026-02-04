@@ -486,7 +486,7 @@ export default function Dashboard() {
         </Card>
 
         {/* Athletics Schedule Card */}
-        <Card className={`shadow-card h-full flex flex-col ${isTylerHillCamp && threeDayOutlook.length > 0 ? 'lg:col-span-2 lg:row-span-1' : ''} ${glassCardClass}`}>
+        <Card className={`shadow-card h-full flex flex-col ${glassCardClass}`}>
           <CardHeader>
             <div className="flex items-center gap-2">
               <div className="p-2 rounded-lg bg-warning/10">
