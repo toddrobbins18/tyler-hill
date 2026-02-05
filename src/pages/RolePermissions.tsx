@@ -10,6 +10,8 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
 const getCompanyMenuItems = (companySlug?: string) => {
+  // NOTE: These IDs MUST match the permission keys used by AppSidebar + ProtectedRoute.
+  // If they drift, toggling permissions here won't affect what users can actually access.
   const baseItems = [
     { id: "dashboard", label: "Dashboard", icon: "📊" },
     { id: "roster", label: "Camper", icon: "👥" },
@@ -20,15 +22,23 @@ const getCompanyMenuItems = (companySlug?: string) => {
     { id: "menu", label: "Menu", icon: "🍽️" },
     { id: "rainy-day", label: "Rainy Day Schedule", icon: "🌧️" },
     { id: "special-events", label: "Special Events & Evening Activities", icon: "🎉" },
-    { id: "special-meals", label: "Special Meals", icon: "🍽️" },
     { id: "transportation", label: "Transportation", icon: "🚌" },
     { id: "tutoring-therapy", label: "Tutoring & Therapy", icon: "📖" },
+
+    // Global modules (all companies)
+    { id: "od-management", label: "OD Management", icon: "✅" },
+    { id: "appointments", label: "Appointments", icon: "🩺" },
+    { id: "reports", label: "Reports", icon: "📈" },
+    { id: "roster-templates", label: "Roster Templates", icon: "🗂️" },
+    { id: "notification-preferences", label: "Notification Preferences", icon: "🔔" },
   ];
 
   // Timber Lake West specific
   if (companySlug === 'timber-lake-west') {
     baseItems.push(
-      { id: "athletics", label: "Athletics", icon: "🏅" },
+      // IMPORTANT: /athletics route maps to permission key "sports-calendar"
+      // (see ProtectedRoute.routeToMenuMap). Keep the ID as "sports-calendar".
+      { id: "sports-calendar", label: "Athletics", icon: "🏅" },
       { id: "daily-wolf-printable", label: "Daily Wolf Printable", icon: "📰" },
       { id: "daily-wolf-management", label: "Daily Wolf Management", icon: "✏️" }
     );
@@ -40,9 +50,8 @@ const getCompanyMenuItems = (companySlug?: string) => {
       { id: "nurse", label: "Nurse Dashboard", icon: "💊" },
       { id: "sports-academy", label: "Sports Academy", icon: "⚽" },
       { id: "sports-calendar", label: "Sports Calendar", icon: "🏅" },
-      { id: "od-management", label: "OD Management", icon: "📋" },
-      { id: "appointments", label: "Appointments", icon: "🩺" },
-      { id: "daily-schedule", label: "Daily Schedule", icon: "📅" }
+      { id: "daily-schedule", label: "Daily Schedule", icon: "📅" },
+      { id: "special-meals", label: "Special Meals", icon: "🍽️" }
     );
   } else {
     // Tyler Hill & other camps
@@ -52,7 +61,8 @@ const getCompanyMenuItems = (companySlug?: string) => {
       { id: "incidents", label: "Incident Reports", icon: "⚠️" },
       { id: "nurse", label: "Nurse Dashboard", icon: "💊" },
       { id: "sports-academy", label: "Sports Academy", icon: "⚽" },
-      { id: "sports-calendar", label: "Sports Calendar", icon: "🏅" }
+      { id: "sports-calendar", label: "Sports Calendar", icon: "🏅" },
+      { id: "special-meals", label: "Special Meals", icon: "🍽️" }
     );
   }
 
@@ -62,6 +72,7 @@ const getCompanyMenuItems = (companySlug?: string) => {
     { id: "evaluation-questions", label: "Evaluation Questions", icon: "📋" },
     { id: "role-permissions", label: "Role Permissions", icon: "🔒" },
     { id: "division-permissions", label: "Division Permissions", icon: "🔐" },
+    { id: "specialist-sport-assignments", label: "Specialist Sport Assignments", icon: "🏅" },
     { id: "user-approvals", label: "User Approvals", icon: "✅" }
   );
 
