@@ -17,7 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 
-type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'conflicts' | 'medications' | 'allergies' | 're_enrollment';
+type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'conflicts' | 'medications' | 'allergies' | 're_enrollment' | 'appointments';
 
 export default function ReportingCenter() {
   const [reportType, setReportType] = useState<ReportType>('incidents');
@@ -520,6 +520,75 @@ export default function ReportingCenter() {
             'Avg Years Attended': avgTenure,
           };
           break;
+
+        case 'appointments':
+          const { data: appointments } = await supabase
+            .from('appointments')
+            .select(`
+              *,
+              child:child_id(name, division_id, divisions(name)),
+              staff:staff_id(name, department)
+            `)
+            .eq('company_id', currentCompany.id)
+            .eq('season', selectedSeason)
+            .gte('appointment_date', startDate || '1900-01-01')
+            .lte('appointment_date', endDate || '2100-12-31')
+            .order('appointment_date', { ascending: false });
+          
+          // Filter by allowed divisions if user has restrictions (only for child appointments)
+          const filteredAppointments = allowedDivisionIds 
+            ? appointments?.filter(a => {
+                // If it's a staff appointment, include it
+                if (a.staff_id && !a.child_id) return true;
+                // If it's a child appointment, check division access
+                return a.child?.division_id && allowedDivisionIds.includes(a.child.division_id);
+              })
+            : appointments;
+          
+          data = filteredAppointments?.map(a => ({
+            Date: a.appointment_date,
+            Time: a.appointment_time || 'N/A',
+            Person: a.child?.name || a.staff?.name || 'Unknown',
+            'Person Type': a.child_id ? 'Camper' : 'Staff',
+            Division: a.child?.divisions?.name || (a.staff?.department || 'N/A'),
+            Type: a.appointment_type,
+            Provider: a.provider_name || 'N/A',
+            Location: a.location || 'N/A',
+            Status: a.status,
+            Outcome: a.outcome || 'N/A',
+            'Follow-up Required': a.follow_up_required ? 'Yes' : 'No',
+            'Follow-up Date': a.follow_up_date || 'N/A',
+            Notes: a.notes || '',
+          })) || [];
+          
+          const totalAppointments = filteredAppointments?.length || 0;
+          const scheduledCount = filteredAppointments?.filter(a => a.status === 'scheduled').length || 0;
+          const completedCount = filteredAppointments?.filter(a => a.status === 'completed').length || 0;
+          const cancelledCount = filteredAppointments?.filter(a => a.status === 'cancelled').length || 0;
+          const noShowCount = filteredAppointments?.filter(a => a.status === 'no_show').length || 0;
+          const camperAppointments = filteredAppointments?.filter(a => a.child_id).length || 0;
+          const staffAppointments = filteredAppointments?.filter(a => a.staff_id).length || 0;
+          const followUpRequired = filteredAppointments?.filter(a => a.follow_up_required).length || 0;
+          
+          // Group by type
+          const byType: Record<string, number> = {};
+          filteredAppointments?.forEach(a => {
+            byType[a.appointment_type] = (byType[a.appointment_type] || 0) + 1;
+          });
+          const mostCommonType = Object.entries(byType).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
+          
+          summaryData = {
+            'Total Appointments': totalAppointments,
+            'Scheduled': scheduledCount,
+            'Completed': completedCount,
+            'Cancelled': cancelledCount,
+            'No Show': noShowCount,
+            'Camper Appointments': camperAppointments,
+            'Staff Appointments': staffAppointments,
+            'Follow-up Required': followUpRequired,
+            'Most Common Type': mostCommonType,
+          };
+          break;
       }
 
       setReportData(data);
@@ -631,6 +700,7 @@ export default function ReportingCenter() {
       medications: 'MEDICATION SCHEDULE',
       allergies: 'ALLERGY REPORT',
       re_enrollment: 'RE-ENROLLMENT REPORT',
+      appointments: 'APPOINTMENTS REPORT',
     };
     
     const title = titleMap[reportType] || reportType.replace('_', ' ').toUpperCase();
@@ -659,6 +729,12 @@ export default function ReportingCenter() {
         { value: 'trips', label: 'Trips' },
         { value: 'activities', label: 'Activities & Field Trips' }
       );
+    }
+
+    // Add appointments report for camps that have appointments enabled
+    const appointmentCamps = ['tyler-hill-camp', 'timber-lake-camp', 'timber-lake-west', 'trails-end-camp'];
+    if (currentCompany?.slug && appointmentCamps.includes(currentCompany.slug)) {
+      baseOptions.push({ value: 'appointments', label: 'Appointments Report' });
     }
 
     return baseOptions;
