@@ -277,6 +277,12 @@ export default function StaffProfile() {
                   <p className="text-sm text-muted-foreground">Hire Date</p>
                   <p className="font-medium">{staff.hire_date ? new Date(staff.hire_date).toLocaleDateString() : "N/A"}</p>
                 </div>
+                {staff.tshirt_size && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">T-Shirt Size</p>
+                    <p className="font-medium">{staff.tshirt_size}</p>
+                  </div>
+                )}
                 {assignedBunks.length > 0 && (
                   <div>
                     <p className="text-sm text-muted-foreground">Assigned Bunk{assignedBunks.length > 1 ? 's' : ''}</p>
