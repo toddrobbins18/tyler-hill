@@ -2750,6 +2750,7 @@ export type Database = {
           created_at: string | null
           date_of_birth: string | null
           department: string | null
+          division_id: string | null
           email: string | null
           gender: string | null
           hire_date: string | null
@@ -2776,6 +2777,7 @@ export type Database = {
           created_at?: string | null
           date_of_birth?: string | null
           department?: string | null
+          division_id?: string | null
           email?: string | null
           gender?: string | null
           hire_date?: string | null
@@ -2802,6 +2804,7 @@ export type Database = {
           created_at?: string | null
           date_of_birth?: string | null
           department?: string | null
+          division_id?: string | null
           email?: string | null
           gender?: string | null
           hire_date?: string | null
@@ -2828,6 +2831,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
             referencedColumns: ["id"]
           },
           {

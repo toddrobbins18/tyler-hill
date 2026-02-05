@@ -12,20 +12,24 @@ import { staffSchema } from "@/lib/validationSchemas";
 import { z } from "zod";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
+import { sortDivisionsGirlsFirst, Division } from "@/lib/divisionUtils";
 
 export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [supervisors, setSupervisors] = useState<any[]>([]);
+  const [divisions, setDivisions] = useState<Division[]>([]);
   const [leaderId, setLeaderId] = useState("");
   const [staffType, setStaffType] = useState<string>("");
   const [session, setSession] = useState<string>("");
+  const [divisionId, setDivisionId] = useState<string>("");
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
 
   useEffect(() => {
     if (open) {
       fetchSupervisors();
+      fetchDivisions();
     }
   }, [open, currentSeason]);
 
@@ -40,6 +44,17 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
       .in("role", ["Director", "Supervisor", "Manager"])
       .order("name");
     setSupervisors(data || []);
+  };
+
+  const fetchDivisions = async () => {
+    if (!currentCompany?.id) return;
+    const { data } = await supabase
+      .from("divisions")
+      .select("*")
+      .eq("company_id", currentCompany.id)
+      .eq("is_active", true)
+      .order("sort_order");
+    setDivisions(sortDivisionsGirlsFirst(data || []));
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -60,6 +75,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
         leader_id: leaderId || null,
         staff_type: staffType || null,
         allergies: formData.get("allergies") as string || null,
+        division_id: divisionId || null,
       };
 
       const validatedData = staffSchema.parse(data) as {
@@ -87,6 +103,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
         setLeaderId("");
         setStaffType("");
         setSession("");
+        setDivisionId("");
         onSuccess?.();
       }
     } catch (error) {
@@ -208,6 +225,22 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
               placeholder="List any allergies (optional)"
               className="min-h-[80px]"
             />
+          </div>
+          <div>
+            <Label>Division</Label>
+            <Select value={divisionId || "none"} onValueChange={(val) => setDivisionId(val === "none" ? "" : val)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select division" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No Division</SelectItem>
+                {divisions.map((division) => (
+                  <SelectItem key={division.id} value={division.id}>
+                    {division.name} ({division.gender})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label>Reports To (Supervisor)</Label>
