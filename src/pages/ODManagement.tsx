@@ -22,6 +22,8 @@ import { CalendarIcon, AlertTriangle, Search, ArrowLeftRight, ChevronLeft, Chevr
 import { cn } from "@/lib/utils";
 import BunkManagement from "@/components/admin/BunkManagement";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 interface Staff {
   id: string;
@@ -64,6 +66,10 @@ interface DayOff {
   checked_in: boolean;
   checked_out_at: string | null;
   checked_in_at: string | null;
+  checked_out_by: string | null;
+  checked_in_by: string | null;
+  checked_out_by_profile?: { full_name: string } | null;
+  checked_in_by_profile?: { full_name: string } | null;
   notes: string | null;
   late_override: boolean;
   late_override_reason: string | null;
@@ -77,6 +83,7 @@ export default function ODManagement() {
   const { selectedSeason: currentSeason } = useSeason();
   const { toast } = useToast();
   const { user } = useAuth();
+  const { userRole } = usePermissions();
   
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [activeTab, setActiveTab] = useState("od");
@@ -167,9 +174,12 @@ export default function ODManagement() {
           .from("staff_days_off")
           .select(`
             id, staff_id, date, is_day_off, is_night_off, is_sleeping_out, 
-            checked_out, checked_in, checked_out_at, checked_in_at, notes,
+            checked_out, checked_in, checked_out_at, checked_in_at, 
+            checked_out_by, checked_in_by, notes,
             late_override, late_override_reason, late_override_approved_by, late_override_approved_at,
-            staff:staff_id(id, name, department, role, rfid, gender)
+            staff:staff_id(id, name, department, role, rfid, gender),
+            checked_out_by_profile:checked_out_by(full_name),
+            checked_in_by_profile:checked_in_by(full_name)
           `)
           .eq("company_id", currentCompany.id)
           .eq("season", currentSeason)
@@ -431,7 +441,18 @@ export default function ODManagement() {
   };
 
   const handleCheckInOut = async (staffId: string, type: 'out' | 'in') => {
-    if (!currentCompany?.id) return;
+    if (!currentCompany?.id || !user?.id) return;
+
+    // Permission check: only admin, staff, and health_center can manually check in/out
+    const allowedRoles = ['admin', 'super_admin', 'staff', 'health_center'];
+    if (!userRole || !allowedRoles.includes(userRole)) {
+      toast({ 
+        title: "Permission denied", 
+        description: "You don't have permission to manually check staff in/out",
+        variant: "destructive" 
+      });
+      return;
+    }
 
     const existing = daysOff.find(d => d.staff_id === staffId);
 
@@ -455,8 +476,8 @@ export default function ODManagement() {
 
     try {
       const updates = type === 'out' 
-        ? { checked_out: true, checked_out_at: new Date().toISOString() }
-        : { checked_in: true, checked_in_at: new Date().toISOString() };
+        ? { checked_out: true, checked_out_at: new Date().toISOString(), checked_out_by: user.id }
+        : { checked_in: true, checked_in_at: new Date().toISOString(), checked_in_by: user.id };
 
       const { error } = await supabase
         .from("staff_days_off")
@@ -553,6 +574,9 @@ export default function ODManagement() {
 
   // Check if Free Play feature should be shown (hidden for Tyler Hill)
   const showFreePlay = currentCompany?.slug !== 'tyler-hill-camp';
+
+  // Check if user can manually check in/out
+  const canManualCheckInOut = userRole && ['admin', 'super_admin', 'staff', 'health_center'].includes(userRole);
 
   const navigateDate = (days: number) => {
     setSelectedDate(addDays(selectedDate, days));
@@ -752,6 +776,7 @@ export default function ODManagement() {
                             <Checkbox
                               checked={item.dayOff?.checked_out || false}
                               onCheckedChange={() => handleCheckInOut(item.staff_id, 'out')}
+                              disabled={!canManualCheckInOut}
                             />
                           </TableCell>
                           {showFreePlay && (
@@ -766,6 +791,7 @@ export default function ODManagement() {
                             <Checkbox
                               checked={item.dayOff?.checked_in || false}
                               onCheckedChange={() => handleCheckInOut(item.staff_id, 'in')}
+                              disabled={!canManualCheckInOut}
                             />
                           </TableCell>
                           <TableCell>
@@ -869,6 +895,7 @@ export default function ODManagement() {
                             <Checkbox
                               checked={item.dayOff?.checked_in || false}
                               onCheckedChange={() => handleCheckInOut(item.staff_id, 'in')}
+                              disabled={!canManualCheckInOut}
                             />
                           </TableCell>
                           <TableCell>
@@ -876,9 +903,9 @@ export default function ODManagement() {
                               {item.dayOff?.is_day_off && <Badge>Day Off</Badge>}
                               {item.dayOff?.is_night_off && <Badge variant="secondary">Night Off</Badge>}
                               {item.dayOff?.checked_out && <Badge variant="outline">Out</Badge>}
-                              {item.dayOff?.checked_in && <Badge variant="outline" className="bg-green-100">In</Badge>}
+                              {item.dayOff?.checked_in && <Badge variant="outline" className="bg-green-100 dark:bg-green-900">In</Badge>}
                               {item.dayOff?.late_override && (
-                                <Badge variant="outline" className="bg-yellow-100 text-yellow-800">
+                                <Badge variant="outline" className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200">
                                   <AlertCircle className="h-3 w-3 mr-1" />
                                   Override
                                 </Badge>
@@ -887,10 +914,24 @@ export default function ODManagement() {
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
                             {item.dayOff?.checked_out_at && (
-                              <div>Out: {format(new Date(item.dayOff.checked_out_at), "h:mm a")}</div>
+                              <div className="flex items-center gap-1">
+                                <span>Out: {format(new Date(item.dayOff.checked_out_at), "h:mm a")}</span>
+                                {item.dayOff?.checked_out_by_profile?.full_name && (
+                                  <span className="text-xs text-primary">
+                                    by {item.dayOff.checked_out_by_profile.full_name}
+                                  </span>
+                                )}
+                              </div>
                             )}
                             {item.dayOff?.checked_in_at && (
-                              <div>In: {format(new Date(item.dayOff.checked_in_at), "h:mm a")}</div>
+                              <div className="flex items-center gap-1">
+                                <span>In: {format(new Date(item.dayOff.checked_in_at), "h:mm a")}</span>
+                                {item.dayOff?.checked_in_by_profile?.full_name && (
+                                  <span className="text-xs text-primary">
+                                    by {item.dayOff.checked_in_by_profile.full_name}
+                                  </span>
+                                )}
+                              </div>
                             )}
                             {item.dayOff?.late_override_reason && (
                               <div className="text-yellow-600 text-xs mt-1">
