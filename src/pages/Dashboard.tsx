@@ -13,6 +13,7 @@ import { WeatherWidget } from "@/components/WeatherWidget";
 import NotesBoard from "@/components/dashboard/NotesBoard";
 import timberLakeWestBg from "@/assets/timber-lake-west-bg.jpeg";
 import { format } from "date-fns";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface DailyWolfContent {
   officer_of_day: string;
@@ -25,6 +26,7 @@ interface DailyWolfContent {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { getDivisionFilter } = usePermissions();
+  const { userRole } = useAuth();
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
   const [stats, setStats] = useState({
@@ -159,6 +161,9 @@ export default function Dashboard() {
     const weekStart = new Date();
     weekStart.setDate(weekStart.getDate() - 7);
     const divisionFilter = getDivisionFilter();
+    
+    // Check if user has full access (no division restrictions)
+    const hasFullAccess = divisionFilter === null;
 
     // Fetch children count with division filtering
     let childrenQuery = supabase
@@ -181,19 +186,50 @@ export default function Dashboard() {
       .eq('company_id', currentCompany.id)
       .gte('date', today);
 
-    // Fetch today's notes count
-    const { count: notesCount } = await supabase
+    // Fetch today's notes count - need to join with children for division filtering
+    let notesQuery = supabase
       .from('daily_notes')
-      .select('*', { count: 'exact', head: true })
+      .select('*, children:child_id(division_id)', { count: 'exact', head: true })
       .eq('date', today)
       .eq('company_id', currentCompany.id);
+    
+    if (!hasFullAccess && divisionFilter && divisionFilter.length > 0) {
+      // Filter notes by children in user's divisions
+      const { data: childrenInDivisions } = await supabase
+        .from('children')
+        .select('id')
+        .eq('company_id', currentCompany.id)
+        .in('division_id', divisionFilter);
+      
+      const childIds = (childrenInDivisions || []).map(c => c.id);
+      if (childIds.length > 0) {
+        notesQuery = notesQuery.in('child_id', childIds);
+      }
+    }
+    
+    const { count: notesCount } = await notesQuery;
 
-    // Fetch this week's awards
-    const { count: awardsCount } = await supabase
+    // Fetch this week's awards with division filtering
+    let awardsQuery = supabase
       .from('awards')
-      .select('*', { count: 'exact', head: true })
+      .select('*, children:child_id(division_id)', { count: 'exact', head: true })
       .eq('company_id', currentCompany.id)
       .gte('date', weekStart.toISOString().split('T')[0]);
+    
+    if (!hasFullAccess && divisionFilter && divisionFilter.length > 0) {
+      const { data: childrenInDivisions } = await supabase
+        .from('children')
+        .select('id')
+        .eq('company_id', currentCompany.id)
+        .in('division_id', divisionFilter);
+      
+      const childIds = (childrenInDivisions || []).map(c => c.id);
+      if (childIds.length > 0) {
+        awardsQuery = awardsQuery.in('child_id', childIds);
+      }
+    }
+    
+    const { count: awardsCount } = await awardsQuery;
 
     // Fetch upcoming trips and events
     const { data: trips } = await supabase
@@ -212,33 +248,71 @@ export default function Dashboard() {
       .eq('company_id', currentCompany.id);
     const menu = menuResult.data;
 
-    // Fetch special events for today
+    // Fetch special events for today with division filtering
     let specialEventsData: any[] = [];
     try {
-      const result = await supabase
+      let specialQuery = supabase
         .from('special_events_activities')
         .select('*')
         .eq('event_date', today)
         .eq('company_id', currentCompany.id);
-      specialEventsData = result.data || [];
+      
+      const result = await specialQuery;
+      let events = result.data || [];
+      
+      // Filter by division if user has restricted access and events have division_id
+      if (!hasFullAccess && divisionFilter && divisionFilter.length > 0) {
+        events = events.filter((event: any) => 
+          !event.division_id || divisionFilter.includes(event.division_id)
+        );
+      }
+      
+      specialEventsData = events;
     } catch (error) {
       console.error('Error fetching special events:', error);
     }
 
-    // Fetch sports calendar events for today
+    // Fetch sports calendar events for today with division filtering
     let sportsData: any[] = [];
     try {
+      // First get sports events with their divisions
       const result = await supabase
         .from('sports_calendar')
         .select('*')
         .eq('event_date', today)
         .eq('company_id', currentCompany.id);
-      sportsData = result.data || [];
+      
+      let events = result.data || [];
+      
+      // If user has division restrictions, filter events by divisions
+      if (!hasFullAccess && divisionFilter && divisionFilter.length > 0) {
+        // Get division associations for these events
+        const eventIds = events.map((e: any) => e.id);
+        if (eventIds.length > 0) {
+          const { data: divisionAssocs } = await supabase
+            .from('sports_calendar_divisions')
+            .select('sports_event_id, division_id')
+            .in('sports_event_id', eventIds);
+          
+          // Filter to only events that have at least one matching division
+          events = events.filter((event: any) => {
+            const eventDivisions = (divisionAssocs || [])
+              .filter((d: any) => d.sports_event_id === event.id)
+              .map((d: any) => d.division_id);
+            
+            // Include if no divisions specified (camp-wide) or user has access to at least one
+            return eventDivisions.length === 0 || 
+              eventDivisions.some((divId: string) => divisionFilter.includes(divId));
+          });
+        }
+      }
+      
+      sportsData = events;
     } catch (error) {
       console.error('Error fetching sports events:', error);
     }
 
-    // Fetch sports calendar events for the next 3 days (for Tyler Hill Camp)
+    // Fetch sports calendar events for the next 3 days (for Tyler Hill Camp) with division filtering
     let threeDayData: any[] = [];
     if (currentCompany?.slug === 'tyler-hill-camp') {
       try {
@@ -253,19 +327,48 @@ export default function Dashboard() {
           .gt('event_date', today)
           .lte('event_date', threeDaysFromNowStr)
           .order('event_date', { ascending: true });
-        threeDayData = result.data || [];
+        
+        let events = result.data || [];
+        
+        // Apply division filtering if user has restrictions
+        if (!hasFullAccess && divisionFilter && divisionFilter.length > 0) {
+          const eventIds = events.map((e: any) => e.id);
+          if (eventIds.length > 0) {
+            const { data: divisionAssocs } = await supabase
+              .from('sports_calendar_divisions')
+              .select('sports_event_id, division_id')
+              .in('sports_event_id', eventIds);
+            
+            events = events.filter((event: any) => {
+              const eventDivisions = (divisionAssocs || [])
+                .filter((d: any) => d.sports_event_id === event.id)
+                .map((d: any) => d.division_id);
+              
+              return eventDivisions.length === 0 || 
+                eventDivisions.some((divId: string) => divisionFilter.includes(divId));
+            });
+          }
+        }
+        
+        threeDayData = events;
       } catch (error) {
         console.error('Error fetching three day outlook:', error);
       }
     }
 
-    // Fetch birthdays for today (matching month and day)
-    const { data: childrenData } = await supabase
+    // Fetch birthdays for today (matching month and day) with division filtering
+    let birthdayQuery = supabase
       .from('children')
-      .select('id, name, date_of_birth')
+      .select('id, name, date_of_birth, division_id')
       .eq('status', 'active')
       .eq('company_id', currentCompany.id)
       .not('date_of_birth', 'is', null);
+    
+    if (!hasFullAccess && divisionFilter && divisionFilter.length > 0) {
+      birthdayQuery = birthdayQuery.in('division_id', divisionFilter);
+    }
+    
+    const { data: childrenData } = await birthdayQuery;
 
     const { data: staffBirthdayData } = await supabase
       .from('staff')
