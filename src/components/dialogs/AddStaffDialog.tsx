@@ -175,6 +175,32 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
             </Select>
           </div>
           <div>
+            <Label>T-Shirt Size</Label>
+            <Select value={staffType === '' && !session ? 'none' : undefined} onValueChange={(val) => {
+              const form = document.getElementById('tshirt_size') as HTMLInputElement;
+              if (form) form.value = val === 'none' ? '' : val;
+            }}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select size" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Not Specified</SelectItem>
+                <SelectItem value="Youth S">Youth S</SelectItem>
+                <SelectItem value="Youth M">Youth M</SelectItem>
+                <SelectItem value="Youth L">Youth L</SelectItem>
+                <SelectItem value="Youth XL">Youth XL</SelectItem>
+                <SelectItem value="Adult XS">Adult XS</SelectItem>
+                <SelectItem value="Adult S">Adult S</SelectItem>
+                <SelectItem value="Adult M">Adult M</SelectItem>
+                <SelectItem value="Adult L">Adult L</SelectItem>
+                <SelectItem value="Adult XL">Adult XL</SelectItem>
+                <SelectItem value="Adult 2XL">Adult 2XL</SelectItem>
+                <SelectItem value="Adult 3XL">Adult 3XL</SelectItem>
+              </SelectContent>
+            </Select>
+            <input type="hidden" id="tshirt_size" name="tshirt_size" />
+          </div>
+          <div>
             <Label>Allergies</Label>
             <Textarea 
               id="allergies" 

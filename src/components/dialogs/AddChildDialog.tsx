@@ -17,10 +17,16 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 
+const TSHIRT_SIZES = [
+  "Youth S", "Youth M", "Youth L", "Youth XL",
+  "Adult XS", "Adult S", "Adult M", "Adult L", "Adult XL", "Adult 2XL", "Adult 3XL"
+];
+
 export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }) {
   const [open, setOpen] = useState(false);
   const [staff, setStaff] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
+  const [tshirtSize, setTshirtSize] = useState<string>("");
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
 
@@ -93,6 +99,7 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
         allergies: values.allergies ?? null,
         medical_notes: values.medical_notes ?? null,
         company_id: currentCompany?.id,
+        tshirt_size: tshirtSize || null,
       };
 
       const { error } = await supabase.from("children").insert([insertData]);
@@ -104,6 +111,7 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
         toast.success("Child added successfully");
         setOpen(false);
         form.reset();
+        setTshirtSize("");
         onSuccess?.();
       }
     } catch (error) {
@@ -289,20 +297,33 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
                 render={({ field }) => (
                   <FormItem className="col-span-2">
                     <FormLabel>Assigned Leader</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value ?? ""}>
-                      <FormControl>
+                    <div className="grid grid-cols-2 gap-4">
+                      <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a leader" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {staff.map((member) => (
+                            <SelectItem key={member.id} value={member.id}>
+                              {member.name} - {member.role}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select value={tshirtSize || "none"} onValueChange={(val) => setTshirtSize(val === "none" ? "" : val)}>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select a leader" />
+                          <SelectValue placeholder="T-Shirt Size" />
                         </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {staff.map((member) => (
-                          <SelectItem key={member.id} value={member.id}>
-                            {member.name} - {member.role}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                        <SelectContent>
+                          <SelectItem value="none">Not Specified</SelectItem>
+                          {TSHIRT_SIZES.map(size => (
+                            <SelectItem key={size} value={size}>{size}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -313,9 +334,9 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Guardian Email</FormLabel>
-                    <FormControl>
+                      <FormControl>
                       <Input type="email" {...field} value={field.value ?? ""} />
-                    </FormControl>
+                      </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
