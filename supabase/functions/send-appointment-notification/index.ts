@@ -16,6 +16,57 @@ interface AppointmentPayload {
   action: 'create' | 'update';
 }
 
+// Check if this is a toothfairy appointment and send special notification
+async function sendToothfairyNotification(
+  supabase: any,
+  appointment: any,
+  companyId: string,
+  personName: string
+) {
+  // Get toothfairy email config
+  const { data: config } = await supabase
+    .from('automated_email_config')
+    .select('*')
+    .eq('company_id', companyId)
+    .eq('email_type', 'toothfairy')
+    .eq('enabled', true)
+    .maybeSingle();
+
+  if (!config) {
+    console.log("Toothfairy notifications not enabled for this company");
+    return 0;
+  }
+
+  // Get recipients for toothfairy notifications
+  const recipients = await getRecipientsForEmailTypeWithFilters(
+    supabase,
+    'toothfairy',
+    companyId,
+    undefined
+  );
+
+  if (recipients.length === 0) {
+    console.log("No recipients configured for toothfairy notifications");
+    return 0;
+  }
+
+  const subject = `🧚 Toothfairy Visit Needed: ${personName}`;
+  const content = `
+A Toothfairy visit has been scheduled!
+
+Camper: ${personName}
+Date: ${appointment.appointment_date}${appointment.appointment_time ? ` at ${appointment.appointment_time}` : ''}
+${appointment.location ? `Location: ${appointment.location}` : ''}
+${appointment.notes ? `\nNotes: ${appointment.notes}` : ''}
+
+Please ensure the toothfairy makes a visit! 🦷✨
+  `.trim();
+
+  await sendEmailNotifications(supabase, recipients, subject, content, companyId);
+  console.log(`Sent ${recipients.length} toothfairy notifications`);
+  return recipients.length;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -54,6 +105,20 @@ serve(async (req) => {
     const personName = appointment.child?.name || appointment.staff?.name || "Unknown";
     const personType = appointment.child_id ? "Camper" : "Staff";
     const divisionId = appointment.child?.division_id;
+
+    // Check if this is a toothfairy appointment
+    const isToothfairy = appointment.appointment_type.toLowerCase() === 'toothfairy';
+    let toothfairyRecipientCount = 0;
+
+    // Send toothfairy-specific notification if applicable
+    if (isToothfairy && action === 'create') {
+      toothfairyRecipientCount = await sendToothfairyNotification(
+        supabase,
+        appointment,
+        companyId,
+        personName
+      );
+    }
 
     // Build notification content
     const content = `
@@ -155,7 +220,8 @@ ${appointment.notes ? `\nNotes: ${appointment.notes}` : ''}
       JSON.stringify({ 
         success: true, 
         recipientCount: recipients.length,
-        scheduledReminder: appointmentDate >= tomorrow
+        scheduledReminder: appointmentDate >= tomorrow,
+        toothfairyRecipientCount
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
