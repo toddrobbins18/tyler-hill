@@ -42,6 +42,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
   const [birthdayCakeAllergies, setBirthdayCakeAllergies] = useState<string[]>([]);
   const [rfidValue, setRfidValue] = useState("");
   const [rfidJustScanned, setRfidJustScanned] = useState(false);
+  const [tshirtSize, setTshirtSize] = useState<string>("");
   const rfidInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -74,6 +75,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
       setBirthdayCakeAllergies(data.birthday_cake_allergies || []);
       setRfidValue(data.rfid || "");
       setBunkId(data.bunk_id || "");
+      setTshirtSize(data.tshirt_size || "");
     }
   };
 
@@ -143,6 +145,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
         birthday_toppings: birthdayToppings.length > 0 ? birthdayToppings : null,
         birthday_cake_allergies: birthdayCakeAllergies.length > 0 ? birthdayCakeAllergies : null,
         birthday_cake_message: formData.get("birthday_cake_message") as string || null,
+        tshirt_size: tshirtSize || null,
       };
 
       const validatedData = childSchema.parse(data);
@@ -252,6 +255,28 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
             <div>
               <Label htmlFor="season">Season (Year)</Label>
               <Input id="season" name="season" defaultValue={child.season || ""} placeholder="e.g., 2024" maxLength={4} />
+            </div>
+            <div>
+              <Label>T-Shirt Size</Label>
+              <Select value={tshirtSize || "none"} onValueChange={(val) => setTshirtSize(val === "none" ? "" : val)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select size" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not Specified</SelectItem>
+                  <SelectItem value="Youth S">Youth S</SelectItem>
+                  <SelectItem value="Youth M">Youth M</SelectItem>
+                  <SelectItem value="Youth L">Youth L</SelectItem>
+                  <SelectItem value="Youth XL">Youth XL</SelectItem>
+                  <SelectItem value="Adult XS">Adult XS</SelectItem>
+                  <SelectItem value="Adult S">Adult S</SelectItem>
+                  <SelectItem value="Adult M">Adult M</SelectItem>
+                  <SelectItem value="Adult L">Adult L</SelectItem>
+                  <SelectItem value="Adult XL">Adult XL</SelectItem>
+                  <SelectItem value="Adult 2XL">Adult 2XL</SelectItem>
+                  <SelectItem value="Adult 3XL">Adult 3XL</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             {currentCompany?.slug === 'timber-lake-west' && (
               <div>

@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { LogOut, User } from "lucide-react";
+import { LogOut, User, Bell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
@@ -73,6 +73,10 @@ export function UserProfileDropdown() {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => navigate('/notification-preferences')} className="cursor-pointer">
+          <Bell className="mr-2 h-4 w-4" />
+          <span>Notification Preferences</span>
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
           <LogOut className="mr-2 h-4 w-4" />
           <span>Log out</span>

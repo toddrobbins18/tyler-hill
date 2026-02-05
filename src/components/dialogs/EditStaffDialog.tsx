@@ -31,6 +31,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
   const [session, setSession] = useState<string>("");
   const [rfidValue, setRfidValue] = useState("");
   const [rfidJustScanned, setRfidJustScanned] = useState(false);
+  const [tshirtSize, setTshirtSize] = useState<string>("");
   const rfidInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -53,6 +54,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
       setStaffType(data.staff_type || "");
       setSession(data.session || "");
       setRfidValue(data.rfid || "");
+      setTshirtSize(data.tshirt_size || "");
     }
   };
 
@@ -90,6 +92,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
         staff_type: staffType || null,
         allergies: formData.get("allergies") as string || null,
         rfid: rfidValue || null,
+        tshirt_size: tshirtSize || null,
       };
 
       const validatedData = staffSchema.parse(data);
@@ -192,6 +195,28 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
               </SelectContent>
             </Select>
           </div>
+        <div>
+          <Label>T-Shirt Size</Label>
+          <Select value={tshirtSize || "none"} onValueChange={(val) => setTshirtSize(val === "none" ? "" : val)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select size" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Not Specified</SelectItem>
+              <SelectItem value="Youth S">Youth S</SelectItem>
+              <SelectItem value="Youth M">Youth M</SelectItem>
+              <SelectItem value="Youth L">Youth L</SelectItem>
+              <SelectItem value="Youth XL">Youth XL</SelectItem>
+              <SelectItem value="Adult XS">Adult XS</SelectItem>
+              <SelectItem value="Adult S">Adult S</SelectItem>
+              <SelectItem value="Adult M">Adult M</SelectItem>
+              <SelectItem value="Adult L">Adult L</SelectItem>
+              <SelectItem value="Adult XL">Adult XL</SelectItem>
+              <SelectItem value="Adult 2XL">Adult 2XL</SelectItem>
+              <SelectItem value="Adult 3XL">Adult 3XL</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
           <div>
             <Label htmlFor="allergies">Allergies</Label>
             <Textarea 

@@ -47,6 +47,7 @@ import RosterTemplates from "./pages/RosterTemplates";
 import ODManagement from "./pages/ODManagement";
 import DailySchedule from "./pages/DailySchedule";
 import Appointments from "./pages/Appointments";
+import NotificationPreferences from "./pages/NotificationPreferences";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 import UpdatePassword from "./pages/UpdatePassword";
@@ -136,6 +137,7 @@ function AppContent() {
                                 <Route path="/od-management" element={<ODManagement />} />
                                 <Route path="/appointments" element={<Appointments />} />
                                 <Route path="/daily-schedule" element={<DailySchedule />} />
+                                <Route path="/notification-preferences" element={<NotificationPreferences />} />
                                 <Route path="*" element={<NotFound />} />
                               </Routes>
                             </main>

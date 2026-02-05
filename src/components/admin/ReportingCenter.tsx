@@ -17,7 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 
-type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'conflicts' | 'medications' | 'allergies' | 're_enrollment' | 'appointments';
+type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'conflicts' | 'medications' | 'allergies' | 're_enrollment' | 'appointments' | 'tshirt_sizes';
 
 export default function ReportingCenter() {
   const [reportType, setReportType] = useState<ReportType>('incidents');
@@ -589,6 +589,90 @@ export default function ReportingCenter() {
             'Most Common Type': mostCommonType,
           };
           break;
+
+        case 'tshirt_sizes':
+          // Fetch campers with t-shirt sizes
+          let camperSizesQuery = supabase
+            .from('children')
+            .select(`
+              name,
+              tshirt_size,
+              division_id,
+              divisions (name),
+              gender,
+              status
+            `)
+            .eq('company_id', currentCompany.id)
+            .eq('season', selectedSeason)
+            .eq('status', 'active');
+          
+          if (allowedDivisionIds !== null && allowedDivisionIds.length > 0) {
+            camperSizesQuery = camperSizesQuery.in('division_id', allowedDivisionIds);
+          }
+          
+          const { data: camperSizes } = await camperSizesQuery.order('name');
+          
+          // Fetch staff with t-shirt sizes
+          const { data: staffSizes } = await supabase
+            .from('staff')
+            .select('name, tshirt_size, department, role, status')
+            .eq('company_id', currentCompany.id)
+            .eq('season', selectedSeason)
+            .eq('status', 'active')
+            .order('name');
+          
+          // Combine data
+          const camperRows = camperSizes?.map(c => ({
+            Name: c.name,
+            Type: 'Camper',
+            Division: c.divisions?.name || 'No Division',
+            'T-Shirt Size': c.tshirt_size || 'Not Set',
+            Gender: c.gender || 'N/A',
+          })) || [];
+          
+          const staffRows = staffSizes?.map(s => ({
+            Name: s.name,
+            Type: 'Staff',
+            Division: s.department || 'N/A',
+            'T-Shirt Size': s.tshirt_size || 'Not Set',
+            Gender: 'N/A',
+          })) || [];
+          
+          data = [...camperRows, ...staffRows];
+          
+          // Size breakdown
+          const sizeCounts: Record<string, number> = {};
+          const camperSizeCounts: Record<string, number> = {};
+          const staffSizeCounts: Record<string, number> = {};
+          
+          camperRows.forEach(r => {
+            const size = r['T-Shirt Size'];
+            sizeCounts[size] = (sizeCounts[size] || 0) + 1;
+            camperSizeCounts[size] = (camperSizeCounts[size] || 0) + 1;
+          });
+          
+          staffRows.forEach(r => {
+            const size = r['T-Shirt Size'];
+            sizeCounts[size] = (sizeCounts[size] || 0) + 1;
+            staffSizeCounts[size] = (staffSizeCounts[size] || 0) + 1;
+          });
+          
+          const notSetCount = sizeCounts['Not Set'] || 0;
+          const totalWithSize = data.length - notSetCount;
+          
+          summaryData = {
+            'Total People': data.length,
+            'Campers': camperRows.length,
+            'Staff': staffRows.length,
+            'With Size Set': totalWithSize,
+            'Missing Size': notSetCount,
+            ...Object.fromEntries(
+              Object.entries(sizeCounts)
+                .filter(([k]) => k !== 'Not Set')
+                .sort((a, b) => b[1] - a[1])
+            ),
+          };
+          break;
       }
 
       setReportData(data);
@@ -701,6 +785,7 @@ export default function ReportingCenter() {
       allergies: 'ALLERGY REPORT',
       re_enrollment: 'RE-ENROLLMENT REPORT',
       appointments: 'APPOINTMENTS REPORT',
+      tshirt_sizes: 'T-SHIRT SIZE REPORT',
     };
     
     const title = titleMap[reportType] || reportType.replace('_', ' ').toUpperCase();
@@ -721,6 +806,7 @@ export default function ReportingCenter() {
       { value: 'medications', label: 'Medication Schedule' },
       { value: 'allergies', label: 'Allergy Report' },
       { value: 're_enrollment', label: 'Re-Enrollment Report' },
+      { value: 'tshirt_sizes', label: 'T-Shirt Sizes' },
     ];
 
     // Only add these report types if the company has the corresponding pages

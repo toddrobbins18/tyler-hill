@@ -622,6 +622,7 @@ export type Database = {
           season: string | null
           session: string | null
           status: string | null
+          tshirt_size: string | null
           updated_at: string | null
         }
         Insert: {
@@ -660,6 +661,7 @@ export type Database = {
           season?: string | null
           session?: string | null
           status?: string | null
+          tshirt_size?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -698,6 +700,7 @@ export type Database = {
           season?: string | null
           session?: string | null
           status?: string | null
+          tshirt_size?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -2761,6 +2764,7 @@ export type Database = {
           specialty_sports: string[] | null
           staff_type: string | null
           status: string | null
+          tshirt_size: string | null
           updated_at: string | null
         }
         Insert: {
@@ -2786,6 +2790,7 @@ export type Database = {
           specialty_sports?: string[] | null
           staff_type?: string | null
           status?: string | null
+          tshirt_size?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -2811,6 +2816,7 @@ export type Database = {
           specialty_sports?: string[] | null
           staff_type?: string | null
           status?: string | null
+          tshirt_size?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -3315,6 +3321,50 @@ export type Database = {
           },
           {
             foreignKeyName: "tutoring_therapy_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_notification_preferences: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          delivery_methods: Json | null
+          enabled: boolean | null
+          id: string
+          notification_type: string
+          timing_options: Json | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          delivery_methods?: Json | null
+          enabled?: boolean | null
+          id?: string
+          notification_type: string
+          timing_options?: Json | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          delivery_methods?: Json | null
+          enabled?: boolean | null
+          id?: string
+          notification_type?: string
+          timing_options?: Json | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_notification_preferences_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
