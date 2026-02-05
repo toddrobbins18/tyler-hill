@@ -26,7 +26,7 @@ async function sendToothfairyNotification(
   // Get toothfairy email config
   const { data: config } = await supabase
     .from('automated_email_config')
-    .select('*')
+    .select('*, specific_recipient_id')
     .eq('company_id', companyId)
     .eq('email_type', 'toothfairy')
     .eq('enabled', true)
@@ -37,13 +37,32 @@ async function sendToothfairyNotification(
     return 0;
   }
 
-  // Get recipients for toothfairy notifications
-  const recipients = await getRecipientsForEmailTypeWithFilters(
-    supabase,
-    'toothfairy',
-    companyId,
-    undefined
-  );
+  let recipients: { email: string }[] = [];
+
+  // Check if there's a specific recipient configured
+  if (config.specific_recipient_id) {
+    // Get the specific user's email from profiles
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('email')
+      .eq('id', config.specific_recipient_id)
+      .single();
+
+    if (profile?.email) {
+      recipients = [{ email: profile.email }];
+      console.log(`Using specific recipient: ${profile.email}`);
+    }
+  }
+  
+  // If no specific recipient or couldn't find them, fall back to tags
+  if (recipients.length === 0) {
+    recipients = await getRecipientsForEmailTypeWithFilters(
+      supabase,
+      'toothfairy',
+      companyId,
+      undefined
+    );
+  }
 
   if (recipients.length === 0) {
     console.log("No recipients configured for toothfairy notifications");

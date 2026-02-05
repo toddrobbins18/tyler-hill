@@ -288,6 +288,7 @@ export type Database = {
           id: string
           recipient_tags: string[]
           send_timing: string[] | null
+          specific_recipient_id: string | null
           updated_at: string | null
         }
         Insert: {
@@ -298,6 +299,7 @@ export type Database = {
           id?: string
           recipient_tags?: string[]
           send_timing?: string[] | null
+          specific_recipient_id?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -308,6 +310,7 @@ export type Database = {
           id?: string
           recipient_tags?: string[]
           send_timing?: string[] | null
+          specific_recipient_id?: string | null
           updated_at?: string | null
         }
         Relationships: [

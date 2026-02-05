@@ -5,9 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import { Loader2, Mail, Clock } from "lucide-react";
+import { Loader2, Mail, Clock, User } from "lucide-react";
 import { useCompany } from "@/contexts/CompanyContext";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface EmailConfig {
   id: string;
@@ -16,6 +17,13 @@ interface EmailConfig {
   enabled: boolean;
   updated_at: string;
   send_timing: string[];
+  specific_recipient_id: string | null;
+}
+
+interface Profile {
+  id: string;
+  email: string;
+  full_name: string | null;
 }
 
 const EMAIL_TYPE_LABELS: Record<string, { label: string; description: string }> = {
@@ -154,10 +162,12 @@ export default function AutomatedEmailConfig() {
   const [configs, setConfigs] = useState<EmailConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [users, setUsers] = useState<Profile[]>([]);
 
   useEffect(() => {
     if (currentCompany) {
       fetchConfigs();
+      fetchUsers();
     }
   }, [currentCompany?.id]);
 
@@ -178,6 +188,24 @@ export default function AutomatedEmailConfig() {
       toast.error("Failed to load email configurations");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchUsers = async () => {
+    if (!currentCompany) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, email, full_name")
+        .eq("company_id", currentCompany.id)
+        .eq("approved", true)
+        .order("full_name");
+
+      if (error) throw error;
+      setUsers(data || []);
+    } catch (error: any) {
+      console.error("Error fetching users:", error);
     }
   };
 
@@ -312,6 +340,50 @@ export default function AutomatedEmailConfig() {
                           {tag.replace(/_/g, " ")}
                         </Badge>
                       ))}
+                    </div>
+                  )}
+
+                  {config.email_type === 'toothfairy' && (
+                    <div className="pt-2 border-t">
+                      <div className="flex items-center gap-2 mb-3">
+                        <User className="h-4 w-4 text-muted-foreground" />
+                        <label className="text-sm font-medium text-foreground">
+                          Specific Recipient (Optional)
+                        </label>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Select a specific user to receive Tooth Fairy notifications, or leave empty to use tags above.
+                      </p>
+                      <Select
+                        value={config.specific_recipient_id || "none"}
+                        onValueChange={(value) => 
+                          updateConfig(config.id, { 
+                            specific_recipient_id: value === "none" ? null : value 
+                          })
+                        }
+                        disabled={updating === config.id}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select a user..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No specific recipient (use tags)</SelectItem>
+                          {users.map((user) => (
+                            <SelectItem key={user.id} value={user.id}>
+                              {user.full_name || user.email} {user.full_name ? `(${user.email})` : ''}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {config.specific_recipient_id && (
+                        <div className="mt-2">
+                          <Badge variant="secondary" className="text-xs">
+                            Sending to: {users.find(u => u.id === config.specific_recipient_id)?.full_name || 
+                                        users.find(u => u.id === config.specific_recipient_id)?.email || 
+                                        'Selected user'}
+                          </Badge>
+                        </div>
+                      )}
                     </div>
                   )}
 
