@@ -68,7 +68,7 @@ const EMAIL_TYPE_LABELS: Record<string, { label: string; description: string }> 
     description: "Medical and therapy appointments - division leaders see only their divisions"
   },
   toothfairy: {
-    label: "Toothfairy Visits",
+    label: "Tooth Fairy Visits",
     description: "Notifications when a camper loses a tooth and needs a toothfairy visit"
   }
 };

@@ -28,7 +28,7 @@ const APPOINTMENT_TYPES = [
   "General Physician",
   "Specialist",
   "Mental Health",
-  "Toothfairy",
+  "Tooth Fairy",
   "Other"
 ];
 
