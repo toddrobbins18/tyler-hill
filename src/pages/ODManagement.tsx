@@ -551,6 +551,9 @@ export default function ODManagement() {
     return filteredStaffWithBunk.filter(item => item.dayOff?.is_sleeping_out);
   };
 
+  // Check if Free Play feature should be shown (hidden for Tyler Hill)
+  const showFreePlay = currentCompany?.slug !== 'tyler-hill-camp';
+
   const navigateDate = (days: number) => {
     setSelectedDate(addDays(selectedDate, days));
   };
@@ -683,7 +686,7 @@ export default function ODManagement() {
         <TabsList>
           <TabsTrigger value="od">OD</TabsTrigger>
           <TabsTrigger value="off">Off</TabsTrigger>
-          <TabsTrigger value="freeplay">Free Play</TabsTrigger>
+          {showFreePlay && <TabsTrigger value="freeplay">Free Play</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="od" className="space-y-4">
@@ -717,7 +720,7 @@ export default function ODManagement() {
                       <TableHead>Bunk</TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead className="text-center">Out</TableHead>
-                      <TableHead className="text-center">Free Play</TableHead>
+                      {showFreePlay && <TableHead className="text-center">Free Play</TableHead>}
                       <TableHead className="text-center">In</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
@@ -751,12 +754,14 @@ export default function ODManagement() {
                               onCheckedChange={() => handleCheckInOut(item.staff_id, 'out')}
                             />
                           </TableCell>
-                          <TableCell className="text-center">
-                            <Checkbox
-                              checked={item.dayOff?.is_sleeping_out || false}
-                              onCheckedChange={() => handleToggleDayOff(item.staff_id, 'is_sleeping_out')}
-                            />
-                          </TableCell>
+                          {showFreePlay && (
+                            <TableCell className="text-center">
+                              <Checkbox
+                                checked={item.dayOff?.is_sleeping_out || false}
+                                onCheckedChange={() => handleToggleDayOff(item.staff_id, 'is_sleeping_out')}
+                              />
+                            </TableCell>
+                          )}
                           <TableCell className="text-center">
                             <Checkbox
                               checked={item.dayOff?.checked_in || false}
@@ -931,15 +936,16 @@ export default function ODManagement() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="freeplay" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Free Play Shifts</CardTitle>
-              <CardDescription>
-                Staff scheduled for Free Play for {format(selectedDate, "MMMM d, yyyy")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+        {showFreePlay && (
+          <TabsContent value="freeplay" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Free Play Shifts</CardTitle>
+                <CardDescription>
+                  Staff scheduled for Free Play for {format(selectedDate, "MMMM d, yyyy")}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
               {loading ? (
                 <div className="text-center py-8 text-muted-foreground">Loading...</div>
               ) : (
@@ -999,7 +1005,8 @@ export default function ODManagement() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Swap Day Off Dialog */}
