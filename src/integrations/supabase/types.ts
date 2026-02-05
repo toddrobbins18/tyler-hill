@@ -2834,8 +2834,10 @@ export type Database = {
         Row: {
           checked_in: boolean | null
           checked_in_at: string | null
+          checked_in_by: string | null
           checked_out: boolean | null
           checked_out_at: string | null
+          checked_out_by: string | null
           company_id: string
           created_at: string | null
           created_by: string | null
@@ -2857,8 +2859,10 @@ export type Database = {
         Insert: {
           checked_in?: boolean | null
           checked_in_at?: string | null
+          checked_in_by?: string | null
           checked_out?: boolean | null
           checked_out_at?: string | null
+          checked_out_by?: string | null
           company_id: string
           created_at?: string | null
           created_by?: string | null
@@ -2880,8 +2884,10 @@ export type Database = {
         Update: {
           checked_in?: boolean | null
           checked_in_at?: string | null
+          checked_in_by?: string | null
           checked_out?: boolean | null
           checked_out_at?: string | null
+          checked_out_by?: string | null
           company_id?: string
           created_at?: string | null
           created_by?: string | null
