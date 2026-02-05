@@ -101,7 +101,9 @@ export default function Appointments() {
   const [followUpDate, setFollowUpDate] = useState<Date | undefined>(undefined);
 
   // Check if this is Tyler Hill Camp
-  const isTylerHill = currentCompany?.slug === 'tyler-hill-camp';
+  // Appointments are available for Tyler Hill, Timber Lake, Timber Lake West, and Trails End
+  const allowedCamps = ['tyler-hill-camp', 'timber-lake-camp', 'timber-lake-west', 'trails-end-camp'];
+  const isAllowedCamp = currentCompany?.slug && allowedCamps.includes(currentCompany.slug);
 
   useEffect(() => {
     if (currentCompany?.id) {
@@ -315,12 +317,12 @@ export default function Appointments() {
     return true;
   });
 
-  if (!isTylerHill) {
+  if (!isAllowedCamp) {
     return (
       <div className="space-y-8">
         <div>
           <h1 className="text-3xl font-bold mb-2">Appointments</h1>
-          <p className="text-muted-foreground">This feature is only available for Tyler Hill Camp.</p>
+          <p className="text-muted-foreground">This feature is not available for your camp.</p>
         </div>
       </div>
     );
