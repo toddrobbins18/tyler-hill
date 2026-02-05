@@ -57,7 +57,7 @@ export default function Roster() {
   const [scannerMode, setScannerMode] = useState(false);
   const rfidInputRef = useRef<HTMLInputElement>(null);
 
-  const { getDivisionFilter } = usePermissions();
+  const { getDivisionFilter, loading: permissionsLoading, userDivisions } = usePermissions();
 
   const fetchChildren = async () => {
     setLoading(true);
@@ -112,11 +112,13 @@ export default function Roster() {
   };
 
   useEffect(() => {
-    if (currentCompany?.id) {
+    // Wait for permissions to load before fetching children
+    // This ensures division_leader users have their divisions populated
+    if (currentCompany?.id && !permissionsLoading) {
       fetchChildren();
       fetchDivisions();
     }
-  }, [currentSeason, currentCompany?.id]);
+  }, [currentSeason, currentCompany?.id, permissionsLoading, userDivisions]);
 
   useEffect(() => {
     setCurrentPage(1);

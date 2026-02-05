@@ -38,6 +38,7 @@ export default function DailyNotes() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [scheduleEvents, setScheduleEvents] = useState<ScheduleEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const { getDivisionFilter, loading: permissionsLoading, userDivisions } = usePermissions();
 
   // Redirect Timber Lake West to their separate Daily Wolf page
   useEffect(() => {
@@ -47,7 +48,8 @@ export default function DailyNotes() {
   }, [currentCompany?.slug, navigate]);
 
   useEffect(() => {
-    if (!currentCompany?.id || currentCompany?.slug === 'timber-lake-west') return;
+    // Wait for permissions to load before fetching
+    if (!currentCompany?.id || currentCompany?.slug === 'timber-lake-west' || permissionsLoading) return;
     fetchAllData();
 
     // Set up realtime subscriptions
@@ -72,9 +74,7 @@ export default function DailyNotes() {
     return () => {
       channels.forEach(channel => supabase.removeChannel(channel));
     };
-  }, [currentCompany?.id, currentSeason]);
-
-  const { getDivisionFilter } = usePermissions();
+  }, [currentCompany?.id, currentSeason, permissionsLoading, userDivisions]);
 
   const fetchAllData = async () => {
     try {

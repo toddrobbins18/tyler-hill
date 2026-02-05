@@ -26,7 +26,7 @@ import {
 export default function Awards() {
   const navigate = useNavigate();
   const { currentSeason } = useSeasonContext();
-  const { getDivisionFilter } = usePermissions();
+  const { getDivisionFilter, loading: permissionsLoading, userDivisions } = usePermissions();
   const { currentCompany } = useCompany();
   const [awards, setAwards] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,7 +35,8 @@ export default function Awards() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
 
   useEffect(() => {
-    if (!currentCompany?.id) return;
+    // Wait for permissions to load before fetching
+    if (!currentCompany?.id || permissionsLoading) return;
     fetchAwards();
 
     const channel = supabase
@@ -50,7 +51,7 @@ export default function Awards() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentSeason, currentCompany?.id]);
+  }, [currentSeason, currentCompany?.id, permissionsLoading, userDivisions]);
 
   const fetchAwards = async () => {
     setLoading(true);
