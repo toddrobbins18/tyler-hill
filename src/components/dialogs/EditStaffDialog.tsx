@@ -96,6 +96,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
       const formData = new FormData(e.currentTarget);
       const data = {
         name: formData.get("name") as string,
+        person_id: staff.person_id || staff.id, // Use existing person_id or fallback to id
         role: formData.get("role") as string,
         department: formData.get("department") as string || null,
         email: formData.get("email") as string || null,
