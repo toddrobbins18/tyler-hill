@@ -12,6 +12,7 @@ import { z } from "zod";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { Radio, CheckCircle2 } from "lucide-react";
+import { sortDivisionsGirlsFirst, Division } from "@/lib/divisionUtils";
 
 interface EditStaffDialogProps {
   staffId: string;
@@ -26,18 +27,21 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
   const [loading, setLoading] = useState(false);
   const [staff, setStaff] = useState<any>(null);
   const [supervisors, setSupervisors] = useState<any[]>([]);
+  const [divisions, setDivisions] = useState<Division[]>([]);
   const [leaderId, setLeaderId] = useState("");
   const [staffType, setStaffType] = useState<string>("");
   const [session, setSession] = useState<string>("");
   const [rfidValue, setRfidValue] = useState("");
   const [rfidJustScanned, setRfidJustScanned] = useState(false);
   const [tshirtSize, setTshirtSize] = useState<string>("");
+  const [divisionId, setDivisionId] = useState<string>("");
   const rfidInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open && staffId) {
       fetchStaff();
       fetchSupervisors();
+      fetchDivisions();
     }
   }, [open, staffId, currentSeason]);
 
@@ -55,6 +59,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
       setSession(data.session || "");
       setRfidValue(data.rfid || "");
       setTshirtSize(data.tshirt_size || "");
+      setDivisionId(data.division_id || "");
     }
   };
 
@@ -70,6 +75,17 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
       .neq("id", staffId)
       .order("name");
     setSupervisors(data || []);
+  };
+
+  const fetchDivisions = async () => {
+    if (!currentCompany?.id) return;
+    const { data } = await supabase
+      .from("divisions")
+      .select("*")
+      .eq("company_id", currentCompany.id)
+      .eq("is_active", true)
+      .order("sort_order");
+    setDivisions(sortDivisionsGirlsFirst(data || []));
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -93,6 +109,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
         allergies: formData.get("allergies") as string || null,
         rfid: rfidValue || null,
         tshirt_size: tshirtSize || null,
+        division_id: divisionId || null,
       };
 
       const validatedData = staffSchema.parse(data);
@@ -217,6 +234,22 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
             </SelectContent>
           </Select>
         </div>
+          <div>
+            <Label>Division</Label>
+            <Select value={divisionId || "none"} onValueChange={(val) => setDivisionId(val === "none" ? "" : val)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select division" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No Division</SelectItem>
+                {divisions.map((division) => (
+                  <SelectItem key={division.id} value={division.id}>
+                    {division.name} ({division.gender})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div>
             <Label htmlFor="allergies">Allergies</Label>
             <Textarea 
