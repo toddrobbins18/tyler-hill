@@ -1,4 +1,111 @@
 /**
+ * Get recipients based on user notification preferences with division filtering
+ * This ensures users only get alerts for children in their assigned divisions
+ */
+export async function getRecipientsForUserPreferences(
+  supabase: any,
+  notificationType: string,
+  companyId: string,
+  childDivisionId?: string
+): Promise<any[]> {
+  console.log(`Getting user preference recipients for ${notificationType}, division: ${childDivisionId}`);
+  
+  // 1. Get all users who have this notification type enabled
+  const { data: preferences, error: prefError } = await supabase
+    .from('user_notification_preferences')
+    .select('user_id, timing_options, delivery_methods')
+    .eq('notification_type', notificationType)
+    .eq('company_id', companyId)
+    .eq('enabled', true);
+  
+  if (prefError) {
+    console.error('Error fetching user preferences:', prefError);
+    return [];
+  }
+  
+  if (!preferences?.length) {
+    console.log('No users have this notification type enabled');
+    return [];
+  }
+  
+  console.log(`Found ${preferences.length} users with ${notificationType} enabled`);
+  
+  const eligibleRecipients: any[] = [];
+  
+  for (const pref of preferences) {
+    // 2. Get user's role and profile
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, email, full_name')
+      .eq('id', pref.user_id)
+      .eq('company_id', companyId)
+      .maybeSingle();
+    
+    if (!profile) continue;
+    
+    // 3. Check user's role to determine access level
+    const { data: roles } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', pref.user_id)
+      .eq('company_id', companyId);
+    
+    const userRoles = roles?.map((r: any) => r.role) || [];
+    
+    // Admins, staff, and health_center get all notifications (no division filter)
+    const hasFullAccess = userRoles.some((r: string) => 
+      ['admin', 'staff', 'health_center', 'super_admin'].includes(r)
+    );
+    
+    if (hasFullAccess) {
+      eligibleRecipients.push({
+        ...profile,
+        timing_options: pref.timing_options,
+        delivery_methods: pref.delivery_methods
+      });
+      continue;
+    }
+    
+    // 4. For division-based roles, check if they have access to the child's division
+    if (childDivisionId) {
+      const hasDivisionRole = userRoles.some((r: string) => 
+        ['division_leader', 'specialist', 'viewer'].includes(r)
+      );
+      
+      if (hasDivisionRole) {
+        const { data: divisionAccess } = await supabase
+          .from('division_permissions')
+          .select('id')
+          .eq('user_id', pref.user_id)
+          .eq('division_id', childDivisionId)
+          .eq('can_access', true)
+          .maybeSingle();
+        
+        if (divisionAccess) {
+          eligibleRecipients.push({
+            ...profile,
+            timing_options: pref.timing_options,
+            delivery_methods: pref.delivery_methods
+          });
+        } else {
+          console.log(`User ${pref.user_id} doesn't have access to division ${childDivisionId}`);
+        }
+      }
+    } else {
+      // No division context (e.g., staff-only events), include the user
+      eligibleRecipients.push({
+        ...profile,
+        timing_options: pref.timing_options,
+        delivery_methods: pref.delivery_methods
+      });
+    }
+  }
+  
+  console.log(`Returning ${eligibleRecipients.length} eligible recipients based on preferences + division access`);
+  return eligibleRecipients;
+}
+
+/**
  * Get recipients with optional division and sport filtering
  * @param divisionIds - Filter division_leader tag to only these divisions
  * @param sportType - Filter specialist tag to only this sport
