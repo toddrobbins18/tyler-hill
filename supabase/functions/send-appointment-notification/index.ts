@@ -107,7 +107,7 @@ serve(async (req) => {
     const divisionId = appointment.child?.division_id;
 
     // Check if this is a toothfairy appointment
-    const isToothfairy = appointment.appointment_type.toLowerCase() === 'toothfairy';
+    const isToothfairy = appointment.appointment_type.toLowerCase() === 'tooth fairy';
     let toothfairyRecipientCount = 0;
 
     // Send toothfairy-specific notification if applicable
