@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 interface TestConnectionRequest {
@@ -35,6 +35,33 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (userError || !user) {
       throw new Error("Unauthorized");
+    }
+
+    // Authorization check: Verify user belongs to this company and has admin role
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("id", user.id)
+      .single();
+
+    if (profileError || !profile) {
+      throw new Error("User profile not found");
+    }
+
+    if (profile.company_id !== company_id) {
+      throw new Error("Unauthorized: cannot access this company's configuration");
+    }
+
+    // Verify user has admin role for this company
+    const { data: userRole, error: roleError } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .in("role", ["admin", "super_admin"])
+      .maybeSingle();
+
+    if (roleError || !userRole) {
+      throw new Error("Unauthorized: admin access required");
     }
 
     // Fetch company's M365 configuration
