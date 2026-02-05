@@ -14,7 +14,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useCompany } from "@/contexts/CompanyContext";
 
 export default function IncidentReports() {
-  const { getDivisionFilter } = usePermissions();
+  const { getDivisionFilter, loading: permissionsLoading, userDivisions } = usePermissions();
   const [incidents, setIncidents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -26,7 +26,8 @@ export default function IncidentReports() {
   const { currentCompany } = useCompany();
 
   useEffect(() => {
-    if (!currentCompany?.id) return;
+    // Wait for permissions to load before fetching
+    if (!currentCompany?.id || permissionsLoading) return;
     fetchIncidents();
 
     const channel = supabase
@@ -41,7 +42,7 @@ export default function IncidentReports() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedSeason, currentCompany?.id]);
+  }, [selectedSeason, currentCompany?.id, permissionsLoading, userDivisions]);
 
   const fetchIncidents = async () => {
     const { data, error } = await supabase

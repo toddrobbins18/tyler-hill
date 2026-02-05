@@ -24,7 +24,7 @@ import SearchableChildSelect from "@/components/SearchableChildSelect";
 export default function SportsAcademy() {
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
-  const { getDivisionFilter } = usePermissions();
+  const { getDivisionFilter, loading: permissionsLoading, userDivisions } = usePermissions();
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [children, setChildren] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
@@ -71,6 +71,8 @@ export default function SportsAcademy() {
   };
 
   useEffect(() => {
+    // Wait for permissions to load before fetching
+    if (permissionsLoading) return;
     fetchEnrollments();
     fetchChildren();
     fetchDivisions();
@@ -87,7 +89,7 @@ export default function SportsAcademy() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [permissionsLoading, userDivisions, currentCompany?.id, currentSeason]);
 
   const fetchEnrollments = async () => {
     const { data, error } = await supabase
