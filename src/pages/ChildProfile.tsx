@@ -199,17 +199,15 @@ export default function ChildProfile() {
 
       setConflicts(conflictsData || []);
 
-      // Fetch appointments for this child (Tyler Hill only)
-      if (currentCompany?.slug === 'tyler-hill-camp') {
-        const { data: appointmentsData } = await supabase
-          .from("appointments")
-          .select("*")
-          .eq("child_id", id)
-          .eq("company_id", currentCompany?.id || '')
-          .order("appointment_date", { ascending: false });
+      // Fetch appointments for this child (all companies)
+      const { data: appointmentsData } = await supabase
+        .from("appointments")
+        .select("*")
+        .eq("child_id", id)
+        .eq("company_id", currentCompany?.id || '')
+        .order("appointment_date", { ascending: false });
 
-        setAppointments(appointmentsData || []);
-      }
+      setAppointments(appointmentsData || []);
     } catch (error) {
       console.error("Error fetching child data:", error);
       toast({ title: "Error loading child profile", variant: "destructive" });
@@ -315,9 +313,7 @@ export default function ChildProfile() {
           <TabsTrigger value="activities">Activities</TabsTrigger>
           <TabsTrigger value="sports-academy">Sports Academy</TabsTrigger>
           <TabsTrigger value="incidents">Incident Reports</TabsTrigger>
-          {currentCompany?.slug === 'tyler-hill-camp' && (
-            <TabsTrigger value="appointments">Appointments</TabsTrigger>
-          )}
+          <TabsTrigger value="appointments">Appointments</TabsTrigger>
           {currentCompany?.slug === 'timber-lake-camp' && (
             <>
               <TabsTrigger value="10-day-report">10-Day Report</TabsTrigger>
