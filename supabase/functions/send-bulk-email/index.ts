@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 interface BulkEmailRequest {
@@ -22,6 +22,25 @@ interface BulkEmailRequest {
 const RATE_LIMIT_WINDOW_HOURS = 1;
 const RATE_LIMIT_MAX_REQUESTS = 5;
 const MAX_RECIPIENTS_PER_REQUEST = 200;
+
+// Sanitize content for email safety - strip dangerous HTML/scripts
+function sanitizeForEmail(content: string): string {
+  // Remove script tags and their content
+  let sanitized = content.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  // Remove iframe, object, embed, form tags
+  sanitized = sanitized.replace(/<(iframe|object|embed|form|input|button|textarea|select)[^>]*>.*?<\/\1>/gi, '');
+  sanitized = sanitized.replace(/<(iframe|object|embed|form|input|button|textarea|select)[^>]*\/?>/gi, '');
+  // Remove event handlers (onclick, onerror, onload, etc.)
+  sanitized = sanitized.replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi, '');
+  sanitized = sanitized.replace(/\s+on\w+\s*=\s*[^\s>]+/gi, '');
+  // Remove javascript: URLs
+  sanitized = sanitized.replace(/href\s*=\s*["']javascript:[^"']*["']/gi, 'href="#"');
+  // Remove data: URLs in href/src
+  sanitized = sanitized.replace(/(href|src)\s*=\s*["']data:[^"']*["']/gi, '$1="#"');
+  // Remove style expressions (IE)
+  sanitized = sanitized.replace(/style\s*=\s*["'][^"']*expression\s*\([^"']*["']/gi, '');
+  return sanitized;
+}
 
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
@@ -263,7 +282,7 @@ const handler = async (req: Request): Promise<Response> => {
                   subject: subject,
                   body: {
                     contentType: "HTML",
-                    content: message.replace(/\n/g, "<br>"),
+                    content: sanitizeForEmail(message.replace(/\n/g, "<br>")),
                   },
                   from: {
                     emailAddress: {
