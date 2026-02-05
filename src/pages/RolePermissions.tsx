@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 const getCompanyMenuItems = (companySlug?: string) => {
   // NOTE: These IDs MUST match the permission keys used by AppSidebar + ProtectedRoute.
   // If they drift, toggling permissions here won't affect what users can actually access.
+  // This mirrors AppSidebar.tsx getMenuItems() exactly.
   const baseItems = [
     { id: "dashboard", label: "Dashboard", icon: "📊" },
     { id: "roster", label: "Camper", icon: "👥" },
@@ -24,46 +25,42 @@ const getCompanyMenuItems = (companySlug?: string) => {
     { id: "special-events", label: "Special Events & Evening Activities", icon: "🎉" },
     { id: "transportation", label: "Transportation", icon: "🚌" },
     { id: "tutoring-therapy", label: "Tutoring & Therapy", icon: "📖" },
-
-    // Global modules (all companies)
     { id: "od-management", label: "OD Management", icon: "✅" },
     { id: "appointments", label: "Appointments", icon: "🩺" },
     { id: "reports", label: "Reports", icon: "📈" },
+    { id: "nurse", label: "Nurse", icon: "💊" },
+    { id: "awards", label: "Awards", icon: "🏆" },
+    { id: "incidents", label: "Incident Reports", icon: "⚠️" },
+    { id: "sports-academy", label: "Sports Academy", icon: "⚽" },
     { id: "roster-templates", label: "Roster Templates", icon: "🗂️" },
-    { id: "notification-preferences", label: "Notification Preferences", icon: "🔔" },
+    { id: "sports-calendar", label: companySlug === 'timber-lake-west' ? "Athletics" : "Sports Calendar", icon: "🏅" },
   ];
 
-  // Timber Lake West specific
+  // Daily Notes/News - all camps EXCEPT timber-lake-camp (matches AppSidebar)
+  if (companySlug !== 'timber-lake-camp') {
+    baseItems.push({
+      id: "notes",
+      label: companySlug === 'tyler-hill-camp' ? "Daily News" : "Daily Notes",
+      icon: "📝"
+    });
+  }
+
+  // Daily Wolf - ONLY for timber-lake-west (matches AppSidebar)
   if (companySlug === 'timber-lake-west') {
     baseItems.push(
-      // IMPORTANT: /athletics route maps to permission key "sports-calendar"
-      // (see ProtectedRoute.routeToMenuMap). Keep the ID as "sports-calendar".
-      { id: "sports-calendar", label: "Athletics", icon: "🏅" },
       { id: "daily-wolf-printable", label: "Daily Wolf Printable", icon: "📰" },
       { id: "daily-wolf-management", label: "Daily Wolf Management", icon: "✏️" }
     );
-  } else if (companySlug === 'timber-lake-camp') {
-    // Timber Lake Camp specific
-    baseItems.push(
-      { id: "awards", label: "Awards", icon: "🏆" },
-      { id: "incidents", label: "Incident Reports", icon: "⚠️" },
-      { id: "nurse", label: "Nurse Dashboard", icon: "💊" },
-      { id: "sports-academy", label: "Sports Academy", icon: "⚽" },
-      { id: "sports-calendar", label: "Sports Calendar", icon: "🏅" },
-      { id: "daily-schedule", label: "Daily Schedule", icon: "📅" },
-      { id: "special-meals", label: "Special Meals", icon: "🍽️" }
-    );
-  } else {
-    // Tyler Hill & other camps
-    baseItems.push(
-      { id: "notes", label: companySlug === 'tyler-hill-camp' ? "Daily News" : "Daily Notes", icon: "📝" },
-      { id: "awards", label: "Awards", icon: "🏆" },
-      { id: "incidents", label: "Incident Reports", icon: "⚠️" },
-      { id: "nurse", label: "Nurse Dashboard", icon: "💊" },
-      { id: "sports-academy", label: "Sports Academy", icon: "⚽" },
-      { id: "sports-calendar", label: "Sports Calendar", icon: "🏅" },
-      { id: "special-meals", label: "Special Meals", icon: "🍽️" }
-    );
+  }
+
+  // Daily Schedule - ONLY for timber-lake-camp (matches AppSidebar)
+  if (companySlug === 'timber-lake-camp') {
+    baseItems.push({ id: "daily-schedule", label: "Daily Schedule", icon: "📅" });
+  }
+
+  // Special Meals - ONLY for tyler-hill-camp (matches AppSidebar)
+  if (companySlug === 'tyler-hill-camp') {
+    baseItems.push({ id: "special-meals", label: "Special Meals", icon: "🍽️" });
   }
 
   // Admin items (all companies)
