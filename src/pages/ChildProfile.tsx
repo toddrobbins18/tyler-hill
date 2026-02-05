@@ -377,6 +377,12 @@ export default function ChildProfile() {
                       </p>
                     </div>
                   )}
+                  {child.tshirt_size && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">T-Shirt Size</p>
+                      <p className="font-medium">{child.tshirt_size}</p>
+                    </div>
+                  )}
                 </div>
                 {(child.allergies || child.medical_notes) && (
                   <div className="pt-3 border-t">
