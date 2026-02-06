@@ -256,7 +256,8 @@ export async function sendEmailNotifications(
   recipients: any[],
   subject: string,
   content: string,
-  companyId?: string
+  companyId?: string,
+  senderId?: string
 ): Promise<void> {
   console.log(`Sending email notifications to ${recipients.length} recipients${companyId ? ` in company ${companyId}` : ''}`);
   console.log(`Subject: ${subject}`);
@@ -272,6 +273,7 @@ export async function sendEmailNotifications(
   const messages = recipients.map(recipient => {
     const message: any = {
       recipient_id: recipient.id,
+      sender_id: senderId || null,
       subject: subject,
       content: content,
       read: false,

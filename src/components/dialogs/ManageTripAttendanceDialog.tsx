@@ -171,6 +171,7 @@ Please review this conflict and take appropriate action.`;
         
         await supabase.from('messages').insert({
           recipient_id: child.leader_id,
+          sender_id: user?.id || null,
           subject,
           content: message,
           notification_type: 'alert',
