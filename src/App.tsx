@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { UserProfileDropdown } from "@/components/UserProfileDropdown";
+import { NotificationBell } from "@/components/NotificationBell";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -100,7 +101,10 @@ function AppContent() {
                           <div className="flex-1 flex flex-col">
                             <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-4 border-b bg-background/95 backdrop-blur px-6">
                               <SidebarTrigger />
-                              <UserProfileDropdown />
+                              <div className="flex items-center gap-1">
+                                <NotificationBell />
+                                <UserProfileDropdown />
+                              </div>
                             </header>
                             <main className="flex-1 p-6 md:p-8 bg-background">
                               <Routes>
