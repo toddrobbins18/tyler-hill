@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
 import { Mail, Send, Eye, Clock, Bell, Users, User, ChevronDown, ChevronUp, ArrowLeft, SendHorizonal, Reply, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,7 +66,6 @@ const TAG_COLORS: Record<string, string> = {
 };
 
 export default function Messages() {
-  const [searchParams, setSearchParams] = useSearchParams();
   const [tagGroups, setTagGroups] = useState<TagGroup[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -77,16 +75,32 @@ export default function Messages() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  
-  // Derive viewMode from URL search params so it survives re-mounts
-  const viewMode = (searchParams.get('view') as 'compose' | 'inbox' | 'sent' | 'groups') || 'inbox';
+
+  // Persist viewMode and groupId in sessionStorage so they survive re-mounts
+  const [viewMode, setViewModeState] = useState<'compose' | 'inbox' | 'sent' | 'groups'>(() => {
+    const saved = sessionStorage.getItem('messages_view_mode');
+    return (saved as 'compose' | 'inbox' | 'sent' | 'groups') || 'inbox';
+  });
+  const [activeGroupId, setActiveGroupIdState] = useState<string | null>(() => {
+    return sessionStorage.getItem('messages_active_group_id') || null;
+  });
+
   const setViewMode = (mode: 'compose' | 'inbox' | 'sent' | 'groups') => {
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev);
-      next.set('view', mode);
-      next.delete('groupId'); // clear group selection on tab switch
-      return next;
-    }, { replace: true });
+    sessionStorage.setItem('messages_view_mode', mode);
+    if (mode !== 'groups') {
+      sessionStorage.removeItem('messages_active_group_id');
+      setActiveGroupIdState(null);
+    }
+    setViewModeState(mode);
+  };
+
+  const setActiveGroupId = (groupId: string | null) => {
+    if (groupId) {
+      sessionStorage.setItem('messages_active_group_id', groupId);
+    } else {
+      sessionStorage.removeItem('messages_active_group_id');
+    }
+    setActiveGroupIdState(groupId);
   };
   const [receivedMessages, setReceivedMessages] = useState<Message[]>([]);
   const [sentMessages, setSentMessages] = useState<Message[]>([]);
@@ -434,19 +448,8 @@ export default function Messages() {
       {/* Groups Tab */}
       {viewMode === 'groups' && (
         <GroupList
-          selectedGroupId={searchParams.get('groupId') || null}
-          onSelectGroup={(groupId) => {
-            setSearchParams(prev => {
-              const next = new URLSearchParams(prev);
-              next.set('view', 'groups');
-              if (groupId) {
-                next.set('groupId', groupId);
-              } else {
-                next.delete('groupId');
-              }
-              return next;
-            }, { replace: true });
-          }}
+          selectedGroupId={activeGroupId}
+          onSelectGroup={setActiveGroupId}
         />
       )}
 
