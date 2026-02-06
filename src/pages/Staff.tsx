@@ -140,11 +140,15 @@ export default function Staff() {
     setLoading(false);
   };
 
-  // Find the logged-in user's staff record (for leader-based filtering)
+  // Track staff IDs assigned to the logged-in leader (many-to-many)
+  const [myAssignedStaffIds, setMyAssignedStaffIds] = useState<Set<string>>(new Set());
+
+  // Find the logged-in user's staff record and their assignments
   useEffect(() => {
     const findMyStaffRecord = async () => {
       if (!user?.email || !currentCompany?.id || !isLeaderRole) {
         setMyStaffId(null);
+        setMyAssignedStaffIds(new Set());
         return;
       }
       const { data } = await supabase
@@ -154,7 +158,21 @@ export default function Staff() {
         .eq("season", currentSeason)
         .ilike("email", user.email)
         .maybeSingle();
-      setMyStaffId(data?.id || null);
+      
+      const staffId = data?.id || null;
+      setMyStaffId(staffId);
+
+      if (staffId) {
+        const { data: assignmentData } = await supabase
+          .from("staff_leader_assignments")
+          .select("staff_id")
+          .eq("leader_id", staffId)
+          .eq("company_id", currentCompany.id)
+          .eq("season", currentSeason);
+        setMyAssignedStaffIds(new Set((assignmentData || []).map(a => a.staff_id)));
+      } else {
+        setMyAssignedStaffIds(new Set());
+      }
     };
     findMyStaffRecord();
   }, [user?.email, currentCompany?.id, currentSeason, isLeaderRole]);
@@ -166,9 +184,9 @@ export default function Staff() {
   }, [currentCompany?.id, currentSeason]);
 
   const filteredStaff = staff.filter((member) => {
-    // Leader-based filtering: division_leader/specialist only see their assigned staff
+    // Leader-based filtering: division_leader/specialist only see their assigned staff (many-to-many)
     if (isLeaderRole && myStaffId) {
-      if (member.leader_id !== myStaffId && member.id !== myStaffId) {
+      if (member.id !== myStaffId && !myAssignedStaffIds.has(member.id)) {
         return false;
       }
     }

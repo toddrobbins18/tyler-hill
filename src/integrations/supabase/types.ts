@@ -3012,6 +3012,55 @@ export type Database = {
           },
         ]
       }
+      staff_leader_assignments: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          leader_id: string
+          season: string
+          staff_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          leader_id: string
+          season: string
+          staff_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          leader_id?: string
+          season?: string
+          staff_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_leader_assignments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_leader_assignments_leader_id_fkey"
+            columns: ["leader_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_leader_assignments_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       staff_notes: {
         Row: {
           company_id: string
