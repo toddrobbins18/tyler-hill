@@ -106,7 +106,7 @@ export default function Messages() {
 
     const newCache = { ...profileCache };
     profiles?.forEach(p => {
-      newCache[p.id] = p.full_name || p.email || "Unknown";
+      newCache[p.id] = p.full_name?.trim() || p.email?.split("@")[0] || "Unknown";
     });
     setProfileCache(newCache);
     return newCache;
@@ -272,12 +272,17 @@ export default function Messages() {
       .select("user_id, tag")
       .eq("company_id", currentCompany!.id);
 
-    const users: UserOption[] = profiles.map((profile) => ({
-      id: profile.id,
-      email: profile.email || "",
-      full_name: profile.full_name || "Unknown",
-      tags: userTags?.filter((tag) => tag.user_id === profile.id).map((tag) => tag.tag) || [],
-    }));
+    const users: UserOption[] = profiles.map((profile) => {
+      const displayName = profile.full_name?.trim() 
+        || profile.email?.split("@")[0] 
+        || "Unknown";
+      return {
+        id: profile.id,
+        email: profile.email || "",
+        full_name: displayName,
+        tags: userTags?.filter((tag) => tag.user_id === profile.id).map((tag) => tag.tag) || [],
+      };
+    });
 
     setAllUsers(users);
   };
