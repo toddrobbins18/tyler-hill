@@ -3637,6 +3637,7 @@ export type Database = {
       encrypt_secret: { Args: { secret: string }; Returns: string }
       get_user_company: { Args: { _user_id: string }; Returns: string }
       get_user_divisions: { Args: { _user_id: string }; Returns: string[] }
+      get_user_group_ids: { Args: { _user_id: string }; Returns: string[] }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
