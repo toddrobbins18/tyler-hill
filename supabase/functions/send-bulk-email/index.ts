@@ -208,6 +208,7 @@ const handler = async (req: Request): Promise<Response> => {
     if (deliveryMethods.inApp) {
       const messages = recipients.map(recipient => ({
         recipient_id: recipient.id,
+        sender_id: user.id,
         subject: subject,
         content: message,
         read: false,

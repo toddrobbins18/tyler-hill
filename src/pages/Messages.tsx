@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Mail, Send, Eye, Clock, Bell, Users, User, ChevronDown, ChevronUp } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Mail, Send, Eye, Clock, Bell, Users, User, ChevronDown, ChevronUp, ArrowLeft, SendHorizonal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,9 +34,12 @@ interface Message {
   created_at: string;
   read: boolean;
   sender_id: string | null;
+  recipient_id: string | null;
+  sender_name?: string;
+  recipient_name?: string;
 }
 
-const TAG_LABELS = {
+const TAG_LABELS: Record<string, string> = {
   nurse: "Nurses",
   transportation: "Transportation",
   food_service: "Food Service",
@@ -47,7 +50,7 @@ const TAG_LABELS = {
   admin_staff: "Admin Staff",
 };
 
-const TAG_COLORS = {
+const TAG_COLORS: Record<string, string> = {
   nurse: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
   transportation: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
   food_service: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
@@ -68,8 +71,9 @@ export default function Messages() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [viewMode, setViewMode] = useState<'compose' | 'inbox'>('inbox');
+  const [viewMode, setViewMode] = useState<'compose' | 'inbox' | 'sent'>('inbox');
   const [receivedMessages, setReceivedMessages] = useState<Message[]>([]);
+  const [sentMessages, setSentMessages] = useState<Message[]>([]);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showRecipientPreview, setShowRecipientPreview] = useState(false);
@@ -78,13 +82,38 @@ export default function Messages() {
     email: false
   });
   const [emailConfig, setEmailConfig] = useState<any>(null);
+  const [profileCache, setProfileCache] = useState<Record<string, string>>({});
   const { currentCompany } = useCompany();
+
+  // Cache profile lookups for sender/recipient names
+  const resolveProfileNames = useCallback(async (messages: any[]) => {
+    const unknownIds = new Set<string>();
+    messages.forEach(m => {
+      if (m.sender_id && !profileCache[m.sender_id]) unknownIds.add(m.sender_id);
+      if (m.recipient_id && !profileCache[m.recipient_id]) unknownIds.add(m.recipient_id);
+    });
+
+    if (unknownIds.size === 0) return profileCache;
+
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", Array.from(unknownIds));
+
+    const newCache = { ...profileCache };
+    profiles?.forEach(p => {
+      newCache[p.id] = p.full_name || p.email || "Unknown";
+    });
+    setProfileCache(newCache);
+    return newCache;
+  }, [profileCache]);
 
   useEffect(() => {
     if (!currentCompany?.id) return;
     fetchTagGroups();
     fetchAllUsers();
     fetchMessages();
+    fetchSentMessages();
     fetchEmailConfig();
 
     const channel = supabase
@@ -92,7 +121,10 @@ export default function Messages() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'messages' },
-        () => fetchMessages()
+        () => {
+          fetchMessages();
+          fetchSentMessages();
+        }
       )
       .subscribe();
 
@@ -112,8 +144,34 @@ export default function Messages() {
       .order("created_at", { ascending: false });
 
     if (!error && data) {
-      setReceivedMessages(data);
+      // Resolve sender names
+      const cache = await resolveProfileNames(data);
+      const enriched = data.map(m => ({
+        ...m,
+        sender_name: m.sender_id ? (cache[m.sender_id] || "Unknown") : undefined,
+      }));
+      setReceivedMessages(enriched);
       setUnreadCount(data.filter(m => !m.read).length);
+    }
+  };
+
+  const fetchSentMessages = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("sender_id", user.id)
+      .order("created_at", { ascending: false });
+
+    if (!error && data) {
+      const cache = await resolveProfileNames(data);
+      const enriched = data.map(m => ({
+        ...m,
+        recipient_name: m.recipient_id ? (cache[m.recipient_id] || "Unknown") : undefined,
+      }));
+      setSentMessages(enriched);
     }
   };
 
@@ -130,7 +188,7 @@ export default function Messages() {
 
   const handleMessageClick = (msg: Message) => {
     setSelectedMessage(msg);
-    if (!msg.read) {
+    if (!msg.read && viewMode === 'inbox') {
       markAsRead(msg.id);
     }
   };
@@ -155,9 +213,9 @@ export default function Messages() {
 
     const groups: TagGroup[] = Object.entries(tagCounts).map(([tag, count]) => ({
       tag,
-      label: TAG_LABELS[tag as keyof typeof TAG_LABELS] || tag,
+      label: TAG_LABELS[tag] || tag,
       count,
-      color: TAG_COLORS[tag as keyof typeof TAG_COLORS] || "bg-gray-100 text-gray-800",
+      color: TAG_COLORS[tag] || "bg-gray-100 text-gray-800",
     }));
 
     setTagGroups(groups);
@@ -293,6 +351,8 @@ export default function Messages() {
     }
   };
 
+  const activeMessages = viewMode === 'sent' ? sentMessages : receivedMessages;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -306,10 +366,17 @@ export default function Messages() {
         <div className="flex gap-2">
           <Button
             variant={viewMode === 'inbox' ? 'default' : 'outline'}
-            onClick={() => setViewMode('inbox')}
+            onClick={() => { setViewMode('inbox'); setSelectedMessage(null); }}
           >
             <Bell className="h-4 w-4 mr-2" />
             Inbox {unreadCount > 0 && `(${unreadCount})`}
+          </Button>
+          <Button
+            variant={viewMode === 'sent' ? 'default' : 'outline'}
+            onClick={() => { setViewMode('sent'); setSelectedMessage(null); }}
+          >
+            <SendHorizonal className="h-4 w-4 mr-2" />
+            Sent
           </Button>
           <Button
             variant={viewMode === 'compose' ? 'default' : 'outline'}
@@ -321,38 +388,49 @@ export default function Messages() {
         </div>
       </div>
 
-      {viewMode === 'inbox' ? (
+      {viewMode === 'inbox' || viewMode === 'sent' ? (
         <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
           <Card>
             <CardHeader>
-              <CardTitle>Notifications & Messages</CardTitle>
-              <CardDescription>{receivedMessages.length} total messages</CardDescription>
+              <CardTitle>{viewMode === 'sent' ? 'Sent Messages' : 'Notifications & Messages'}</CardTitle>
+              <CardDescription>{activeMessages.length} total messages</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               <ScrollArea className="h-[600px]">
-                {receivedMessages.length === 0 ? (
+                {activeMessages.length === 0 ? (
                   <div className="p-4 text-center text-muted-foreground">
-                    No messages yet
+                    {viewMode === 'sent' ? 'No sent messages yet' : 'No messages yet'}
                   </div>
                 ) : (
-                  receivedMessages.map((msg) => (
+                  activeMessages.map((msg) => (
                     <div key={msg.id}>
                       <button
                         onClick={() => handleMessageClick(msg)}
                         className={`w-full p-4 text-left hover:bg-muted/50 transition-colors ${
                           selectedMessage?.id === msg.id ? 'bg-muted' : ''
-                        } ${!msg.read ? 'bg-primary/5 border-l-4 border-primary' : ''}`}
+                        } ${viewMode === 'inbox' && !msg.read ? 'bg-primary/5 border-l-4 border-primary' : ''}`}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
-                              <p className={`font-medium truncate ${!msg.read ? 'font-bold' : ''}`}>
+                              <p className={`font-medium truncate ${viewMode === 'inbox' && !msg.read ? 'font-bold' : ''}`}>
                                 {msg.subject}
                               </p>
-                              {!msg.read && (
+                              {viewMode === 'inbox' && !msg.read && (
                                 <Badge variant="default" className="h-5 px-1 text-xs">NEW</Badge>
                               )}
                             </div>
+                            {/* Show sender for inbox, recipient for sent */}
+                            {viewMode === 'inbox' && (
+                              <p className="text-xs font-medium text-primary mb-1">
+                                From: {msg.sender_name || "System Notification"}
+                              </p>
+                            )}
+                            {viewMode === 'sent' && (
+                              <p className="text-xs font-medium text-primary mb-1">
+                                To: {msg.recipient_name || "Unknown"}
+                              </p>
+                            )}
                             <p className="text-sm text-muted-foreground truncate">
                               {msg.content.substring(0, 100)}...
                             </p>
@@ -381,8 +459,20 @@ export default function Messages() {
                       <Badge variant="secondary">System</Badge>
                     )}
                   </CardTitle>
-                  <CardDescription>
-                    {format(new Date(selectedMessage.created_at), 'MMMM d, yyyy h:mm a')}
+                  <CardDescription className="space-y-1">
+                    <span className="block">
+                      {format(new Date(selectedMessage.created_at), 'MMMM d, yyyy h:mm a')}
+                    </span>
+                    {viewMode === 'inbox' && (
+                      <span className="block font-medium text-foreground">
+                        From: {selectedMessage.sender_name || "System Notification"}
+                      </span>
+                    )}
+                    {viewMode === 'sent' && (
+                      <span className="block font-medium text-foreground">
+                        To: {selectedMessage.recipient_name || "Unknown"}
+                      </span>
+                    )}
                   </CardDescription>
                 </>
               ) : (
@@ -592,7 +682,7 @@ export default function Messages() {
                             <div className="flex flex-wrap gap-1 mt-1">
                               {user.tags.map((tag) => (
                                 <Badge key={tag} variant="outline" className="text-xs">
-                                  {TAG_LABELS[tag as keyof typeof TAG_LABELS]}
+                                  {TAG_LABELS[tag]}
                                 </Badge>
                               ))}
                             </div>
