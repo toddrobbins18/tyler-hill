@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Mail, Send, Eye, Clock, Bell, Users, User, ChevronDown, ChevronUp, ArrowLeft, SendHorizonal } from "lucide-react";
+import { Mail, Send, Eye, Clock, Bell, Users, User, ChevronDown, ChevronUp, ArrowLeft, SendHorizonal, Reply, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,6 +12,8 @@ import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { format } from "date-fns";
+import GroupList from "@/components/messages/GroupList";
+import ReplyThread from "@/components/messages/ReplyThread";
 
 interface TagGroup {
   tag: string;
@@ -35,8 +37,10 @@ interface Message {
   read: boolean;
   sender_id: string | null;
   recipient_id: string | null;
+  parent_message_id?: string | null;
   sender_name?: string;
   recipient_name?: string;
+  reply_count?: number;
 }
 
 const TAG_LABELS: Record<string, string> = {
@@ -71,10 +75,11 @@ export default function Messages() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [viewMode, setViewMode] = useState<'compose' | 'inbox' | 'sent'>('inbox');
+  const [viewMode, setViewMode] = useState<'compose' | 'inbox' | 'sent' | 'groups'>('inbox');
   const [receivedMessages, setReceivedMessages] = useState<Message[]>([]);
   const [sentMessages, setSentMessages] = useState<Message[]>([]);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [showReplyThread, setShowReplyThread] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showRecipientPreview, setShowRecipientPreview] = useState(false);
   const [deliveryMethods, setDeliveryMethods] = useState({
@@ -85,7 +90,6 @@ export default function Messages() {
   const [profileCache, setProfileCache] = useState<Record<string, string>>({});
   const { currentCompany } = useCompany();
 
-  // Cache profile lookups for sender/recipient names
   const resolveProfileNames = useCallback(async (messages: any[]) => {
     const unknownIds = new Set<string>();
     messages.forEach(m => {
@@ -137,21 +141,34 @@ export default function Messages() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    // Only fetch top-level messages (not replies)
     const { data, error } = await supabase
       .from("messages")
       .select("*")
       .eq("recipient_id", user.id)
+      .is("parent_message_id", null)
       .order("created_at", { ascending: false });
 
     if (!error && data) {
-      // Resolve sender names
       const cache = await resolveProfileNames(data);
-      const enriched = data.map(m => ({
-        ...m,
-        sender_name: m.sender_id ? (cache[m.sender_id] || "Unknown") : undefined,
-      }));
+
+      // Get reply counts for each message
+      const enrichedPromises = data.map(async (m) => {
+        const { count } = await supabase
+          .from("messages")
+          .select("*", { count: "exact", head: true })
+          .eq("parent_message_id", m.id);
+
+        return {
+          ...m,
+          sender_name: m.sender_id ? (cache[m.sender_id] || "Unknown") : undefined,
+          reply_count: count || 0,
+        };
+      });
+
+      const enriched = await Promise.all(enrichedPromises);
       setReceivedMessages(enriched);
-      setUnreadCount(data.filter(m => !m.read).length);
+      setUnreadCount(enriched.filter(m => !m.read).length);
     }
   };
 
@@ -163,6 +180,7 @@ export default function Messages() {
       .from("messages")
       .select("*")
       .eq("sender_id", user.id)
+      .is("parent_message_id", null)
       .order("created_at", { ascending: false });
 
     if (!error && data) {
@@ -188,6 +206,7 @@ export default function Messages() {
 
   const handleMessageClick = (msg: Message) => {
     setSelectedMessage(msg);
+    setShowReplyThread(false);
     if (!msg.read && viewMode === 'inbox') {
       markAsRead(msg.id);
     }
@@ -361,22 +380,29 @@ export default function Messages() {
             <Bell className="h-8 w-8" />
             Notifications & Messages
           </h1>
-          <p className="text-muted-foreground">Send notifications and view messages</p>
+          <p className="text-muted-foreground">Send notifications, chat in groups, and reply to messages</p>
         </div>
         <div className="flex gap-2">
           <Button
             variant={viewMode === 'inbox' ? 'default' : 'outline'}
-            onClick={() => { setViewMode('inbox'); setSelectedMessage(null); }}
+            onClick={() => { setViewMode('inbox'); setSelectedMessage(null); setShowReplyThread(false); }}
           >
             <Bell className="h-4 w-4 mr-2" />
             Inbox {unreadCount > 0 && `(${unreadCount})`}
           </Button>
           <Button
             variant={viewMode === 'sent' ? 'default' : 'outline'}
-            onClick={() => { setViewMode('sent'); setSelectedMessage(null); }}
+            onClick={() => { setViewMode('sent'); setSelectedMessage(null); setShowReplyThread(false); }}
           >
             <SendHorizonal className="h-4 w-4 mr-2" />
             Sent
+          </Button>
+          <Button
+            variant={viewMode === 'groups' ? 'default' : 'outline'}
+            onClick={() => { setViewMode('groups'); setSelectedMessage(null); setShowReplyThread(false); }}
+          >
+            <Users className="h-4 w-4 mr-2" />
+            Groups
           </Button>
           <Button
             variant={viewMode === 'compose' ? 'default' : 'outline'}
@@ -388,7 +414,11 @@ export default function Messages() {
         </div>
       </div>
 
-      {viewMode === 'inbox' || viewMode === 'sent' ? (
+      {/* Groups Tab */}
+      {viewMode === 'groups' && <GroupList />}
+
+      {/* Inbox / Sent Tab */}
+      {(viewMode === 'inbox' || viewMode === 'sent') && (
         <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
           <Card>
             <CardHeader>
@@ -419,8 +449,13 @@ export default function Messages() {
                               {viewMode === 'inbox' && !msg.read && (
                                 <Badge variant="default" className="h-5 px-1 text-xs">NEW</Badge>
                               )}
+                              {(msg.reply_count ?? 0) > 0 && (
+                                <Badge variant="outline" className="h-5 px-1 text-xs flex items-center gap-0.5">
+                                  <Reply className="h-3 w-3" />
+                                  {msg.reply_count}
+                                </Badge>
+                              )}
                             </div>
-                            {/* Show sender for inbox, recipient for sent */}
                             {viewMode === 'inbox' && (
                               <p className="text-xs font-medium text-primary mb-1">
                                 From: {msg.sender_name || "System Notification"}
@@ -449,50 +484,85 @@ export default function Messages() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              {selectedMessage ? (
-                <>
-                  <CardTitle className="flex items-center gap-2">
-                    {selectedMessage.subject}
-                    {selectedMessage.sender_id === null && (
-                      <Badge variant="secondary">System</Badge>
-                    )}
-                  </CardTitle>
-                  <CardDescription className="space-y-1">
-                    <span className="block">
-                      {format(new Date(selectedMessage.created_at), 'MMMM d, yyyy h:mm a')}
-                    </span>
-                    {viewMode === 'inbox' && (
-                      <span className="block font-medium text-foreground">
-                        From: {selectedMessage.sender_name || "System Notification"}
+          {/* Message Detail / Reply Thread */}
+          {showReplyThread && selectedMessage ? (
+            <ReplyThread
+              originalMessage={selectedMessage}
+              onBack={() => {
+                setShowReplyThread(false);
+                fetchMessages();
+                fetchSentMessages();
+              }}
+            />
+          ) : (
+            <Card>
+              <CardHeader>
+                {selectedMessage ? (
+                  <>
+                    <CardTitle className="flex items-center gap-2">
+                      {selectedMessage.subject}
+                      {selectedMessage.sender_id === null && (
+                        <Badge variant="secondary">System</Badge>
+                      )}
+                    </CardTitle>
+                    <CardDescription className="space-y-1">
+                      <span className="block">
+                        {format(new Date(selectedMessage.created_at), 'MMMM d, yyyy h:mm a')}
                       </span>
+                      {viewMode === 'inbox' && (
+                        <span className="block font-medium text-foreground">
+                          From: {selectedMessage.sender_name || "System Notification"}
+                        </span>
+                      )}
+                      {viewMode === 'sent' && (
+                        <span className="block font-medium text-foreground">
+                          To: {selectedMessage.recipient_name || "Unknown"}
+                        </span>
+                      )}
+                    </CardDescription>
+                  </>
+                ) : (
+                  <CardTitle>Select a message</CardTitle>
+                )}
+              </CardHeader>
+              <CardContent>
+                {selectedMessage ? (
+                  <div className="space-y-4">
+                    <ScrollArea className="h-[430px]">
+                      <div className="whitespace-pre-wrap text-sm">{selectedMessage.content}</div>
+                    </ScrollArea>
+                    {/* Reply button */}
+                    {selectedMessage.sender_id && (
+                      <div className="flex items-center gap-2 pt-3 border-t">
+                        <Button
+                          variant="outline"
+                          onClick={() => setShowReplyThread(true)}
+                          className="flex items-center gap-2"
+                        >
+                          <Reply className="h-4 w-4" />
+                          Reply
+                          {(selectedMessage.reply_count ?? 0) > 0 && (
+                            <Badge variant="secondary" className="ml-1">
+                              {selectedMessage.reply_count} {selectedMessage.reply_count === 1 ? 'reply' : 'replies'}
+                            </Badge>
+                          )}
+                        </Button>
+                      </div>
                     )}
-                    {viewMode === 'sent' && (
-                      <span className="block font-medium text-foreground">
-                        To: {selectedMessage.recipient_name || "Unknown"}
-                      </span>
-                    )}
-                  </CardDescription>
-                </>
-              ) : (
-                <CardTitle>Select a message</CardTitle>
-              )}
-            </CardHeader>
-            <CardContent>
-              {selectedMessage ? (
-                <ScrollArea className="h-[500px]">
-                  <div className="whitespace-pre-wrap text-sm">{selectedMessage.content}</div>
-                </ScrollArea>
-              ) : (
-                <div className="h-[500px] flex items-center justify-center text-muted-foreground">
-                  Select a message to view its contents
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                  </div>
+                ) : (
+                  <div className="h-[500px] flex items-center justify-center text-muted-foreground">
+                    Select a message to view its contents
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
-      ) : (
+      )}
+
+      {/* Compose Tab - unchanged */}
+      {viewMode === 'compose' && (
         <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
           <div className="space-y-4">
             <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
