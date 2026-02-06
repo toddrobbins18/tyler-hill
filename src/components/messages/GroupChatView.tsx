@@ -144,16 +144,38 @@ export default function GroupChatView({ groupId, onBack, onDeleted }: GroupChatV
 
     setSending(true);
     try {
+      const messageContent = newMessage.trim();
+
       const { error } = await supabase
         .from("group_messages")
         .insert({
           group_id: groupId,
           sender_id: currentUserId,
-          content: newMessage.trim(),
+          content: messageContent,
           parent_message_id: replyTo?.id || null,
         });
 
       if (error) throw error;
+
+      // Send inbox notifications to all other group members
+      if (groupInfo) {
+        const otherMembers = groupInfo.members.filter(m => m.user_id !== currentUserId);
+        const senderName = groupInfo.members.find(m => m.user_id === currentUserId)?.full_name || "Someone";
+        const preview = messageContent.length > 100 ? messageContent.substring(0, 100) + "..." : messageContent;
+
+        if (otherMembers.length > 0) {
+          const notifications = otherMembers.map(member => ({
+            sender_id: currentUserId,
+            recipient_id: member.user_id,
+            subject: `New message in ${groupInfo.name}`,
+            content: `${senderName}: ${preview}`,
+            read: false,
+          }));
+
+          await supabase.from("messages").insert(notifications);
+        }
+      }
+
       setNewMessage("");
       setReplyTo(null);
     } catch (error: any) {
