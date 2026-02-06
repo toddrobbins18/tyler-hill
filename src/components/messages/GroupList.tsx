@@ -111,6 +111,10 @@ export default function GroupList() {
           setSelectedGroupId(null);
           fetchGroups();
         }}
+        onDeleted={() => {
+          setSelectedGroupId(null);
+          fetchGroups();
+        }}
       />
     );
   }
