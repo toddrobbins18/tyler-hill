@@ -25,6 +25,7 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
 import { StaffMultiSelect } from "@/components/StaffMultiSelect";
+import { notifyStaffAssignment } from "@/lib/notifyStaffAssignment";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -205,9 +206,18 @@ export default function ActivitiesFieldTrips() {
           );
       }
       const staffNames = formData.chaperone ? formData.chaperone.split(",").map(s => s.trim()).filter(Boolean) : [];
+      if (staffNames.length > 0) {
+        notifyStaffAssignment({
+          staffNames,
+          eventTitle: formData.title,
+          eventDate: formData.event_date,
+          eventType: "activity",
+          companyId: currentCompany?.id,
+        });
+      }
       toast({ 
         title: "Activity updated successfully",
-        description: staffNames.length > 0 ? `Staff assigned: ${staffNames.join(", ")}` : undefined,
+        description: staffNames.length > 0 ? `Staff assigned & notified: ${staffNames.join(", ")}` : undefined,
       });
     } else {
       const { data: newActivity, error } = await supabase
@@ -262,6 +272,15 @@ export default function ActivitiesFieldTrips() {
       }
 
       const staffNames = formData.chaperone ? formData.chaperone.split(",").map(s => s.trim()).filter(Boolean) : [];
+      if (staffNames.length > 0) {
+        notifyStaffAssignment({
+          staffNames,
+          eventTitle: formData.title,
+          eventDate: formData.event_date,
+          eventType: "activity",
+          companyId: currentCompany?.id,
+        });
+      }
       const staffMsg = staffNames.length > 0 ? ` — Staff notified: ${staffNames.join(", ")}` : "";
       toast({ 
         title: formData.home_away === 'home' 

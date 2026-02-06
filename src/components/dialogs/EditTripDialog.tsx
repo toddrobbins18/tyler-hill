@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { CalendarRange } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { StaffMultiSelect } from "@/components/StaffMultiSelect";
+import { notifyStaffAssignment } from "@/lib/notifyStaffAssignment";
+import { useCompany } from "@/contexts/CompanyContext";
 import { toast } from "sonner";
 import TripAttachments from "@/components/TripAttachments";
 
@@ -20,6 +22,7 @@ interface EditTripDialogProps {
 }
 
 export default function EditTripDialog({ tripId, open, onOpenChange, onSuccess }: EditTripDialogProps) {
+  const { currentCompany } = useCompany();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -113,7 +116,18 @@ export default function EditTripDialog({ tripId, open, onOpenChange, onSuccess }
       toast.error("Failed to update trip");
       console.error(error);
     } else {
-      toast.success("Trip updated successfully");
+      // Notify assigned staff
+      const staffNames = formData.chaperone ? formData.chaperone.split(",").map(s => s.trim()).filter(Boolean) : [];
+      if (staffNames.length > 0 && currentCompany?.id) {
+        notifyStaffAssignment({
+          staffNames,
+          eventTitle: formData.name,
+          eventDate: formData.date,
+          eventType: "trip",
+          companyId: currentCompany.id,
+        });
+      }
+      toast.success("Trip updated successfully" + (staffNames.length > 0 ? ` — Staff notified` : ""));
       onSuccess();
       onOpenChange(false);
     }
