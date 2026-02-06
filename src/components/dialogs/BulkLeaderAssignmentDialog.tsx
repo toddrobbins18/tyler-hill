@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
-import { Users, Wand2, Search, UserCheck, X } from "lucide-react";
+import { Users, Wand2, Search, UserCheck } from "lucide-react";
 
 interface StaffMember {
   id: string;
@@ -19,8 +19,12 @@ interface StaffMember {
   role: string | null;
   staff_type: string | null;
   division_id: string | null;
-  leader_id: string | null;
   email: string | null;
+}
+
+interface LeaderAssignment {
+  staff_id: string;
+  leader_id: string;
 }
 
 interface Division {
@@ -37,6 +41,7 @@ interface BulkLeaderAssignmentDialogProps {
 export function BulkLeaderAssignmentDialog({ onSuccess }: BulkLeaderAssignmentDialogProps) {
   const [open, setOpen] = useState(false);
   const [allStaff, setAllStaff] = useState<StaffMember[]>([]);
+  const [assignments, setAssignments] = useState<LeaderAssignment[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -58,10 +63,10 @@ export function BulkLeaderAssignmentDialog({ onSuccess }: BulkLeaderAssignmentDi
     if (!currentCompany?.id) return;
     setLoading(true);
 
-    const [staffResult, divisionResult] = await Promise.all([
+    const [staffResult, divisionResult, assignmentResult] = await Promise.all([
       supabase
         .from("staff")
-        .select("id, name, role, staff_type, division_id, leader_id, email")
+        .select("id, name, role, staff_type, division_id, email")
         .eq("company_id", currentCompany.id)
         .eq("season", currentSeason)
         .neq("name", "Unknown")
@@ -73,20 +78,41 @@ export function BulkLeaderAssignmentDialog({ onSuccess }: BulkLeaderAssignmentDi
         .eq("company_id", currentCompany.id)
         .eq("is_active", true)
         .order("sort_order"),
+      supabase
+        .from("staff_leader_assignments")
+        .select("staff_id, leader_id")
+        .eq("company_id", currentCompany.id)
+        .eq("season", currentSeason),
     ]);
 
     setAllStaff(staffResult.data || []);
     setDivisions(divisionResult.data || []);
+    setAssignments(assignmentResult.data || []);
     setLoading(false);
   };
 
-  // Identify potential leaders - staff with leadership-type roles
+  // Get all leader IDs for a staff member (many-to-many)
+  const getLeaderIdsForStaff = (staffId: string): string[] => {
+    return assignments
+      .filter(a => a.staff_id === staffId)
+      .map(a => a.leader_id);
+  };
+
+  // Get all staff IDs assigned to a leader
+  const getStaffIdsForLeader = (leaderId: string): string[] => {
+    return assignments
+      .filter(a => a.leader_id === leaderId)
+      .map(a => a.staff_id);
+  };
+
+  // Identify potential leaders
   const potentialLeaders = useMemo(() => {
+    const leaderIds = new Set(assignments.map(a => a.leader_id));
     return allStaff.filter(s =>
       s.role?.match(/division leader|director|lead |head |asst\. |assistant /i) ||
-      allStaff.some(other => other.leader_id === s.id)
+      leaderIds.has(s.id)
     ).sort((a, b) => a.name.localeCompare(b.name));
-  }, [allStaff]);
+  }, [allStaff, assignments]);
 
   // Division leaders specifically
   const divisionLeaders = useMemo(() => {
@@ -95,7 +121,7 @@ export function BulkLeaderAssignmentDialog({ onSuccess }: BulkLeaderAssignmentDi
     );
   }, [allStaff]);
 
-  // Get division assignment stats
+  // Division assignment stats
   const divisionStats = useMemo(() => {
     return divisions.map(div => {
       const staffInDiv = allStaff.filter(s => s.division_id === div.id);
@@ -105,7 +131,8 @@ export function BulkLeaderAssignmentDialog({ onSuccess }: BulkLeaderAssignmentDi
       const gcsInDiv = staffInDiv.filter(s =>
         s.staff_type === "general_counselor" || s.staff_type === "both"
       );
-      const assignedGcs = gcsInDiv.filter(s => s.leader_id !== null);
+      // A GC is "assigned" if they have at least one leader assignment
+      const assignedGcs = gcsInDiv.filter(s => getLeaderIdsForStaff(s.id).length > 0);
 
       return {
         division: div,
@@ -115,23 +142,20 @@ export function BulkLeaderAssignmentDialog({ onSuccess }: BulkLeaderAssignmentDi
         totalStaff: staffInDiv.length,
       };
     });
-  }, [divisions, allStaff]);
+  }, [divisions, allStaff, assignments]);
 
   // When a leader is selected, pre-check their currently assigned staff
   useEffect(() => {
     if (selectedLeader) {
-      const alreadyAssigned = new Set(
-        allStaff
-          .filter(s => s.leader_id === selectedLeader)
-          .map(s => s.id)
-      );
+      const alreadyAssigned = new Set(getStaffIdsForLeader(selectedLeader));
       setSelectedStaffIds(alreadyAssigned);
     } else {
       setSelectedStaffIds(new Set());
     }
-  }, [selectedLeader, allStaff]);
+  }, [selectedLeader, assignments]);
 
   // Filter assignable staff (exclude the selected leader themselves)
+  // IMPORTANT: Do NOT filter out staff assigned to other leaders
   const assignableStaff = useMemo(() => {
     let filtered = allStaff.filter(s => s.id !== selectedLeader);
 
@@ -140,7 +164,7 @@ export function BulkLeaderAssignmentDialog({ onSuccess }: BulkLeaderAssignmentDi
     } else if (filterType === "specialist") {
       filtered = filtered.filter(s => s.staff_type === "specialist" || s.staff_type === "both");
     } else if (filterType === "unassigned") {
-      filtered = filtered.filter(s => s.leader_id === null);
+      filtered = filtered.filter(s => getLeaderIdsForStaff(s.id).length === 0);
     }
 
     if (searchTerm) {
@@ -152,7 +176,7 @@ export function BulkLeaderAssignmentDialog({ onSuccess }: BulkLeaderAssignmentDi
     }
 
     return filtered;
-  }, [allStaff, selectedLeader, filterType, searchTerm]);
+  }, [allStaff, selectedLeader, filterType, searchTerm, assignments]);
 
   const toggleStaff = (staffId: string) => {
     setSelectedStaffIds(prev => {
@@ -182,23 +206,29 @@ export function BulkLeaderAssignmentDialog({ onSuccess }: BulkLeaderAssignmentDi
     for (const stat of divisionStats) {
       if (stat.divisionLeaders.length === 0) continue;
 
-      // Use the first Division Leader found in this division
       const dl = stat.divisionLeaders[0];
 
-      // Find all GC staff in this division not already assigned to this DL
+      // Find GCs in this division not already assigned to this DL
+      const currentlyAssignedToThisDL = new Set(getStaffIdsForLeader(dl.id));
       const gcsToAssign = allStaff.filter(s =>
         s.division_id === stat.division.id &&
         (s.staff_type === "general_counselor" || s.staff_type === "both") &&
-        s.leader_id !== dl.id &&
+        !currentlyAssignedToThisDL.has(s.id) &&
         s.id !== dl.id
       );
 
       if (gcsToAssign.length === 0) continue;
 
+      const records = gcsToAssign.map(s => ({
+        staff_id: s.id,
+        leader_id: dl.id,
+        company_id: currentCompany!.id,
+        season: currentSeason,
+      }));
+
       const { error } = await supabase
-        .from("staff")
-        .update({ leader_id: dl.id })
-        .in("id", gcsToAssign.map(s => s.id));
+        .from("staff_leader_assignments")
+        .upsert(records, { onConflict: "staff_id,leader_id,company_id,season" });
 
       if (error) {
         console.error("Auto-assign error for division", stat.division.name, error);
@@ -220,34 +250,39 @@ export function BulkLeaderAssignmentDialog({ onSuccess }: BulkLeaderAssignmentDi
   };
 
   const handleSaveManualAssignment = async () => {
-    if (!selectedLeader) return;
+    if (!selectedLeader || !currentCompany?.id) return;
     setSaving(true);
 
-    // Find what changed
-    const currentlyAssigned = new Set(
-      allStaff.filter(s => s.leader_id === selectedLeader).map(s => s.id)
-    );
+    const currentlyAssigned = new Set(getStaffIdsForLeader(selectedLeader));
 
     const toAssign = [...selectedStaffIds].filter(id => !currentlyAssigned.has(id));
     const toUnassign = [...currentlyAssigned].filter(id => !selectedStaffIds.has(id));
 
     let errors = 0;
 
-    // Assign new staff to this leader
+    // Add new assignments
     if (toAssign.length > 0) {
+      const records = toAssign.map(staffId => ({
+        staff_id: staffId,
+        leader_id: selectedLeader,
+        company_id: currentCompany.id,
+        season: currentSeason,
+      }));
       const { error } = await supabase
-        .from("staff")
-        .update({ leader_id: selectedLeader })
-        .in("id", toAssign);
+        .from("staff_leader_assignments")
+        .upsert(records, { onConflict: "staff_id,leader_id,company_id,season" });
       if (error) errors++;
     }
 
-    // Unassign staff from this leader
+    // Remove unassigned (only for THIS leader, not others)
     if (toUnassign.length > 0) {
       const { error } = await supabase
-        .from("staff")
-        .update({ leader_id: null })
-        .in("id", toUnassign);
+        .from("staff_leader_assignments")
+        .delete()
+        .eq("leader_id", selectedLeader)
+        .eq("company_id", currentCompany.id)
+        .eq("season", currentSeason)
+        .in("staff_id", toUnassign);
       if (error) errors++;
     }
 
@@ -271,9 +306,13 @@ export function BulkLeaderAssignmentDialog({ onSuccess }: BulkLeaderAssignmentDi
     return divisions.find(d => d.id === divisionId)?.name || "—";
   };
 
-  const getLeaderName = (leaderId: string | null) => {
-    if (!leaderId) return null;
-    return allStaff.find(s => s.id === leaderId)?.name || null;
+  const getLeaderNames = (staffId: string) => {
+    const leaderIds = getLeaderIdsForStaff(staffId);
+    if (leaderIds.length === 0) return null;
+    return leaderIds
+      .map(lid => allStaff.find(s => s.id === lid)?.name)
+      .filter(Boolean)
+      .join(", ");
   };
 
   return (
@@ -421,8 +460,11 @@ export function BulkLeaderAssignmentDialog({ onSuccess }: BulkLeaderAssignmentDi
                         <div className="divide-y">
                           {assignableStaff.map(staff => {
                             const isChecked = selectedStaffIds.has(staff.id);
-                            const currentLeader = getLeaderName(staff.leader_id);
-                            const assignedElsewhere = staff.leader_id && staff.leader_id !== selectedLeader;
+                            const otherLeaders = getLeaderIdsForStaff(staff.id)
+                              .filter(lid => lid !== selectedLeader);
+                            const otherLeaderNames = otherLeaders
+                              .map(lid => allStaff.find(s => s.id === lid)?.name)
+                              .filter(Boolean);
 
                             return (
                               <label
@@ -449,9 +491,9 @@ export function BulkLeaderAssignmentDialog({ onSuccess }: BulkLeaderAssignmentDi
                                        staff.staff_type === "both" ? "Both" : staff.staff_type}
                                     </Badge>
                                   )}
-                                  {assignedElsewhere && (
+                                  {otherLeaderNames.length > 0 && (
                                     <Badge variant="secondary" className="text-xs">
-                                      → {currentLeader}
+                                      Also → {otherLeaderNames.join(", ")}
                                     </Badge>
                                   )}
                                 </div>
