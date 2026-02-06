@@ -3650,6 +3650,10 @@ export type Database = {
         Args: { _division_id: string; _user_id: string }
         Returns: boolean
       }
+      is_group_creator: {
+        Args: { _group_id: string; _user_id: string }
+        Returns: boolean
+      }
       is_specialist: { Args: { _user_id: string }; Returns: boolean }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       set_current_company: { Args: { company_id: string }; Returns: undefined }
