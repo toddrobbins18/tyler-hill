@@ -43,13 +43,15 @@ serve(async (req: Request): Promise<Response> => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get the assigning user's name from auth token
+    // Get the assigning user's name and ID from auth token
     let assignedByName = "An administrator";
+    let assignedByUserId: string | null = null;
     const authHeader = req.headers.get("Authorization");
     if (authHeader) {
       const token = authHeader.replace("Bearer ", "");
       const { data: { user } } = await supabase.auth.getUser(token);
       if (user) {
+        assignedByUserId = user.id;
         const { data: profile } = await supabase
           .from("profiles")
           .select("full_name")
@@ -125,6 +127,7 @@ serve(async (req: Request): Promise<Response> => {
     if (userIdsToNotify.length > 0) {
       const messages = userIdsToNotify.map((userId) => ({
         recipient_id: userId,
+        sender_id: assignedByUserId,
         subject,
         content,
         read: false,
