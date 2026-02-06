@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Mail, Send, Eye, Clock, Bell, Users, User, ChevronDown, ChevronUp, ArrowLeft, SendHorizonal, Reply, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -66,6 +67,7 @@ const TAG_COLORS: Record<string, string> = {
 };
 
 export default function Messages() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tagGroups, setTagGroups] = useState<TagGroup[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -75,7 +77,17 @@ export default function Messages() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [viewMode, setViewMode] = useState<'compose' | 'inbox' | 'sent' | 'groups'>('inbox');
+  
+  // Derive viewMode from URL search params so it survives re-mounts
+  const viewMode = (searchParams.get('view') as 'compose' | 'inbox' | 'sent' | 'groups') || 'inbox';
+  const setViewMode = (mode: 'compose' | 'inbox' | 'sent' | 'groups') => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('view', mode);
+      next.delete('groupId'); // clear group selection on tab switch
+      return next;
+    }, { replace: true });
+  };
   const [receivedMessages, setReceivedMessages] = useState<Message[]>([]);
   const [sentMessages, setSentMessages] = useState<Message[]>([]);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
@@ -420,7 +432,23 @@ export default function Messages() {
       </div>
 
       {/* Groups Tab */}
-      {viewMode === 'groups' && <GroupList />}
+      {viewMode === 'groups' && (
+        <GroupList
+          selectedGroupId={searchParams.get('groupId') || null}
+          onSelectGroup={(groupId) => {
+            setSearchParams(prev => {
+              const next = new URLSearchParams(prev);
+              next.set('view', 'groups');
+              if (groupId) {
+                next.set('groupId', groupId);
+              } else {
+                next.delete('groupId');
+              }
+              return next;
+            }, { replace: true });
+          }}
+        />
+      )}
 
       {/* Inbox / Sent Tab */}
       {(viewMode === 'inbox' || viewMode === 'sent') && (

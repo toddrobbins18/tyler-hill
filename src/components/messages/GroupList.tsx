@@ -21,9 +21,13 @@ interface GroupSummary {
   last_sender_name?: string;
 }
 
-export default function GroupList() {
+interface GroupListProps {
+  selectedGroupId: string | null;
+  onSelectGroup: (groupId: string | null) => void;
+}
+
+export default function GroupList({ selectedGroupId, onSelectGroup }: GroupListProps) {
   const [groups, setGroups] = useState<GroupSummary[]>([]);
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [loading, setLoading] = useState(true);
   const { currentCompany } = useCompany();
@@ -108,11 +112,11 @@ export default function GroupList() {
       <GroupChatView
         groupId={selectedGroupId}
         onBack={() => {
-          setSelectedGroupId(null);
+          onSelectGroup(null);
           fetchGroups();
         }}
         onDeleted={() => {
-          setSelectedGroupId(null);
+          onSelectGroup(null);
           fetchGroups();
         }}
       />
@@ -155,7 +159,7 @@ export default function GroupList() {
               groups.map((group) => (
                 <div key={group.id}>
                   <button
-                    onClick={() => setSelectedGroupId(group.id)}
+                    onClick={() => onSelectGroup(group.id)}
                     className="w-full p-4 text-left hover:bg-muted/50 transition-colors"
                   >
                     <div className="flex items-start justify-between gap-2">
