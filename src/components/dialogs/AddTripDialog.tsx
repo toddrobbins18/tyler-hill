@@ -15,6 +15,7 @@ import { tripSchema } from "@/lib/validationSchemas";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
+import { StaffMultiSelect } from "@/components/StaffMultiSelect";
 
 interface AddTripDialogProps {
   onSuccess: () => void;
@@ -275,10 +276,12 @@ export default function AddTripDialog({ onSuccess }: AddTripDialogProps) {
               name="chaperone"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Chaperone</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Who will supervise?" {...field} />
-                  </FormControl>
+                  <StaffMultiSelect
+                    value={field.value || ""}
+                    onChange={field.onChange}
+                    label="Staff"
+                    placeholder="Search staff to assign..."
+                  />
                   <FormMessage />
                 </FormItem>
               )}

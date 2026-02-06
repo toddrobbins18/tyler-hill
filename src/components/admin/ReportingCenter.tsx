@@ -254,7 +254,7 @@ export default function ReportingCenter() {
             Type: a.activity_type,
             Location: a.location,
             Time: a.time,
-            Chaperone: a.chaperone,
+            Staff: a.chaperone,
           })) || [];
           
           summaryData = {

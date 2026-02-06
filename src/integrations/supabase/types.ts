@@ -2254,6 +2254,7 @@ export type Database = {
       }
       special_events_activities: {
         Row: {
+          chaperone: string | null
           company_id: string | null
           created_at: string | null
           created_by: string | null
@@ -2272,6 +2273,7 @@ export type Database = {
           title: string
         }
         Insert: {
+          chaperone?: string | null
           company_id?: string | null
           created_at?: string | null
           created_by?: string | null
@@ -2290,6 +2292,7 @@ export type Database = {
           title: string
         }
         Update: {
+          chaperone?: string | null
           company_id?: string | null
           created_at?: string | null
           created_by?: string | null
