@@ -11,10 +11,13 @@ import AddStaffDialog from "@/components/dialogs/AddStaffDialog";
 import EditStaffDialog from "@/components/dialogs/EditStaffDialog";
 import { EvaluateStaffDialog } from "@/components/dialogs/EvaluateStaffDialog";
 import { BulkRfidAssignmentDialog } from "@/components/dialogs/BulkRfidAssignmentDialog";
+import { BulkLeaderAssignmentDialog } from "@/components/dialogs/BulkLeaderAssignmentDialog";
 import CSVUploader from "@/components/CSVUploader";
 import { toast } from "sonner";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,9 +39,14 @@ export default function Staff() {
   const [editingStaff, setEditingStaff] = useState<string | null>(null);
   const [deletingStaff, setDeletingStaff] = useState<string | null>(null);
   const [evaluatingStaff, setEvaluatingStaff] = useState<string | null>(null);
+  const [myStaffId, setMyStaffId] = useState<string | null>(null);
   const { currentSeason } = useSeasonContext();
   const { currentCompany } = useCompany();
+  const { userRole, isSuperAdmin } = usePermissions();
+  const { user } = useAuth();
   const navigate = useNavigate();
+  
+  const isLeaderRole = userRole === 'division_leader' || userRole === 'specialist';
   
   // RFID Scanner state
   const [rfidInput, setRfidInput] = useState("");
@@ -132,6 +140,25 @@ export default function Staff() {
     setLoading(false);
   };
 
+  // Find the logged-in user's staff record (for leader-based filtering)
+  useEffect(() => {
+    const findMyStaffRecord = async () => {
+      if (!user?.email || !currentCompany?.id || !isLeaderRole) {
+        setMyStaffId(null);
+        return;
+      }
+      const { data } = await supabase
+        .from("staff")
+        .select("id")
+        .eq("company_id", currentCompany.id)
+        .eq("season", currentSeason)
+        .ilike("email", user.email)
+        .maybeSingle();
+      setMyStaffId(data?.id || null);
+    };
+    findMyStaffRecord();
+  }, [user?.email, currentCompany?.id, currentSeason, isLeaderRole]);
+
   useEffect(() => {
     if (currentCompany?.id) {
       fetchStaff();
@@ -139,6 +166,13 @@ export default function Staff() {
   }, [currentCompany?.id, currentSeason]);
 
   const filteredStaff = staff.filter((member) => {
+    // Leader-based filtering: division_leader/specialist only see their assigned staff
+    if (isLeaderRole && myStaffId) {
+      if (member.leader_id !== myStaffId && member.id !== myStaffId) {
+        return false;
+      }
+    }
+
     const matchesSearch = 
       member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (member.role?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
@@ -155,7 +189,6 @@ export default function Staff() {
       selectedGender === "all" ||
       member.gender?.toLowerCase() === selectedGender.toLowerCase();
     
-    // Season filtering now done at query level
     return matchesSearch && matchesSession && matchesGender;
   });
 
@@ -263,7 +296,7 @@ export default function Staff() {
           <h1 className="text-3xl font-bold text-foreground mb-2">Staff & Evaluations</h1>
           <p className="text-muted-foreground">Manage team members and performance reviews</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button
             variant={scannerMode ? "default" : "outline"}
             onClick={toggleScannerMode}
@@ -272,7 +305,12 @@ export default function Staff() {
             <Radio className={`h-4 w-4 mr-2 ${scannerMode ? "animate-pulse" : ""}`} />
             {scannerMode ? "Scanner Active" : "Scan Wristband"}
           </Button>
+          {(userRole === 'admin' || isSuperAdmin) && (
+            <BulkLeaderAssignmentDialog onSuccess={fetchStaff} />
+          )}
           <BulkRfidAssignmentDialog type="staff" onSuccess={fetchStaff} />
+          <CSVUploader tableName="staff" onUploadComplete={fetchStaff} />
+          <AddStaffDialog onSuccess={fetchStaff} />
           <CSVUploader tableName="staff" onUploadComplete={fetchStaff} />
           <AddStaffDialog onSuccess={fetchStaff} />
         </div>
@@ -352,6 +390,11 @@ export default function Staff() {
           {staffError && (
             <div className="text-sm text-destructive">
               Couldn’t load staff: {staffError}
+            </div>
+          )}
+          {isLeaderRole && myStaffId && (
+            <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-sm">
+              <strong>My Team:</strong> Showing staff assigned to you. Contact an admin to update assignments.
             </div>
           )}
           <div className="text-sm text-muted-foreground">
