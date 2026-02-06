@@ -4,7 +4,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Users, Send, ArrowLeft, MessageSquare, Reply } from "lucide-react";
+import { Users, Send, ArrowLeft, MessageSquare, Reply, Trash2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 
@@ -30,9 +31,10 @@ interface GroupInfo {
 interface GroupChatViewProps {
   groupId: string;
   onBack: () => void;
+  onDeleted?: () => void;
 }
 
-export default function GroupChatView({ groupId, onBack }: GroupChatViewProps) {
+export default function GroupChatView({ groupId, onBack, onDeleted }: GroupChatViewProps) {
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [groupInfo, setGroupInfo] = useState<GroupInfo | null>(null);
   const [newMessage, setNewMessage] = useState("");
@@ -168,6 +170,22 @@ export default function GroupChatView({ groupId, onBack }: GroupChatViewProps) {
     }
   };
 
+  const handleDeleteGroup = async () => {
+    try {
+      const { error } = await supabase
+        .from("message_groups")
+        .delete()
+        .eq("id", groupId);
+
+      if (error) throw error;
+      onDeleted?.();
+    } catch (error: any) {
+      console.error("Failed to delete group:", error);
+    }
+  };
+
+  const isCreator = currentUserId === groupInfo?.created_by;
+
   // Group messages into threads (top-level + replies)
   const topLevelMessages = messages.filter(m => !m.parent_message_id);
   const repliesMap = new Map<string, GroupMessage[]>();
@@ -193,6 +211,29 @@ export default function GroupChatView({ groupId, onBack }: GroupChatViewProps) {
             {groupInfo?.member_count} members: {groupInfo?.members.map(m => m.full_name).join(", ")}
           </p>
         </div>
+        {isCreator && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Group</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete "{groupInfo?.name}" and all its messages. This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteGroup} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
 
       {/* Messages */}
