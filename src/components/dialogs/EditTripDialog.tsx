@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { CalendarRange } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { StaffMultiSelect } from "@/components/StaffMultiSelect";
 import { toast } from "sonner";
 import TripAttachments from "@/components/TripAttachments";
 
@@ -241,14 +242,12 @@ export default function EditTripDialog({ tripId, open, onOpenChange, onSuccess }
             </div>
           </div>
 
-          <div>
-            <Label htmlFor="chaperone">Chaperone</Label>
-            <Input
-              id="chaperone"
-              value={formData.chaperone}
-              onChange={(e) => setFormData({ ...formData, chaperone: e.target.value })}
-            />
-          </div>
+          <StaffMultiSelect
+            value={formData.chaperone}
+            onChange={(value) => setFormData({ ...formData, chaperone: value })}
+            label="Staff"
+            placeholder="Search staff to assign..."
+          />
 
           <div>
             <Label htmlFor="capacity">Capacity</Label>

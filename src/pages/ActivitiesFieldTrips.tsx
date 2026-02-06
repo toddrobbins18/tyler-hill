@@ -24,6 +24,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
+import { StaffMultiSelect } from "@/components/StaffMultiSelect";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -203,8 +204,11 @@ export default function ActivitiesFieldTrips() {
             }))
           );
       }
-
-      toast({ title: "Field trip updated successfully" });
+      const staffNames = formData.chaperone ? formData.chaperone.split(",").map(s => s.trim()).filter(Boolean) : [];
+      toast({ 
+        title: "Activity updated successfully",
+        description: staffNames.length > 0 ? `Staff assigned: ${staffNames.join(", ")}` : undefined,
+      });
     } else {
       const { data: newActivity, error } = await supabase
         .from("activities_field_trips")
@@ -257,10 +261,13 @@ export default function ActivitiesFieldTrips() {
         }
       }
 
+      const staffNames = formData.chaperone ? formData.chaperone.split(",").map(s => s.trim()).filter(Boolean) : [];
+      const staffMsg = staffNames.length > 0 ? ` — Staff notified: ${staffNames.join(", ")}` : "";
       toast({ 
         title: formData.home_away === 'home' 
           ? "Activity added (no trip created for HOME event)" 
-          : "Activity added and pending trip created" 
+          : "Activity added and pending trip created",
+        description: staffMsg || undefined,
       });
     }
 
@@ -547,7 +554,7 @@ export default function ActivitiesFieldTrips() {
                         <p className="text-sm text-muted-foreground">👥 Capacity: {event.capacity}</p>
                       )}
                       {event.chaperone && (
-                        <p className="text-sm text-muted-foreground">👤 Chaperone: {event.chaperone}</p>
+                        <p className="text-sm text-muted-foreground">👤 Staff: {event.chaperone}</p>
                       )}
                       {event.description && (
                         <p className="text-sm text-muted-foreground line-clamp-2">
@@ -777,14 +784,12 @@ export default function ActivitiesFieldTrips() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>Chaperone (optional)</Label>
-              <Input
-                value={formData.chaperone}
-                onChange={(e) => setFormData({ ...formData, chaperone: e.target.value })}
-                placeholder="Staff member name"
-              />
-            </div>
+            <StaffMultiSelect
+              value={formData.chaperone}
+              onChange={(value) => setFormData({ ...formData, chaperone: value })}
+              label="Staff (optional)"
+              placeholder="Search staff to assign..."
+            />
 
             <div className="space-y-2">
               <Label>Description (optional)</Label>

@@ -19,6 +19,7 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
 import { toast as sonnerToast } from "sonner";
+import { StaffMultiSelect } from "@/components/StaffMultiSelect";
 
 export default function SpecialEventsActivities() {
   const { currentCompany } = useCompany();
@@ -46,6 +47,7 @@ export default function SpecialEventsActivities() {
     division_ids: [] as string[],
     file_url: "",
     file_name: "",
+    chaperone: "",
   });
   const { toast } = useToast();
   const { selectedSeason } = useSeason();
@@ -170,6 +172,7 @@ export default function SpecialEventsActivities() {
       start_time: formData.start_time || null,
       end_time: formData.end_time || null,
       location: formData.location,
+      chaperone: formData.chaperone || null,
       season: selectedSeason,
       company_id: currentCompany?.id,
       file_url: formData.file_url || null,
@@ -205,7 +208,11 @@ export default function SpecialEventsActivities() {
           );
       }
 
-      toast({ title: "Event updated successfully" });
+      const staffNames = formData.chaperone ? formData.chaperone.split(",").map(s => s.trim()).filter(Boolean) : [];
+      toast({ 
+        title: "Event updated successfully",
+        description: staffNames.length > 0 ? `Staff assigned: ${staffNames.join(", ")}` : undefined,
+      });
     } else {
       const { data: newEvent, error } = await supabase
         .from("special_events_activities")
@@ -231,7 +238,11 @@ export default function SpecialEventsActivities() {
           );
       }
 
-      toast({ title: "Event added successfully" });
+      const staffNames = formData.chaperone ? formData.chaperone.split(",").map(s => s.trim()).filter(Boolean) : [];
+      toast({ 
+        title: "Event added successfully",
+        description: staffNames.length > 0 ? `Staff notified: ${staffNames.join(", ")}` : undefined,
+      });
     }
 
     resetForm();
@@ -249,6 +260,7 @@ export default function SpecialEventsActivities() {
       division_ids: [],
       file_url: "",
       file_name: "",
+      chaperone: "",
     });
     setEditingEvent(null);
     setShowDialog(false);
@@ -324,6 +336,7 @@ export default function SpecialEventsActivities() {
       division_ids: divisionLinks?.map(link => link.division_id) || [],
       file_url: event.file_url || "",
       file_name: event.file_name || "",
+      chaperone: event.chaperone || "",
     });
     setShowDialog(true);
   };
@@ -480,6 +493,9 @@ export default function SpecialEventsActivities() {
                           {event.location && (
                             <p className="text-sm text-muted-foreground">📍 {event.location}</p>
                           )}
+                          {event.chaperone && (
+                            <p className="text-sm text-muted-foreground">👤 Staff: {event.chaperone}</p>
+                          )}
                           {event.description && (
                             <p className="text-sm text-muted-foreground line-clamp-2">
                               {event.description}
@@ -626,6 +642,13 @@ export default function SpecialEventsActivities() {
               />
             </div>
 
+            <StaffMultiSelect
+              value={formData.chaperone}
+              onChange={(value) => setFormData({ ...formData, chaperone: value })}
+              label="Staff (optional)"
+              placeholder="Search staff to assign..."
+            />
+
             <div className="space-y-2">
               <Label>Description (optional)</Label>
               <Textarea
@@ -729,6 +752,12 @@ export default function SpecialEventsActivities() {
                   </div>
                 )}
               </div>
+              {selectedEvent.chaperone && (
+                <div>
+                  <p className="text-muted-foreground text-sm">Staff</p>
+                  <p>👤 {selectedEvent.chaperone}</p>
+                </div>
+              )}
               {selectedEvent.description && (
                 <div>
                   <p className="text-muted-foreground text-sm">Description</p>
