@@ -68,3 +68,6 @@ verify_jwt = false
 
 [functions.send-tutoring-notification]
 verify_jwt = false
+
+[functions.notify-staff-assignment]
+verify_jwt = true

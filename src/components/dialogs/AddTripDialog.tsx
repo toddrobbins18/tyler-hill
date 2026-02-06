@@ -16,6 +16,7 @@ import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
 import { StaffMultiSelect } from "@/components/StaffMultiSelect";
+import { notifyStaffAssignment } from "@/lib/notifyStaffAssignment";
 
 interface AddTripDialogProps {
   onSuccess: () => void;
@@ -85,7 +86,18 @@ export default function AddTripDialog({ onSuccess }: AddTripDialogProps) {
         toast.error("Failed to add trip");
         console.error(error);
       } else {
-        toast.success("Trip added successfully");
+        // Notify assigned staff
+        const staffNames = values.chaperone ? values.chaperone.split(",").map(s => s.trim()).filter(Boolean) : [];
+        if (staffNames.length > 0 && currentCompany?.id) {
+          notifyStaffAssignment({
+            staffNames,
+            eventTitle: values.name,
+            eventDate: values.date,
+            eventType: "trip",
+            companyId: currentCompany.id,
+          });
+        }
+        toast.success("Trip added successfully" + (staffNames.length > 0 ? ` — Staff notified` : ""));
         onSuccess();
         setOpen(false);
         form.reset();

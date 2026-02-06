@@ -20,6 +20,7 @@ import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
 import { toast as sonnerToast } from "sonner";
 import { StaffMultiSelect } from "@/components/StaffMultiSelect";
+import { notifyStaffAssignment } from "@/lib/notifyStaffAssignment";
 
 export default function SpecialEventsActivities() {
   const { currentCompany } = useCompany();
@@ -209,9 +210,18 @@ export default function SpecialEventsActivities() {
       }
 
       const staffNames = formData.chaperone ? formData.chaperone.split(",").map(s => s.trim()).filter(Boolean) : [];
+      if (staffNames.length > 0) {
+        notifyStaffAssignment({
+          staffNames,
+          eventTitle: formData.title,
+          eventDate: formData.event_date,
+          eventType: "special_event",
+          companyId: currentCompany?.id,
+        });
+      }
       toast({ 
         title: "Event updated successfully",
-        description: staffNames.length > 0 ? `Staff assigned: ${staffNames.join(", ")}` : undefined,
+        description: staffNames.length > 0 ? `Staff assigned & notified: ${staffNames.join(", ")}` : undefined,
       });
     } else {
       const { data: newEvent, error } = await supabase
@@ -239,6 +249,15 @@ export default function SpecialEventsActivities() {
       }
 
       const staffNames = formData.chaperone ? formData.chaperone.split(",").map(s => s.trim()).filter(Boolean) : [];
+      if (staffNames.length > 0) {
+        notifyStaffAssignment({
+          staffNames,
+          eventTitle: formData.title,
+          eventDate: formData.event_date,
+          eventType: "special_event",
+          companyId: currentCompany?.id,
+        });
+      }
       toast({ 
         title: "Event added successfully",
         description: staffNames.length > 0 ? `Staff notified: ${staffNames.join(", ")}` : undefined,
