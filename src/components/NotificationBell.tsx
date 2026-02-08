@@ -20,6 +20,7 @@ interface InboxMessage {
   created_at: string;
   read: boolean;
   notification_type: string | null;
+  group_id: string | null;
   sender_name?: string;
 }
 
@@ -74,7 +75,7 @@ export function NotificationBell() {
 
     const { data } = await supabase
       .from("messages")
-      .select("id, subject, content, sender_id, created_at, read, notification_type")
+      .select("id, subject, content, sender_id, created_at, read, notification_type, group_id")
       .eq("recipient_id", user.id)
       .order("created_at", { ascending: false })
       .limit(8);
@@ -137,9 +138,14 @@ export function NotificationBell() {
     if (open) fetchRecent();
   }, [open, fetchRecent]);
 
-  const handleGoToMessages = () => {
+  const handleGoToMessages = (msg?: InboxMessage) => {
     setOpen(false);
-    sessionStorage.setItem("messages_view_mode", "inbox");
+    if (msg?.group_id) {
+      sessionStorage.setItem("messages_view_mode", "groups");
+      sessionStorage.setItem("messages_active_group_id", msg.group_id);
+    } else {
+      sessionStorage.setItem("messages_view_mode", "inbox");
+    }
     navigate("/messages");
   };
 
@@ -198,7 +204,7 @@ export function NotificationBell() {
                     className={`w-full text-left px-4 py-3 border-b last:border-b-0 hover:bg-accent/50 transition-colors ${
                       !msg.read ? "bg-accent/20" : ""
                     }`}
-                    onClick={handleGoToMessages}
+                    onClick={() => handleGoToMessages(msg)}
                   >
                     <div className="flex items-start gap-3">
                       <div className="mt-0.5 shrink-0 relative">
@@ -239,7 +245,7 @@ export function NotificationBell() {
             variant="ghost"
             size="sm"
             className="w-full text-xs"
-            onClick={handleGoToMessages}
+            onClick={() => handleGoToMessages()}
           >
             View all messages
           </Button>

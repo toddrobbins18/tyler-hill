@@ -170,6 +170,7 @@ export default function GroupChatView({ groupId, onBack, onDeleted }: GroupChatV
             subject: `New message in ${groupInfo.name}`,
             content: `${senderName}: ${preview}`,
             read: false,
+            group_id: groupId,
           }));
 
           await supabase.from("messages").insert(notifications);
