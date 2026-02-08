@@ -38,6 +38,7 @@ interface Message {
   sender_id: string | null;
   recipient_id: string | null;
   parent_message_id?: string | null;
+  group_id?: string | null;
   sender_name?: string;
   recipient_name?: string;
   reply_count?: number;
@@ -568,8 +569,22 @@ export default function Messages() {
                       <div className="whitespace-pre-wrap text-sm">{selectedMessage.content}</div>
                     </ScrollArea>
                     {/* Reply button */}
-                    {selectedMessage.sender_id && (
-                      <div className="flex items-center gap-2 pt-3 border-t">
+                    <div className="flex items-center gap-2 pt-3 border-t">
+                      {selectedMessage.group_id && (
+                        <Button
+                          variant="default"
+                          onClick={() => {
+                            setActiveGroupId(selectedMessage.group_id!);
+                            setViewMode('groups');
+                            setSelectedMessage(null);
+                          }}
+                          className="flex items-center gap-2"
+                        >
+                          <Users className="h-4 w-4" />
+                          View in Group Chat
+                        </Button>
+                      )}
+                      {selectedMessage.sender_id && (
                         <Button
                           variant="outline"
                           onClick={() => setShowReplyThread(true)}
@@ -583,8 +598,8 @@ export default function Messages() {
                             </Badge>
                           )}
                         </Button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <div className="h-[500px] flex items-center justify-center text-muted-foreground">

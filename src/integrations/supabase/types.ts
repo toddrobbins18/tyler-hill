@@ -1862,6 +1862,7 @@ export type Database = {
         Row: {
           content: string
           created_at: string | null
+          group_id: string | null
           id: string
           notification_type: string | null
           parent_message_id: string | null
@@ -1873,6 +1874,7 @@ export type Database = {
         Insert: {
           content: string
           created_at?: string | null
+          group_id?: string | null
           id?: string
           notification_type?: string | null
           parent_message_id?: string | null
@@ -1884,6 +1886,7 @@ export type Database = {
         Update: {
           content?: string
           created_at?: string | null
+          group_id?: string | null
           id?: string
           notification_type?: string | null
           parent_message_id?: string | null
@@ -1893,6 +1896,13 @@ export type Database = {
           subject?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "messages_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "message_groups"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "messages_parent_message_id_fkey"
             columns: ["parent_message_id"]
