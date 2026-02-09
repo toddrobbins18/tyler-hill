@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Mail, Send, Eye, Clock, Bell, Users, User, ChevronDown, ChevronUp, ArrowLeft, SendHorizonal, Reply, MessageSquare } from "lucide-react";
+import { Mail, Send, Eye, Clock, Bell, Users, User, ChevronDown, ChevronUp, ArrowLeft, SendHorizonal, Reply } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,7 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { format } from "date-fns";
 import GroupList from "@/components/messages/GroupList";
-import ReplyThread from "@/components/messages/ReplyThread";
+import InlineThread from "@/components/messages/InlineThread";
 
 interface TagGroup {
   tag: string;
@@ -42,6 +42,9 @@ interface Message {
   sender_name?: string;
   recipient_name?: string;
   reply_count?: number;
+  latest_reply_content?: string;
+  latest_reply_sender?: string;
+  latest_reply_at?: string;
 }
 
 const TAG_LABELS: Record<string, string> = {
@@ -106,7 +109,6 @@ export default function Messages() {
   const [receivedMessages, setReceivedMessages] = useState<Message[]>([]);
   const [sentMessages, setSentMessages] = useState<Message[]>([]);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
-  const [showReplyThread, setShowReplyThread] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showRecipientPreview, setShowRecipientPreview] = useState(false);
   const [deliveryMethods, setDeliveryMethods] = useState({
@@ -179,17 +181,29 @@ export default function Messages() {
     if (!error && data) {
       const cache = await resolveProfileNames(data);
 
-      // Get reply counts for each message
+      // Get reply counts and latest reply for each message
       const enrichedPromises = data.map(async (m) => {
-        const { count } = await supabase
+        const { data: latestReplies, count } = await supabase
           .from("messages")
-          .select("*", { count: "exact", head: true })
-          .eq("parent_message_id", m.id);
+          .select("*", { count: "exact" })
+          .eq("parent_message_id", m.id)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        const latestReply = latestReplies?.[0] || null;
+        let latestReplyName: string | undefined;
+        if (latestReply?.sender_id) {
+          const replyCache = await resolveProfileNames([latestReply]);
+          latestReplyName = replyCache[latestReply.sender_id] || "Unknown";
+        }
 
         return {
           ...m,
           sender_name: m.sender_id ? (cache[m.sender_id] || "Unknown") : undefined,
           reply_count: count || 0,
+          latest_reply_content: latestReply?.content,
+          latest_reply_sender: latestReplyName,
+          latest_reply_at: latestReply?.created_at,
         };
       });
 
@@ -233,7 +247,6 @@ export default function Messages() {
 
   const handleMessageClick = (msg: Message) => {
     setSelectedMessage(msg);
-    setShowReplyThread(false);
     if (!msg.read && viewMode === 'inbox') {
       markAsRead(msg.id);
     }
@@ -417,21 +430,21 @@ export default function Messages() {
         <div className="flex gap-2">
           <Button
             variant={viewMode === 'inbox' ? 'default' : 'outline'}
-            onClick={() => { setViewMode('inbox'); setSelectedMessage(null); setShowReplyThread(false); }}
+            onClick={() => { setViewMode('inbox'); setSelectedMessage(null); }}
           >
             <Bell className="h-4 w-4 mr-2" />
             Inbox {unreadCount > 0 && `(${unreadCount})`}
           </Button>
           <Button
             variant={viewMode === 'sent' ? 'default' : 'outline'}
-            onClick={() => { setViewMode('sent'); setSelectedMessage(null); setShowReplyThread(false); }}
+            onClick={() => { setViewMode('sent'); setSelectedMessage(null); }}
           >
             <SendHorizonal className="h-4 w-4 mr-2" />
             Sent
           </Button>
           <Button
             variant={viewMode === 'groups' ? 'default' : 'outline'}
-            onClick={() => { setViewMode('groups'); setSelectedMessage(null); setShowReplyThread(false); }}
+            onClick={() => { setViewMode('groups'); setSelectedMessage(null); }}
           >
             <Users className="h-4 w-4 mr-2" />
             Groups
@@ -503,12 +516,19 @@ export default function Messages() {
                                 To: {msg.recipient_name || "Unknown"}
                               </p>
                             )}
-                            <p className="text-sm text-muted-foreground truncate">
-                              {msg.content.substring(0, 100)}...
-                            </p>
+                            {msg.latest_reply_content ? (
+                              <p className="text-sm text-muted-foreground truncate">
+                                <span className="font-medium">{msg.latest_reply_sender}:</span>{" "}
+                                {msg.latest_reply_content.substring(0, 80)}...
+                              </p>
+                            ) : (
+                              <p className="text-sm text-muted-foreground truncate">
+                                {msg.content.substring(0, 100)}...
+                              </p>
+                            )}
                             <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                               <Clock className="h-3 w-3" />
-                              {format(new Date(msg.created_at), 'MMM d, yyyy h:mm a')}
+                              {format(new Date(msg.latest_reply_at || msg.created_at), 'MMM d, yyyy h:mm a')}
                             </p>
                           </div>
                         </div>
@@ -521,91 +541,26 @@ export default function Messages() {
             </CardContent>
           </Card>
 
-          {/* Message Detail / Reply Thread */}
-          {showReplyThread && selectedMessage ? (
-            <ReplyThread
-              originalMessage={selectedMessage}
-              onBack={() => {
-                setShowReplyThread(false);
-                fetchMessages();
-                fetchSentMessages();
+          {/* Message Detail - Inline Thread */}
+          {selectedMessage ? (
+            <InlineThread
+              message={selectedMessage}
+              viewMode={viewMode as 'inbox' | 'sent'}
+              onNavigateToGroup={(groupId) => {
+                setActiveGroupId(groupId);
+                setViewMode('groups');
+                setSelectedMessage(null);
               }}
             />
           ) : (
             <Card>
               <CardHeader>
-                {selectedMessage ? (
-                  <>
-                    <CardTitle className="flex items-center gap-2">
-                      {selectedMessage.subject}
-                      {selectedMessage.sender_id === null && (
-                        <Badge variant="secondary">System</Badge>
-                      )}
-                    </CardTitle>
-                    <CardDescription className="space-y-1">
-                      <span className="block">
-                        {format(new Date(selectedMessage.created_at), 'MMMM d, yyyy h:mm a')}
-                      </span>
-                      {viewMode === 'inbox' && (
-                        <span className="block font-medium text-foreground">
-                          From: {selectedMessage.sender_name || "System Notification"}
-                        </span>
-                      )}
-                      {viewMode === 'sent' && (
-                        <span className="block font-medium text-foreground">
-                          To: {selectedMessage.recipient_name || "Unknown"}
-                        </span>
-                      )}
-                    </CardDescription>
-                  </>
-                ) : (
-                  <CardTitle>Select a message</CardTitle>
-                )}
+                <CardTitle>Select a message</CardTitle>
               </CardHeader>
               <CardContent>
-                {selectedMessage ? (
-                  <div className="space-y-4">
-                    <ScrollArea className="h-[430px]">
-                      <div className="whitespace-pre-wrap text-sm">{selectedMessage.content}</div>
-                    </ScrollArea>
-                    {/* Reply button */}
-                    <div className="flex items-center gap-2 pt-3 border-t">
-                      {selectedMessage.group_id && (
-                        <Button
-                          variant="default"
-                          onClick={() => {
-                            setActiveGroupId(selectedMessage.group_id!);
-                            setViewMode('groups');
-                            setSelectedMessage(null);
-                          }}
-                          className="flex items-center gap-2"
-                        >
-                          <Users className="h-4 w-4" />
-                          View in Group Chat
-                        </Button>
-                      )}
-                      {selectedMessage.sender_id && (
-                        <Button
-                          variant="outline"
-                          onClick={() => setShowReplyThread(true)}
-                          className="flex items-center gap-2"
-                        >
-                          <Reply className="h-4 w-4" />
-                          Reply
-                          {(selectedMessage.reply_count ?? 0) > 0 && (
-                            <Badge variant="secondary" className="ml-1">
-                              {selectedMessage.reply_count} {selectedMessage.reply_count === 1 ? 'reply' : 'replies'}
-                            </Badge>
-                          )}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="h-[500px] flex items-center justify-center text-muted-foreground">
-                    Select a message to view its contents
-                  </div>
-                )}
+                <div className="h-[500px] flex items-center justify-center text-muted-foreground">
+                  Select a message to view its contents
+                </div>
               </CardContent>
             </Card>
           )}
