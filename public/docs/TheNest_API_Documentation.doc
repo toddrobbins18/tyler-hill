@@ -1,0 +1,920 @@
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="utf-8">
+<meta name="ProgId" content="Word.Document">
+<meta name="Generator" content="Microsoft Word 15">
+<meta name="Originator" content="Microsoft Word 15">
+<title>The Nest - Complete API Documentation</title>
+<style>
+body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.5; margin: 40px; color: #333; }
+h1 { font-size: 24pt; color: #1a365d; border-bottom: 3px solid #2b6cb0; padding-bottom: 8px; margin-top: 30px; }
+h2 { font-size: 18pt; color: #2b6cb0; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; margin-top: 25px; }
+h3 { font-size: 14pt; color: #2c5282; margin-top: 20px; }
+h4 { font-size: 12pt; color: #4a5568; margin-top: 15px; }
+table { border-collapse: collapse; width: 100%; margin: 10px 0 20px 0; }
+th { background-color: #2b6cb0; color: white; padding: 8px 12px; text-align: left; font-size: 10pt; border: 1px solid #2b6cb0; }
+td { padding: 6px 12px; border: 1px solid #e2e8f0; font-size: 10pt; vertical-align: top; }
+tr:nth-child(even) td { background-color: #f7fafc; }
+code { font-family: Consolas, 'Courier New', monospace; background-color: #edf2f7; padding: 2px 6px; border-radius: 3px; font-size: 9pt; }
+pre { background-color: #1a202c; color: #e2e8f0; padding: 15px; border-radius: 5px; font-family: Consolas, monospace; font-size: 9pt; overflow-x: auto; white-space: pre-wrap; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 8pt; font-weight: bold; margin-right: 5px; }
+.get { background-color: #c6f6d5; color: #22543d; }
+.post { background-color: #bee3f8; color: #2a4365; }
+.put { background-color: #fefcbf; color: #744210; }
+.delete { background-color: #fed7d7; color: #742a2a; }
+.patch { background-color: #e9d8fd; color: #44337a; }
+.note { background-color: #ebf8ff; border-left: 4px solid #3182ce; padding: 10px 15px; margin: 10px 0; font-size: 10pt; }
+.warning { background-color: #fffbeb; border-left: 4px solid #d69e2e; padding: 10px 15px; margin: 10px 0; font-size: 10pt; }
+.section-divider { border: none; border-top: 2px solid #e2e8f0; margin: 30px 0; }
+.cover-page { text-align: center; padding: 100px 0; page-break-after: always; }
+.cover-page h1 { font-size: 36pt; border: none; }
+.cover-page p { font-size: 14pt; color: #718096; }
+.toc { page-break-after: always; }
+.toc a { text-decoration: none; color: #2b6cb0; }
+.toc li { margin: 5px 0; }
+</style>
+</head>
+<body>
+
+<!-- COVER PAGE -->
+<div class="cover-page">
+<h1>The Nest</h1>
+<h2 style="border: none; color: #718096;">Complete API Documentation</h2>
+<p>For Mobile App Integration</p>
+<p style="margin-top: 50px; font-size: 11pt;">
+Version: 1.0<br>
+Date: February 11, 2026<br>
+Platform: Supabase (PostgREST + Edge Functions)
+</p>
+</div>
+
+<!-- TABLE OF CONTENTS -->
+<div class="toc">
+<h1>Table of Contents</h1>
+<ol style="font-size: 12pt; line-height: 2;">
+<li>Overview &amp; Base URLs</li>
+<li>Authentication</li>
+<li>Database API (REST) - Module Wise
+  <ol type="a">
+    <li>Children / Campers</li>
+    <li>Staff</li>
+    <li>Bunks &amp; Divisions</li>
+    <li>Daily Notes</li>
+    <li>Messages &amp; Notifications</li>
+    <li>Group Messaging</li>
+    <li>Incident Reports</li>
+    <li>Awards</li>
+    <li>Medication Logs (Nurse)</li>
+    <li>Health Center Admissions</li>
+    <li>Appointments</li>
+    <li>Transportation / Trips</li>
+    <li>Activities &amp; Field Trips</li>
+    <li>Special Events &amp; Activities</li>
+    <li>Sports Calendar</li>
+    <li>Sports Academy</li>
+    <li>Tutoring &amp; Therapy</li>
+    <li>Menu &amp; Special Meals</li>
+    <li>Master Calendar &amp; Events</li>
+    <li>Daily Wolf Content</li>
+    <li>Kanban Notes</li>
+    <li>Camper Reports &amp; Evaluations</li>
+    <li>Staff Evaluations</li>
+    <li>Roster Templates</li>
+    <li>User Roles &amp; Permissions</li>
+    <li>Companies</li>
+    <li>Audit Logs &amp; Email Logs</li>
+    <li>Notification Preferences</li>
+    <li>Schedule Conflicts</li>
+  </ol>
+</li>
+<li>Edge Functions (Server-Side APIs)</li>
+<li>File Storage APIs</li>
+<li>Realtime Subscriptions</li>
+<li>Common Patterns &amp; Authentication Headers</li>
+</ol>
+</div>
+
+<!-- SECTION 1: OVERVIEW -->
+<h1>1. Overview &amp; Base URLs</h1>
+
+<h3>Base URL</h3>
+<pre>https://gdcxtefbarvnrtvacqln.supabase.co</pre>
+
+<h3>REST API (PostgREST)</h3>
+<pre>https://gdcxtefbarvnrtvacqln.supabase.co/rest/v1/{table_name}</pre>
+
+<h3>Edge Functions</h3>
+<pre>https://gdcxtefbarvnrtvacqln.supabase.co/functions/v1/{function_name}</pre>
+
+<h3>Storage</h3>
+<pre>https://gdcxtefbarvnrtvacqln.supabase.co/storage/v1/object/{bucket_name}/{path}</pre>
+
+<h3>Realtime (WebSocket)</h3>
+<pre>wss://gdcxtefbarvnrtvacqln.supabase.co/realtime/v1/websocket</pre>
+
+<h3>API Key (Anon/Public)</h3>
+<pre>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdkY3h0ZWZiYXJ2bnJ0dmFjcWxuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAwNTA3NDIsImV4cCI6MjA3NTYyNjc0Mn0.8KkemWYnHix_jtcT_ZSx0EdsACsBnyID76-xZgZSKhA</pre>
+
+<div class="note">
+<strong>Note:</strong> All REST API requests require the <code>apikey</code> header set to the anon key above. Authenticated requests also need the <code>Authorization: Bearer {jwt_token}</code> header.
+</div>
+
+<hr class="section-divider">
+
+<!-- SECTION 2: AUTHENTICATION -->
+<h1>2. Authentication</h1>
+
+<h3>Auth Base URL</h3>
+<pre>https://gdcxtefbarvnrtvacqln.supabase.co/auth/v1</pre>
+
+<table>
+<tr><th>Action</th><th>Method</th><th>Endpoint</th><th>Body</th></tr>
+<tr><td>Sign Up</td><td><span class="badge post">POST</span></td><td><code>/auth/v1/signup</code></td><td><code>{ "email": "...", "password": "..." }</code></td></tr>
+<tr><td>Sign In (Email/Password)</td><td><span class="badge post">POST</span></td><td><code>/auth/v1/token?grant_type=password</code></td><td><code>{ "email": "...", "password": "..." }</code></td></tr>
+<tr><td>Sign Out</td><td><span class="badge post">POST</span></td><td><code>/auth/v1/logout</code></td><td>Header: <code>Authorization: Bearer {token}</code></td></tr>
+<tr><td>Get User</td><td><span class="badge get">GET</span></td><td><code>/auth/v1/user</code></td><td>Header: <code>Authorization: Bearer {token}</code></td></tr>
+<tr><td>Refresh Token</td><td><span class="badge post">POST</span></td><td><code>/auth/v1/token?grant_type=refresh_token</code></td><td><code>{ "refresh_token": "..." }</code></td></tr>
+<tr><td>Reset Password</td><td><span class="badge post">POST</span></td><td><code>/auth/v1/recover</code></td><td><code>{ "email": "..." }</code></td></tr>
+<tr><td>Update Password</td><td><span class="badge put">PUT</span></td><td><code>/auth/v1/user</code></td><td><code>{ "password": "new_password" }</code></td></tr>
+</table>
+
+<h4>Required Headers for All Auth Requests</h4>
+<pre>{
+  "apikey": "{ANON_KEY}",
+  "Content-Type": "application/json"
+}</pre>
+
+<h4>After Sign In - Use JWT Token</h4>
+<pre>{
+  "apikey": "{ANON_KEY}",
+  "Authorization": "Bearer {access_token}",
+  "Content-Type": "application/json"
+}</pre>
+
+<hr class="section-divider">
+
+<!-- SECTION 3: DATABASE REST API -->
+<h1>3. Database REST API (Module-Wise)</h1>
+
+<div class="note">
+<strong>PostgREST Pattern:</strong> All database tables follow the same REST pattern:<br><br>
+<span class="badge get">GET</span> <code>/rest/v1/{table}?select=*</code> — List / Read<br>
+<span class="badge post">POST</span> <code>/rest/v1/{table}</code> — Insert<br>
+<span class="badge patch">PATCH</span> <code>/rest/v1/{table}?id=eq.{id}</code> — Update<br>
+<span class="badge delete">DELETE</span> <code>/rest/v1/{table}?id=eq.{id}</code> — Delete<br><br>
+Add <code>Prefer: return=representation</code> header to get the result back after insert/update.
+</div>
+
+<!-- 3a: Children -->
+<h2>3a. Children / Campers</h2>
+<p><strong>Table:</strong> <code>children</code></p>
+
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th><th>Key Filters</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/children?select=*,bunks(*),divisions(*)&company_id=eq.{id}</code></td><td>List all campers with bunk & division details</td><td><code>company_id</code>, <code>season</code>, <code>division_id</code>, <code>bunk_id</code>, <code>session</code></td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/children?id=eq.{id}&select=*,bunks(*),divisions(*)</code></td><td>Get single camper profile</td><td></td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/children</code></td><td>Add new camper</td><td></td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/children?id=eq.{id}</code></td><td>Update camper info</td><td></td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/children?id=eq.{id}</code></td><td>Delete camper</td><td></td></tr>
+</table>
+
+<h4>Key Columns</h4>
+<table>
+<tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+<tr><td>id</td><td>UUID (PK)</td><td>Auto-generated</td></tr>
+<tr><td>name</td><td>text</td><td>Required</td></tr>
+<tr><td>person_id</td><td>text</td><td>Required - external ID</td></tr>
+<tr><td>company_id</td><td>UUID (FK)</td><td>References companies</td></tr>
+<tr><td>division_id</td><td>UUID (FK)</td><td>References divisions</td></tr>
+<tr><td>bunk_id</td><td>UUID (FK)</td><td>References bunks</td></tr>
+<tr><td>leader_id</td><td>UUID (FK)</td><td>References staff</td></tr>
+<tr><td>age, gender, grade</td><td>various</td><td>Optional demographics</td></tr>
+<tr><td>date_of_birth</td><td>date</td><td>Optional</td></tr>
+<tr><td>allergies, medical_notes</td><td>text</td><td>Health info</td></tr>
+<tr><td>guardian_name, guardian_email, guardian_phone</td><td>text</td><td>Parent/guardian contact</td></tr>
+<tr><td>photo_url</td><td>text</td><td>Profile photo storage path</td></tr>
+<tr><td>rfid</td><td>text</td><td>RFID tag identifier</td></tr>
+<tr><td>season, session</td><td>text</td><td>Camp season/session</td></tr>
+<tr><td>status</td><td>text</td><td>Active/inactive</td></tr>
+<tr><td>birthday_*</td><td>various</td><td>Birthday party preferences</td></tr>
+</table>
+
+<!-- 3b: Staff -->
+<h2>3b. Staff</h2>
+<p><strong>Table:</strong> <code>staff</code></p>
+
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/staff?select=*,divisions(*)&company_id=eq.{id}</code></td><td>List all staff</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/staff?id=eq.{id}&select=*</code></td><td>Get single staff</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/staff</code></td><td>Add staff member</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/staff?id=eq.{id}</code></td><td>Update staff</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/staff?id=eq.{id}</code></td><td>Delete staff</td></tr>
+</table>
+
+<!-- 3c: Bunks & Divisions -->
+<h2>3c. Bunks &amp; Divisions</h2>
+
+<h4>Table: <code>bunks</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/bunks?select=*,divisions(*)&company_id=eq.{id}</code></td><td>List all bunks with division</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/bunks</code></td><td>Create bunk</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/bunks?id=eq.{id}</code></td><td>Update bunk</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/bunks?id=eq.{id}</code></td><td>Delete bunk</td></tr>
+</table>
+
+<h4>Table: <code>divisions</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/divisions?select=*&company_id=eq.{id}&is_active=eq.true&order=sort_order</code></td><td>List active divisions</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/divisions</code></td><td>Create division</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/divisions?id=eq.{id}</code></td><td>Update division</td></tr>
+</table>
+
+<h4>Table: <code>bunk_staff</code> (Junction)</h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/bunk_staff?select=*,staff(*),bunks(*)&company_id=eq.{id}</code></td><td>List bunk-staff assignments</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/bunk_staff</code></td><td>Assign staff to bunk</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/bunk_staff?id=eq.{id}</code></td><td>Remove assignment</td></tr>
+</table>
+
+<!-- 3d: Daily Notes -->
+<h2>3d. Daily Notes</h2>
+<p><strong>Table:</strong> <code>daily_notes</code></p>
+
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/daily_notes?select=*,children(name)&company_id=eq.{id}&date=eq.{date}</code></td><td>Get notes for a specific date</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/daily_notes</code></td><td>Create daily note</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/daily_notes?id=eq.{id}</code></td><td>Update note</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/daily_notes?id=eq.{id}</code></td><td>Delete note</td></tr>
+</table>
+
+<!-- 3e: Messages & Notifications -->
+<h2>3e. Messages &amp; Notifications (Inbox)</h2>
+<p><strong>Table:</strong> <code>messages</code></p>
+
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/messages?select=*&recipient_id=eq.{user_id}&order=created_at.desc</code></td><td>Get inbox messages</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/messages?select=*&sender_id=eq.{user_id}&notification_type=eq.direct&order=created_at.desc</code></td><td>Get sent messages</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/messages?select=*&parent_message_id=eq.{msg_id}&order=created_at.asc</code></td><td>Get thread replies</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/messages</code></td><td>Send message / reply</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/messages?id=eq.{id}</code></td><td>Mark as read: <code>{ "read": true }</code></td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/messages?id=eq.{id}</code></td><td>Delete message</td></tr>
+</table>
+
+<h4>Key Columns</h4>
+<table>
+<tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+<tr><td>recipient_id</td><td>UUID</td><td>Recipient user ID</td></tr>
+<tr><td>sender_id</td><td>UUID</td><td>Sender user ID</td></tr>
+<tr><td>subject</td><td>text</td><td>Message subject</td></tr>
+<tr><td>content</td><td>text</td><td>Message body</td></tr>
+<tr><td>read</td><td>boolean</td><td>Read status</td></tr>
+<tr><td>notification_type</td><td>text</td><td>'direct', 'notification', 'group_alert'</td></tr>
+<tr><td>parent_message_id</td><td>UUID</td><td>For threading/replies</td></tr>
+<tr><td>group_id</td><td>UUID</td><td>Reference to message_groups for linking</td></tr>
+</table>
+
+<!-- 3f: Group Messaging -->
+<h2>3f. Group Messaging</h2>
+
+<h4>Table: <code>message_groups</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/message_groups?select=*,group_members!inner(user_id)&group_members.user_id=eq.{user_id}</code></td><td>Get groups user belongs to</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/message_groups</code></td><td>Create group</td></tr>
+</table>
+
+<h4>Table: <code>group_members</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/group_members?select=*,profiles(*)&group_id=eq.{id}</code></td><td>Get group members</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/group_members</code></td><td>Add member to group</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/group_members?id=eq.{id}</code></td><td>Remove member</td></tr>
+</table>
+
+<h4>Table: <code>group_messages</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/group_messages?select=*,profiles:sender_id(*)&group_id=eq.{id}&order=created_at.asc</code></td><td>Get messages in group</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/group_messages?select=*&parent_message_id=eq.{id}&order=created_at.asc</code></td><td>Get thread replies</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/group_messages</code></td><td>Send group message</td></tr>
+</table>
+
+<!-- 3g: Incident Reports -->
+<h2>3g. Incident Reports</h2>
+<p><strong>Table:</strong> <code>incident_reports</code></p>
+
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/incident_reports?select=*,incident_children(child:children(id,name))&company_id=eq.{id}</code></td><td>List incidents with children</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/incident_reports</code></td><td>Create incident</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/incident_reports?id=eq.{id}</code></td><td>Update incident</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/incident_reports?id=eq.{id}</code></td><td>Delete incident</td></tr>
+</table>
+
+<h4>Table: <code>incident_children</code> (Junction)</h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/incident_children</code></td><td>Link child to incident</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/incident_children?incident_id=eq.{id}</code></td><td>Remove links</td></tr>
+</table>
+
+<!-- 3h: Awards -->
+<h2>3h. Awards</h2>
+<p><strong>Table:</strong> <code>awards</code></p>
+
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/awards?select=*,children(name)&company_id=eq.{id}</code></td><td>List awards</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/awards</code></td><td>Create award</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/awards?id=eq.{id}</code></td><td>Update award</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/awards?id=eq.{id}</code></td><td>Delete award</td></tr>
+</table>
+
+<!-- 3i: Medication Logs -->
+<h2>3i. Medication Logs (Nurse Module)</h2>
+<p><strong>Table:</strong> <code>medication_logs</code></p>
+
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/medication_logs?select=*,children(name,bunk_id,bunks(bunk_name))&company_id=eq.{id}&date=eq.{date}</code></td><td>Get daily medication schedule</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/medication_logs</code></td><td>Add medication entry</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/medication_logs?id=eq.{id}</code></td><td>Update / Mark as administered: <code>{ "administered": true, "administered_at": "...", "administered_by": "..." }</code></td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/medication_logs?id=eq.{id}</code></td><td>Delete medication entry</td></tr>
+</table>
+
+<!-- 3j: Health Center -->
+<h2>3j. Health Center Admissions</h2>
+<p><strong>Table:</strong> <code>health_center_admissions</code></p>
+
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/health_center_admissions?select=*,children(name)&company_id=eq.{id}&checked_out_at=is.null</code></td><td>Get current admissions (not checked out)</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/health_center_admissions</code></td><td>Admit camper/staff</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/health_center_admissions?id=eq.{id}</code></td><td>Checkout: <code>{ "checked_out_at": "...", "checked_out_by": "..." }</code></td></tr>
+</table>
+
+<!-- 3k: Appointments -->
+<h2>3k. Appointments</h2>
+<p><strong>Table:</strong> <code>appointments</code></p>
+
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/appointments?select=*,children(name),staff(name)&company_id=eq.{id}</code></td><td>List appointments</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/appointments</code></td><td>Create appointment</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/appointments?id=eq.{id}</code></td><td>Update appointment</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/appointments?id=eq.{id}</code></td><td>Delete appointment</td></tr>
+</table>
+
+<!-- 3l: Transportation / Trips -->
+<h2>3l. Transportation / Trips</h2>
+<p><strong>Table:</strong> <code>trips</code></p>
+
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/trips?select=*,trip_attendees(*,children(name)),trip_staff(*,staff(name))&company_id=eq.{id}</code></td><td>List trips with attendees</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/trips</code></td><td>Create trip</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/trips?id=eq.{id}</code></td><td>Update trip</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/trips?id=eq.{id}</code></td><td>Delete trip</td></tr>
+</table>
+
+<h4>Table: <code>trip_attendees</code> (Junction)</h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/trip_attendees</code></td><td>Add attendee to trip</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/trip_attendees?trip_id=eq.{id}</code></td><td>Remove attendees</td></tr>
+</table>
+
+<h4>Table: <code>trip_staff</code> (Junction)</h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/trip_staff</code></td><td>Assign staff to trip</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/trip_staff?trip_id=eq.{id}</code></td><td>Remove staff</td></tr>
+</table>
+
+<!-- 3m: Activities & Field Trips -->
+<h2>3m. Activities &amp; Field Trips</h2>
+<p><strong>Table:</strong> <code>activities_field_trips</code></p>
+
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/activities_field_trips?select=*,divisions(*),activities_field_trips_divisions(division_id)&company_id=eq.{id}</code></td><td>List activities</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/activities_field_trips</code></td><td>Create activity</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/activities_field_trips?id=eq.{id}</code></td><td>Update activity</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/activities_field_trips?id=eq.{id}</code></td><td>Delete activity</td></tr>
+</table>
+
+<!-- 3n: Special Events -->
+<h2>3n. Special Events &amp; Activities</h2>
+<p><strong>Table:</strong> <code>special_events_activities</code></p>
+
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/special_events_activities?select=*&company_id=eq.{id}</code></td><td>List special events</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/special_events_activities</code></td><td>Create event</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/special_events_activities?id=eq.{id}</code></td><td>Update event</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/special_events_activities?id=eq.{id}</code></td><td>Delete event</td></tr>
+</table>
+
+<!-- 3o: Sports Calendar -->
+<h2>3o. Sports Calendar</h2>
+<p><strong>Table:</strong> <code>sports_calendar</code></p>
+
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/sports_calendar?select=*,sports_calendar_divisions(division_id,divisions(*)),sports_event_roster(child_id,children(name))&company_id=eq.{id}</code></td><td>List sports events with divisions &amp; roster</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/sports_calendar</code></td><td>Create sports event</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/sports_calendar?id=eq.{id}</code></td><td>Update event</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/sports_calendar?id=eq.{id}</code></td><td>Delete event</td></tr>
+</table>
+
+<h4>Junction Tables: <code>sports_calendar_divisions</code>, <code>sports_event_roster</code></h4>
+<p>Standard CRUD on junction tables for division assignments and roster management.</p>
+
+<!-- 3p: Sports Academy -->
+<h2>3p. Sports Academy</h2>
+<p><strong>Table:</strong> <code>sports_academy</code></p>
+
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/sports_academy?select=*,children(name)&company_id=eq.{id}</code></td><td>List enrollments</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/sports_academy</code></td><td>Enroll camper</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/sports_academy?id=eq.{id}</code></td><td>Update enrollment</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/sports_academy?id=eq.{id}</code></td><td>Remove enrollment</td></tr>
+</table>
+
+<!-- 3q: Tutoring & Therapy -->
+<h2>3q. Tutoring &amp; Therapy</h2>
+<p><strong>Table:</strong> <code>tutoring_therapy</code></p>
+
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/tutoring_therapy?select=*,children(name,divisions(*))&company_id=eq.{id}</code></td><td>List enrollments</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/tutoring_therapy</code></td><td>Create enrollment</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/tutoring_therapy?id=eq.{id}</code></td><td>Update enrollment</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/tutoring_therapy?id=eq.{id}</code></td><td>Delete enrollment</td></tr>
+</table>
+
+<!-- 3r: Menu & Special Meals -->
+<h2>3r. Menu &amp; Special Meals</h2>
+
+<h4>Table: <code>menu_items</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/menu_items?select=*&company_id=eq.{id}&date=eq.{date}</code></td><td>Get menu for date</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/menu_items</code></td><td>Add menu item</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/menu_items?id=eq.{id}</code></td><td>Update menu item</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/menu_items?id=eq.{id}</code></td><td>Delete menu item</td></tr>
+</table>
+
+<h4>Table: <code>special_meals</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/special_meals?select=*,children(name)&company_id=eq.{id}</code></td><td>List special meals</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/special_meals</code></td><td>Add special meal</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/special_meals?id=eq.{id}</code></td><td>Update</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/special_meals?id=eq.{id}</code></td><td>Delete</td></tr>
+</table>
+
+<!-- 3s: Master Calendar -->
+<h2>3s. Master Calendar &amp; Events</h2>
+
+<h4>Table: <code>master_calendar</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/master_calendar?select=*,divisions(name)&company_id=eq.{id}</code></td><td>List calendar events</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/master_calendar</code></td><td>Create event</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/master_calendar?id=eq.{id}</code></td><td>Update event</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/master_calendar?id=eq.{id}</code></td><td>Delete event</td></tr>
+</table>
+
+<h4>Table: <code>events</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/events?select=*&company_id=eq.{id}</code></td><td>List events</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/events</code></td><td>Create event</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/events?id=eq.{id}</code></td><td>Update</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/events?id=eq.{id}</code></td><td>Delete</td></tr>
+</table>
+
+<!-- 3t: Daily Wolf -->
+<h2>3t. Daily Wolf Content</h2>
+
+<h4>Table: <code>daily_wolf_content</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/daily_wolf_content?select=*&company_id=eq.{id}&date=eq.{date}&season=eq.{season}</code></td><td>Get daily wolf for date</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/daily_wolf_content</code></td><td>Create content</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/daily_wolf_content?id=eq.{id}</code></td><td>Update content</td></tr>
+</table>
+
+<h4>Table: <code>daily_wolf_documents</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/daily_wolf_documents?select=*&company_id=eq.{id}&date=eq.{date}</code></td><td>Get uploaded documents</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/daily_wolf_documents</code></td><td>Record document upload</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/daily_wolf_documents?id=eq.{id}</code></td><td>Delete document record</td></tr>
+</table>
+
+<!-- 3u: Kanban Notes -->
+<h2>3u. Kanban Notes (Dashboard)</h2>
+<p><strong>Table:</strong> <code>kanban_notes</code></p>
+
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/kanban_notes?select=*&company_id=eq.{id}&season=eq.{season}&order=sort_order</code></td><td>Get kanban board</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/kanban_notes</code></td><td>Create note card</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/kanban_notes?id=eq.{id}</code></td><td>Update (move column, edit)</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/kanban_notes?id=eq.{id}</code></td><td>Delete note</td></tr>
+</table>
+
+<!-- 3v: Camper Reports & Evaluations -->
+<h2>3v. Camper Reports &amp; Evaluations</h2>
+
+<h4>Table: <code>camper_reports</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/camper_reports?select=*,children(name),profiles:created_by(full_name)&company_id=eq.{id}</code></td><td>List camper reports</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/camper_reports</code></td><td>Submit report</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/camper_reports?id=eq.{id}</code></td><td>Update report</td></tr>
+</table>
+
+<h4>Table: <code>camper_evaluation_questions</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/camper_evaluation_questions?select=*&company_id=eq.{id}&is_active=eq.true&order=sort_order</code></td><td>Get active evaluation questions</td></tr>
+</table>
+
+<!-- 3w: Staff Evaluations -->
+<h2>3w. Staff Evaluations</h2>
+
+<h4>Table: <code>evaluation_questions</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/evaluation_questions?select=*&company_id=eq.{id}&is_active=eq.true&order=display_order</code></td><td>Get evaluation questions</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/evaluation_questions</code></td><td>Add question</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/evaluation_questions?id=eq.{id}</code></td><td>Update question</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/evaluation_questions?id=eq.{id}</code></td><td>Delete question</td></tr>
+</table>
+
+<h4>Table: <code>staff_evaluations</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/staff_evaluations?select=*,staff(name),evaluation_responses(*)&company_id=eq.{id}</code></td><td>List evaluations</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/staff_evaluations</code></td><td>Submit evaluation</td></tr>
+</table>
+
+<h4>Table: <code>evaluation_responses</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/evaluation_responses</code></td><td>Submit responses (batch insert)</td></tr>
+</table>
+
+<!-- 3x: Roster Templates -->
+<h2>3x. Roster Templates</h2>
+
+<h4>Table: <code>roster_templates</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/roster_templates?select=*,roster_template_children(child_id,children(name))&company_id=eq.{id}</code></td><td>List templates</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/roster_templates</code></td><td>Create template</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/roster_templates?id=eq.{id}</code></td><td>Update template</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/roster_templates?id=eq.{id}</code></td><td>Delete template</td></tr>
+</table>
+
+<!-- 3y: User Roles & Permissions -->
+<h2>3y. User Roles &amp; Permissions</h2>
+
+<h4>Table: <code>profiles</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/profiles?select=*&company_id=eq.{id}</code></td><td>List user profiles</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/profiles?id=eq.{user_id}&select=*</code></td><td>Get own profile</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/profiles?id=eq.{user_id}</code></td><td>Update profile</td></tr>
+</table>
+
+<h4>Table: <code>user_roles</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/user_roles?select=*&user_id=eq.{id}</code></td><td>Get user roles</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/user_roles</code></td><td>Assign role</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/user_roles?id=eq.{id}</code></td><td>Update role</td></tr>
+</table>
+
+<h4>Table: <code>user_tags</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/user_tags?select=*&user_id=eq.{id}</code></td><td>Get user tags</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/user_tags</code></td><td>Add tag</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/user_tags?id=eq.{id}</code></td><td>Remove tag</td></tr>
+</table>
+
+<h4>Table: <code>division_permissions</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/division_permissions?select=*&user_id=eq.{id}&company_id=eq.{cid}</code></td><td>Get division access</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/division_permissions</code></td><td>Grant access</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/division_permissions?id=eq.{id}</code></td><td>Revoke access</td></tr>
+</table>
+
+<!-- 3z: Companies -->
+<h2>3z. Companies</h2>
+<p><strong>Table:</strong> <code>companies</code></p>
+
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/companies?select=*</code></td><td>List companies</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/companies?id=eq.{id}&select=*</code></td><td>Get company details</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/companies?id=eq.{id}</code></td><td>Update company</td></tr>
+</table>
+
+<!-- 3aa: Audit & Email Logs -->
+<h2>3aa. Audit Logs &amp; Email Logs</h2>
+
+<h4>Table: <code>audit_logs</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/audit_logs?select=*&company_id=eq.{id}&order=changed_at.desc&limit=100</code></td><td>Get recent audit trail</td></tr>
+</table>
+
+<h4>Table: <code>email_logs</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/email_logs?select=*&order=sent_at.desc</code></td><td>Get email send history</td></tr>
+</table>
+
+<!-- 3ab: Notification Preferences -->
+<h2>3ab. Notification Preferences</h2>
+
+<h4>Table: <code>automated_email_config</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/automated_email_config?select=*&company_id=eq.{id}</code></td><td>Get notification configs</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/automated_email_config</code></td><td>Create config</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/automated_email_config?id=eq.{id}</code></td><td>Update config</td></tr>
+</table>
+
+<!-- 3ac: Schedule Conflicts -->
+<h2>3ac. Schedule Conflicts</h2>
+<p><strong>Table:</strong> <code>schedule_conflicts</code></p>
+
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/schedule_conflicts?select=*&company_id=eq.{id}</code></td><td>Get detected conflicts</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/schedule_conflicts</code></td><td>Log conflict</td></tr>
+<tr><td><span class="badge patch">PATCH</span></td><td><code>/rest/v1/schedule_conflicts?id=eq.{id}</code></td><td>Update (resolve/dismiss)</td></tr>
+</table>
+
+<h4>Table: <code>division_schedules</code></h4>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/rest/v1/division_schedules?select=*&company_id=eq.{id}&division_id=eq.{div_id}</code></td><td>Get uploaded schedules</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/rest/v1/division_schedules</code></td><td>Record schedule upload</td></tr>
+<tr><td><span class="badge delete">DELETE</span></td><td><code>/rest/v1/division_schedules?id=eq.{id}</code></td><td>Delete schedule</td></tr>
+</table>
+
+<hr class="section-divider">
+
+<!-- SECTION 4: EDGE FUNCTIONS -->
+<h1>4. Edge Functions (Server-Side APIs)</h1>
+
+<div class="note">
+<strong>Base URL:</strong> <code>https://gdcxtefbarvnrtvacqln.supabase.co/functions/v1/{function_name}</code><br>
+All requests require <code>apikey</code> header. JWT-protected functions also require <code>Authorization: Bearer {token}</code>.
+</div>
+
+<table>
+<tr><th>#</th><th>Function Name</th><th>Method</th><th>JWT Required</th><th>Description</th><th>Request Body</th></tr>
+
+<tr><td>1</td><td><code>create-user</code></td><td><span class="badge post">POST</span></td><td>Yes</td><td>Create a new user account (admin only)</td>
+<td><code>{ "email", "password", "fullName", "role", "companyId" }</code></td></tr>
+
+<tr><td>2</td><td><code>delete-user</code></td><td><span class="badge post">POST</span></td><td>Yes</td><td>Delete a user account (admin only)</td>
+<td><code>{ "userId" }</code></td></tr>
+
+<tr><td>3</td><td><code>send-user-invitation</code></td><td><span class="badge post">POST</span></td><td>Yes</td><td>Send email invitation to new user</td>
+<td><code>{ "email", "fullName", "role", "companyId" }</code></td></tr>
+
+<tr><td>4</td><td><code>send-bulk-email</code></td><td><span class="badge post">POST</span></td><td>Yes</td><td>Send bulk in-app notifications and/or emails</td>
+<td><code>{ "subject", "message", "recipientTags": [], "recipientIds": [], "deliveryMethods": { "inApp": true, "email": false } }</code></td></tr>
+
+<tr><td>5</td><td><code>ai-chat</code></td><td><span class="badge post">POST</span></td><td>Yes</td><td>AI chat assistant</td>
+<td><code>{ "messages": [{ "role", "content" }], "companyId", "season" }</code></td></tr>
+
+<tr><td>6</td><td><code>get-weather</code></td><td><span class="badge post">POST</span></td><td>Yes</td><td>Get weather data for camp location</td>
+<td><code>{ "zipCode" }</code></td></tr>
+
+<tr><td>7</td><td><code>detect-schedule-conflicts</code></td><td><span class="badge post">POST</span></td><td>No</td><td>Check scheduling conflicts for entity</td>
+<td><code>{ "entityType", "entityId", "eventType", "eventId", "eventDate", "eventTime", "companyId" }</code></td></tr>
+
+<tr><td>8</td><td><code>notify-staff-assignment</code></td><td><span class="badge post">POST</span></td><td>Yes</td><td>Notify staff about event assignment</td>
+<td><code>{ "staffNames", "eventTitle", "eventDate", "eventType", "companyId" }</code></td></tr>
+
+<tr><td>9</td><td><code>send-appointment-notification</code></td><td><span class="badge post">POST</span></td><td>No</td><td>Send appointment create/update notification</td>
+<td><code>{ "appointment_id", "action" }</code></td></tr>
+
+<tr><td>10</td><td><code>send-incident-notification</code></td><td><span class="badge post">POST</span></td><td>No</td><td>Send incident report notification</td>
+<td><code>{ "incident_id", "action" }</code></td></tr>
+
+<tr><td>11</td><td><code>send-health-center-notification</code></td><td><span class="badge post">POST</span></td><td>No</td><td>Notify about health center admission/checkout</td>
+<td><code>{ "admission_id", "action" }</code></td></tr>
+
+<tr><td>12</td><td><code>send-user-approval-notification</code></td><td><span class="badge post">POST</span></td><td>No</td><td>Notify admins about new user signup</td>
+<td><code>{ "user_id", "user_email", "user_name" }</code></td></tr>
+
+<tr><td>13</td><td><code>notify-transportation-events</code></td><td><span class="badge post">POST</span></td><td>No</td><td>Notify about transportation events</td>
+<td><code>{ "trip_id", "action" }</code></td></tr>
+
+<tr><td>14</td><td><code>send-event-notifications</code></td><td><span class="badge post">POST</span></td><td>No</td><td>Send calendar event notifications</td>
+<td><code>{ "event_id", "action" }</code></td></tr>
+
+<tr><td>15</td><td><code>send-sports-academy-notification</code></td><td><span class="badge post">POST</span></td><td>No</td><td>Notify about sports academy enrollment</td>
+<td><code>{ "enrollment_id", "action" }</code></td></tr>
+
+<tr><td>16</td><td><code>send-tutoring-notification</code></td><td><span class="badge post">POST</span></td><td>No</td><td>Notify about tutoring/therapy enrollment</td>
+<td><code>{ "enrollment_id", "action" }</code></td></tr>
+
+<tr><td>17</td><td><code>check-medication-alerts</code></td><td><span class="badge post">POST</span></td><td>No</td><td>Check for overdue medications (cron)</td>
+<td><code>{}</code></td></tr>
+
+<tr><td>18</td><td><code>generate-daily-medications</code></td><td><span class="badge post">POST</span></td><td>No</td><td>Generate daily medication schedule from recurring entries</td>
+<td><code>{}</code></td></tr>
+
+<tr><td>19</td><td><code>process-scheduled-notifications</code></td><td><span class="badge post">POST</span></td><td>No</td><td>Process pending scheduled notifications (cron)</td>
+<td><code>{}</code></td></tr>
+
+<tr><td>20</td><td><code>populate-guardian-emails</code></td><td><span class="badge post">POST</span></td><td>No</td><td>Populate guardian emails from CampMinder data</td>
+<td><code>{ "company_id" }</code></td></tr>
+
+<tr><td>21</td><td><code>test-m365-connection</code></td><td><span class="badge post">POST</span></td><td>Yes</td><td>Test Microsoft 365 email configuration</td>
+<td><code>{ "company_id" }</code></td></tr>
+
+<tr><td>22</td><td><code>test-campminder-connection</code></td><td><span class="badge post">POST</span></td><td>Yes</td><td>Test CampMinder API connection</td>
+<td><code>{ "company_id" }</code></td></tr>
+
+<tr><td>23</td><td><code>sync-campminder</code></td><td><span class="badge post">POST</span></td><td>No</td><td>Sync data from CampMinder</td>
+<td><code>{ "company_id", "sync_type" }</code></td></tr>
+
+<tr><td>24</td><td><code>import-tyler-hill-data</code></td><td><span class="badge post">POST</span></td><td>Yes</td><td>Import Tyler Hill specific data</td>
+<td><code>{ "campersData", "awardsData", "companyId", "season" }</code></td></tr>
+
+<tr><td>25</td><td><code>cleanup-campminder</code></td><td><span class="badge post">POST</span></td><td>No</td><td>Cleanup stale CampMinder data</td>
+<td><code>{ "company_id" }</code></td></tr>
+</table>
+
+<hr class="section-divider">
+
+<!-- SECTION 5: FILE STORAGE -->
+<h1>5. File Storage APIs</h1>
+
+<div class="note">
+<strong>Storage Base URL:</strong> <code>https://gdcxtefbarvnrtvacqln.supabase.co/storage/v1</code>
+</div>
+
+<h3>Storage Buckets Used</h3>
+<table>
+<tr><th>Bucket Name</th><th>Public?</th><th>Used For</th></tr>
+<tr><td><code>profile-photos</code></td><td>No (signed URLs)</td><td>Camper &amp; staff profile photos</td></tr>
+<tr><td><code>company-logos</code></td><td>Yes</td><td>Company logo images</td></tr>
+<tr><td><code>daily-wolf-documents</code></td><td>Yes</td><td>Daily Wolf PDF/document uploads</td></tr>
+<tr><td><code>rainy-day-documents</code></td><td>Yes</td><td>Rainy day schedules &amp; special event files</td></tr>
+<tr><td><code>trip-attachments</code></td><td>Yes</td><td>Trip/transportation file attachments</td></tr>
+<tr><td><code>division-schedules</code></td><td>No (signed URLs)</td><td>Division schedule documents</td></tr>
+</table>
+
+<h3>Storage Operations</h3>
+<table>
+<tr><th>Operation</th><th>Method</th><th>Endpoint</th><th>Notes</th></tr>
+<tr><td>Upload File</td><td><span class="badge post">POST</span></td><td><code>/storage/v1/object/{bucket}/{path}</code></td><td>Body: file binary. Headers: <code>Content-Type: {mime}</code></td></tr>
+<tr><td>Get Public URL</td><td><span class="badge get">GET</span></td><td><code>/storage/v1/object/public/{bucket}/{path}</code></td><td>Only for public buckets</td></tr>
+<tr><td>Create Signed URL</td><td><span class="badge post">POST</span></td><td><code>/storage/v1/object/sign/{bucket}/{path}</code></td><td>Body: <code>{ "expiresIn": 3600 }</code></td></tr>
+<tr><td>Delete File</td><td><span class="badge delete">DELETE</span></td><td><code>/storage/v1/object/{bucket}/{path}</code></td><td></td></tr>
+<tr><td>List Files</td><td><span class="badge post">POST</span></td><td><code>/storage/v1/object/list/{bucket}</code></td><td>Body: <code>{ "prefix": "folder/" }</code></td></tr>
+</table>
+
+<hr class="section-divider">
+
+<!-- SECTION 6: REALTIME -->
+<h1>6. Realtime Subscriptions</h1>
+
+<div class="note">
+<strong>WebSocket URL:</strong> <code>wss://gdcxtefbarvnrtvacqln.supabase.co/realtime/v1/websocket?apikey={ANON_KEY}</code><br><br>
+Use the Supabase client library for your mobile platform (iOS/Android/Flutter) for easy realtime integration.
+</div>
+
+<h3>Tables with Realtime Enabled</h3>
+<table>
+<tr><th>Table</th><th>Events Watched</th><th>Used In</th></tr>
+<tr><td><code>children</code></td><td>INSERT, UPDATE, DELETE</td><td>Daily Wolf Printable, Daily Notes</td></tr>
+<tr><td><code>special_meals</code></td><td>INSERT, UPDATE, DELETE</td><td>Daily Wolf Printable</td></tr>
+<tr><td><code>sports_calendar</code></td><td>INSERT, UPDATE, DELETE</td><td>Daily Wolf Printable, Daily Notes</td></tr>
+<tr><td><code>special_events_activities</code></td><td>INSERT, UPDATE, DELETE</td><td>Daily Wolf Printable, Daily Notes</td></tr>
+<tr><td><code>daily_wolf_content</code></td><td>INSERT, UPDATE, DELETE</td><td>Daily Wolf Printable</td></tr>
+<tr><td><code>menu_items</code></td><td>INSERT, UPDATE, DELETE</td><td>Daily Notes</td></tr>
+<tr><td><code>activities_field_trips</code></td><td>INSERT, UPDATE, DELETE</td><td>Daily Notes</td></tr>
+<tr><td><code>messages</code></td><td>INSERT</td><td>Inline Thread (message replies)</td></tr>
+</table>
+
+<hr class="section-divider">
+
+<!-- SECTION 7: COMMON PATTERNS -->
+<h1>7. Common Patterns &amp; Headers</h1>
+
+<h3>Required Headers for ALL Requests</h3>
+<pre>{
+  "apikey": "{ANON_KEY}",
+  "Content-Type": "application/json"
+}
+
+// For authenticated requests, add:
+{
+  "Authorization": "Bearer {jwt_access_token}"
+}</pre>
+
+<h3>PostgREST Query Operators</h3>
+<table>
+<tr><th>Operator</th><th>Usage</th><th>Example</th></tr>
+<tr><td>eq</td><td>Equals</td><td><code>?company_id=eq.abc123</code></td></tr>
+<tr><td>neq</td><td>Not equals</td><td><code>?status=neq.deleted</code></td></tr>
+<tr><td>gt / gte</td><td>Greater than</td><td><code>?date=gte.2026-06-01</code></td></tr>
+<tr><td>lt / lte</td><td>Less than</td><td><code>?date=lte.2026-08-31</code></td></tr>
+<tr><td>like / ilike</td><td>Pattern match</td><td><code>?name=ilike.*john*</code></td></tr>
+<tr><td>in</td><td>In list</td><td><code>?status=in.(active,pending)</code></td></tr>
+<tr><td>is</td><td>IS NULL / IS TRUE</td><td><code>?checked_out_at=is.null</code></td></tr>
+<tr><td>order</td><td>Sort results</td><td><code>?order=created_at.desc</code></td></tr>
+<tr><td>limit</td><td>Limit results</td><td><code>?limit=50</code></td></tr>
+<tr><td>offset</td><td>Pagination offset</td><td><code>?offset=50</code></td></tr>
+<tr><td>select</td><td>Column selection</td><td><code>?select=id,name,email</code></td></tr>
+</table>
+
+<h3>Embedding Related Tables</h3>
+<pre>// Get children with their bunk and division names
+GET /rest/v1/children?select=*,bunks(bunk_name),divisions(name)&company_id=eq.{id}
+
+// Get trips with attendees and staff
+GET /rest/v1/trips?select=*,trip_attendees(children(name)),trip_staff(staff(name))&company_id=eq.{id}</pre>
+
+<h3>Insert with Return</h3>
+<pre>POST /rest/v1/children
+Headers: { "Prefer": "return=representation" }
+Body: { "name": "John Doe", "company_id": "...", "person_id": "..." }
+
+// Returns the created record</pre>
+
+<h3>Batch Insert</h3>
+<pre>POST /rest/v1/trip_attendees
+Body: [
+  { "trip_id": "...", "child_id": "child1", "company_id": "..." },
+  { "trip_id": "...", "child_id": "child2", "company_id": "..." }
+]</pre>
+
+<h3>Upsert</h3>
+<pre>POST /rest/v1/daily_wolf_content
+Headers: { "Prefer": "resolution=merge-duplicates" }
+Body: { "company_id": "...", "date": "2026-07-15", "quote_of_the_day": "..." }</pre>
+
+<h3>RPC (Database Functions)</h3>
+<pre>POST /rest/v1/rpc/{function_name}
+Body: { "param1": "value1" }</pre>
+
+<h3>Authentication Flow for Mobile</h3>
+<pre>
+1. Sign Up:
+   POST /auth/v1/signup
+   Body: { "email": "user@camp.com", "password": "securePass123" }
+   → Returns: { "access_token", "refresh_token", "user" }
+
+2. Sign In:
+   POST /auth/v1/token?grant_type=password
+   Body: { "email": "user@camp.com", "password": "securePass123" }
+   → Returns: { "access_token", "refresh_token", "user" }
+
+3. Use token in all subsequent requests:
+   Authorization: Bearer {access_token}
+
+4. Refresh when expired:
+   POST /auth/v1/token?grant_type=refresh_token
+   Body: { "refresh_token": "..." }
+   → Returns new { "access_token", "refresh_token" }
+
+5. Sign Out:
+   POST /auth/v1/logout
+   Authorization: Bearer {access_token}
+</pre>
+
+<div class="warning">
+<strong>Important Notes:</strong><br>
+• All tables enforce Row Level Security (RLS) - users can only access data their role permits.<br>
+• The default query limit is 1000 rows. Use <code>limit</code> and <code>offset</code> for pagination.<br>
+• Always filter by <code>company_id</code> to scope data to the correct organization.<br>
+• Season filtering (<code>season=eq.{season}</code>) is used across most modules.<br>
+• Use Supabase client libraries (Swift, Kotlin, Flutter) for easier integration vs raw HTTP.
+</div>
+
+</body>
+</html>
