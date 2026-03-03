@@ -99,6 +99,12 @@ export default function CSVFormatGuide({ open, onOpenChange }: CSVFormatGuidePro
       columns: "person_id, service_type, provider_name, schedule_day, schedule_time, duration_minutes, notes, status",
       example: "P12345, Tutoring, Dr. Smith, Monday, 10:00, 60, Math tutoring, active",
       notes: "REQUIRED: person_id, service_type. The person_id must match the child's Person ID in the roster."
+    },
+    special_events_activities: {
+      title: "Special Events & Activities",
+      columns: "title, event_type, event_date, time_slot, start_time, end_time, location, description, chaperone",
+      example: "Color War, Special Event, 2024-06-20, Morning, 09:00, 12:00, Main Field, Annual color war event, Jane Smith",
+      notes: "REQUIRED: title, event_type, event_date, time_slot. time_slot examples: Morning, Afternoon, Evening, All Day."
     }
   };
 
@@ -131,10 +137,11 @@ export default function CSVFormatGuide({ open, onOpenChange }: CSVFormatGuidePro
             <TabsTrigger value="sports_calendar" className="text-xs">Sports</TabsTrigger>
             <TabsTrigger value="daily_wolf_content" className="text-xs">Daily Wolf</TabsTrigger>
           </TabsList>
-          <TabsList className="grid grid-cols-3 h-auto mt-2">
+          <TabsList className="grid grid-cols-4 h-auto mt-2">
             <TabsTrigger value="activities_field_trips" className="text-xs">Activities</TabsTrigger>
             <TabsTrigger value="sports_academy" className="text-xs">Sports Academy</TabsTrigger>
             <TabsTrigger value="tutoring_therapy" className="text-xs">Tutoring</TabsTrigger>
+            <TabsTrigger value="special_events_activities" className="text-xs">Special Events</TabsTrigger>
           </TabsList>
 
           {Object.entries(formats).map(([key, format]) => (
