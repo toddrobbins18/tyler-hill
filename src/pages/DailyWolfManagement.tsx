@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,6 +39,9 @@ export default function DailyWolfManagement() {
   const [saving, setSaving] = useState(false);
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
+  const isTimberLakeWest = currentCompany?.slug === 'timber-lake-west';
+  const odLabel = isTimberLakeWest ? 'Super OD' : 'OD';
+  const odDescription = isTimberLakeWest ? 'Super OD information' : 'Officer of the Day information';
 
   useEffect(() => {
     fetchContent();
@@ -302,8 +305,8 @@ export default function DailyWolfManagement() {
         <div className="grid gap-6 md:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>OD</CardTitle>
-              <CardDescription>Officer of the Day information</CardDescription>
+              <CardTitle>{odLabel}</CardTitle>
+              <CardDescription>{odDescription}</CardDescription>
             </CardHeader>
             <CardContent>
               <Input

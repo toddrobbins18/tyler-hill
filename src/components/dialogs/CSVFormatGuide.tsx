@@ -75,6 +75,30 @@ export default function CSVFormatGuide({ open, onOpenChange }: CSVFormatGuidePro
       columns: "event_date, title, sport_type, description, time, location, team, opponent",
       example: "2024-06-25, Championship Game, Basketball, Final game of season, 14:00, Main Court, Eagles, Hawks",
       notes: "REQUIRED: event_date, title, sport_type."
+    },
+    daily_wolf_content: {
+      title: "Daily Wolf Content",
+      columns: "date, officer_of_day, quote_of_the_day, laundry_info, phone_calls_info, notes",
+      example: "2024-06-15, John Smith, Believe in yourself!, Laundry at 2pm for Bunk 5, Phone calls 6-7pm, Color War starts tomorrow!",
+      notes: "REQUIRED: date. All other fields are optional text fields."
+    },
+    activities_field_trips: {
+      title: "Activities & Field Trips",
+      columns: "title, activity_type, event_date, time, location, description, capacity, chaperone, home_away, depart_from_camp, depart_from_activity",
+      example: "Zoo Trip, Field Trip, 2024-06-15, 09:00, City Zoo, Educational trip, 30, Jane Smith, Away, 08:30, 14:00",
+      notes: "REQUIRED: title, activity_type, event_date. activity_type examples: Field Trip, On-Campus, Special Event."
+    },
+    sports_academy: {
+      title: "Sports Academy",
+      columns: "person_id, sport, session, enrollment_date, status, notes",
+      example: "P12345, Basketball, Session 1, 2024-06-01, active, Advanced level",
+      notes: "REQUIRED: person_id, sport. The person_id must match the child's Person ID in the roster."
+    },
+    tutoring_therapy: {
+      title: "Tutoring & Therapy",
+      columns: "person_id, service_type, provider_name, schedule_day, schedule_time, duration_minutes, notes, status",
+      example: "P12345, Tutoring, Dr. Smith, Monday, 10:00, 60, Math tutoring, active",
+      notes: "REQUIRED: person_id, service_type. The person_id must match the child's Person ID in the roster."
     }
   };
 
@@ -101,10 +125,16 @@ export default function CSVFormatGuide({ open, onOpenChange }: CSVFormatGuidePro
             <TabsTrigger value="daily_notes" className="text-xs">Daily Notes</TabsTrigger>
             <TabsTrigger value="incident_reports" className="text-xs">Incidents</TabsTrigger>
           </TabsList>
-          <TabsList className="grid grid-cols-3 h-auto mt-2">
+          <TabsList className="grid grid-cols-4 h-auto mt-2">
             <TabsTrigger value="bunk_staff" className="text-xs">Bunk Staff</TabsTrigger>
             <TabsTrigger value="master_calendar" className="text-xs">Calendar</TabsTrigger>
             <TabsTrigger value="sports_calendar" className="text-xs">Sports</TabsTrigger>
+            <TabsTrigger value="daily_wolf_content" className="text-xs">Daily Wolf</TabsTrigger>
+          </TabsList>
+          <TabsList className="grid grid-cols-3 h-auto mt-2">
+            <TabsTrigger value="activities_field_trips" className="text-xs">Activities</TabsTrigger>
+            <TabsTrigger value="sports_academy" className="text-xs">Sports Academy</TabsTrigger>
+            <TabsTrigger value="tutoring_therapy" className="text-xs">Tutoring</TabsTrigger>
           </TabsList>
 
           {Object.entries(formats).map(([key, format]) => (
