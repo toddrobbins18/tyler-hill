@@ -26,25 +26,25 @@ const ALL_FORMATS: Record<string, FormatDef> = {
     title: "Children Roster",
     columns: "first_name, last_name, person_id, age, grade, gender, guardian_phone, guardian_email, medical_notes, allergies, emergency_contact, status, season",
     example: "John, Doe, P12345, 10, 5, Male, 555-1234, parent@email.com, None, Peanuts, Jane Doe 555-5678, active, Summer 2024",
-    notes: "REQUIRED: first_name, last_name, and person_id. The person_id is essential for matching records and must be unique for each child."
+    notes: "REQUIRED: first_name and last_name (or name). All other fields are optional. person_id is recommended for matching records."
   },
   staff: {
     title: "Staff Directory",
     columns: "first_name, last_name, person_id, email, phone, role, department, hire_date, status, season",
     example: "Jane, Smith, S98765, jane@camp.com, 555-9876, Counselor, Activities, 2024-01-15, active, Summer 2024",
-    notes: "REQUIRED: first_name (or name), last_name, person_id, and role. The person_id must match CampMinder Person ID for proper syncing."
+    notes: "REQUIRED: first_name (or name) and last_name. Role defaults to 'Staff' if not provided. All other fields are optional."
   },
   medication_logs: {
     title: "Medication Logs",
     columns: "person_id, medication_name, dosage, scheduled_time, date, notes, is_recurring, frequency, days_of_week, end_date",
     example: "P12345, Tylenol, 5ml, 08:00, 2024-01-15, Take with food, false, daily, , ",
-    notes: "REQUIRED: person_id, medication_name, scheduled_time, date. The person_id must match the child's Person ID in the roster."
+    notes: "REQUIRED: medication_name. person_id, date, and scheduled_time are recommended. All other fields are optional."
   },
   trips: {
     title: "Transportation/Trips",
     columns: "name, type, date, destination, departure_time, return_time, capacity, driver, chaperone, transportation_type, event_type, event_length, meal, status",
     example: "Zoo Trip, Field Trip, 2024-06-15, City Zoo, 09:00, 15:00, 30, John Driver, Jane Chaperone, Bus, Educational, Half Day, Packed Lunch, confirmed",
-    notes: "REQUIRED: name, type, date. Other fields are optional."
+    notes: "REQUIRED: name. Type defaults to 'Trip' if not provided. All other fields are optional."
   },
   menu_items: {
     title: "Menu Items",
@@ -56,20 +56,20 @@ const ALL_FORMATS: Record<string, FormatDef> = {
     title: "Awards",
     columns: "person_id, title, category, date, description",
     example: "P12345, Best Sportsmanship, Sports, 2024-06-15, Showed excellent teamwork during soccer",
-    notes: "REQUIRED: person_id, title, date. The person_id must match the child's Person ID in the roster."
+    notes: "REQUIRED: title. person_id and date are recommended for matching. All other fields are optional."
   },
   daily_notes: {
     title: "Daily Notes",
     columns: "person_id, date, mood, activities, meals, nap, notes",
     example: "P12345, 2024-06-15, Happy, Arts and crafts; Swimming, Ate well, 1 hour, Great day overall",
-    notes: "REQUIRED: person_id, date. The person_id must match the child's Person ID in the roster.",
+    notes: "All fields are optional. person_id and date are recommended for proper record matching.",
     excludeSlugs: ["timber-lake-camp", "timber-lake-west"],
   },
   incident_reports: {
     title: "Incident Reports",
     columns: "person_id, date, type, severity, description, reported_by, reporter_person_id, status",
     example: "P12345, 2024-06-15, Minor Injury, Low, Scraped knee on playground, Jane Smith, S98765, resolved",
-    notes: "REQUIRED: person_id, date, type, description. For multiple children, use comma-separated person_ids."
+    notes: "All fields are optional. person_id, date, type, and description are recommended. For multiple children, use comma-separated person_ids."
   },
   bunk_staff: {
     title: "Bunk Staff Assignments",
@@ -81,13 +81,13 @@ const ALL_FORMATS: Record<string, FormatDef> = {
     title: "Master Calendar",
     columns: "event_date, title, type, description, time, location",
     example: "2024-06-20, Swimming Day, Activity, Pool day for all divisions, 10:00, Main Pool",
-    notes: "REQUIRED: event_date, title, type."
+    notes: "REQUIRED: title. event_date and type are recommended. All other fields are optional."
   },
   sports_calendar: {
     title: "Sports Calendar",
     columns: "event_date, title, sport_type, description, time, location, team, opponent",
     example: "2024-06-25, Championship Game, Basketball, Final game of season, 14:00, Main Court, Eagles, Hawks",
-    notes: "REQUIRED: event_date, title, sport_type."
+    notes: "REQUIRED: title. event_date and sport_type are recommended. All other fields are optional."
   },
   daily_wolf_content: {
     title: "Daily Wolf Content",
@@ -100,25 +100,25 @@ const ALL_FORMATS: Record<string, FormatDef> = {
     title: "Activities & Field Trips",
     columns: "title, activity_type, event_date, time, location, description, capacity, chaperone, home_away, depart_from_camp, depart_from_activity",
     example: "Zoo Trip, Field Trip, 2024-06-15, 09:00, City Zoo, Educational trip, 30, Jane Smith, Away, 08:30, 14:00",
-    notes: "REQUIRED: title, activity_type, event_date. activity_type examples: Field Trip, On-Campus, Special Event."
+    notes: "REQUIRED: title. activity_type and event_date are recommended. All other fields are optional."
   },
   sports_academy: {
     title: "Sports Academy",
     columns: "person_id, sport, session, enrollment_date, status, notes",
     example: "P12345, Basketball, Session 1, 2024-06-01, active, Advanced level",
-    notes: "REQUIRED: person_id, sport. The person_id must match the child's Person ID in the roster."
+    notes: "All fields are optional. person_id and sport are recommended for proper matching."
   },
   tutoring_therapy: {
     title: "Tutoring & Therapy",
     columns: "person_id, service_type, provider_name, schedule_day, schedule_time, duration_minutes, notes, status",
     example: "P12345, Tutoring, Dr. Smith, Monday, 10:00, 60, Math tutoring, active",
-    notes: "REQUIRED: person_id, service_type. The person_id must match the child's Person ID in the roster."
+    notes: "All fields are optional. person_id and service_type are recommended for proper matching."
   },
   special_events_activities: {
     title: "Special Events & Activities",
     columns: "title, event_type, event_date, time_slot, start_time, end_time, location, description, chaperone",
     example: "Color War, Special Event, 2024-06-20, Morning, 09:00, 12:00, Main Field, Annual color war event, Jane Smith",
-    notes: "REQUIRED: title, event_type, event_date, time_slot. time_slot examples: Morning, Afternoon, Evening, All Day."
+    notes: "REQUIRED: title. event_type, event_date, and time_slot are recommended. All other fields are optional."
   },
 };
 

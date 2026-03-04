@@ -1,18 +1,17 @@
 import { z } from "zod";
 
-// Child validation schema - Only First Name, Last Name, and Person ID are required
+// Child validation schema - Only name and person_id are required
 export const childSchema = z.object({
   name: z.string().trim().min(1, "First and Last Name are required").max(100, "Name must be less than 100 characters"),
   person_id: z.string().trim().min(1, "Person ID is required").max(50, "Person ID must be less than 50 characters"),
-  age: z.number().int().min(0, "Age must be positive").max(18, "Age must be 18 or less").nullable().optional(),
-  grade: z.string().trim().max(50, "Grade must be less than 50 characters").nullable().optional(),
-  group_name: z.string().trim().max(100, "Group name must be less than 100 characters").nullable().optional(),
-  guardian_email: z.union([z.string().trim().email("Invalid email address").max(255), z.literal("")]).nullable().optional(),
-  guardian_phone: z.string().trim().max(20, "Phone must be less than 20 characters").nullable().optional(),
-  emergency_contact: z.string().trim().max(255, "Emergency contact must be less than 255 characters").nullable().optional(),
-  allergies: z.string().trim().max(1000, "Allergies must be less than 1000 characters").nullable().optional(),
-  medical_notes: z.string().trim().max(1000, "Medical notes must be less than 1000 characters").nullable().optional(),
-  // Additional fields that are set by the form but not explicitly validated
+  age: z.number().int().min(0).max(18).nullable().optional(),
+  grade: z.string().trim().max(50).nullable().optional(),
+  group_name: z.string().trim().max(100).nullable().optional(),
+  guardian_email: z.union([z.string().trim().email().max(255), z.literal("")]).nullable().optional(),
+  guardian_phone: z.string().trim().max(20).nullable().optional(),
+  emergency_contact: z.string().trim().max(255).nullable().optional(),
+  allergies: z.string().trim().max(1000).nullable().optional(),
+  medical_notes: z.string().trim().max(1000).nullable().optional(),
   category: z.string().nullable().optional(),
   gender: z.string().nullable().optional(),
   division_id: z.string().uuid().nullable().optional(),
@@ -33,32 +32,32 @@ export const childSchema = z.object({
   rfid: z.string().nullable().optional(),
 });
 
-// Staff validation schema - person_id REQUIRED for CSV matching
+// Staff validation schema - only name is truly required
 export const staffSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(100, "Name must be less than 100 characters"),
-  person_id: z.string().trim().min(1, "Person ID is required").max(50, "Person ID must be less than 50 characters"),
-  role: z.string().trim().min(1, "Role is required").max(100, "Role must be less than 100 characters"),
-  department: z.string().trim().max(100, "Department must be less than 100 characters").nullable().optional(),
-  email: z.union([z.string().trim().email("Invalid email address").max(255), z.literal("")]).nullable().optional(),
-  phone: z.string().trim().max(20, "Phone must be less than 20 characters").nullable().optional(),
+  name: z.string().trim().min(1, "Name is required").max(100),
+  person_id: z.string().trim().max(50).optional().default(""),
+  role: z.string().trim().max(100).optional().default("Staff"),
+  department: z.string().trim().max(100).nullable().optional(),
+  email: z.union([z.string().trim().email().max(255), z.literal("")]).nullable().optional(),
+  phone: z.string().trim().max(20).nullable().optional(),
   hire_date: z.string().nullable().optional(),
   leader_id: z.string().uuid().nullable().optional(),
   staff_type: z.enum(["general_counselor", "specialist", "both"]).nullable().optional(),
 });
 
-// Award validation schema - uses person_id for CSV matching
+// Award validation schema
 export const awardSchema = z.object({
   title: z.string().min(1, "Title is required"),
-  person_id: z.string().trim().min(1, "Person ID is required"),
-  date: z.string(),
+  person_id: z.string().trim().optional().default(""),
+  date: z.string().optional().default(""),
   category: z.string().optional(),
   description: z.string().optional(),
 });
 
-// Daily note validation schema - uses person_id for CSV matching
+// Daily note validation schema
 export const dailyNoteSchema = z.object({
-  person_id: z.string().trim().min(1, "Person ID is required"),
-  date: z.string(),
+  person_id: z.string().trim().optional().default(""),
+  date: z.string().optional().default(""),
   mood: z.string().optional(),
   activities: z.string().optional(),
   meals: z.string().optional(),
@@ -69,8 +68,8 @@ export const dailyNoteSchema = z.object({
 // Trip validation schema
 export const tripSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  type: z.string().min(1, "Type is required"),
-  date: z.string(),
+  type: z.string().optional().default("Trip"),
+  date: z.string().optional().default(""),
   end_date: z.string().optional(),
   is_multi_day: z.boolean().optional().default(false),
   destination: z.string().optional(),
@@ -80,7 +79,7 @@ export const tripSchema = z.object({
   capacity: z.number().optional(),
   status: z.string().optional(),
 }).refine((data) => {
-  if (data.is_multi_day && data.end_date) {
+  if (data.is_multi_day && data.end_date && data.date) {
     return new Date(data.end_date) > new Date(data.date);
   }
   return true;
@@ -100,12 +99,12 @@ export const menuItemSchema = z.object({
   allergens: z.string().nullable().optional(),
 });
 
-// Incident report validation schema - uses person_ids for CSV matching
+// Incident report validation schema
 export const incidentReportSchema = z.object({
   person_ids: z.array(z.string().trim()).default([]),
-  date: z.string().min(1, "Date is required"),
-  type: z.string().min(1, "Type is required"),
-  description: z.string().min(1, "Description is required"),
+  date: z.string().optional().default(""),
+  type: z.string().optional().default("General"),
+  description: z.string().optional().default(""),
   severity: z.string().optional(),
   tags: z.array(z.string()).optional(),
   reported_by: z.string().optional(),
@@ -114,13 +113,13 @@ export const incidentReportSchema = z.object({
   season: z.string().optional(),
 });
 
-// Medication validation schema - uses person_id for CSV matching
+// Medication validation schema
 export const medicationSchema = z.object({
-  person_id: z.string().trim().min(1, "Person ID is required"),
-  date: z.string().min(1, "Date is required"),
+  person_id: z.string().trim().optional().default(""),
+  date: z.string().optional().default(""),
   medication_name: z.string().min(1, "Medication name is required"),
   dosage: z.string().optional(),
-  scheduled_time: z.string().min(1, "Scheduled time is required"),
+  scheduled_time: z.string().optional().default(""),
   notes: z.string().optional(),
   is_recurring: z.boolean().optional(),
   frequency: z.string().optional(),
@@ -130,20 +129,20 @@ export const medicationSchema = z.object({
 
 // Calendar event validation schema
 export const calendarEventSchema = z.object({
-  event_date: z.string().min(1, "Date is required"),
+  event_date: z.string().optional().default(""),
   title: z.string().min(1, "Title is required"),
   description: z.string().optional(),
-  type: z.string().min(1, "Type is required"),
+  type: z.string().optional().default("Event"),
   time: z.string().optional(),
   location: z.string().optional(),
 });
 
 // Sports calendar validation schema
 export const sportsCalendarSchema = z.object({
-  event_date: z.string().min(1, "Date is required"),
+  event_date: z.string().optional().default(""),
   title: z.string().min(1, "Title is required"),
   description: z.string().optional(),
-  sport_type: z.string().min(1, "Sport type is required"),
+  sport_type: z.string().optional().default("General"),
   time: z.string().optional(),
   location: z.string().optional(),
   team: z.string().optional(),
@@ -153,15 +152,15 @@ export const sportsCalendarSchema = z.object({
 // Daily Wolf Content validation schema
 export const dailyWolfContentSchema = z.object({
   date: z.string().min(1, "Date is required"),
-  officer_of_day: z.string().max(500, "OD must be less than 500 characters").optional(),
-  laundry_info: z.string().max(1000, "Laundry info must be less than 1000 characters").optional(),
-  phone_calls_info: z.string().max(1000, "Phone calls info must be less than 1000 characters").optional(),
-  quote_of_the_day: z.string().max(500, "Quote must be less than 500 characters").optional(),
-  notes: z.string().max(2000, "Notes must be less than 2000 characters").optional(),
+  officer_of_day: z.string().max(500).optional(),
+  laundry_info: z.string().max(1000).optional(),
+  phone_calls_info: z.string().max(1000).optional(),
+  quote_of_the_day: z.string().max(500).optional(),
+  notes: z.string().max(2000).optional(),
   season: z.string().optional(),
 });
 
-// Bunk staff assignment validation schema (for CSV upload) - requires person_id for matching
+// Bunk staff assignment validation schema
 export const bunkStaffSchema = z.object({
   person_id: z.string().min(1, "Person ID is required"),
   bunk_number: z.number().int().min(1, "Bunk number is required"),
@@ -170,11 +169,9 @@ export const bunkStaffSchema = z.object({
 });
 
 export function parseBunkStaffRow(row: Record<string, any>) {
-  // Parse bunk number - support various CSV column naming
   let bunkNumber = row.bunk_number || row['Bunk Number'] || row.bunk || row.Bunk || '';
   bunkNumber = parseInt(String(bunkNumber).trim(), 10);
   
-  // Parse is_primary - support true/false, yes/no, 1/0
   let isPrimary = row.is_primary || row['Is Primary'] || row.primary || row.Primary || '';
   isPrimary = ['true', 'yes', '1', 'primary'].includes(String(isPrimary).toLowerCase().trim());
   
@@ -188,7 +185,6 @@ export function parseBunkStaffRow(row: Record<string, any>) {
 
 // Convert CSV row to typed object for children
 export function parseChildRow(row: Record<string, any>) {
-  // Construct full name from first and last name
   const firstName = row.first_name || row['First Name'] || row.firstname || '';
   const lastName = row.last_name || row['Last Name'] || row.lastname || '';
   const fullName = `${firstName} ${lastName}`.trim() || row.name || '';
@@ -207,9 +203,8 @@ export function parseChildRow(row: Record<string, any>) {
   };
 }
 
-// Convert CSV row to typed object for staff - requires person_id
+// Convert CSV row to typed object for staff
 export function parseStaffRow(row: Record<string, any>) {
-  // Construct full name from first and last name if available
   const firstName = row.first_name || row['First Name'] || row.firstname || '';
   const lastName = row.last_name || row['Last Name'] || row.lastname || '';
   const fullName = `${firstName} ${lastName}`.trim() || row.name || row.Name || '';
@@ -225,7 +220,7 @@ export function parseStaffRow(row: Record<string, any>) {
   };
 }
 
-// Award CSV parser - uses person_id for matching
+// Award CSV parser
 export function parseAwardRow(row: Record<string, any>) {
   return {
     title: String(row.title || row.Title || ''),
@@ -236,7 +231,7 @@ export function parseAwardRow(row: Record<string, any>) {
   };
 }
 
-// Daily note CSV parser - uses person_id for matching
+// Daily note CSV parser
 export function parseDailyNoteRow(row: Record<string, any>) {
   return {
     person_id: String(row.person_id || row['Person ID'] || row.PersonID || row.personid || '').trim(),
@@ -278,9 +273,8 @@ export function parseMenuItemRow(row: Record<string, any>) {
   };
 }
 
-// Incident report CSV parser - uses person_ids for matching
+// Incident report CSV parser
 export function parseIncidentReportRow(row: Record<string, any>) {
-  // Support single person_id or comma-separated list
   const personIdString = String(row.person_id || row['Person ID'] || row.PersonID || row.person_ids || row['Person IDs'] || '').trim();
   const personIds = personIdString ? personIdString.split(',').map(id => id.trim()).filter(Boolean) : [];
   
@@ -296,7 +290,7 @@ export function parseIncidentReportRow(row: Record<string, any>) {
   };
 }
 
-// Medication CSV parser - uses person_id for matching
+// Medication CSV parser
 export function parseMedicationRow(row: Record<string, any>) {
   return {
     person_id: String(row.person_id || row['Person ID'] || row.PersonID || row.personid || '').trim(),
