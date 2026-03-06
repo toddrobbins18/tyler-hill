@@ -344,11 +344,13 @@ export default function MasterCalendar() {
       const dateCompare = new Date(a.event_date + 'T00:00:00').getTime() - new Date(b.event_date + 'T00:00:00').getTime();
       if (dateCompare !== 0) return dateCompare;
       
-      // If same date, sort by time
-      if (a.time && b.time) {
-        return a.time.localeCompare(b.time);
-      }
-      return a.time ? -1 : b.time ? 1 : 0;
+      // If same date, sort by normalized time
+      const timeA = getNormalizedEventTime(a);
+      const timeB = getNormalizedEventTime(b);
+      if (timeA && timeB) return timeA.localeCompare(timeB);
+      if (timeA) return -1;
+      if (timeB) return 1;
+      return 0;
     });
 
   const groupedEvents: Record<string, UnifiedEvent[]> = filteredAndSortedEvents.reduce((acc, event) => {
