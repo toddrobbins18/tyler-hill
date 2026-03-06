@@ -553,23 +553,31 @@ export default function MasterCalendar() {
                 let allDay = false;
                 
                 if (hasSpecificTime) {
-                  // Use actual start and end times for the event
-                  startDate = new Date(event.event_date + 'T' + event.originalData.start_time);
-                  endDate = new Date(event.event_date + 'T' + event.originalData.end_time);
+                  // Normalize start/end times for special events
+                  const normStart = getNormalizedEventTime({ ...event, time: event.originalData.start_time, originalData: { ...event.originalData, start_time_field: event.originalData.start_time } });
+                  const normEnd = getNormalizedEventTime({ ...event, time: event.originalData.end_time, originalData: { ...event.originalData, start_time_field: event.originalData.end_time } });
+                  if (normStart && normEnd) {
+                    startDate = new Date(event.event_date + 'T' + normStart + ':00');
+                    endDate = new Date(event.event_date + 'T' + normEnd + ':00');
+                  } else {
+                    startDate = new Date(event.event_date + 'T' + event.originalData.start_time);
+                    endDate = new Date(event.event_date + 'T' + event.originalData.end_time);
+                  }
                 } else if (isMultiDay) {
                   startDate = new Date(event.event_date + 'T00:00:00');
-                  endDate = addDays(new Date(event.originalData.end_date + 'T00:00:00'), 1); // Add 1 day because react-big-calendar end is exclusive
+                  endDate = addDays(new Date(event.originalData.end_date + 'T00:00:00'), 1);
                   allDay = true;
-                } else if (event.time) {
-                  // For sports events and field trips with a time
-                  startDate = new Date(event.event_date + 'T' + event.time);
-                  // Assume 2 hour duration for events with only start time
-                  endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
                 } else {
-                  // No time specified - show as all day
-                  startDate = new Date(event.event_date + 'T00:00:00');
-                  endDate = new Date(event.event_date + 'T23:59:59');
-                  allDay = true;
+                  // Use normalized time for all other events
+                  const normalizedTime = getNormalizedEventTime(event);
+                  if (normalizedTime) {
+                    startDate = new Date(event.event_date + 'T' + normalizedTime + ':00');
+                    endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
+                  } else {
+                    startDate = new Date(event.event_date + 'T00:00:00');
+                    endDate = new Date(event.event_date + 'T23:59:59');
+                    allDay = true;
+                  }
                 }
                 
                 return {
