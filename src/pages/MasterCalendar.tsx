@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CSVUploader } from "@/components/CSVUploader";
 import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar';
-import { format, parse, startOfWeek, getDay, addDays, eachDayOfInterval } from 'date-fns';
+import { format, parse, startOfWeek, getDay, addDays, eachDayOfInterval, isValid } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -251,6 +251,40 @@ export default function MasterCalendar() {
     return { sportsStaff: sportsStaff || [] };
   };
 
+  const getNormalizedEventTime = (event: UnifiedEvent): string | null => {
+    const rawTime = event.originalData?.start_time_field || event.originalData?.start_time || event.time || event.originalData?.depart_time;
+    if (!rawTime || typeof rawTime !== "string") return null;
+
+    const trimmedTime = rawTime.trim();
+    if (!trimmedTime) return null;
+
+    // Handle ranges like "9:30 AM - 10:30 AM" by using the start portion
+    const startPortion = trimmedTime.split("-")[0]?.trim() || trimmedTime;
+
+    // 24-hour with seconds (e.g. 09:30:00)
+    if (/^\d{1,2}:\d{2}:\d{2}$/.test(startPortion)) {
+      return startPortion.slice(0, 5).padStart(5, "0");
+    }
+
+    // 24-hour (e.g. 9:05, 14:30)
+    if (/^\d{1,2}:\d{2}$/.test(startPortion)) {
+      return startPortion.padStart(5, "0");
+    }
+
+    // 12-hour time with AM/PM (e.g. 9:05 AM, 12 PM)
+    const parsed12Hour = parse(startPortion, "h:mm a", new Date());
+    if (isValid(parsed12Hour)) {
+      return format(parsed12Hour, "HH:mm");
+    }
+
+    const parsedHourOnly = parse(startPortion, "h a", new Date());
+    if (isValid(parsedHourOnly)) {
+      return format(parsedHourOnly, "HH:mm");
+    }
+
+    return null;
+  };
+
   const getTimeOfDayFromTime = (timeStr?: string) => {
     if (!timeStr) return "unknown";
     const hour = parseInt(timeStr.split(':')[0]);
@@ -310,11 +344,13 @@ export default function MasterCalendar() {
       const dateCompare = new Date(a.event_date + 'T00:00:00').getTime() - new Date(b.event_date + 'T00:00:00').getTime();
       if (dateCompare !== 0) return dateCompare;
       
-      // If same date, sort by time
-      if (a.time && b.time) {
-        return a.time.localeCompare(b.time);
-      }
-      return a.time ? -1 : b.time ? 1 : 0;
+      // If same date, sort by normalized time
+      const timeA = getNormalizedEventTime(a);
+      const timeB = getNormalizedEventTime(b);
+      if (timeA && timeB) return timeA.localeCompare(timeB);
+      if (timeA) return -1;
+      if (timeB) return 1;
+      return 0;
     });
 
   const groupedEvents: Record<string, UnifiedEvent[]> = filteredAndSortedEvents.reduce((acc, event) => {
@@ -517,23 +553,31 @@ export default function MasterCalendar() {
                 let allDay = false;
                 
                 if (hasSpecificTime) {
-                  // Use actual start and end times for the event
-                  startDate = new Date(event.event_date + 'T' + event.originalData.start_time);
-                  endDate = new Date(event.event_date + 'T' + event.originalData.end_time);
+                  // Normalize start/end times for special events
+                  const normStart = getNormalizedEventTime({ ...event, time: event.originalData.start_time, originalData: { ...event.originalData, start_time_field: event.originalData.start_time } });
+                  const normEnd = getNormalizedEventTime({ ...event, time: event.originalData.end_time, originalData: { ...event.originalData, start_time_field: event.originalData.end_time } });
+                  if (normStart && normEnd) {
+                    startDate = new Date(event.event_date + 'T' + normStart + ':00');
+                    endDate = new Date(event.event_date + 'T' + normEnd + ':00');
+                  } else {
+                    startDate = new Date(event.event_date + 'T' + event.originalData.start_time);
+                    endDate = new Date(event.event_date + 'T' + event.originalData.end_time);
+                  }
                 } else if (isMultiDay) {
                   startDate = new Date(event.event_date + 'T00:00:00');
-                  endDate = addDays(new Date(event.originalData.end_date + 'T00:00:00'), 1); // Add 1 day because react-big-calendar end is exclusive
+                  endDate = addDays(new Date(event.originalData.end_date + 'T00:00:00'), 1);
                   allDay = true;
-                } else if (event.time) {
-                  // For sports events and field trips with a time
-                  startDate = new Date(event.event_date + 'T' + event.time);
-                  // Assume 2 hour duration for events with only start time
-                  endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
                 } else {
-                  // No time specified - show as all day
-                  startDate = new Date(event.event_date + 'T00:00:00');
-                  endDate = new Date(event.event_date + 'T23:59:59');
-                  allDay = true;
+                  // Use normalized time for all other events
+                  const normalizedTime = getNormalizedEventTime(event);
+                  if (normalizedTime) {
+                    startDate = new Date(event.event_date + 'T' + normalizedTime + ':00');
+                    endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
+                  } else {
+                    startDate = new Date(event.event_date + 'T00:00:00');
+                    endDate = new Date(event.event_date + 'T23:59:59');
+                    allDay = true;
+                  }
                 }
                 
                 return {
