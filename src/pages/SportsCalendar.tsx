@@ -446,24 +446,32 @@ export default function SportsCalendar() {
   const uniqueLocations = Array.from(new Set(events.map(e => e.location))).filter(Boolean).sort();
 
   const getNormalizedEventTime = (event: any): string | null => {
-    const rawTime = event.start_time_field || event.time;
+    const rawTime = event.start_time_field || event.time || event.depart_time;
     if (!rawTime || typeof rawTime !== "string") return null;
 
     const trimmedTime = rawTime.trim();
     if (!trimmedTime) return null;
 
-    // 24-hour time (e.g. 9:05, 14:30)
-    if (/^\d{1,2}:\d{2}$/.test(trimmedTime)) {
-      return trimmedTime.padStart(5, "0");
+    // Handle ranges like "9:30 AM - 10:30 AM" by using the start portion
+    const startPortion = trimmedTime.split("-")[0]?.trim() || trimmedTime;
+
+    // 24-hour with seconds (e.g. 09:30:00)
+    if (/^\d{1,2}:\d{2}:\d{2}$/.test(startPortion)) {
+      return startPortion.slice(0, 5).padStart(5, "0");
+    }
+
+    // 24-hour (e.g. 9:05, 14:30)
+    if (/^\d{1,2}:\d{2}$/.test(startPortion)) {
+      return startPortion.padStart(5, "0");
     }
 
     // 12-hour time with AM/PM (e.g. 9:05 AM, 12 PM)
-    const parsed12Hour = parse(trimmedTime, "h:mm a", new Date());
+    const parsed12Hour = parse(startPortion, "h:mm a", new Date());
     if (isValid(parsed12Hour)) {
       return format(parsed12Hour, "HH:mm");
     }
 
-    const parsedHourOnly = parse(trimmedTime, "h a", new Date());
+    const parsedHourOnly = parse(startPortion, "h a", new Date());
     if (isValid(parsedHourOnly)) {
       return format(parsedHourOnly, "HH:mm");
     }
