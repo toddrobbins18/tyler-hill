@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CSVUploader } from "@/components/CSVUploader";
 import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar';
-import { format, parse, startOfWeek, getDay } from 'date-fns';
+import { format, parse, startOfWeek, getDay, isValid } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -445,6 +445,32 @@ export default function SportsCalendar() {
   const uniqueEventTypes = Array.from(new Set(events.map(e => e.event_type))).filter(Boolean).sort();
   const uniqueLocations = Array.from(new Set(events.map(e => e.location))).filter(Boolean).sort();
 
+  const getNormalizedEventTime = (event: any): string | null => {
+    const rawTime = event.start_time_field || event.time;
+    if (!rawTime || typeof rawTime !== "string") return null;
+
+    const trimmedTime = rawTime.trim();
+    if (!trimmedTime) return null;
+
+    // 24-hour time (e.g. 9:05, 14:30)
+    if (/^\d{1,2}:\d{2}$/.test(trimmedTime)) {
+      return trimmedTime.padStart(5, "0");
+    }
+
+    // 12-hour time with AM/PM (e.g. 9:05 AM, 12 PM)
+    const parsed12Hour = parse(trimmedTime, "h:mm a", new Date());
+    if (isValid(parsed12Hour)) {
+      return format(parsed12Hour, "HH:mm");
+    }
+
+    const parsedHourOnly = parse(trimmedTime, "h a", new Date());
+    if (isValid(parsedHourOnly)) {
+      return format(parsedHourOnly, "HH:mm");
+    }
+
+    return null;
+  };
+
   const filteredAndSortedEvents = events
     .filter(event => {
       // Division filter
@@ -522,14 +548,16 @@ export default function SportsCalendar() {
       }
       
       // Default or date sort
-      const dateCompare = new Date(a.event_date).getTime() - new Date(b.event_date).getTime();
+      const dateCompare = new Date(a.event_date + 'T00:00:00').getTime() - new Date(b.event_date + 'T00:00:00').getTime();
       if (dateCompare !== 0) return dateCompare;
       
-      // If same date, sort by time
-      if (a.time && b.time) {
-        return a.time.localeCompare(b.time);
-      }
-      return a.time ? -1 : b.time ? 1 : 0;
+      // If same date, sort by normalized start time
+      const timeA = getNormalizedEventTime(a);
+      const timeB = getNormalizedEventTime(b);
+      if (timeA && timeB) return timeA.localeCompare(timeB);
+      if (timeA) return -1;
+      if (timeB) return 1;
+      return 0;
     });
 
   const groupedEvents: Record<string, any[]> = filteredAndSortedEvents.reduce((acc, event) => {
@@ -714,22 +742,20 @@ export default function SportsCalendar() {
             <Calendar
               localizer={localizer}
               events={filteredAndSortedEvents.map(event => {
-                const timeStr = event.start_time_field || event.time;
-                let start: Date;
-                let end: Date;
-                if (timeStr) {
-                  start = new Date(event.event_date + 'T' + timeStr.padStart(5, '0') + ':00');
-                  end = new Date(start.getTime() + 60 * 60 * 1000); // 1 hour duration
-                } else {
-                  start = new Date(event.event_date + 'T00:00:00');
-                  end = new Date(event.event_date + 'T23:59:59');
-                }
+                const normalizedTime = getNormalizedEventTime(event);
+                const start = normalizedTime
+                  ? new Date(`${event.event_date}T${normalizedTime}:00`)
+                  : new Date(`${event.event_date}T00:00:00`);
+                const end = normalizedTime
+                  ? new Date(start.getTime() + 60 * 60 * 1000)
+                  : new Date(`${event.event_date}T23:59:59`);
+
                 return {
                   id: event.id,
                   title: `${getDisplaySport(event)}: ${event.title}`,
                   start,
                   end,
-                  allDay: !timeStr,
+                  allDay: !normalizedTime,
                   resource: event,
                 };
               })}
