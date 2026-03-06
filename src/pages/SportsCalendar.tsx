@@ -713,13 +713,26 @@ export default function SportsCalendar() {
           <CardContent className="p-6">
             <Calendar
               localizer={localizer}
-              events={filteredAndSortedEvents.map(event => ({
-                id: event.id,
-                title: `${getDisplaySport(event)}: ${event.title}`,
-                start: new Date(event.event_date + 'T00:00:00'),
-                end: new Date(event.event_date + 'T23:59:59'),
-                resource: event,
-              }))}
+              events={filteredAndSortedEvents.map(event => {
+                const timeStr = event.start_time_field || event.time;
+                let start: Date;
+                let end: Date;
+                if (timeStr) {
+                  start = new Date(event.event_date + 'T' + timeStr.padStart(5, '0') + ':00');
+                  end = new Date(start.getTime() + 60 * 60 * 1000); // 1 hour duration
+                } else {
+                  start = new Date(event.event_date + 'T00:00:00');
+                  end = new Date(event.event_date + 'T23:59:59');
+                }
+                return {
+                  id: event.id,
+                  title: `${getDisplaySport(event)}: ${event.title}`,
+                  start,
+                  end,
+                  allDay: !timeStr,
+                  resource: event,
+                };
+              })}
               startAccessor="start"
               endAccessor="end"
               style={{ height: 600 }}
