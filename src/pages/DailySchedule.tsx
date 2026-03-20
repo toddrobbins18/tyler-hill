@@ -86,6 +86,7 @@ export default function DailySchedule() {
   useEffect(() => {
     if (currentCompany?.id) {
       fetchScheduleEvents();
+      if (isTimberLakeCamp) fetchTigerTimesContent();
     }
   }, [currentCompany?.id, selectedDate, selectedSeason]);
 
