@@ -54,6 +54,7 @@ export default function DailySchedule() {
   // Tiger Times content for Timber Lake Camp
   const [tigerTimesContent, setTigerTimesContent] = useState<any>(null);
   const isTimberLakeCamp = currentCompany?.slug === 'timber-lake-camp';
+  const ttColors = useTigerTimesColors();
 
   const fetchTigerTimesContent = async () => {
     if (!currentCompany || !isTimberLakeCamp) return;
