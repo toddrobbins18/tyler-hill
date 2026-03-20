@@ -188,6 +188,33 @@ export default function ElectiveSignUp() {
     return counts;
   }, []);
 
+  const fetchCamperHistory = async (childId: string) => {
+    setHistoryLoading(true);
+    setHistoryChildId(childId);
+    const { data } = await supabase
+      .from("elective_signups")
+      .select("*, electives(name)")
+      .eq("company_id", currentCompany!.id)
+      .eq("child_id", childId)
+      .order("week_start_date", { ascending: false });
+    setHistoryResults(data || []);
+    setHistoryLoading(false);
+  };
+
+  const filteredHistoryChildren = useMemo(() => {
+    let filtered = allChildren;
+    if (historyDivision !== "all") {
+      filtered = filtered.filter((c) => c.division_id === historyDivision);
+    }
+    if (historySearch.trim()) {
+      const q = historySearch.toLowerCase();
+      filtered = filtered.filter((c) => c.name.toLowerCase().includes(q));
+    }
+    return filtered;
+  }, [allChildren, historyDivision, historySearch]);
+
+  const historyChildName = allChildren.find((c) => c.id === historyChildId)?.name;
+
   const periodLabel = PERIODS.find((p) => p.id === selectedPeriod);
 
   // Rosters: group signups by elective
