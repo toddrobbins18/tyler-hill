@@ -600,10 +600,7 @@ export default function SpecialEventsActivities() {
                   <SelectItem value="evening-activity">Evening Activity</SelectItem>
                   {isTimberLakeCamp && (
                     <>
-                      <SelectItem value="tournament">Tournament</SelectItem>
                       <SelectItem value="wednesday-event">Wednesday Event</SelectItem>
-                      <SelectItem value="admin-notes">Admin Notes</SelectItem>
-                      <SelectItem value="trip">Trip</SelectItem>
                     </>
                   )}
                   <SelectItem value="campfire">Campfire</SelectItem>
