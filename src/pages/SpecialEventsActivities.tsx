@@ -389,6 +389,7 @@ export default function SpecialEventsActivities() {
       title: event.title,
       description: event.description || "",
       event_type: event.event_type,
+      sub_category: event.sub_category || "",
       start_time: event.start_time || "",
       end_time: event.end_time || "",
       location: event.location || "",
