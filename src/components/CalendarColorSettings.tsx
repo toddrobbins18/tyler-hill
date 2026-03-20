@@ -52,12 +52,15 @@ export function CalendarColorSettings({ calendarId, defaultColors, onColorsChang
     });
     localStorage.setItem(STORAGE_KEY_PREFIX + calendarId, JSON.stringify(overrides));
     onColorsChange(updated);
+    // Dispatch custom event for same-tab listeners
+    window.dispatchEvent(new Event(calendarId + "-colors-updated"));
   };
 
   const handleReset = () => {
     setColors(defaultColors);
     localStorage.removeItem(STORAGE_KEY_PREFIX + calendarId);
     onColorsChange(defaultColors);
+    window.dispatchEvent(new Event(calendarId + "-colors-updated"));
   };
 
   const entries = Object.entries(colors);

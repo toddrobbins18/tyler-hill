@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon, Loader2 } from 'lucide-react';
+import { CalendarColorSettings } from '@/components/CalendarColorSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { useCompany } from '@/contexts/CompanyContext';
 import { useSeasonContext } from '@/contexts/SeasonContext';
@@ -53,6 +54,15 @@ export default function DailyWolfManagement() {
   const odDescription = isTimberLakeWest ? 'Super OD information' : 'Officer of the Day information';
   const pageTitle = isTimberLakeCamp ? 'Tiger Times' : 'Daily Wolf Management';
   const pageDescription = isTimberLakeCamp ? 'Manage daily content for Tiger Times' : 'Manage daily content for The Daily Wolf';
+
+  const tigerTimesDefaultColors: Record<string, string> = {
+    "Laundry": "#3b82f6",
+    "Phone Calls": "#ef4444",
+    "Outside Events": "#eab308",
+    "Staff Days Off": "#7dd3fc",
+    "OD Notes": "#ff69b4",
+  };
+  const [tigerTimesColors, setTigerTimesColors] = useState<Record<string, string>>(tigerTimesDefaultColors);
 
   useEffect(() => {
     fetchContent();
@@ -307,7 +317,16 @@ export default function DailyWolfManagement() {
             </PopoverContent>
           </Popover>
         </div>
-        <CSVUploader tableName="daily_wolf_content" onUploadComplete={fetchContent} />
+        <div className="flex gap-2">
+          {isTimberLakeCamp && (
+            <CalendarColorSettings
+              calendarId="tiger-times"
+              defaultColors={tigerTimesDefaultColors}
+              onColorsChange={setTigerTimesColors}
+            />
+          )}
+          <CSVUploader tableName="daily_wolf_content" onUploadComplete={fetchContent} />
+        </div>
       </div>
 
       {loading ? (
@@ -326,7 +345,7 @@ export default function DailyWolfManagement() {
         </Card>
       ) : isTimberLakeCamp ? (
         <div className="grid gap-6 md:grid-cols-2">
-          <Card>
+          <Card style={{ borderTopWidth: '3px', borderTopColor: tigerTimesColors["Laundry"] }}>
             <CardHeader>
               <CardTitle>👕 Laundry</CardTitle>
               <CardDescription>Laundry schedule and information</CardDescription>
@@ -343,7 +362,7 @@ export default function DailyWolfManagement() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card style={{ borderTopWidth: '3px', borderTopColor: tigerTimesColors["Phone Calls"] }}>
             <CardHeader>
               <CardTitle>📞 Phone Calls</CardTitle>
               <CardDescription>Phone call schedule and notes</CardDescription>
@@ -360,7 +379,7 @@ export default function DailyWolfManagement() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card style={{ borderTopWidth: '3px', borderTopColor: tigerTimesColors["Outside Events"] }}>
             <CardHeader>
               <CardTitle>🌐 Outside Event</CardTitle>
               <CardDescription>External events and activities</CardDescription>
@@ -377,7 +396,7 @@ export default function DailyWolfManagement() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card style={{ borderTopWidth: '3px', borderTopColor: tigerTimesColors["OD Notes"] }}>
             <CardHeader>
               <CardTitle>💗 OD Notes</CardTitle>
               <CardDescription>Officer of the Day notes</CardDescription>
@@ -394,7 +413,7 @@ export default function DailyWolfManagement() {
             </CardContent>
           </Card>
 
-          <Card className="md:col-span-2">
+          <Card className="md:col-span-2" style={{ borderTopWidth: '3px', borderTopColor: tigerTimesColors["Staff Days Off"] }}>
             <CardHeader>
               <CardTitle>🗓️ Staff Days Off</CardTitle>
               <CardDescription>Staff schedule and days off information</CardDescription>

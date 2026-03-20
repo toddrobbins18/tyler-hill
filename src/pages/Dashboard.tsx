@@ -1,4 +1,5 @@
 import { Users, Truck, FileText, Award, Utensils, Calendar as CalendarIcon, CalendarDays, MapPin, Cake, Trophy, Activity, Quote, Phone, Shirt, User, Camera, Globe, CalendarOff } from "lucide-react";
+import { useTigerTimesColors } from "@/hooks/useTigerTimesColors";
 import { StatCard } from "@/components/StatCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ interface DailyWolfContent {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { getDivisionFilter } = usePermissions();
+  const ttColors = useTigerTimesColors();
   const { userRole } = useAuth();
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
@@ -911,11 +913,11 @@ export default function Dashboard() {
       {/* Tiger Times Content for Timber Lake Camp */}
       {isTimberLakeCamp && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20">
+          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20" style={{ borderTopWidth: '3px', borderTopColor: ttColors["Laundry"] }}>
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-blue-500/10">
-                  <Shirt className="h-4 w-4 text-blue-600" />
+                <div className="p-2 rounded-lg" style={{ backgroundColor: ttColors["Laundry"] + '1a' }}>
+                  <Shirt className="h-4 w-4" style={{ color: ttColors["Laundry"] }} />
                 </div>
                 <CardTitle className="text-base">👕 Laundry</CardTitle>
               </div>
@@ -927,11 +929,11 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20">
+          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20" style={{ borderTopWidth: '3px', borderTopColor: ttColors["Phone Calls"] }}>
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-red-500/10">
-                  <Phone className="h-4 w-4 text-red-600" />
+                <div className="p-2 rounded-lg" style={{ backgroundColor: ttColors["Phone Calls"] + '1a' }}>
+                  <Phone className="h-4 w-4" style={{ color: ttColors["Phone Calls"] }} />
                 </div>
                 <CardTitle className="text-base">📞 Phone Calls</CardTitle>
               </div>
@@ -943,11 +945,11 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20">
+          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20" style={{ borderTopWidth: '3px', borderTopColor: ttColors["Outside Events"] }}>
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-amber-400/10">
-                  <Globe className="h-4 w-4 text-amber-500" />
+                <div className="p-2 rounded-lg" style={{ backgroundColor: ttColors["Outside Events"] + '1a' }}>
+                  <Globe className="h-4 w-4" style={{ color: ttColors["Outside Events"] }} />
                 </div>
                 <CardTitle className="text-base">🌐 Outside Events</CardTitle>
               </div>
@@ -959,11 +961,11 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20">
+          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20" style={{ borderTopWidth: '3px', borderTopColor: ttColors["Staff Days Off"] }}>
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-sky-300/10">
-                  <CalendarOff className="h-4 w-4 text-sky-400" />
+                <div className="p-2 rounded-lg" style={{ backgroundColor: ttColors["Staff Days Off"] + '1a' }}>
+                  <CalendarOff className="h-4 w-4" style={{ color: ttColors["Staff Days Off"] }} />
                 </div>
                 <CardTitle className="text-base">🗓️ Staff Days Off</CardTitle>
               </div>
@@ -975,11 +977,11 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20">
+          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20" style={{ borderTopWidth: '3px', borderTopColor: ttColors["OD Notes"] }}>
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-pink-500/10">
-                  <FileText className="h-4 w-4 text-pink-500" />
+                <div className="p-2 rounded-lg" style={{ backgroundColor: ttColors["OD Notes"] + '1a' }}>
+                  <FileText className="h-4 w-4" style={{ color: ttColors["OD Notes"] }} />
                 </div>
                 <CardTitle className="text-base">💗 OD Notes</CardTitle>
               </div>

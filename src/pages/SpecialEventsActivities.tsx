@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Sun, Moon, Plus, Pencil, Trash2, Calendar as CalendarIcon, Paperclip, FileText, Download, X } from "lucide-react";
+import { CalendarColorSettings } from "@/components/CalendarColorSettings";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -54,6 +55,29 @@ export default function SpecialEventsActivities() {
   });
 
   const isTimberLakeCamp = currentCompany?.id === '1d296ccf-31e1-4176-af57-50a4a4820f82';
+
+  // Color settings for event types
+  const specialEventsDefaultColors: Record<string, string> = {
+    "special-event": "#3b82f6",
+    "evening-activity": "#8b5cf6",
+    ...(isTimberLakeCamp ? {
+      "rookie-day": "#22c55e",
+      "tour": "#000000",
+      "divisional-night": "#bf00ff",
+      "campus-night": "#4d4dff",
+      "full-camp": "#ff6600",
+    } : {}),
+    "campfire": "#f59e0b",
+    "movie-night": "#6366f1",
+    "talent-show": "#ec4899",
+    "game-night": "#14b8a6",
+    "other": "#6b7280",
+  };
+  const [eventTypeColors, setEventTypeColors] = useState<Record<string, string>>(specialEventsDefaultColors);
+
+  const getEventTypeColor = (eventType: string): string => {
+    return eventTypeColors[eventType] || "#6b7280";
+  };
 
   const subCategoryMap: Record<string, { label: string; color?: string }[]> = {};
 
@@ -437,6 +461,11 @@ export default function SpecialEventsActivities() {
           <p className="text-muted-foreground">Special events and evening activities</p>
         </div>
         <div className="flex gap-2">
+          <CalendarColorSettings
+            calendarId="special-events"
+            defaultColors={specialEventsDefaultColors}
+            onColorsChange={setEventTypeColors}
+          />
           <CSVUploader tableName="special_events_activities" onUploadComplete={fetchEvents} />
           <Button onClick={() => setShowDialog(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -522,7 +551,7 @@ export default function SpecialEventsActivities() {
                         </CardHeader>
                         <CardContent className="space-y-2">
                           <div className="flex gap-2 flex-wrap">
-                            <Badge>{event.emoji ? `${event.emoji} ` : ''}{event.event_type}</Badge>
+                            <Badge style={{ backgroundColor: getEventTypeColor(event.event_type), color: '#fff' }}>{event.emoji ? `${event.emoji} ` : ''}{event.event_type}</Badge>
                             {event.sub_category && (
                               <Badge className={getSubCategoryColor(event.event_type, event.sub_category) || ""}>
                                 {event.sub_category}
