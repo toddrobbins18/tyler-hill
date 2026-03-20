@@ -60,29 +60,12 @@ export default function SpecialEventsActivities() {
       { label: "Campus Night" },
       { label: "Full Camp" },
     ],
-    "tournament": [
-      { label: "Away", color: "bg-orange-500 text-white" },
-      { label: "Home", color: "bg-green-800 text-white" },
-    ],
     "wednesday-event": [
       { label: "GORDON" },
       { label: "JACOBS" },
       { label: "BOCIAN/MELTER BOWL" },
       { label: "Olympics" },
       { label: "Wacky Wednesday" },
-    ],
-    "admin-notes": [
-      { label: "Picture Day" },
-      { label: "Laundry" },
-      { label: "Phone Calls" },
-      { label: "Outside Event" },
-      { label: "Staff Days Off" },
-    ],
-    "trip": [
-      { label: "Teen Trip", color: "bg-black text-white" },
-      { label: "Collegiate Trip", color: "bg-blue-600 text-white" },
-      { label: "Senior Trip", color: "bg-red-600 text-white" },
-      { label: "Junior Trip", color: "bg-purple-600 text-white" },
     ],
   } : {};
 
