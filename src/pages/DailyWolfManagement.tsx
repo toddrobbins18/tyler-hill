@@ -46,8 +46,11 @@ export default function DailyWolfManagement() {
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
   const isTimberLakeWest = currentCompany?.slug === 'timber-lake-west';
+  const isTimberLakeCamp = currentCompany?.slug === 'timber-lake-camp';
   const odLabel = isTimberLakeWest ? 'Super OD' : 'OD';
   const odDescription = isTimberLakeWest ? 'Super OD information' : 'Officer of the Day information';
+  const pageTitle = isTimberLakeCamp ? 'Tiger Times' : 'Daily Wolf Management';
+  const pageDescription = isTimberLakeCamp ? 'Manage daily content for Tiger Times' : 'Manage daily content for The Daily Wolf';
 
   useEffect(() => {
     fetchContent();

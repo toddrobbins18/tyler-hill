@@ -70,7 +70,7 @@ const getMenuItems = (companySlug?: string) => {
     });
   }
 
-  // Add Daily Wolf items ONLY for Timber Lake West
+  // Add Daily Wolf items for Timber Lake West
   if (companySlug === 'timber-lake-west') {
     baseItems.push(
       {
@@ -81,6 +81,18 @@ const getMenuItems = (companySlug?: string) => {
       },
       {
         title: "Daily Wolf Management",
+        url: "/daily-wolf-management",
+        icon: ClipboardEdit,
+        menuId: "daily-wolf-management"
+      }
+    );
+  }
+
+  // Add Tiger Times for Timber Lake Camp
+  if (companySlug === 'timber-lake-camp') {
+    baseItems.push(
+      {
+        title: "Tiger Times",
         url: "/daily-wolf-management",
         icon: ClipboardEdit,
         menuId: "daily-wolf-management"
