@@ -240,6 +240,8 @@ export default function MasterCalendar() {
           const eventDivisions = event.originalData?.divisions?.map((d: any) => d.id) || 
                                  event.originalData?.sports_calendar_divisions?.map((d: any) => d.division_id) || [];
           if (eventDivisionId) eventDivisions.push(eventDivisionId);
+          // Tiger Times events have no division, always show them
+          if (event.source === 'tiger_times') return true;
           return eventDivisions.some((divId: string) => divisionFilter.includes(divId)) || eventDivisions.length === 0;
         });
       }
