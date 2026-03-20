@@ -461,6 +461,11 @@ export default function SpecialEventsActivities() {
           <p className="text-muted-foreground">Special events and evening activities</p>
         </div>
         <div className="flex gap-2">
+          <CalendarColorSettings
+            calendarId="special-events"
+            defaultColors={specialEventsDefaultColors}
+            onColorsChange={setEventTypeColors}
+          />
           <CSVUploader tableName="special_events_activities" onUploadComplete={fetchEvents} />
           <Button onClick={() => setShowDialog(true)}>
             <Plus className="h-4 w-4 mr-2" />
