@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { Calendar as CalendarIcon, Plus, List, Pencil, Trash2, Search, X, Trophy, Users, Star, Sparkles, MapPin, Clock, Home, Plane, FileText, Download } from "lucide-react";
-import { CalendarColorSettings } from "@/components/CalendarColorSettings";
+
 import { CalendarZoomWrapper } from "@/components/CalendarZoomWrapper";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -66,35 +66,57 @@ export default function MasterCalendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState<UnifiedEvent | null>(null);
   const { toast } = useToast();
-  const [customColors, setCustomColors] = useState<Record<string, string>>({});
-
-  const masterCalendarDefaultColors: Record<string, string> = {
-    "Sports (Default)": "#3b82f6",
-    "Field Trip (Default)": "#22c55e",
-    "Special Event (Default)": "#a855f7",
-    "Teen Trip": "#6b7280",
-    "Collegiate Trip": "#14b8a6",
-    "Senior Trip": "#7f1d1d",
-    "Junior Trip": "#9333ea",
-    "Olympics": "#000000",
-    "Wacky Wednesday": "#000000",
-    "Divisional Night": "#bf00ff",
-    "Campus Night": "#4d4dff",
-    "Full Camp": "#ff6600",
-    "Rookie Day": "#22c55e",
-    "Tour": "#000000",
-    "Away (Sports)": "#1e3a5f",
-    "Home (Sports)": "#166534",
-    "Gordon": "#39ff14",
-    "Jacobs": "#39ff14",
-    "Bocian/Melter Bowl": "#39ff14",
-    "Tiger Times (Default)": "#f59e0b",
-    "TT: Laundry": "#3b82f6",
-    "TT: Phone Calls": "#ef4444",
-    "TT: Outside Events": "#eab308",
-    "TT: Staff Days Off": "#93c5fd",
-    "TT: OD Notes": "#ec4899",
+  // Aggregate colors from individual calendar settings in localStorage
+  const loadAggregatedColors = () => {
+    const defaultColors: Record<string, string> = {
+      "Sports (Default)": "#3b82f6",
+      "Field Trip (Default)": "#22c55e",
+      "Special Event (Default)": "#a855f7",
+      "Tiger Times (Default)": "#f59e0b",
+      "Teen Trip": "#6b7280",
+      "Collegiate Trip": "#14b8a6",
+      "Senior Trip": "#7f1d1d",
+      "Junior Trip": "#9333ea",
+      "Olympics": "#000000",
+      "Wacky Wednesday": "#000000",
+      "Divisional Night": "#bf00ff",
+      "Campus Night": "#4d4dff",
+      "Full Camp": "#ff6600",
+      "Rookie Day": "#22c55e",
+      "Tour": "#000000",
+      "Away (Sports)": "#1e3a5f",
+      "Home (Sports)": "#166534",
+      "Gordon": "#39ff14",
+      "Jacobs": "#39ff14",
+      "Bocian/Melter Bowl": "#39ff14",
+      "TT: Laundry": "#3b82f6",
+      "TT: Phone Calls": "#ef4444",
+      "TT: Outside Events": "#eab308",
+      "TT: Staff Days Off": "#93c5fd",
+      "TT: OD Notes": "#ec4899",
+    };
+    const merged = { ...defaultColors };
+    const sources = ["sports-calendar", "activities-field-trips", "special-events", "tiger-times"];
+    sources.forEach((id) => {
+      try {
+        const stored = localStorage.getItem(`calendar-colors-${id}`);
+        if (stored) Object.assign(merged, JSON.parse(stored));
+      } catch {}
+    });
+    return merged;
   };
+
+  const [customColors, setCustomColors] = useState<Record<string, string>>(loadAggregatedColors);
+
+  // Listen for color changes from individual calendars
+  useEffect(() => {
+    const handleColorChange = () => setCustomColors(loadAggregatedColors());
+    const ids = ["sports-calendar", "activities-field-trips", "special-events", "tiger-times"];
+    ids.forEach((id) => window.addEventListener(`${id}-colors-updated`, handleColorChange));
+    return () => {
+      ids.forEach((id) => window.removeEventListener(`${id}-colors-updated`, handleColorChange));
+    };
+  }, []);
 
   useEffect(() => {
     fetchAllEvents();
@@ -525,11 +547,6 @@ export default function MasterCalendar() {
           </div>
         </div>
         <div className="flex gap-2">
-          <CalendarColorSettings
-            calendarId="master-calendar"
-            defaultColors={masterCalendarDefaultColors}
-            onColorsChange={setCustomColors}
-          />
           <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
             <ToggleGroupItem value="calendar" aria-label="Calendar view">
               <CalendarIcon className="h-4 w-4" />
