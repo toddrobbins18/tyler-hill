@@ -535,7 +535,7 @@ export default function ActivitiesFieldTrips() {
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <CardTitle className="text-lg flex items-center gap-2">
-                            {event.title}
+                            {event.emoji ? `${event.emoji} ` : ''}{event.title}
                             {event.is_multi_day && (
                               <CalendarRange className="h-4 w-4 text-muted-foreground" />
                             )}
