@@ -738,6 +738,8 @@ export default function ActivitiesFieldTrips() {
                 </Select>
               </div>
             )}
+
+            <div className="space-y-2">
               <Label>Location Type</Label>
               <Select value={formData.home_away || "none"} onValueChange={(value) => setFormData({ ...formData, home_away: value === "none" ? "" : value as any })}>
                 <SelectTrigger>
