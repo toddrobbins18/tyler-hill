@@ -12,7 +12,7 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
-import { Plus, Trash2, Users, ClipboardList, BarChart3, Clock } from "lucide-react";
+import { Plus, Trash2, Users, ClipboardList, BarChart3, Clock, History, Search } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { startOfWeek, format } from "date-fns";
@@ -49,6 +49,14 @@ export default function ElectiveSignUp() {
   const [selectedElectiveFilter, setSelectedElectiveFilter] = useState("all");
   const [analyticsDivision, setAnalyticsDivision] = useState("all");
 
+  // History state
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyDivision, setHistoryDivision] = useState("all");
+  const [historyResults, setHistoryResults] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyChildId, setHistoryChildId] = useState<string | null>(null);
+  const [allChildren, setAllChildren] = useState<any[]>([]);
+
   // Add elective dialog
   const [addElectiveOpen, setAddElectiveOpen] = useState(false);
   const [newElectiveName, setNewElectiveName] = useState("");
@@ -69,7 +77,7 @@ export default function ElectiveSignUp() {
       divisionsQuery = divisionsQuery.in("id", divisionFilter);
     }
 
-    const [divisionsRes, electivesRes, signupsRes] = await Promise.all([
+    const [divisionsRes, electivesRes, signupsRes, allChildrenRes] = await Promise.all([
       divisionsQuery,
       supabase.from("electives").select("*").eq("company_id", companyId).eq("is_active", true).order("name"),
       supabase.from("elective_signups").select("*, children(name, division_id), electives(name)")
@@ -77,11 +85,16 @@ export default function ElectiveSignUp() {
         .eq("week_start_date", weekStart)
         .eq("day_of_week", selectedDay)
         .eq("period", selectedPeriod),
+      supabase.from("children").select("id, name, division_id")
+        .eq("company_id", companyId)
+        .eq("season", currentSeason)
+        .order("name"),
     ]);
 
     if (divisionsRes.data) setDivisions(sortDivisionsGirlsFirst(divisionsRes.data));
     if (electivesRes.data) setElectives(electivesRes.data);
     if (signupsRes.data) setSignups(signupsRes.data);
+    if (allChildrenRes.data) setAllChildren(allChildrenRes.data);
     setLoading(false);
   };
 
@@ -174,6 +187,33 @@ export default function ElectiveSignUp() {
     // We don't have full children list per division, so we'll show from signups
     return counts;
   }, []);
+
+  const fetchCamperHistory = async (childId: string) => {
+    setHistoryLoading(true);
+    setHistoryChildId(childId);
+    const { data } = await supabase
+      .from("elective_signups")
+      .select("*, electives(name)")
+      .eq("company_id", currentCompany!.id)
+      .eq("child_id", childId)
+      .order("week_start_date", { ascending: false });
+    setHistoryResults(data || []);
+    setHistoryLoading(false);
+  };
+
+  const filteredHistoryChildren = useMemo(() => {
+    let filtered = allChildren;
+    if (historyDivision !== "all") {
+      filtered = filtered.filter((c) => c.division_id === historyDivision);
+    }
+    if (historySearch.trim()) {
+      const q = historySearch.toLowerCase();
+      filtered = filtered.filter((c) => c.name.toLowerCase().includes(q));
+    }
+    return filtered;
+  }, [allChildren, historyDivision, historySearch]);
+
+  const historyChildName = allChildren.find((c) => c.id === historyChildId)?.name;
 
   const periodLabel = PERIODS.find((p) => p.id === selectedPeriod);
 
@@ -300,6 +340,9 @@ export default function ElectiveSignUp() {
           </TabsTrigger>
           <TabsTrigger value="analytics" className="flex items-center gap-1.5">
             <BarChart3 className="h-4 w-4" />Analytics
+          </TabsTrigger>
+          <TabsTrigger value="history" className="flex items-center gap-1.5">
+            <History className="h-4 w-4" />Camper History
           </TabsTrigger>
         </TabsList>
 
@@ -456,6 +499,93 @@ export default function ElectiveSignUp() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* HISTORY TAB */}
+        <TabsContent value="history">
+          <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Select Camper</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search campers..."
+                    value={historySearch}
+                    onChange={(e) => setHistorySearch(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+                <Select value={historyDivision} onValueChange={setHistoryDivision}>
+                  <SelectTrigger><SelectValue placeholder="All Divisions" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Divisions</SelectItem>
+                    {divisions.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="max-h-[400px] overflow-y-auto space-y-0.5">
+                  {filteredHistoryChildren.map((child) => (
+                    <button
+                      key={child.id}
+                      onClick={() => fetchCamperHistory(child.id)}
+                      className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${
+                        historyChildId === child.id
+                          ? "bg-primary/10 text-primary font-medium"
+                          : "hover:bg-muted/50"
+                      }`}
+                    >
+                      {child.name}
+                    </button>
+                  ))}
+                  {filteredHistoryChildren.length === 0 && (
+                    <p className="text-muted-foreground text-sm text-center py-4">No campers found</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>{historyChildName ? `${historyChildName}'s Elective History` : "Camper History"}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {!historyChildId ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                    <History className="h-10 w-10 mb-3 opacity-40" />
+                    <p>Select a camper to view their elective history</p>
+                  </div>
+                ) : historyLoading ? (
+                  <p className="text-muted-foreground text-center py-8">Loading...</p>
+                ) : historyResults.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-8">No elective history found for this camper</p>
+                ) : (
+                  <div className="space-y-1">
+                    <div className="grid grid-cols-4 gap-4 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground border-b">
+                      <span>Week</span>
+                      <span>Day</span>
+                      <span>Period</span>
+                      <span>Elective</span>
+                    </div>
+                    {historyResults.map((r) => {
+                      const pInfo = PERIODS.find((p) => p.id === r.period);
+                      return (
+                        <div key={r.id} className="grid grid-cols-4 gap-4 px-3 py-2.5 text-sm rounded-md hover:bg-muted/30 border-b last:border-b-0">
+                          <span>{r.week_start_date}</span>
+                          <span>{r.day_of_week}</span>
+                          <span>{pInfo?.label || r.period}</span>
+                          <Badge variant="secondary">{(r.electives as any)?.name || "Unknown"}</Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>
