@@ -432,16 +432,19 @@ export default function SportsCalendar() {
     let backgroundColor = rosterCount === 0 ? '#ef4444' : '#22c55e';
     
     // For Timber Lake Camp: color by home/away field OR event_type
-    if (isTLC && (homeAway === 'away' || eventType === 'Away')) backgroundColor = '#f97316'; // Orange
+    if (isTLC && (homeAway === 'away' || eventType === 'Away')) backgroundColor = '#1e3a5f'; // Navy
     if (isTLC && (homeAway === 'home' || eventType === 'Home')) backgroundColor = '#166534'; // Dark Green
+    if (isTLC && (eventType === 'Gordon' || eventType === 'Jacobs' || eventType === 'Bocian/Melter Bowl')) backgroundColor = '#39ff14'; // Neon Green
     
     let borderColor = !isTLC ? (homeAway === 'home' ? '#3b82f6' : homeAway === 'away' ? '#ec4899' : 'transparent') : 'transparent';
+    
+    const isNeonGreen = isTLC && (eventType === 'Gordon' || eventType === 'Jacobs' || eventType === 'Bocian/Melter Bowl');
     
     return {
       style: {
         backgroundColor,
         borderLeft: borderColor !== 'transparent' ? `4px solid ${borderColor}` : undefined,
-        color: 'white',
+        color: isNeonGreen ? '#000000' : 'white',
         borderRadius: '4px',
         padding: '2px 5px',
       }
@@ -1006,6 +1009,13 @@ export default function SportsCalendar() {
                 <SelectContent>
                   <SelectItem value="Away">Away</SelectItem>
                   <SelectItem value="Home">Home</SelectItem>
+                  {currentCompany?.id === '1d296ccf-31e1-4176-af57-50a4a4820f82' && (
+                    <>
+                      <SelectItem value="Gordon">Gordon</SelectItem>
+                      <SelectItem value="Jacobs">Jacobs</SelectItem>
+                      <SelectItem value="Bocian/Melter Bowl">Bocian/Melter Bowl</SelectItem>
+                    </>
+                  )}
                   <SelectItem value="WC One Day Tournament">WC One Day Tournament</SelectItem>
                   <SelectItem value="WC Knock Out Tournament">WC Knock Out Tournament</SelectItem>
                   <SelectItem value="Exhibition/Friendly">Exhibition/Friendly</SelectItem>

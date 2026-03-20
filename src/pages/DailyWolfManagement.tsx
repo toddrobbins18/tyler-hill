@@ -27,6 +27,7 @@ interface DailyWolfContent {
   picture_day: string;
   outside_event: string;
   staff_days_off: string;
+  od_notes: string;
 }
 
 export default function DailyWolfManagement() {
@@ -40,6 +41,7 @@ export default function DailyWolfManagement() {
     picture_day: '',
     outside_event: '',
     staff_days_off: '',
+    od_notes: '',
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -116,6 +118,7 @@ export default function DailyWolfManagement() {
           picture_day: (data as any).picture_day || '',
           outside_event: (data as any).outside_event || '',
           staff_days_off: (data as any).staff_days_off || '',
+          od_notes: (data as any).od_notes || '',
         });
       } else {
         setContent({
@@ -127,6 +130,7 @@ export default function DailyWolfManagement() {
           picture_day: '',
           outside_event: '',
           staff_days_off: '',
+          od_notes: '',
         });
       }
     } catch (error: any) {
@@ -248,6 +252,7 @@ export default function DailyWolfManagement() {
           picture_day: '',
           outside_event: '',
           staff_days_off: '',
+          od_notes: '',
         });
       }
 
@@ -323,23 +328,6 @@ export default function DailyWolfManagement() {
         <div className="grid gap-6 md:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>📸 Picture Day</CardTitle>
-              <CardDescription>Picture day details and schedule</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Textarea
-                value={content.picture_day}
-                onChange={(e) => handleFieldChange('picture_day', e.target.value)}
-                onBlur={(e) => handleFieldBlur('picture_day', e.target.value)}
-                placeholder="Enter picture day details"
-                rows={4}
-                disabled={saving}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
               <CardTitle>👕 Laundry</CardTitle>
               <CardDescription>Laundry schedule and information</CardDescription>
             </CardHeader>
@@ -383,6 +371,23 @@ export default function DailyWolfManagement() {
                 onChange={(e) => handleFieldChange('outside_event', e.target.value)}
                 onBlur={(e) => handleFieldBlur('outside_event', e.target.value)}
                 placeholder="Enter outside event details"
+                rows={4}
+                disabled={saving}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>💗 OD Notes</CardTitle>
+              <CardDescription>Officer of the Day notes</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={content.od_notes}
+                onChange={(e) => handleFieldChange('od_notes', e.target.value)}
+                onBlur={(e) => handleFieldBlur('od_notes', e.target.value)}
+                placeholder="Enter OD notes"
                 rows={4}
                 disabled={saving}
               />

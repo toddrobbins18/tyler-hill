@@ -1,0 +1,1 @@
+ALTER TABLE public.daily_wolf_content ADD COLUMN IF NOT EXISTS od_notes TEXT;

@@ -67,9 +67,9 @@ export default function ActivitiesFieldTrips() {
   const isTimberLakeCamp = currentCompany?.id === '1d296ccf-31e1-4176-af57-50a4a4820f82';
 
   const tripSubCategories = [
-    { label: "Teen Trip", color: "bg-black text-white" },
-    { label: "Collegiate Trip", color: "bg-blue-600 text-white" },
-    { label: "Senior Trip", color: "bg-red-600 text-white" },
+    { label: "Teen Trip", color: "bg-gray-500 text-white" },
+    { label: "Collegiate Trip", color: "bg-teal-500 text-white" },
+    { label: "Senior Trip", color: "bg-red-900 text-white" },
     { label: "Junior Trip", color: "bg-purple-600 text-white" },
   ];
 
@@ -79,10 +79,12 @@ export default function ActivitiesFieldTrips() {
 
   const getTripSubCategoryHex = (subCategory: string): string | undefined => {
     const hexMap: Record<string, string> = {
-      "Teen Trip": "#000000",
-      "Collegiate Trip": "#2563eb",
-      "Senior Trip": "#dc2626",
-      "Junior Trip": "#9333ea",
+      "Teen Trip": "#6b7280",       // Gray
+      "Collegiate Trip": "#14b8a6", // Turquoise
+      "Senior Trip": "#7f1d1d",     // Dark Red
+      "Junior Trip": "#9333ea",     // Purple
+      "Olympics": "#000000",        // Black
+      "Wacky Wednesday": "#000000", // Black
     };
     return hexMap[subCategory];
   };
@@ -721,6 +723,8 @@ export default function ActivitiesFieldTrips() {
                       <SelectItem value="collegiate-trip">Collegiate Trip</SelectItem>
                       <SelectItem value="senior-trip">Senior Trip</SelectItem>
                       <SelectItem value="junior-trip">Junior Trip</SelectItem>
+                      <SelectItem value="olympics">Olympics</SelectItem>
+                      <SelectItem value="wacky-wednesday">Wacky Wednesday</SelectItem>
                     </>
                   )}
                   <SelectItem value="arts-crafts">Arts & Crafts</SelectItem>

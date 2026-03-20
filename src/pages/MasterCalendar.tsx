@@ -396,7 +396,7 @@ export default function MasterCalendar() {
 
   const getSubCategoryColor = (eventType: string, subCategory: string): string | undefined => {
     const colorMap: Record<string, Record<string, string>> = {
-      "field-trip": { "Teen Trip": "bg-black text-white", "Collegiate Trip": "bg-blue-600 text-white", "Senior Trip": "bg-red-600 text-white", "Junior Trip": "bg-purple-600 text-white" },
+      "field-trip": { "Teen Trip": "bg-gray-500 text-white", "Collegiate Trip": "bg-teal-500 text-white", "Senior Trip": "bg-red-900 text-white", "Junior Trip": "bg-purple-600 text-white" },
     };
     return colorMap[eventType]?.[subCategory];
   };
@@ -417,16 +417,28 @@ export default function MasterCalendar() {
 
     // Trip colors - check both sub_category (legacy) and activity_type (new direct values)
     const tripColors: Record<string, string> = {
-      "Teen Trip": "#000000", "Collegiate Trip": "#2563eb", "Senior Trip": "#dc2626", "Junior Trip": "#9333ea",
-      "teen-trip": "#000000", "collegiate-trip": "#2563eb", "senior-trip": "#dc2626", "junior-trip": "#9333ea",
+      "Teen Trip": "#6b7280", "Collegiate Trip": "#14b8a6", "Senior Trip": "#7f1d1d", "Junior Trip": "#9333ea",
+      "teen-trip": "#6b7280", "collegiate-trip": "#14b8a6", "senior-trip": "#7f1d1d", "junior-trip": "#9333ea",
+      "olympics": "#000000", "Olympics": "#000000", "wacky-wednesday": "#000000", "Wacky Wednesday": "#000000",
+    };
+
+    // Special Events colors for TLC
+    const specialEventColors: Record<string, string> = {
+      "divisional-night": "#bf00ff", "Divisional Night": "#bf00ff",  // Neon Purple
+      "campus-night": "#4d4dff", "Campus Night": "#4d4dff",          // Neon Blue
+      "full-camp": "#ff6600", "Full Camp": "#ff6600",                  // Neon Orange
+      "rookie-day": "#22c55e", "Rookie Day": "#22c55e",              // Green
+      "tour": "#000000", "Tour": "#000000",                            // Black
     };
 
     let bgColor: string | undefined;
     if (subCategory && tripColors[subCategory]) bgColor = tripColors[subCategory];
     if (!bgColor && eventType && tripColors[eventType]) bgColor = tripColors[eventType];
-    // Sports calendar home/away colors (field or event_type)
-    if (source === 'sports_calendar' && (homeAway === 'away' || event.resource.originalData?.event_type === 'Away')) bgColor = '#f97316';
-    if (source === 'sports_calendar' && (homeAway === 'home' || event.resource.originalData?.event_type === 'Home')) bgColor = '#166534';
+    if (!bgColor && eventType && specialEventColors[eventType]) bgColor = specialEventColors[eventType];
+    // Sports calendar home/away and Gordon/Jacobs/Bocian colors
+    if (source === 'sports_calendar' && (homeAway === 'away' || event.resource.originalData?.event_type === 'Away')) bgColor = '#1e3a5f'; // Navy
+    if (source === 'sports_calendar' && (homeAway === 'home' || event.resource.originalData?.event_type === 'Home')) bgColor = '#166534'; // Dark Green
+    if (source === 'sports_calendar' && ['Gordon', 'Jacobs', 'Bocian/Melter Bowl'].includes(event.resource.originalData?.event_type)) bgColor = '#39ff14'; // Neon Green
 
     const colors: Record<EventSource, string> = {
       'sports_calendar': '#3b82f6',

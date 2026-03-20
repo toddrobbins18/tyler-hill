@@ -405,22 +405,6 @@ export default function DailySchedule() {
               <Card>
                 <CardHeader className="pb-2">
                   <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-lg bg-amber-500/10">
-                      <Camera className="h-4 w-4 text-amber-600" />
-                    </div>
-                    <CardTitle className="text-base">📸 Picture Day</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground whitespace-pre-line">
-                    {tigerTimesContent.picture_day || 'No info'}
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center gap-2">
                     <div className="p-2 rounded-lg bg-blue-500/10">
                       <Shirt className="h-4 w-4 text-blue-600" />
                     </div>
@@ -437,8 +421,8 @@ export default function DailySchedule() {
               <Card>
                 <CardHeader className="pb-2">
                   <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-lg bg-green-500/10">
-                      <Phone className="h-4 w-4 text-green-600" />
+                    <div className="p-2 rounded-lg bg-red-500/10">
+                      <Phone className="h-4 w-4 text-red-600" />
                     </div>
                     <CardTitle className="text-base">📞 Phone Calls</CardTitle>
                   </div>
@@ -453,10 +437,10 @@ export default function DailySchedule() {
               <Card>
                 <CardHeader className="pb-2">
                   <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-lg bg-purple-500/10">
-                      <Globe className="h-4 w-4 text-purple-600" />
+                    <div className="p-2 rounded-lg bg-amber-400/10">
+                      <Globe className="h-4 w-4 text-amber-500" />
                     </div>
-                    <CardTitle className="text-base">🌐 Outside Event</CardTitle>
+                    <CardTitle className="text-base">🌐 Outside Events</CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -469,8 +453,8 @@ export default function DailySchedule() {
               <Card>
                 <CardHeader className="pb-2">
                   <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-lg bg-red-500/10">
-                      <CalendarOff className="h-4 w-4 text-red-600" />
+                    <div className="p-2 rounded-lg bg-sky-300/10">
+                      <CalendarOff className="h-4 w-4 text-sky-400" />
                     </div>
                     <CardTitle className="text-base">🗓️ Staff Days Off</CardTitle>
                   </div>
@@ -478,6 +462,22 @@ export default function DailySchedule() {
                 <CardContent>
                   <p className="text-sm text-muted-foreground whitespace-pre-line">
                     {tigerTimesContent.staff_days_off || 'No info'}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-lg bg-pink-500/10">
+                      <FileText className="h-4 w-4 text-pink-500" />
+                    </div>
+                    <CardTitle className="text-base">💗 OD Notes</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground whitespace-pre-line">
+                    {tigerTimesContent.od_notes || 'No info'}
                   </p>
                 </CardContent>
               </Card>

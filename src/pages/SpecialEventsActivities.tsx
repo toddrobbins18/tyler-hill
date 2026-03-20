@@ -57,16 +57,9 @@ export default function SpecialEventsActivities() {
 
   const subCategoryMap: Record<string, { label: string; color?: string }[]> = isTimberLakeCamp ? {
     "evening-activity": [
-      { label: "Divisional Night" },
-      { label: "Campus Night" },
-      { label: "Full Camp" },
-    ],
-    "wednesday-event": [
-      { label: "Gordon" },
-      { label: "Jacobs" },
-      { label: "Bocian/Melter Bowl" },
-      { label: "Olympics" },
-      { label: "Wacky Wednesday" },
+      { label: "Divisional Night", color: "bg-[#bf00ff] text-white" },
+      { label: "Campus Night", color: "bg-[#4d4dff] text-white" },
+      { label: "Full Camp", color: "bg-[#ff6600] text-white" },
     ],
   } : {};
 
@@ -604,15 +597,11 @@ export default function SpecialEventsActivities() {
                   <SelectItem value="evening-activity">Evening Activity</SelectItem>
                   {isTimberLakeCamp && (
                     <>
+                      <SelectItem value="rookie-day">Rookie Day</SelectItem>
+                      <SelectItem value="tour">Tour</SelectItem>
                       <SelectItem value="divisional-night">Divisional Night</SelectItem>
                       <SelectItem value="campus-night">Campus Night</SelectItem>
                       <SelectItem value="full-camp">Full Camp</SelectItem>
-                      <SelectItem value="wednesday-event">Wednesday Event</SelectItem>
-                      <SelectItem value="gordon">Gordon</SelectItem>
-                      <SelectItem value="jacobs">Jacobs</SelectItem>
-                      <SelectItem value="bocian-melter-bowl">Bocian/Melter Bowl</SelectItem>
-                      <SelectItem value="olympics">Olympics</SelectItem>
-                      <SelectItem value="wacky-wednesday">Wacky Wednesday</SelectItem>
                     </>
                   )}
                   <SelectItem value="campfire">Campfire</SelectItem>
