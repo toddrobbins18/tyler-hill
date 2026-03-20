@@ -88,7 +88,7 @@ const getMenuItems = (companySlug?: string) => {
     );
   }
 
-  // Add Tiger Times for Timber Lake Camp
+  // Add Tiger Times and Elective Sign-Up for Timber Lake Camp
   if (companySlug === 'timber-lake-camp') {
     baseItems.push(
       {
@@ -96,6 +96,13 @@ const getMenuItems = (companySlug?: string) => {
         url: "/daily-wolf-management",
         icon: ClipboardEdit,
         menuId: "daily-wolf-management"
+      },
+      {
+        title: "Elective Sign-Up",
+        url: "https://tlcelective.lovable.app/signup",
+        icon: ExternalLink,
+        menuId: "elective-signup",
+        external: true
       }
     );
   }
