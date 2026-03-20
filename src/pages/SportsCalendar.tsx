@@ -1134,19 +1134,21 @@ export default function SportsCalendar() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Home or Away</Label>
-              <Select value={formData.home_away} onValueChange={(value) => setFormData({ ...formData, home_away: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select home/away" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="home">Home</SelectItem>
-                  <SelectItem value="away">Away</SelectItem>
-                  <SelectItem value="neutral">Neutral</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {currentCompany?.id !== '1d296ccf-31e1-4176-af57-50a4a4820f82' && (
+              <div className="space-y-2">
+                <Label>Home or Away</Label>
+                <Select value={formData.home_away} onValueChange={(value) => setFormData({ ...formData, home_away: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select home/away" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="home">Home</SelectItem>
+                    <SelectItem value="away">Away</SelectItem>
+                    <SelectItem value="neutral">Neutral</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {formData.home_away === 'away' && (
               <div className="space-y-2">
