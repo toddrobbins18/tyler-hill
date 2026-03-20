@@ -205,6 +205,7 @@ export default function SportsCalendar() {
         sport_type: formData.sport_type === "Other" ? "Other" : formData.sport_type,
         custom_sport_type: formData.sport_type === "Other" || formData.event_type === "Other" ? formData.custom_sport_type : null,
         event_type: formData.event_type || null,
+        emoji: formData.emoji || null,
         depart_time: formData.depart_time || null,
         start_time_field: formData.start_time_field || null,
         location: formData.location,
