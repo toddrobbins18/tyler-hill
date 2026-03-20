@@ -489,11 +489,17 @@ export default function MasterCalendar() {
     if (source === 'sports_calendar' && (homeAway === 'away' || event.resource.originalData?.event_type === 'Away')) bgColor = cc["Away (Sports)"] || '#1e3a5f';
     if (source === 'sports_calendar' && (homeAway === 'home' || event.resource.originalData?.event_type === 'Home')) bgColor = cc["Home (Sports)"] || '#166534';
     if (source === 'sports_calendar' && ['Gordon', 'Jacobs', 'Bocian/Melter Bowl'].includes(event.resource.originalData?.event_type)) bgColor = cc[event.resource.originalData?.event_type] || '#39ff14';
+    // Tiger Times category colors
+    if (source === 'tiger_times') {
+      const ttCategory = event.resource.originalData?.tiger_times_category;
+      if (ttCategory && cc[ttCategory]) bgColor = cc[ttCategory];
+    }
 
     const sourceColors: Record<EventSource, string> = {
       'sports_calendar': cc["Sports (Default)"] || '#3b82f6',
       'activities_field_trips': cc["Field Trip (Default)"] || '#22c55e',
-      'special_events_activities': cc["Special Event (Default)"] || '#a855f7'
+      'special_events_activities': cc["Special Event (Default)"] || '#a855f7',
+      'tiger_times': cc["Tiger Times (Default)"] || '#f59e0b',
     };
     
     const finalBg = bgColor || sourceColors[source];
