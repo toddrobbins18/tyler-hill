@@ -27,6 +27,7 @@ interface DailyWolfContent {
   picture_day: string;
   outside_event: string;
   staff_days_off: string;
+  od_notes: string;
 }
 
 export default function DailyWolfManagement() {
