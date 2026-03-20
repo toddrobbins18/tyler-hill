@@ -35,6 +35,7 @@ export type Database = {
           meal_notes: string | null
           meal_options: string[] | null
           season: string | null
+          sub_category: string | null
           time: string | null
           title: string
         }
@@ -58,6 +59,7 @@ export type Database = {
           meal_notes?: string | null
           meal_options?: string[] | null
           season?: string | null
+          sub_category?: string | null
           time?: string | null
           title: string
         }
@@ -81,6 +83,7 @@ export type Database = {
           meal_notes?: string | null
           meal_options?: string[] | null
           season?: string | null
+          sub_category?: string | null
           time?: string | null
           title?: string
         }

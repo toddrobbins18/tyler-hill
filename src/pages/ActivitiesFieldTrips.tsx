@@ -52,6 +52,7 @@ export default function ActivitiesFieldTrips() {
     title: "",
     description: "",
     activity_type: "",
+    sub_category: "",
     depart_from_camp: "",
     depart_from_activity: "",
     location: "",
@@ -62,6 +63,29 @@ export default function ActivitiesFieldTrips() {
     meal_options: [] as string[],
     meal_notes: "",
   });
+
+  const isTimberLakeCamp = currentCompany?.id === '1d296ccf-31e1-4176-af57-50a4a4820f82';
+
+  const tripSubCategories = [
+    { label: "Teen Trip", color: "bg-black text-white" },
+    { label: "Collegiate Trip", color: "bg-blue-600 text-white" },
+    { label: "Senior Trip", color: "bg-red-600 text-white" },
+    { label: "Junior Trip", color: "bg-purple-600 text-white" },
+  ];
+
+  const getTripSubCategoryColor = (subCategory: string): string | undefined => {
+    return tripSubCategories.find(s => s.label === subCategory)?.color;
+  };
+
+  const getTripSubCategoryHex = (subCategory: string): string | undefined => {
+    const hexMap: Record<string, string> = {
+      "Teen Trip": "#000000",
+      "Collegiate Trip": "#2563eb",
+      "Senior Trip": "#dc2626",
+      "Junior Trip": "#9333ea",
+    };
+    return hexMap[subCategory];
+  };
   const { toast } = useToast();
 
   useEffect(() => {
@@ -165,6 +189,7 @@ export default function ActivitiesFieldTrips() {
       title: formData.title,
       description: formData.description,
       activity_type: formData.activity_type,
+      sub_category: formData.sub_category || null,
       depart_from_camp: formData.depart_from_camp || null,
       depart_from_activity: formData.depart_from_activity || null,
       location: formData.location,
@@ -301,6 +326,7 @@ export default function ActivitiesFieldTrips() {
       title: "",
       description: "",
       activity_type: "",
+      sub_category: "",
       depart_from_camp: "",
       depart_from_activity: "",
       location: "",
@@ -332,6 +358,7 @@ export default function ActivitiesFieldTrips() {
       title: event.title,
       description: event.description || "",
       activity_type: event.activity_type,
+      sub_category: event.sub_category || "",
       depart_from_camp: event.depart_from_camp || "",
       depart_from_activity: event.depart_from_activity || "",
       location: event.location || "",
@@ -538,6 +565,11 @@ export default function ActivitiesFieldTrips() {
                     <CardContent className="space-y-2">
                       <div className="flex gap-2 flex-wrap">
                         <Badge>{event.activity_type}</Badge>
+                        {event.sub_category && (
+                          <Badge className={getTripSubCategoryColor(event.sub_category) || ""}>
+                            {event.sub_category}
+                          </Badge>
+                        )}
                         {event.is_multi_day && event.end_date && (
                           (() => {
                             const start = new Date(event.event_date + 'T00:00:00');
@@ -677,7 +709,7 @@ export default function ActivitiesFieldTrips() {
 
             <div className="space-y-2">
               <Label>Activity Type</Label>
-              <Select value={formData.activity_type} onValueChange={(value) => setFormData({ ...formData, activity_type: value })}>
+              <Select value={formData.activity_type} onValueChange={(value) => setFormData({ ...formData, activity_type: value, sub_category: "" })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select activity type" />
                 </SelectTrigger>
@@ -693,6 +725,24 @@ export default function ActivitiesFieldTrips() {
                 </SelectContent>
               </Select>
             </div>
+
+            {isTimberLakeCamp && formData.activity_type === "field-trip" && (
+              <div className="space-y-2">
+                <Label>Trip Sub-Category</Label>
+                <Select value={formData.sub_category} onValueChange={(value) => setFormData({ ...formData, sub_category: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select trip type (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tripSubCategories.map((sub) => (
+                      <SelectItem key={sub.label} value={sub.label}>
+                        {sub.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label>Location Type</Label>

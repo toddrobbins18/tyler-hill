@@ -396,8 +396,7 @@ export default function MasterCalendar() {
 
   const getSubCategoryColor = (eventType: string, subCategory: string): string | undefined => {
     const colorMap: Record<string, Record<string, string>> = {
-      "tournament": { "Away": "bg-orange-500 text-white", "Home": "bg-green-800 text-white" },
-      "trip": { "Teen Trip": "bg-black text-white", "Collegiate Trip": "bg-blue-600 text-white", "Senior Trip": "bg-red-600 text-white", "Junior Trip": "bg-purple-600 text-white" },
+      "field-trip": { "Teen Trip": "bg-black text-white", "Collegiate Trip": "bg-blue-600 text-white", "Senior Trip": "bg-red-600 text-white", "Junior Trip": "bg-purple-600 text-white" },
     };
     return colorMap[eventType]?.[subCategory];
   };
@@ -413,15 +412,19 @@ export default function MasterCalendar() {
   const eventPropGetter = (event: any) => {
     const source = event.resource.source;
     const subCategory = event.resource.originalData?.sub_category;
-    const eventType = event.resource.originalData?.event_type;
+    const eventType = event.resource.originalData?.event_type || event.resource.originalData?.activity_type;
+    const homeAway = event.resource.originalData?.home_away;
 
-    // Sub-category specific colors
-    const subColors: Record<string, Record<string, string>> = {
-      "tournament": { "Away": "#f97316", "Home": "#166534" },
-      "trip": { "Teen Trip": "#000000", "Collegiate Trip": "#2563eb", "Senior Trip": "#dc2626", "Junior Trip": "#9333ea" },
+    // Trip sub-category colors (Activities & Field Trips)
+    const tripColors: Record<string, string> = {
+      "Teen Trip": "#000000", "Collegiate Trip": "#2563eb", "Senior Trip": "#dc2626", "Junior Trip": "#9333ea",
     };
 
-    const subColor = subColors[eventType]?.[subCategory];
+    let bgColor: string | undefined;
+    if (subCategory && tripColors[subCategory]) bgColor = tripColors[subCategory];
+    // Sports calendar home/away colors
+    if (source === 'sports_calendar' && homeAway === 'away') bgColor = '#f97316';
+    if (source === 'sports_calendar' && homeAway === 'home') bgColor = '#166534';
 
     const colors: Record<EventSource, string> = {
       'sports_calendar': '#3b82f6',
@@ -431,7 +434,7 @@ export default function MasterCalendar() {
     
     return {
       style: {
-        backgroundColor: subColor || colors[source],
+        backgroundColor: bgColor || colors[source],
         color: 'white',
         borderRadius: '4px',
         padding: '2px 5px',

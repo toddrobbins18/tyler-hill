@@ -426,14 +426,20 @@ export default function SportsCalendar() {
   const eventPropGetter = (event: any) => {
     const rosterCount = getRosterCount(event.resource.id);
     const homeAway = event.resource.home_away;
+    const isTLC = currentCompany?.id === '1d296ccf-31e1-4176-af57-50a4a4820f82';
     
     let backgroundColor = rosterCount === 0 ? '#ef4444' : '#22c55e';
-    let borderColor = homeAway === 'home' ? '#3b82f6' : homeAway === 'away' ? '#ec4899' : 'transparent';
+    
+    // For Timber Lake Camp: color by home/away
+    if (isTLC && homeAway === 'away') backgroundColor = '#f97316'; // Orange
+    if (isTLC && homeAway === 'home') backgroundColor = '#166534'; // Dark Green
+    
+    let borderColor = !isTLC ? (homeAway === 'home' ? '#3b82f6' : homeAway === 'away' ? '#ec4899' : 'transparent') : 'transparent';
     
     return {
       style: {
         backgroundColor,
-        borderLeft: `4px solid ${borderColor}`,
+        borderLeft: borderColor !== 'transparent' ? `4px solid ${borderColor}` : undefined,
         color: 'white',
         borderRadius: '4px',
         padding: '2px 5px',
