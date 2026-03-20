@@ -780,41 +780,45 @@ export default function SportsCalendar() {
       ) : viewMode === "calendar" ? (
         <Card>
           <CardContent className="p-6">
-            <Calendar
-              localizer={localizer}
-              events={filteredAndSortedEvents.map(event => {
-                const normalizedTime = getNormalizedEventTime(event);
-                const start = normalizedTime
-                  ? new Date(`${event.event_date}T${normalizedTime}:00`)
-                  : new Date(`${event.event_date}T00:00:00`);
-                const end = normalizedTime
-                  ? new Date(start.getTime() + 60 * 60 * 1000)
-                  : new Date(`${event.event_date}T23:59:59`);
+            <CalendarZoomWrapper>
+              {(height) => (
+                <Calendar
+                  localizer={localizer}
+                  events={filteredAndSortedEvents.map(event => {
+                    const normalizedTime = getNormalizedEventTime(event);
+                    const start = normalizedTime
+                      ? new Date(`${event.event_date}T${normalizedTime}:00`)
+                      : new Date(`${event.event_date}T00:00:00`);
+                    const end = normalizedTime
+                      ? new Date(start.getTime() + 60 * 60 * 1000)
+                      : new Date(`${event.event_date}T23:59:59`);
 
-                return {
-                  id: event.id,
-                  title: `${event.emoji ? event.emoji + ' ' : ''}${getDisplaySport(event)}: ${event.title}`,
-                  start,
-                  end,
-                  allDay: !normalizedTime,
-                  resource: event,
-                };
-              })}
-              startAccessor="start"
-              endAccessor="end"
-              style={{ height: 600 }}
-              view={calendarView}
-              onView={setCalendarView}
-              date={currentDate}
-              onNavigate={setCurrentDate}
-              onSelectEvent={(event: any) => setShowRosterPopup(event.resource)}
-              onSelectSlot={(slotInfo: any) => {
-                setFormData({ ...formData, event_date: format(slotInfo.start, 'yyyy-MM-dd') });
-                setShowDialog(true);
-              }}
-              eventPropGetter={eventPropGetter}
-              selectable
-            />
+                    return {
+                      id: event.id,
+                      title: `${event.emoji ? event.emoji + ' ' : ''}${getDisplaySport(event)}: ${event.title}`,
+                      start,
+                      end,
+                      allDay: !normalizedTime,
+                      resource: event,
+                    };
+                  })}
+                  startAccessor="start"
+                  endAccessor="end"
+                  style={{ height }}
+                  view={calendarView}
+                  onView={setCalendarView}
+                  date={currentDate}
+                  onNavigate={setCurrentDate}
+                  onSelectEvent={(event: any) => setShowRosterPopup(event.resource)}
+                  onSelectSlot={(slotInfo: any) => {
+                    setFormData({ ...formData, event_date: format(slotInfo.start, 'yyyy-MM-dd') });
+                    setShowDialog(true);
+                  }}
+                  eventPropGetter={eventPropGetter}
+                  selectable
+                />
+              )}
+            </CalendarZoomWrapper>
           </CardContent>
         </Card>
       ) : (

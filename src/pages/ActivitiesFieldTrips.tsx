@@ -508,32 +508,36 @@ export default function ActivitiesFieldTrips() {
       ) : viewMode === "calendar" ? (
         <Card>
           <CardContent className="p-6">
-            <Calendar
-              localizer={localizer}
-              events={filteredAndSortedEvents.map(event => ({
-                id: event.id,
-                title: `${event.emoji ? event.emoji + ' ' : ''}${event.activity_type}: ${event.title}${event.is_multi_day ? ' (Multi-Day)' : ''}`,
-                start: new Date(event.event_date + 'T00:00:00'),
-                end: event.is_multi_day && event.end_date 
-                  ? new Date(event.end_date + 'T23:59:59')
-                  : new Date(event.event_date + 'T23:59:59'),
-                resource: event,
-                allDay: true,
-              }))}
-              startAccessor="start"
-              endAccessor="end"
-              style={{ height: 600 }}
-              view={calendarView}
-              onView={setCalendarView}
-              date={currentDate}
-              onNavigate={setCurrentDate}
-              onSelectEvent={(event: any) => handleEdit(event.resource)}
-              onSelectSlot={(slotInfo: any) => {
-                setFormData({ ...formData, event_date: format(slotInfo.start, 'yyyy-MM-dd') });
-                setShowDialog(true);
-              }}
-              selectable
-            />
+            <CalendarZoomWrapper>
+              {(height) => (
+                <Calendar
+                  localizer={localizer}
+                  events={filteredAndSortedEvents.map(event => ({
+                    id: event.id,
+                    title: `${event.emoji ? event.emoji + ' ' : ''}${event.activity_type}: ${event.title}${event.is_multi_day ? ' (Multi-Day)' : ''}`,
+                    start: new Date(event.event_date + 'T00:00:00'),
+                    end: event.is_multi_day && event.end_date 
+                      ? new Date(event.end_date + 'T23:59:59')
+                      : new Date(event.event_date + 'T23:59:59'),
+                    resource: event,
+                    allDay: true,
+                  }))}
+                  startAccessor="start"
+                  endAccessor="end"
+                  style={{ height }}
+                  view={calendarView}
+                  onView={setCalendarView}
+                  date={currentDate}
+                  onNavigate={setCurrentDate}
+                  onSelectEvent={(event: any) => handleEdit(event.resource)}
+                  onSelectSlot={(slotInfo: any) => {
+                    setFormData({ ...formData, event_date: format(slotInfo.start, 'yyyy-MM-dd') });
+                    setShowDialog(true);
+                  }}
+                  selectable
+                />
+              )}
+            </CalendarZoomWrapper>
           </CardContent>
         </Card>
       ) : (
