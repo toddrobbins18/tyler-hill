@@ -413,7 +413,7 @@ export default function DailyWolfManagement() {
             </CardContent>
           </Card>
 
-          <Card className="md:col-span-2">
+          <Card className="md:col-span-2" style={{ borderTopWidth: '3px', borderTopColor: tigerTimesColors["Staff Days Off"] }}>
             <CardHeader>
               <CardTitle>🗓️ Staff Days Off</CardTitle>
               <CardDescription>Staff schedule and days off information</CardDescription>
