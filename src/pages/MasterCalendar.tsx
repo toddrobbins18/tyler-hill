@@ -547,11 +547,6 @@ export default function MasterCalendar() {
           </div>
         </div>
         <div className="flex gap-2">
-          <CalendarColorSettings
-            calendarId="master-calendar"
-            defaultColors={masterCalendarDefaultColors}
-            onColorsChange={setCustomColors}
-          />
           <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
             <ToggleGroupItem value="calendar" aria-label="Calendar view">
               <CalendarIcon className="h-4 w-4" />
