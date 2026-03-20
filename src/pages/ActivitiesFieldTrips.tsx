@@ -364,6 +364,7 @@ export default function ActivitiesFieldTrips() {
       description: event.description || "",
       activity_type: event.activity_type,
       sub_category: event.sub_category || "",
+      emoji: event.emoji || "",
       depart_from_camp: event.depart_from_camp || "",
       depart_from_activity: event.depart_from_activity || "",
       location: event.location || "",
