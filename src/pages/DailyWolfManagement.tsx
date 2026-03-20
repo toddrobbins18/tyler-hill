@@ -41,6 +41,7 @@ export default function DailyWolfManagement() {
     picture_day: '',
     outside_event: '',
     staff_days_off: '',
+    od_notes: '',
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
