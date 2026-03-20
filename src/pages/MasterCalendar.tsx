@@ -469,6 +469,7 @@ export default function MasterCalendar() {
       case 'sports_calendar': return "Sports";
       case 'activities_field_trips': return "Field Trip";
       case 'special_events_activities': return "Special Event";
+      case 'tiger_times': return "Tiger Times";
     }
   };
 
