@@ -1,0 +1,1 @@
+UPDATE companies SET is_active = false WHERE slug = 'trails-end-camp';
