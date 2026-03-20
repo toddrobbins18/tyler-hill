@@ -633,6 +633,11 @@ export default function SportsCalendar() {
           </div>
         </div>
         <div className="flex gap-2">
+          <CalendarColorSettings
+            calendarId="sports-calendar"
+            defaultColors={sportsDefaultColors}
+            onColorsChange={setCustomColors}
+          />
           <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
             <ToggleGroupItem value="calendar" aria-label="Calendar view">
               <CalendarIcon className="h-4 w-4" />
