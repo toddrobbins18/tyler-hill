@@ -29,7 +29,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
 
-type EventSource = 'sports_calendar' | 'activities_field_trips' | 'special_events_activities';
+type EventSource = 'sports_calendar' | 'activities_field_trips' | 'special_events_activities' | 'tiger_times';
 
 interface UnifiedEvent {
   id: string;
