@@ -601,13 +601,17 @@ export default function SpecialEventsActivities() {
 
             <div className="space-y-2">
               <Label>Event Type</Label>
-              <Select value={formData.event_type} onValueChange={(value) => setFormData({ ...formData, event_type: value })}>
+              <Select value={formData.event_type} onValueChange={(value) => setFormData({ ...formData, event_type: value, sub_category: "" })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select event type" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="special-event">Special Event</SelectItem>
                   <SelectItem value="evening-activity">Evening Activity</SelectItem>
+                  <SelectItem value="tournament">Tournament</SelectItem>
+                  <SelectItem value="wednesday-event">Wednesday Event</SelectItem>
+                  <SelectItem value="admin-notes">Admin Notes</SelectItem>
+                  <SelectItem value="trip">Trip</SelectItem>
                   <SelectItem value="campfire">Campfire</SelectItem>
                   <SelectItem value="movie-night">Movie Night</SelectItem>
                   <SelectItem value="talent-show">Talent Show</SelectItem>
@@ -616,6 +620,24 @@ export default function SpecialEventsActivities() {
                 </SelectContent>
               </Select>
             </div>
+
+            {subCategoryMap[formData.event_type] && (
+              <div className="space-y-2">
+                <Label>Sub-Category</Label>
+                <Select value={formData.sub_category} onValueChange={(value) => setFormData({ ...formData, sub_category: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select sub-category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {subCategoryMap[formData.event_type].map((sub) => (
+                      <SelectItem key={sub.label} value={sub.label}>
+                        {sub.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
