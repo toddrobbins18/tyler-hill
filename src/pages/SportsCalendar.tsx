@@ -1003,6 +1003,8 @@ export default function SportsCalendar() {
                   <SelectValue placeholder="Select event type" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="Away">Away</SelectItem>
+                  <SelectItem value="Home">Home</SelectItem>
                   <SelectItem value="WC One Day Tournament">WC One Day Tournament</SelectItem>
                   <SelectItem value="WC Knock Out Tournament">WC Knock Out Tournament</SelectItem>
                   <SelectItem value="Exhibition/Friendly">Exhibition/Friendly</SelectItem>
