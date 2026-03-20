@@ -432,8 +432,9 @@ export default function SportsCalendar() {
     let backgroundColor = rosterCount === 0 ? '#ef4444' : '#22c55e';
     
     // For Timber Lake Camp: color by home/away field OR event_type
-    if (isTLC && (homeAway === 'away' || eventType === 'Away')) backgroundColor = '#f97316'; // Orange
+    if (isTLC && (homeAway === 'away' || eventType === 'Away')) backgroundColor = '#1e3a5f'; // Navy
     if (isTLC && (homeAway === 'home' || eventType === 'Home')) backgroundColor = '#166534'; // Dark Green
+    if (isTLC && (eventType === 'Gordon' || eventType === 'Jacobs' || eventType === 'Bocian/Melter Bowl')) backgroundColor = '#39ff14'; // Neon Green
     
     let borderColor = !isTLC ? (homeAway === 'home' ? '#3b82f6' : homeAway === 'away' ? '#ec4899' : 'transparent') : 'transparent';
     

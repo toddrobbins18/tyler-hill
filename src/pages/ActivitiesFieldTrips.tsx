@@ -723,6 +723,8 @@ export default function ActivitiesFieldTrips() {
                       <SelectItem value="collegiate-trip">Collegiate Trip</SelectItem>
                       <SelectItem value="senior-trip">Senior Trip</SelectItem>
                       <SelectItem value="junior-trip">Junior Trip</SelectItem>
+                      <SelectItem value="olympics">Olympics</SelectItem>
+                      <SelectItem value="wacky-wednesday">Wacky Wednesday</SelectItem>
                     </>
                   )}
                   <SelectItem value="arts-crafts">Arts & Crafts</SelectItem>

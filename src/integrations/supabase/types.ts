@@ -925,6 +925,7 @@ export type Database = {
           id: string
           laundry_info: string | null
           notes: string | null
+          od_notes: string | null
           officer_of_day: string | null
           outside_event: string | null
           phone_calls_info: string | null
@@ -941,6 +942,7 @@ export type Database = {
           id?: string
           laundry_info?: string | null
           notes?: string | null
+          od_notes?: string | null
           officer_of_day?: string | null
           outside_event?: string | null
           phone_calls_info?: string | null
@@ -957,6 +959,7 @@ export type Database = {
           id?: string
           laundry_info?: string | null
           notes?: string | null
+          od_notes?: string | null
           officer_of_day?: string | null
           outside_event?: string | null
           phone_calls_info?: string | null
