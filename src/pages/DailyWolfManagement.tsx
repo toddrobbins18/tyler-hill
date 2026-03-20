@@ -328,23 +328,6 @@ export default function DailyWolfManagement() {
         <div className="grid gap-6 md:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>📸 Picture Day</CardTitle>
-              <CardDescription>Picture day details and schedule</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Textarea
-                value={content.picture_day}
-                onChange={(e) => handleFieldChange('picture_day', e.target.value)}
-                onBlur={(e) => handleFieldBlur('picture_day', e.target.value)}
-                placeholder="Enter picture day details"
-                rows={4}
-                disabled={saving}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
               <CardTitle>👕 Laundry</CardTitle>
               <CardDescription>Laundry schedule and information</CardDescription>
             </CardHeader>
