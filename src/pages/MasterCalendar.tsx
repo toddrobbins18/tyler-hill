@@ -440,41 +440,30 @@ export default function MasterCalendar() {
     const eventType = event.resource.originalData?.event_type || event.resource.originalData?.activity_type;
     const homeAway = event.resource.originalData?.home_away;
 
-    // Trip colors - check both sub_category (legacy) and activity_type (new direct values)
-    const tripColors: Record<string, string> = {
-      "Teen Trip": "#6b7280", "Collegiate Trip": "#14b8a6", "Senior Trip": "#7f1d1d", "Junior Trip": "#9333ea",
-      "teen-trip": "#6b7280", "collegiate-trip": "#14b8a6", "senior-trip": "#7f1d1d", "junior-trip": "#9333ea",
-      "olympics": "#000000", "Olympics": "#000000", "wacky-wednesday": "#000000", "Wacky Wednesday": "#000000",
-    };
-
-    // Special Events colors for TLC
-    const specialEventColors: Record<string, string> = {
-      "divisional-night": "#bf00ff", "Divisional Night": "#bf00ff",  // Neon Purple
-      "campus-night": "#4d4dff", "Campus Night": "#4d4dff",          // Neon Blue
-      "full-camp": "#ff6600", "Full Camp": "#ff6600",                  // Neon Orange
-      "rookie-day": "#22c55e", "Rookie Day": "#22c55e",              // Green
-      "tour": "#000000", "Tour": "#000000",                            // Black
-    };
+    // Trip colors - use customColors (which includes user overrides)
+    const cc = customColors;
 
     let bgColor: string | undefined;
-    if (subCategory && tripColors[subCategory]) bgColor = tripColors[subCategory];
-    if (!bgColor && eventType && tripColors[eventType]) bgColor = tripColors[eventType];
-    if (!bgColor && eventType && specialEventColors[eventType]) bgColor = specialEventColors[eventType];
+    if (subCategory && cc[subCategory]) bgColor = cc[subCategory];
+    if (!bgColor && eventType && cc[eventType]) bgColor = cc[eventType];
     // Sports calendar home/away and Gordon/Jacobs/Bocian colors
-    if (source === 'sports_calendar' && (homeAway === 'away' || event.resource.originalData?.event_type === 'Away')) bgColor = '#1e3a5f'; // Navy
-    if (source === 'sports_calendar' && (homeAway === 'home' || event.resource.originalData?.event_type === 'Home')) bgColor = '#166534'; // Dark Green
-    if (source === 'sports_calendar' && ['Gordon', 'Jacobs', 'Bocian/Melter Bowl'].includes(event.resource.originalData?.event_type)) bgColor = '#39ff14'; // Neon Green
+    if (source === 'sports_calendar' && (homeAway === 'away' || event.resource.originalData?.event_type === 'Away')) bgColor = cc["Away (Sports)"] || '#1e3a5f';
+    if (source === 'sports_calendar' && (homeAway === 'home' || event.resource.originalData?.event_type === 'Home')) bgColor = cc["Home (Sports)"] || '#166534';
+    if (source === 'sports_calendar' && ['Gordon', 'Jacobs', 'Bocian/Melter Bowl'].includes(event.resource.originalData?.event_type)) bgColor = cc[event.resource.originalData?.event_type] || '#39ff14';
 
-    const colors: Record<EventSource, string> = {
-      'sports_calendar': '#3b82f6',
-      'activities_field_trips': '#22c55e',
-      'special_events_activities': '#a855f7'
+    const sourceColors: Record<EventSource, string> = {
+      'sports_calendar': cc["Sports (Default)"] || '#3b82f6',
+      'activities_field_trips': cc["Field Trip (Default)"] || '#22c55e',
+      'special_events_activities': cc["Special Event (Default)"] || '#a855f7'
     };
+    
+    const finalBg = bgColor || sourceColors[source];
+    const isNeonGreen = finalBg === '#39ff14';
     
     return {
       style: {
-        backgroundColor: bgColor || colors[source],
-        color: 'white',
+        backgroundColor: finalBg,
+        color: isNeonGreen ? '#000000' : 'white',
         borderRadius: '4px',
         padding: '2px 5px',
       }
@@ -490,6 +479,22 @@ export default function MasterCalendar() {
             <p className="text-muted-foreground">Consolidated view of all events and activities for The Nest</p>
           </div>
         </div>
+        <div className="flex gap-2">
+          <CalendarColorSettings
+            calendarId="master-calendar"
+            defaultColors={masterCalendarDefaultColors}
+            onColorsChange={setCustomColors}
+          />
+          <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
+            <ToggleGroupItem value="calendar" aria-label="Calendar view">
+              <CalendarIcon className="h-4 w-4" />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="list" aria-label="List view">
+              <List className="h-4 w-4" />
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+      </div>
         <div className="flex gap-2">
           <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
             <ToggleGroupItem value="calendar" aria-label="Calendar view">
