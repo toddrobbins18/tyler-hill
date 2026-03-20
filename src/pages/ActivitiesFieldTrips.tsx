@@ -499,7 +499,7 @@ export default function ActivitiesFieldTrips() {
               localizer={localizer}
               events={filteredAndSortedEvents.map(event => ({
                 id: event.id,
-                title: `${event.activity_type}: ${event.title}${event.is_multi_day ? ' (Multi-Day)' : ''}`,
+                title: `${event.emoji ? event.emoji + ' ' : ''}${event.activity_type}: ${event.title}${event.is_multi_day ? ' (Multi-Day)' : ''}`,
                 start: new Date(event.event_date + 'T00:00:00'),
                 end: event.is_multi_day && event.end_date 
                   ? new Date(event.end_date + 'T23:59:59')
