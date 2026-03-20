@@ -1155,6 +1155,102 @@ export type Database = {
           },
         ]
       }
+      elective_signups: {
+        Row: {
+          child_id: string
+          company_id: string
+          created_at: string | null
+          day_of_week: string
+          elective_id: string
+          id: string
+          period: string
+          season: string | null
+          updated_at: string | null
+          week_start_date: string
+        }
+        Insert: {
+          child_id: string
+          company_id: string
+          created_at?: string | null
+          day_of_week: string
+          elective_id: string
+          id?: string
+          period: string
+          season?: string | null
+          updated_at?: string | null
+          week_start_date: string
+        }
+        Update: {
+          child_id?: string
+          company_id?: string
+          created_at?: string | null
+          day_of_week?: string
+          elective_id?: string
+          id?: string
+          period?: string
+          season?: string | null
+          updated_at?: string | null
+          week_start_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "elective_signups_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "elective_signups_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "elective_signups_elective_id_fkey"
+            columns: ["elective_id"]
+            isOneToOne: false
+            referencedRelation: "electives"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      electives: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "electives_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_logs: {
         Row: {
           created_at: string | null
