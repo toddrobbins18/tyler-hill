@@ -547,6 +547,11 @@ export default function SpecialEventsActivities() {
                         <CardContent className="space-y-2">
                           <div className="flex gap-2 flex-wrap">
                             <Badge>{event.event_type}</Badge>
+                            {event.sub_category && (
+                              <Badge className={getSubCategoryColor(event.event_type, event.sub_category) || ""}>
+                                {event.sub_category}
+                              </Badge>
+                            )}
                             {event.divisions?.map((div: any) => (
                               <Badge key={div.id} variant="secondary">{div.name}</Badge>
                             ))}
