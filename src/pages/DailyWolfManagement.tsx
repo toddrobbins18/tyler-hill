@@ -55,6 +55,15 @@ export default function DailyWolfManagement() {
   const pageTitle = isTimberLakeCamp ? 'Tiger Times' : 'Daily Wolf Management';
   const pageDescription = isTimberLakeCamp ? 'Manage daily content for Tiger Times' : 'Manage daily content for The Daily Wolf';
 
+  const tigerTimesDefaultColors: Record<string, string> = {
+    "Laundry": "#3b82f6",
+    "Phone Calls": "#ef4444",
+    "Outside Events": "#eab308",
+    "Staff Days Off": "#7dd3fc",
+    "OD Notes": "#ff69b4",
+  };
+  const [tigerTimesColors, setTigerTimesColors] = useState<Record<string, string>>(tigerTimesDefaultColors);
+
   useEffect(() => {
     fetchContent();
   }, [selectedDate, currentCompany, currentSeason]);
