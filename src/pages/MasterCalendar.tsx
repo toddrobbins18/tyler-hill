@@ -126,13 +126,14 @@ export default function MasterCalendar() {
       }
 
       // Fetch all events in parallel with batch fetching - filtered by company
-      const [sportsBatch1, sportsBatch2, fieldTripsBatch1, fieldTripsBatch2, specialBatch1, specialBatch2] = await Promise.all([
+      const [sportsBatch1, sportsBatch2, fieldTripsBatch1, fieldTripsBatch2, specialBatch1, specialBatch2, tigerTimesRes] = await Promise.all([
         supabase.from("sports_calendar").select(`*, division:divisions(id, name, gender), sports_calendar_divisions(division_id, division:divisions(id, name, gender))`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(0, 999),
         supabase.from("sports_calendar").select(`*, division:divisions(id, name, gender), sports_calendar_divisions(division_id, division:divisions(id, name, gender))`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(1000, 1999),
         supabase.from("activities_field_trips").select(`*, division:divisions(id, name, gender)`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(0, 999),
         supabase.from("activities_field_trips").select(`*, division:divisions(id, name, gender)`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(1000, 1999),
         supabase.from("special_events_activities").select(`*, division:divisions(id, name, gender)`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(0, 999),
-        supabase.from("special_events_activities").select(`*, division:divisions(id, name, gender)`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(1000, 1999)
+        supabase.from("special_events_activities").select(`*, division:divisions(id, name, gender)`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(1000, 1999),
+        supabase.from("daily_wolf_content").select("*").eq('company_id', currentCompany.id).eq('season', currentSeason).order("date", { ascending: true }),
       ]);
 
       // Combine batches
