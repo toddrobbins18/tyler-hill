@@ -57,7 +57,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (currentCompany?.id) {
       fetchDashboardData();
-      if (currentCompany.slug === 'timber-lake-west') {
+      if (currentCompany.slug === 'timber-lake-west' || currentCompany.slug === 'timber-lake-camp') {
         fetchDailyWolfContent();
       }
     }
