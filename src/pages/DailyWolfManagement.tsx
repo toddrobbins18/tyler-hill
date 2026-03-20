@@ -24,6 +24,9 @@ interface DailyWolfContent {
   phone_calls_info: string;
   quote_of_the_day: string;
   notes: string;
+  picture_day: string;
+  outside_event: string;
+  staff_days_off: string;
 }
 
 export default function DailyWolfManagement() {
