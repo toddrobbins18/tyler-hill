@@ -362,7 +362,7 @@ export default function DailyWolfManagement() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card style={{ borderTopWidth: '3px', borderTopColor: tigerTimesColors["Phone Calls"] }}>
             <CardHeader>
               <CardTitle>📞 Phone Calls</CardTitle>
               <CardDescription>Phone call schedule and notes</CardDescription>
