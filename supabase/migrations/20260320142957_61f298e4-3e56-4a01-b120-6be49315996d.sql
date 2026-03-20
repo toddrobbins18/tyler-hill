@@ -1,0 +1,1 @@
+ALTER TABLE public.special_events_activities ADD COLUMN IF NOT EXISTS sub_category TEXT;

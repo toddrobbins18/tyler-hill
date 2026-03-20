@@ -394,6 +394,14 @@ export default function MasterCalendar() {
     }
   };
 
+  const getSubCategoryColor = (eventType: string, subCategory: string): string | undefined => {
+    const colorMap: Record<string, Record<string, string>> = {
+      "tournament": { "Away": "bg-orange-500 text-white", "Home": "bg-green-800 text-white" },
+      "trip": { "Teen Trip": "bg-black text-white", "Collegiate Trip": "bg-blue-600 text-white", "Senior Trip": "bg-red-600 text-white", "Junior Trip": "bg-purple-600 text-white" },
+    };
+    return colorMap[eventType]?.[subCategory];
+  };
+
   const getSourceLabel = (source: EventSource) => {
     switch (source) {
       case 'sports_calendar': return "Sports";
@@ -404,6 +412,17 @@ export default function MasterCalendar() {
 
   const eventPropGetter = (event: any) => {
     const source = event.resource.source;
+    const subCategory = event.resource.originalData?.sub_category;
+    const eventType = event.resource.originalData?.event_type;
+
+    // Sub-category specific colors
+    const subColors: Record<string, Record<string, string>> = {
+      "tournament": { "Away": "#f97316", "Home": "#166534" },
+      "trip": { "Teen Trip": "#000000", "Collegiate Trip": "#2563eb", "Senior Trip": "#dc2626", "Junior Trip": "#9333ea" },
+    };
+
+    const subColor = subColors[eventType]?.[subCategory];
+
     const colors: Record<EventSource, string> = {
       'sports_calendar': '#3b82f6',
       'activities_field_trips': '#22c55e',
@@ -412,7 +431,7 @@ export default function MasterCalendar() {
     
     return {
       style: {
-        backgroundColor: colors[source],
+        backgroundColor: subColor || colors[source],
         color: 'white',
         borderRadius: '4px',
         padding: '2px 5px',
@@ -632,6 +651,11 @@ export default function MasterCalendar() {
                           {getSourceLabel(event.source)}
                         </Badge>
                         <Badge variant="outline">{event.type}</Badge>
+                        {event.originalData?.sub_category && (
+                          <Badge className={getSubCategoryColor(event.originalData?.event_type, event.originalData.sub_category) || ""}>
+                            {event.originalData.sub_category}
+                          </Badge>
+                        )}
                         {event.division && (
                           <Badge variant="secondary">{event.division.name}</Badge>
                         )}
@@ -675,6 +699,11 @@ export default function MasterCalendar() {
                   {getSourceLabel(selectedEvent.source)}
                 </Badge>
                 <Badge variant="outline">{selectedEvent.type}</Badge>
+                {selectedEvent.originalData?.sub_category && (
+                  <Badge className={getSubCategoryColor(selectedEvent.originalData?.event_type, selectedEvent.originalData.sub_category) || ""}>
+                    {selectedEvent.originalData.sub_category}
+                  </Badge>
+                )}
               </div>
 
               {/* Division */}

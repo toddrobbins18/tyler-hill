@@ -42,6 +42,7 @@ export default function SpecialEventsActivities() {
     title: "",
     description: "",
     event_type: "",
+    sub_category: "",
     start_time: "",
     end_time: "",
     location: "",
@@ -50,6 +51,44 @@ export default function SpecialEventsActivities() {
     file_name: "",
     chaperone: "",
   });
+
+  const subCategoryMap: Record<string, { label: string; color?: string }[]> = {
+    "evening-activity": [
+      { label: "Divisional Night" },
+      { label: "Campus Night" },
+      { label: "Full Camp" },
+    ],
+    "tournament": [
+      { label: "Away", color: "bg-orange-500 text-white" },
+      { label: "Home", color: "bg-green-800 text-white" },
+    ],
+    "wednesday-event": [
+      { label: "GORDON" },
+      { label: "JACOBS" },
+      { label: "BOCIAN/MELTER BOWL" },
+      { label: "Olympics" },
+      { label: "Wacky Wednesday" },
+    ],
+    "admin-notes": [
+      { label: "Picture Day" },
+      { label: "Laundry" },
+      { label: "Phone Calls" },
+      { label: "Outside Event" },
+      { label: "Staff Days Off" },
+    ],
+    "trip": [
+      { label: "Teen Trip", color: "bg-black text-white" },
+      { label: "Collegiate Trip", color: "bg-blue-600 text-white" },
+      { label: "Senior Trip", color: "bg-red-600 text-white" },
+      { label: "Junior Trip", color: "bg-purple-600 text-white" },
+    ],
+  };
+
+  const getSubCategoryColor = (eventType: string, subCategory: string): string | undefined => {
+    const subs = subCategoryMap[eventType];
+    if (!subs) return undefined;
+    return subs.find(s => s.label === subCategory)?.color;
+  };
   const { toast } = useToast();
   const { selectedSeason } = useSeason();
 
@@ -169,6 +208,7 @@ export default function SpecialEventsActivities() {
       title: formData.title,
       description: formData.description,
       event_type: formData.event_type,
+      sub_category: formData.sub_category || null,
       time_slot: timeSlot,
       start_time: formData.start_time || null,
       end_time: formData.end_time || null,
@@ -273,6 +313,7 @@ export default function SpecialEventsActivities() {
       title: "",
       description: "",
       event_type: "",
+      sub_category: "",
       start_time: "",
       end_time: "",
       location: "",
@@ -349,6 +390,7 @@ export default function SpecialEventsActivities() {
       title: event.title,
       description: event.description || "",
       event_type: event.event_type,
+      sub_category: event.sub_category || "",
       start_time: event.start_time || "",
       end_time: event.end_time || "",
       location: event.location || "",
@@ -505,6 +547,11 @@ export default function SpecialEventsActivities() {
                         <CardContent className="space-y-2">
                           <div className="flex gap-2 flex-wrap">
                             <Badge>{event.event_type}</Badge>
+                            {event.sub_category && (
+                              <Badge className={getSubCategoryColor(event.event_type, event.sub_category) || ""}>
+                                {event.sub_category}
+                              </Badge>
+                            )}
                             {event.divisions?.map((div: any) => (
                               <Badge key={div.id} variant="secondary">{div.name}</Badge>
                             ))}
@@ -559,13 +606,17 @@ export default function SpecialEventsActivities() {
 
             <div className="space-y-2">
               <Label>Event Type</Label>
-              <Select value={formData.event_type} onValueChange={(value) => setFormData({ ...formData, event_type: value })}>
+              <Select value={formData.event_type} onValueChange={(value) => setFormData({ ...formData, event_type: value, sub_category: "" })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select event type" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="special-event">Special Event</SelectItem>
                   <SelectItem value="evening-activity">Evening Activity</SelectItem>
+                  <SelectItem value="tournament">Tournament</SelectItem>
+                  <SelectItem value="wednesday-event">Wednesday Event</SelectItem>
+                  <SelectItem value="admin-notes">Admin Notes</SelectItem>
+                  <SelectItem value="trip">Trip</SelectItem>
                   <SelectItem value="campfire">Campfire</SelectItem>
                   <SelectItem value="movie-night">Movie Night</SelectItem>
                   <SelectItem value="talent-show">Talent Show</SelectItem>
@@ -574,6 +625,24 @@ export default function SpecialEventsActivities() {
                 </SelectContent>
               </Select>
             </div>
+
+            {subCategoryMap[formData.event_type] && (
+              <div className="space-y-2">
+                <Label>Sub-Category</Label>
+                <Select value={formData.sub_category} onValueChange={(value) => setFormData({ ...formData, sub_category: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select sub-category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {subCategoryMap[formData.event_type].map((sub) => (
+                      <SelectItem key={sub.label} value={sub.label}>
+                        {sub.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -751,6 +820,11 @@ export default function SpecialEventsActivities() {
             <div className="space-y-4">
               <div className="flex gap-2 flex-wrap">
                 <Badge>{selectedEvent.event_type}</Badge>
+                {selectedEvent.sub_category && (
+                  <Badge className={getSubCategoryColor(selectedEvent.event_type, selectedEvent.sub_category) || ""}>
+                    {selectedEvent.sub_category}
+                  </Badge>
+                )}
                 {selectedEvent.divisions?.map((div: any) => (
                   <Badge key={div.id} variant="secondary">{div.name}</Badge>
                 ))}
