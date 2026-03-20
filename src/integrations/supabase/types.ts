@@ -926,9 +926,12 @@ export type Database = {
           laundry_info: string | null
           notes: string | null
           officer_of_day: string | null
+          outside_event: string | null
           phone_calls_info: string | null
+          picture_day: string | null
           quote_of_the_day: string | null
           season: string
+          staff_days_off: string | null
           updated_at: string | null
         }
         Insert: {
@@ -939,9 +942,12 @@ export type Database = {
           laundry_info?: string | null
           notes?: string | null
           officer_of_day?: string | null
+          outside_event?: string | null
           phone_calls_info?: string | null
+          picture_day?: string | null
           quote_of_the_day?: string | null
           season?: string
+          staff_days_off?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -952,9 +958,12 @@ export type Database = {
           laundry_info?: string | null
           notes?: string | null
           officer_of_day?: string | null
+          outside_event?: string | null
           phone_calls_info?: string | null
+          picture_day?: string | null
           quote_of_the_day?: string | null
           season?: string
+          staff_days_off?: string | null
           updated_at?: string | null
         }
         Relationships: [

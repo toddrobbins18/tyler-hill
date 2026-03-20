@@ -53,6 +53,13 @@ const getCompanyMenuItems = (companySlug?: string) => {
     );
   }
 
+  // Tiger Times - ONLY for timber-lake-camp (matches AppSidebar)
+  if (companySlug === 'timber-lake-camp') {
+    baseItems.push(
+      { id: "daily-wolf-management", label: "Tiger Times", icon: "🐯" }
+    );
+  }
+
   // Daily Schedule - ONLY for timber-lake-camp (matches AppSidebar)
   if (companySlug === 'timber-lake-camp') {
     baseItems.push({ id: "daily-schedule", label: "Daily Schedule", icon: "📅" });

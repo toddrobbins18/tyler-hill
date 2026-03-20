@@ -24,6 +24,9 @@ interface DailyWolfContent {
   phone_calls_info: string;
   quote_of_the_day: string;
   notes: string;
+  picture_day: string;
+  outside_event: string;
+  staff_days_off: string;
 }
 
 export default function DailyWolfManagement() {
@@ -34,14 +37,20 @@ export default function DailyWolfManagement() {
     phone_calls_info: '',
     quote_of_the_day: '',
     notes: '',
+    picture_day: '',
+    outside_event: '',
+    staff_days_off: '',
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
   const isTimberLakeWest = currentCompany?.slug === 'timber-lake-west';
+  const isTimberLakeCamp = currentCompany?.slug === 'timber-lake-camp';
   const odLabel = isTimberLakeWest ? 'Super OD' : 'OD';
   const odDescription = isTimberLakeWest ? 'Super OD information' : 'Officer of the Day information';
+  const pageTitle = isTimberLakeCamp ? 'Tiger Times' : 'Daily Wolf Management';
+  const pageDescription = isTimberLakeCamp ? 'Manage daily content for Tiger Times' : 'Manage daily content for The Daily Wolf';
 
   useEffect(() => {
     fetchContent();
@@ -104,6 +113,9 @@ export default function DailyWolfManagement() {
           phone_calls_info: data.phone_calls_info || '',
           quote_of_the_day: data.quote_of_the_day || '',
           notes: data.notes || '',
+          picture_day: (data as any).picture_day || '',
+          outside_event: (data as any).outside_event || '',
+          staff_days_off: (data as any).staff_days_off || '',
         });
       } else {
         setContent({
@@ -112,6 +124,9 @@ export default function DailyWolfManagement() {
           phone_calls_info: '',
           quote_of_the_day: '',
           notes: '',
+          picture_day: '',
+          outside_event: '',
+          staff_days_off: '',
         });
       }
     } catch (error: any) {
@@ -230,6 +245,9 @@ export default function DailyWolfManagement() {
           phone_calls_info: '',
           quote_of_the_day: '',
           notes: '',
+          picture_day: '',
+          outside_event: '',
+          staff_days_off: '',
         });
       }
 
@@ -252,9 +270,9 @@ export default function DailyWolfManagement() {
   return (
     <div className="container mx-auto p-6">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-foreground">Daily Wolf Management</h1>
+        <h1 className="text-3xl font-bold text-foreground">{pageTitle}</h1>
         <p className="text-muted-foreground mt-2">
-          Manage daily content for The Daily Wolf
+          {pageDescription}
         </p>
       </div>
 
@@ -301,6 +319,93 @@ export default function DailyWolfManagement() {
             </Button>
           </CardContent>
         </Card>
+      ) : isTimberLakeCamp ? (
+        <div className="grid gap-6 md:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>📸 Picture Day</CardTitle>
+              <CardDescription>Picture day details and schedule</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={content.picture_day}
+                onChange={(e) => handleFieldChange('picture_day', e.target.value)}
+                onBlur={(e) => handleFieldBlur('picture_day', e.target.value)}
+                placeholder="Enter picture day details"
+                rows={4}
+                disabled={saving}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>👕 Laundry</CardTitle>
+              <CardDescription>Laundry schedule and information</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={content.laundry_info}
+                onChange={(e) => handleFieldChange('laundry_info', e.target.value)}
+                onBlur={(e) => handleFieldBlur('laundry_info', e.target.value)}
+                placeholder="Enter laundry information"
+                rows={4}
+                disabled={saving}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>📞 Phone Calls</CardTitle>
+              <CardDescription>Phone call schedule and notes</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={content.phone_calls_info}
+                onChange={(e) => handleFieldChange('phone_calls_info', e.target.value)}
+                onBlur={(e) => handleFieldBlur('phone_calls_info', e.target.value)}
+                placeholder="Enter phone call information"
+                rows={4}
+                disabled={saving}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>🌐 Outside Event</CardTitle>
+              <CardDescription>External events and activities</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={content.outside_event}
+                onChange={(e) => handleFieldChange('outside_event', e.target.value)}
+                onBlur={(e) => handleFieldBlur('outside_event', e.target.value)}
+                placeholder="Enter outside event details"
+                rows={4}
+                disabled={saving}
+              />
+            </CardContent>
+          </Card>
+
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <CardTitle>🗓️ Staff Days Off</CardTitle>
+              <CardDescription>Staff schedule and days off information</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={content.staff_days_off}
+                onChange={(e) => handleFieldChange('staff_days_off', e.target.value)}
+                onBlur={(e) => handleFieldBlur('staff_days_off', e.target.value)}
+                placeholder="Enter staff days off information"
+                rows={6}
+                disabled={saving}
+              />
+            </CardContent>
+          </Card>
+        </div>
       ) : (
         <div className="grid gap-6 md:grid-cols-2">
           <Card>
