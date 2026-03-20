@@ -52,7 +52,9 @@ export default function SpecialEventsActivities() {
     chaperone: "",
   });
 
-  const subCategoryMap: Record<string, { label: string; color?: string }[]> = {
+  const isTimberLakeCamp = currentCompany?.id === '1d296ccf-31e1-4176-af57-50a4a4820f82';
+
+  const subCategoryMap: Record<string, { label: string; color?: string }[]> = isTimberLakeCamp ? {
     "evening-activity": [
       { label: "Divisional Night" },
       { label: "Campus Night" },
@@ -82,7 +84,7 @@ export default function SpecialEventsActivities() {
       { label: "Senior Trip", color: "bg-red-600 text-white" },
       { label: "Junior Trip", color: "bg-purple-600 text-white" },
     ],
-  };
+  } : {};
 
   const getSubCategoryColor = (eventType: string, subCategory: string): string | undefined => {
     const subs = subCategoryMap[eventType];
@@ -613,10 +615,14 @@ export default function SpecialEventsActivities() {
                 <SelectContent>
                   <SelectItem value="special-event">Special Event</SelectItem>
                   <SelectItem value="evening-activity">Evening Activity</SelectItem>
-                  <SelectItem value="tournament">Tournament</SelectItem>
-                  <SelectItem value="wednesday-event">Wednesday Event</SelectItem>
-                  <SelectItem value="admin-notes">Admin Notes</SelectItem>
-                  <SelectItem value="trip">Trip</SelectItem>
+                  {isTimberLakeCamp && (
+                    <>
+                      <SelectItem value="tournament">Tournament</SelectItem>
+                      <SelectItem value="wednesday-event">Wednesday Event</SelectItem>
+                      <SelectItem value="admin-notes">Admin Notes</SelectItem>
+                      <SelectItem value="trip">Trip</SelectItem>
+                    </>
+                  )}
                   <SelectItem value="campfire">Campfire</SelectItem>
                   <SelectItem value="movie-night">Movie Night</SelectItem>
                   <SelectItem value="talent-show">Talent Show</SelectItem>
