@@ -905,6 +905,91 @@ export default function Dashboard() {
           )}
         </div>
       )}
+
+      {/* Tiger Times Content for Timber Lake Camp */}
+      {isTimberLakeCamp && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20">
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-amber-500/10">
+                  <Camera className="h-4 w-4 text-amber-600" />
+                </div>
+                <CardTitle className="text-base">📸 Picture Day</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">
+                {dailyWolfContent?.picture_day || 'No info'}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20">
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-blue-500/10">
+                  <Shirt className="h-4 w-4 text-blue-600" />
+                </div>
+                <CardTitle className="text-base">👕 Laundry</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">
+                {dailyWolfContent?.laundry_info || 'No info'}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20">
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-green-500/10">
+                  <Phone className="h-4 w-4 text-green-600" />
+                </div>
+                <CardTitle className="text-base">📞 Phone Calls</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">
+                {dailyWolfContent?.phone_calls_info || 'No info'}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20">
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-purple-500/10">
+                  <Globe className="h-4 w-4 text-purple-600" />
+                </div>
+                <CardTitle className="text-base">🌐 Outside Event</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">
+                {dailyWolfContent?.outside_event || 'No info'}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20">
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-red-500/10">
+                  <CalendarOff className="h-4 w-4 text-red-600" />
+                </div>
+                <CardTitle className="text-base">🗓️ Staff Days Off</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">
+                {dailyWolfContent?.staff_days_off || 'No info'}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )
     </div>
   );
 }
