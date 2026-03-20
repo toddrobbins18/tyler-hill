@@ -704,7 +704,7 @@ export default function ActivitiesFieldTrips() {
 
             <div className="space-y-2">
               <Label>Activity Type</Label>
-              <Select value={formData.activity_type} onValueChange={(value) => setFormData({ ...formData, activity_type: value })}>
+              <Select value={formData.activity_type} onValueChange={(value) => setFormData({ ...formData, activity_type: value, sub_category: "" })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select activity type" />
                 </SelectTrigger>
@@ -721,7 +721,23 @@ export default function ActivitiesFieldTrips() {
               </Select>
             </div>
 
-            <div className="space-y-2">
+            {isTimberLakeCamp && formData.activity_type === "field-trip" && (
+              <div className="space-y-2">
+                <Label>Trip Sub-Category</Label>
+                <Select value={formData.sub_category} onValueChange={(value) => setFormData({ ...formData, sub_category: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select trip type (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tripSubCategories.map((sub) => (
+                      <SelectItem key={sub.label} value={sub.label}>
+                        {sub.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
               <Label>Location Type</Label>
               <Select value={formData.home_away || "none"} onValueChange={(value) => setFormData({ ...formData, home_away: value === "none" ? "" : value as any })}>
                 <SelectTrigger>
