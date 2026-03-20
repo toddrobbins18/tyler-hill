@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
-import { useSeason } from "@/contexts/SeasonContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
+import { usePermissions } from "@/hooks/usePermissions";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 import { Plus, Trash2, Users, ClipboardList, BarChart3, Clock } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -29,7 +30,8 @@ const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 export default function ElectiveSignUp() {
   const { currentCompany } = useCompany();
-  const { selectedSeason } = useSeason();
+  const { currentSeason } = useSeasonContext();
+  const { getDivisionFilter, loading: permissionsLoading, userDivisions } = usePermissions();
   const { toast } = useToast();
 
   const [divisions, setDivisions] = useState<any[]>([]);
@@ -52,17 +54,23 @@ export default function ElectiveSignUp() {
   const [newElectiveName, setNewElectiveName] = useState("");
 
   useEffect(() => {
-    if (currentCompany?.id) {
+    if (currentCompany?.id && !permissionsLoading) {
       fetchData();
     }
-  }, [currentCompany, selectedSeason, weekStart, selectedDay, selectedPeriod]);
+  }, [currentCompany, currentSeason, weekStart, selectedDay, selectedPeriod, permissionsLoading, userDivisions]);
 
   const fetchData = async () => {
     setLoading(true);
     const companyId = currentCompany!.id;
+    const divisionFilter = getDivisionFilter();
+
+    let divisionsQuery = supabase.from("divisions").select("*").eq("company_id", companyId).eq("is_active", true).order("sort_order");
+    if (divisionFilter !== null && divisionFilter.length > 0) {
+      divisionsQuery = divisionsQuery.in("id", divisionFilter);
+    }
 
     const [divisionsRes, electivesRes, signupsRes] = await Promise.all([
-      supabase.from("divisions").select("*").eq("company_id", companyId).eq("is_active", true).order("sort_order"),
+      divisionsQuery,
       supabase.from("electives").select("*").eq("company_id", companyId).eq("is_active", true).order("name"),
       supabase.from("elective_signups").select("*, children(name, division_id), electives(name)")
         .eq("company_id", companyId)
@@ -83,7 +91,7 @@ export default function ElectiveSignUp() {
       .select("id, name, division_id")
       .eq("company_id", currentCompany!.id)
       .eq("division_id", divisionId)
-      .eq("status", "active")
+      .eq("season", currentSeason)
       .order("name");
     setChildren(data || []);
   };
@@ -114,7 +122,7 @@ export default function ElectiveSignUp() {
         week_start_date: weekStart,
         day_of_week: selectedDay,
         period: selectedPeriod,
-        season: selectedSeason,
+        season: currentSeason,
       });
       if (error) {
         toast({ title: "Error assigning elective", variant: "destructive" });
