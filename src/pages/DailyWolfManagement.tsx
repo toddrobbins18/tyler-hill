@@ -379,7 +379,7 @@ export default function DailyWolfManagement() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card style={{ borderTopWidth: '3px', borderTopColor: tigerTimesColors["Outside Events"] }}>
             <CardHeader>
               <CardTitle>🌐 Outside Event</CardTitle>
               <CardDescription>External events and activities</CardDescription>
