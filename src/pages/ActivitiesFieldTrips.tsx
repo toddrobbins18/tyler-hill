@@ -437,7 +437,20 @@ export default function ActivitiesFieldTrips() {
       return new Date(a.event_date).getTime() - new Date(b.event_date).getTime();
     });
 
-  const groupedEvents: Record<string, any[]> = filteredAndSortedEvents.reduce((acc, event) => {
+  const eventPropGetter = (event: any) => {
+    const cc = customColors;
+    const subCategory = event.resource?.sub_category || event.resource?.activity_type;
+    const bgColor = (subCategory && cc[subCategory]) || cc["Default"] || '#22c55e';
+    return {
+      style: {
+        backgroundColor: bgColor,
+        color: 'white',
+        borderRadius: '4px',
+        padding: '2px 5px',
+      }
+    };
+  };
+
     // Append T00:00:00 to prevent timezone issues with date-only strings
     const date = new Date(event.event_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
     if (!acc[date]) acc[date] = [];
