@@ -62,7 +62,10 @@ const getCompanyMenuItems = (companySlug?: string) => {
 
   // Daily Schedule - ONLY for timber-lake-camp (matches AppSidebar)
   if (companySlug === 'timber-lake-camp') {
-    baseItems.push({ id: "daily-schedule", label: "Daily Schedule", icon: "📅" });
+    baseItems.push(
+      { id: "daily-schedule", label: "Daily Schedule", icon: "📅" },
+      { id: "elective-signup", label: "Elective Sign-Up", icon: "🔗" }
+    );
   }
 
   // Special Meals - ONLY for tyler-hill-camp (matches AppSidebar)

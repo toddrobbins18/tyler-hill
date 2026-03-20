@@ -1,4 +1,4 @@
-import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, ClipboardEdit, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree, BookOpen, Building2, LogOut, BarChart3, ListChecks, ClipboardCheck, Stethoscope } from "lucide-react";
+import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, ClipboardEdit, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree, BookOpen, Building2, LogOut, BarChart3, ListChecks, ClipboardCheck, Stethoscope, ExternalLink } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,7 +24,7 @@ import { toast } from "sonner";
 
 // Items that need conditional rendering will be handled in the component
 const getMenuItems = (companySlug?: string) => {
-  const baseItems = [
+  const baseItems: Array<{ title: string; url: string; icon: any; menuId: string; external?: boolean }> = [
     { title: companySlug === 'timber-lake-west' ? "Athletics" : "Sports Calendar", url: "/athletics", icon: Trophy, menuId: "sports-calendar" },
     { title: "Camper", url: "/roster", icon: Users, menuId: "roster" },
     { title: "Dashboard", url: "/", icon: Home, menuId: "dashboard" },
@@ -88,7 +88,7 @@ const getMenuItems = (companySlug?: string) => {
     );
   }
 
-  // Add Tiger Times for Timber Lake Camp
+  // Add Tiger Times and Elective Sign-Up for Timber Lake Camp
   if (companySlug === 'timber-lake-camp') {
     baseItems.push(
       {
@@ -96,6 +96,13 @@ const getMenuItems = (companySlug?: string) => {
         url: "/daily-wolf-management",
         icon: ClipboardEdit,
         menuId: "daily-wolf-management"
+      },
+      {
+        title: "Elective Sign-Up",
+        url: "https://tlcelective.lovable.app/signup",
+        icon: ExternalLink,
+        menuId: "elective-signup",
+        external: true
       }
     );
   }
@@ -250,18 +257,30 @@ export function AppSidebar() {
               {visibleItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <NavLink
-                      to={item.url}
-                      end
-                      className={({ isActive }) =>
-                        isActive
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                          : "hover:bg-sidebar-accent/50"
-                      }
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </NavLink>
+                    {item.external ? (
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:bg-sidebar-accent/50 flex items-center gap-2"
+                      >
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </a>
+                    ) : (
+                      <NavLink
+                        to={item.url}
+                        end
+                        className={({ isActive }) =>
+                          isActive
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                            : "hover:bg-sidebar-accent/50"
+                        }
+                      >
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </NavLink>
+                    )}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
