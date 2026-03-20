@@ -31,6 +31,7 @@ interface DailyWolfContent {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { getDivisionFilter } = usePermissions();
+  const ttColors = useTigerTimesColors();
   const { userRole } = useAuth();
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
