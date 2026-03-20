@@ -88,6 +88,12 @@ export default function MasterCalendar() {
     "Gordon": "#39ff14",
     "Jacobs": "#39ff14",
     "Bocian/Melter Bowl": "#39ff14",
+    "Tiger Times (Default)": "#f59e0b",
+    "TT: Laundry": "#3b82f6",
+    "TT: Phone Calls": "#ef4444",
+    "TT: Outside Events": "#eab308",
+    "TT: Staff Days Off": "#93c5fd",
+    "TT: OD Notes": "#ec4899",
   };
 
   useEffect(() => {
