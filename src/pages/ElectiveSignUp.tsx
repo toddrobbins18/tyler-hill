@@ -122,7 +122,7 @@ export default function ElectiveSignUp() {
         week_start_date: weekStart,
         day_of_week: selectedDay,
         period: selectedPeriod,
-        season: selectedSeason,
+        season: currentSeason,
       });
       if (error) {
         toast({ title: "Error assigning elective", variant: "destructive" });
