@@ -552,6 +552,7 @@ export default function ActivitiesFieldTrips() {
                     setFormData({ ...formData, event_date: format(slotInfo.start, 'yyyy-MM-dd') });
                     setShowDialog(true);
                   }}
+                  eventPropGetter={eventPropGetter}
                   selectable
                 />
               )}
