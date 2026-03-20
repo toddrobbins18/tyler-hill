@@ -319,6 +319,93 @@ export default function DailyWolfManagement() {
             </Button>
           </CardContent>
         </Card>
+      ) : isTimberLakeCamp ? (
+        <div className="grid gap-6 md:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>📸 Picture Day</CardTitle>
+              <CardDescription>Picture day details and schedule</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={content.picture_day}
+                onChange={(e) => handleFieldChange('picture_day', e.target.value)}
+                onBlur={(e) => handleFieldBlur('picture_day', e.target.value)}
+                placeholder="Enter picture day details"
+                rows={4}
+                disabled={saving}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>👕 Laundry</CardTitle>
+              <CardDescription>Laundry schedule and information</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={content.laundry_info}
+                onChange={(e) => handleFieldChange('laundry_info', e.target.value)}
+                onBlur={(e) => handleFieldBlur('laundry_info', e.target.value)}
+                placeholder="Enter laundry information"
+                rows={4}
+                disabled={saving}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>📞 Phone Calls</CardTitle>
+              <CardDescription>Phone call schedule and notes</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={content.phone_calls_info}
+                onChange={(e) => handleFieldChange('phone_calls_info', e.target.value)}
+                onBlur={(e) => handleFieldBlur('phone_calls_info', e.target.value)}
+                placeholder="Enter phone call information"
+                rows={4}
+                disabled={saving}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>🌐 Outside Event</CardTitle>
+              <CardDescription>External events and activities</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={content.outside_event}
+                onChange={(e) => handleFieldChange('outside_event', e.target.value)}
+                onBlur={(e) => handleFieldBlur('outside_event', e.target.value)}
+                placeholder="Enter outside event details"
+                rows={4}
+                disabled={saving}
+              />
+            </CardContent>
+          </Card>
+
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <CardTitle>🗓️ Staff Days Off</CardTitle>
+              <CardDescription>Staff schedule and days off information</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={content.staff_days_off}
+                onChange={(e) => handleFieldChange('staff_days_off', e.target.value)}
+                onBlur={(e) => handleFieldBlur('staff_days_off', e.target.value)}
+                placeholder="Enter staff days off information"
+                rows={6}
+                disabled={saving}
+              />
+            </CardContent>
+          </Card>
+        </div>
       ) : (
         <div className="grid gap-6 md:grid-cols-2">
           <Card>
