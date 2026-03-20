@@ -66,6 +66,29 @@ export default function MasterCalendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState<UnifiedEvent | null>(null);
   const { toast } = useToast();
+  const [customColors, setCustomColors] = useState<Record<string, string>>({});
+
+  const masterCalendarDefaultColors: Record<string, string> = {
+    "Sports (Default)": "#3b82f6",
+    "Field Trip (Default)": "#22c55e",
+    "Special Event (Default)": "#a855f7",
+    "Teen Trip": "#6b7280",
+    "Collegiate Trip": "#14b8a6",
+    "Senior Trip": "#7f1d1d",
+    "Junior Trip": "#9333ea",
+    "Olympics": "#000000",
+    "Wacky Wednesday": "#000000",
+    "Divisional Night": "#bf00ff",
+    "Campus Night": "#4d4dff",
+    "Full Camp": "#ff6600",
+    "Rookie Day": "#22c55e",
+    "Tour": "#000000",
+    "Away (Sports)": "#1e3a5f",
+    "Home (Sports)": "#166534",
+    "Gordon": "#39ff14",
+    "Jacobs": "#39ff14",
+    "Bocian/Melter Bowl": "#39ff14",
+  };
 
   useEffect(() => {
     fetchAllEvents();
