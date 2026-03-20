@@ -60,6 +60,7 @@ export function CalendarColorSettings({ calendarId, defaultColors, onColorsChang
     setColors(defaultColors);
     localStorage.removeItem(STORAGE_KEY_PREFIX + calendarId);
     onColorsChange(defaultColors);
+    window.dispatchEvent(new Event(calendarId + "-colors-updated"));
   };
 
   const entries = Object.entries(colors);
