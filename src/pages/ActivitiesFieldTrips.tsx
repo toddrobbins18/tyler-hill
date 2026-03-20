@@ -458,6 +458,11 @@ export default function ActivitiesFieldTrips() {
           </div>
         </div>
         <div className="flex gap-2">
+          <CalendarColorSettings
+            calendarId="activities-field-trips"
+            defaultColors={activitiesDefaultColors}
+            onColorsChange={setCustomColors}
+          />
           <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
             <ToggleGroupItem value="calendar" aria-label="Calendar view">
               <CalendarIcon className="h-4 w-4" />
