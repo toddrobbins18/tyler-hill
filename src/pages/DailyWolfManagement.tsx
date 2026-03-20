@@ -130,6 +130,7 @@ export default function DailyWolfManagement() {
           picture_day: '',
           outside_event: '',
           staff_days_off: '',
+          od_notes: '',
         });
       }
     } catch (error: any) {
