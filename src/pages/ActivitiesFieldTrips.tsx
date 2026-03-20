@@ -331,6 +331,7 @@ export default function ActivitiesFieldTrips() {
       description: "",
       activity_type: "",
       sub_category: "",
+      emoji: "",
       depart_from_camp: "",
       depart_from_activity: "",
       location: "",
