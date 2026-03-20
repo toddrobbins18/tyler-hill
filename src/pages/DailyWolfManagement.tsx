@@ -317,7 +317,16 @@ export default function DailyWolfManagement() {
             </PopoverContent>
           </Popover>
         </div>
-        <CSVUploader tableName="daily_wolf_content" onUploadComplete={fetchContent} />
+        <div className="flex gap-2">
+          {isTimberLakeCamp && (
+            <CalendarColorSettings
+              calendarId="tiger-times"
+              defaultColors={tigerTimesDefaultColors}
+              onColorsChange={setTigerTimesColors}
+            />
+          )}
+          <CSVUploader tableName="daily_wolf_content" onUploadComplete={fetchContent} />
+        </div>
       </div>
 
       {loading ? (
