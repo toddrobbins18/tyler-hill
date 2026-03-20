@@ -341,6 +341,9 @@ export default function ElectiveSignUp() {
           <TabsTrigger value="analytics" className="flex items-center gap-1.5">
             <BarChart3 className="h-4 w-4" />Analytics
           </TabsTrigger>
+          <TabsTrigger value="history" className="flex items-center gap-1.5">
+            <History className="h-4 w-4" />Camper History
+          </TabsTrigger>
         </TabsList>
 
         {/* SIGN-UP TAB */}
