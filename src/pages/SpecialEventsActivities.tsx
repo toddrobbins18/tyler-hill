@@ -62,9 +62,9 @@ export default function SpecialEventsActivities() {
       { label: "Full Camp" },
     ],
     "wednesday-event": [
-      { label: "GORDON" },
-      { label: "JACOBS" },
-      { label: "BOCIAN/MELTER BOWL" },
+      { label: "Gordon" },
+      { label: "Jacobs" },
+      { label: "Bocian/Melter Bowl" },
       { label: "Olympics" },
       { label: "Wacky Wednesday" },
     ],
