@@ -379,6 +379,7 @@ export default function SpecialEventsActivities() {
       description: event.description || "",
       event_type: event.event_type,
       sub_category: event.sub_category || "",
+      emoji: event.emoji || "",
       start_time: event.start_time || "",
       end_time: event.end_time || "",
       location: event.location || "",
