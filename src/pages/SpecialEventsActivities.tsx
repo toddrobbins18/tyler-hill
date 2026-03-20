@@ -43,6 +43,7 @@ export default function SpecialEventsActivities() {
     description: "",
     event_type: "",
     sub_category: "",
+    emoji: "",
     start_time: "",
     end_time: "",
     location: "",
