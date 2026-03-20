@@ -111,7 +111,7 @@ export default function Dashboard() {
     const dailyWolfChannel = supabase
       .channel('dashboard-daily-wolf')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_wolf_content' }, () => {
-        if (currentCompany?.slug === 'timber-lake-west') {
+        if (currentCompany?.slug === 'timber-lake-west' || currentCompany?.slug === 'timber-lake-camp') {
           fetchDailyWolfContent();
         }
       })
