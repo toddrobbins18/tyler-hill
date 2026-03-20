@@ -608,9 +608,9 @@ export default function SpecialEventsActivities() {
                       <SelectItem value="campus-night">Campus Night</SelectItem>
                       <SelectItem value="full-camp">Full Camp</SelectItem>
                       <SelectItem value="wednesday-event">Wednesday Event</SelectItem>
-                      <SelectItem value="gordon">GORDON</SelectItem>
-                      <SelectItem value="jacobs">JACOBS</SelectItem>
-                      <SelectItem value="bocian-melter-bowl">BOCIAN/MELTER BOWL</SelectItem>
+                      <SelectItem value="gordon">Gordon</SelectItem>
+                      <SelectItem value="jacobs">Jacobs</SelectItem>
+                      <SelectItem value="bocian-melter-bowl">Bocian/Melter Bowl</SelectItem>
                       <SelectItem value="olympics">Olympics</SelectItem>
                       <SelectItem value="wacky-wednesday">Wacky Wednesday</SelectItem>
                     </>
