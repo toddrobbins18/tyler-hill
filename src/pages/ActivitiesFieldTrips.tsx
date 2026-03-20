@@ -451,7 +451,7 @@ export default function ActivitiesFieldTrips() {
     };
   };
 
-    // Append T00:00:00 to prevent timezone issues with date-only strings
+  const groupedEvents: Record<string, any[]> = filteredAndSortedEvents.reduce((acc, event) => {
     const date = new Date(event.event_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
     if (!acc[date]) acc[date] = [];
     acc[date].push(event);
