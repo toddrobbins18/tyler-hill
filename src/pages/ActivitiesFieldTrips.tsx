@@ -47,6 +47,18 @@ export default function ActivitiesFieldTrips() {
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [calendarView, setCalendarView] = useState<View>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [customColors, setCustomColors] = useState<Record<string, string>>({});
+
+  const activitiesDefaultColors: Record<string, string> = {
+    "Teen Trip": "#6b7280",
+    "Collegiate Trip": "#14b8a6",
+    "Senior Trip": "#7f1d1d",
+    "Junior Trip": "#9333ea",
+    "Olympics": "#000000",
+    "Wacky Wednesday": "#000000",
+    "Default": "#22c55e",
+  };
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [formData, setFormData] = useState({
     event_date: new Date().toISOString().split('T')[0],
     end_date: "",

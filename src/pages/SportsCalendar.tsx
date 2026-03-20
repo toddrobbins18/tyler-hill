@@ -54,6 +54,17 @@ export default function SportsCalendar() {
   const [showRosterPopup, setShowRosterPopup] = useState<any>(null);
   const [rosterCounts, setRosterCounts] = useState<Record<string, number>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [customColors, setCustomColors] = useState<Record<string, string>>({});
+
+  const sportsDefaultColors: Record<string, string> = {
+    "Away": "#1e3a5f",
+    "Home": "#166534",
+    "Gordon": "#39ff14",
+    "Jacobs": "#39ff14",
+    "Bocian/Melter Bowl": "#39ff14",
+    "No Roster": "#ef4444",
+    "Has Roster": "#22c55e",
+  };
   const [formData, setFormData] = useState({
     event_date: new Date().toISOString().split('T')[0],
     title: "",
