@@ -396,7 +396,7 @@ export default function MasterCalendar() {
 
   const getSubCategoryColor = (eventType: string, subCategory: string): string | undefined => {
     const colorMap: Record<string, Record<string, string>> = {
-      "field-trip": { "Teen Trip": "bg-black text-white", "Collegiate Trip": "bg-blue-600 text-white", "Senior Trip": "bg-red-600 text-white", "Junior Trip": "bg-purple-600 text-white" },
+      "field-trip": { "Teen Trip": "bg-gray-500 text-white", "Collegiate Trip": "bg-teal-500 text-white", "Senior Trip": "bg-red-900 text-white", "Junior Trip": "bg-purple-600 text-white" },
     };
     return colorMap[eventType]?.[subCategory];
   };
