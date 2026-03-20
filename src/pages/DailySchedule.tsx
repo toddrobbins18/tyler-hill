@@ -48,6 +48,24 @@ export default function DailySchedule() {
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingEvents, setLoadingEvents] = useState(false);
+  const { currentSeason } = useSeasonContext();
+
+  // Tiger Times content for Timber Lake Camp
+  const [tigerTimesContent, setTigerTimesContent] = useState<any>(null);
+  const isTimberLakeCamp = currentCompany?.slug === 'timber-lake-camp';
+
+  const fetchTigerTimesContent = async () => {
+    if (!currentCompany || !isTimberLakeCamp) return;
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const { data } = await supabase
+      .from('daily_wolf_content')
+      .select('*')
+      .eq('company_id', currentCompany.id)
+      .eq('date', dateStr)
+      .eq('season', currentSeason)
+      .maybeSingle();
+    setTigerTimesContent(data);
+  };
 
   // Get user's accessible divisions
   const divisionFilter = getDivisionFilter();
