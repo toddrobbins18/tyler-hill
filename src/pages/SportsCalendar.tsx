@@ -370,6 +370,7 @@ export default function SportsCalendar() {
       sport_type: event.sport_type,
       custom_sport_type: event.custom_sport_type || "",
       event_type: event.event_type || "",
+      emoji: event.emoji || "",
       depart_time: event.depart_time || "",
       start_time_field: event.start_time_field || "",
       location: event.location || "",
