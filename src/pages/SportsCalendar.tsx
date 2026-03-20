@@ -1006,6 +1006,13 @@ export default function SportsCalendar() {
                 <SelectContent>
                   <SelectItem value="Away">Away</SelectItem>
                   <SelectItem value="Home">Home</SelectItem>
+                  {currentCompany?.id === '1d296ccf-31e1-4176-af57-50a4a4820f82' && (
+                    <>
+                      <SelectItem value="Gordon">Gordon</SelectItem>
+                      <SelectItem value="Jacobs">Jacobs</SelectItem>
+                      <SelectItem value="Bocian/Melter Bowl">Bocian/Melter Bowl</SelectItem>
+                    </>
+                  )}
                   <SelectItem value="WC One Day Tournament">WC One Day Tournament</SelectItem>
                   <SelectItem value="WC Knock Out Tournament">WC Knock Out Tournament</SelectItem>
                   <SelectItem value="Exhibition/Friendly">Exhibition/Friendly</SelectItem>
