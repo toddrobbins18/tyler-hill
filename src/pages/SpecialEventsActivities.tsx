@@ -55,13 +55,7 @@ export default function SpecialEventsActivities() {
 
   const isTimberLakeCamp = currentCompany?.id === '1d296ccf-31e1-4176-af57-50a4a4820f82';
 
-  const subCategoryMap: Record<string, { label: string; color?: string }[]> = isTimberLakeCamp ? {
-    "evening-activity": [
-      { label: "Divisional Night", color: "bg-[#bf00ff] text-white" },
-      { label: "Campus Night", color: "bg-[#4d4dff] text-white" },
-      { label: "Full Camp", color: "bg-[#ff6600] text-white" },
-    ],
-  } : {};
+  const subCategoryMap: Record<string, { label: string; color?: string }[]> = {};
 
   const getSubCategoryColor = (eventType: string, subCategory: string): string | undefined => {
     const subs = subCategoryMap[eventType];
