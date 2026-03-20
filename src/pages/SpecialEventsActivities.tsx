@@ -551,7 +551,7 @@ export default function SpecialEventsActivities() {
                         </CardHeader>
                         <CardContent className="space-y-2">
                           <div className="flex gap-2 flex-wrap">
-                            <Badge>{event.emoji ? `${event.emoji} ` : ''}{event.event_type}</Badge>
+                            <Badge style={{ backgroundColor: getEventTypeColor(event.event_type), color: '#fff' }}>{event.emoji ? `${event.emoji} ` : ''}{event.event_type}</Badge>
                             {event.sub_category && (
                               <Badge className={getSubCategoryColor(event.event_type, event.sub_category) || ""}>
                                 {event.sub_category}
