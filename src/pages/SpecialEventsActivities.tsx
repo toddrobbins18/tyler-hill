@@ -615,10 +615,14 @@ export default function SpecialEventsActivities() {
                 <SelectContent>
                   <SelectItem value="special-event">Special Event</SelectItem>
                   <SelectItem value="evening-activity">Evening Activity</SelectItem>
-                  <SelectItem value="tournament">Tournament</SelectItem>
-                  <SelectItem value="wednesday-event">Wednesday Event</SelectItem>
-                  <SelectItem value="admin-notes">Admin Notes</SelectItem>
-                  <SelectItem value="trip">Trip</SelectItem>
+                  {isTimberLakeCamp && (
+                    <>
+                      <SelectItem value="tournament">Tournament</SelectItem>
+                      <SelectItem value="wednesday-event">Wednesday Event</SelectItem>
+                      <SelectItem value="admin-notes">Admin Notes</SelectItem>
+                      <SelectItem value="trip">Trip</SelectItem>
+                    </>
+                  )}
                   <SelectItem value="campfire">Campfire</SelectItem>
                   <SelectItem value="movie-night">Movie Night</SelectItem>
                   <SelectItem value="talent-show">Talent Show</SelectItem>
