@@ -99,10 +99,9 @@ const getMenuItems = (companySlug?: string) => {
       },
       {
         title: "Elective Sign-Up",
-        url: "https://tlcelective.lovable.app/signup",
-        icon: ExternalLink,
-        menuId: "elective-signup",
-        external: true
+        url: "/elective-signup",
+        icon: ClipboardPen,
+        menuId: "elective-signup"
       }
     );
   }
