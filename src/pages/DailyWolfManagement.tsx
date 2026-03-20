@@ -118,6 +118,7 @@ export default function DailyWolfManagement() {
           picture_day: (data as any).picture_day || '',
           outside_event: (data as any).outside_event || '',
           staff_days_off: (data as any).staff_days_off || '',
+          od_notes: (data as any).od_notes || '',
         });
       } else {
         setContent({
