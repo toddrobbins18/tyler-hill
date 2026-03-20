@@ -30,7 +30,8 @@ const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 export default function ElectiveSignUp() {
   const { currentCompany } = useCompany();
-  const { selectedSeason } = useSeason();
+  const { currentSeason } = useSeasonContext();
+  const { getDivisionFilter, loading: permissionsLoading, userDivisions } = usePermissions();
   const { toast } = useToast();
 
   const [divisions, setDivisions] = useState<any[]>([]);
