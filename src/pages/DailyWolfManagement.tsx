@@ -345,7 +345,7 @@ export default function DailyWolfManagement() {
         </Card>
       ) : isTimberLakeCamp ? (
         <div className="grid gap-6 md:grid-cols-2">
-          <Card>
+          <Card style={{ borderTopWidth: '3px', borderTopColor: tigerTimesColors["Laundry"] }}>
             <CardHeader>
               <CardTitle>👕 Laundry</CardTitle>
               <CardDescription>Laundry schedule and information</CardDescription>
