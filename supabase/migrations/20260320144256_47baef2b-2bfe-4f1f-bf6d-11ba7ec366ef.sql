@@ -1,0 +1,1 @@
+ALTER TABLE public.activities_field_trips ADD COLUMN IF NOT EXISTS sub_category TEXT;
