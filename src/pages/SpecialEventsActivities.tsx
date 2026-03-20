@@ -624,7 +624,33 @@ export default function SpecialEventsActivities() {
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Emoji Icon (optional)</Label>
+              <div className="flex flex-col gap-2">
+                <Input
+                  value={formData.emoji}
+                  onChange={(e) => setFormData({ ...formData, emoji: e.target.value })}
+                  placeholder="Paste an emoji e.g. 🌙 🏕️ 🎪"
+                  className="w-full"
+                  maxLength={4}
+                />
+                <div className="flex gap-1 flex-wrap">
+                  {["🌙", "🏕️", "🎪", "⚽", "🏆", "🎯", "🚌", "🎨", "🎭", "🎵", "📸", "🍕"].map((e) => (
+                    <Button
+                      key={e}
+                      type="button"
+                      variant={formData.emoji === e ? "default" : "outline"}
+                      size="sm"
+                      className="text-lg px-2 py-1 h-8"
+                      onClick={() => setFormData({ ...formData, emoji: formData.emoji === e ? "" : e })}
+                    >
+                      {e}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
               <div className="space-y-2">
                 <Label>Start Time</Label>
                 <Input

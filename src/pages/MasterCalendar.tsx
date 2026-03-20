@@ -606,7 +606,7 @@ export default function MasterCalendar() {
                 
                 return {
                   id: event.id,
-                  title: event.title,
+                  title: (event.originalData?.emoji ? `${event.originalData.emoji} ` : '') + event.title,
                   start: startDate,
                   end: endDate,
                   allDay,
