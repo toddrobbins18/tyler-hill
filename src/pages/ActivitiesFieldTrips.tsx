@@ -193,6 +193,7 @@ export default function ActivitiesFieldTrips() {
       description: formData.description,
       activity_type: formData.activity_type,
       sub_category: formData.sub_category || null,
+      emoji: formData.emoji || null,
       depart_from_camp: formData.depart_from_camp || null,
       depart_from_activity: formData.depart_from_activity || null,
       location: formData.location,
