@@ -438,11 +438,13 @@ export default function SportsCalendar() {
     
     let borderColor = !isTLC ? (homeAway === 'home' ? '#3b82f6' : homeAway === 'away' ? '#ec4899' : 'transparent') : 'transparent';
     
+    const isNeonGreen = isTLC && (eventType === 'Gordon' || eventType === 'Jacobs' || eventType === 'Bocian/Melter Bowl');
+    
     return {
       style: {
         backgroundColor,
         borderLeft: borderColor !== 'transparent' ? `4px solid ${borderColor}` : undefined,
-        color: 'white',
+        color: isNeonGreen ? '#000000' : 'white',
         borderRadius: '4px',
         padding: '2px 5px',
       }
