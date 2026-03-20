@@ -49,6 +49,7 @@ import ODManagement from "./pages/ODManagement";
 import DailySchedule from "./pages/DailySchedule";
 import Appointments from "./pages/Appointments";
 import NotificationPreferences from "./pages/NotificationPreferences";
+import ElectiveSignUp from "./pages/ElectiveSignUp";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 import UpdatePassword from "./pages/UpdatePassword";
