@@ -91,7 +91,7 @@ export default function ElectiveSignUp() {
       .select("id, name, division_id")
       .eq("company_id", currentCompany!.id)
       .eq("division_id", divisionId)
-      .eq("status", "active")
+      .eq("season", currentSeason)
       .order("name");
     setChildren(data || []);
   };
