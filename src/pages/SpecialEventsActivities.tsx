@@ -600,7 +600,15 @@ export default function SpecialEventsActivities() {
                   <SelectItem value="evening-activity">Evening Activity</SelectItem>
                   {isTimberLakeCamp && (
                     <>
+                      <SelectItem value="divisional-night">Divisional Night</SelectItem>
+                      <SelectItem value="campus-night">Campus Night</SelectItem>
+                      <SelectItem value="full-camp">Full Camp</SelectItem>
                       <SelectItem value="wednesday-event">Wednesday Event</SelectItem>
+                      <SelectItem value="gordon">GORDON</SelectItem>
+                      <SelectItem value="jacobs">JACOBS</SelectItem>
+                      <SelectItem value="bocian-melter-bowl">BOCIAN/MELTER BOWL</SelectItem>
+                      <SelectItem value="olympics">Olympics</SelectItem>
+                      <SelectItem value="wacky-wednesday">Wacky Wednesday</SelectItem>
                     </>
                   )}
                   <SelectItem value="campfire">Campfire</SelectItem>
@@ -611,24 +619,6 @@ export default function SpecialEventsActivities() {
                 </SelectContent>
               </Select>
             </div>
-
-            {subCategoryMap[formData.event_type] && (
-              <div className="space-y-2">
-                <Label>Sub-Category</Label>
-                <Select value={formData.sub_category} onValueChange={(value) => setFormData({ ...formData, sub_category: value })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select sub-category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {subCategoryMap[formData.event_type].map((sub) => (
-                      <SelectItem key={sub.label} value={sub.label}>
-                        {sub.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">

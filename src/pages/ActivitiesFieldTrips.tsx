@@ -715,6 +715,14 @@ export default function ActivitiesFieldTrips() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="field-trip">Field Trip</SelectItem>
+                  {isTimberLakeCamp && (
+                    <>
+                      <SelectItem value="teen-trip">Teen Trip</SelectItem>
+                      <SelectItem value="collegiate-trip">Collegiate Trip</SelectItem>
+                      <SelectItem value="senior-trip">Senior Trip</SelectItem>
+                      <SelectItem value="junior-trip">Junior Trip</SelectItem>
+                    </>
+                  )}
                   <SelectItem value="arts-crafts">Arts & Crafts</SelectItem>
                   <SelectItem value="nature">Nature Activity</SelectItem>
                   <SelectItem value="water">Water Activity</SelectItem>
@@ -725,24 +733,6 @@ export default function ActivitiesFieldTrips() {
                 </SelectContent>
               </Select>
             </div>
-
-            {isTimberLakeCamp && formData.activity_type === "field-trip" && (
-              <div className="space-y-2">
-                <Label>Trip Sub-Category</Label>
-                <Select value={formData.sub_category} onValueChange={(value) => setFormData({ ...formData, sub_category: value })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select trip type (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tripSubCategories.map((sub) => (
-                      <SelectItem key={sub.label} value={sub.label}>
-                        {sub.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
 
             <div className="space-y-2">
               <Label>Location Type</Label>

@@ -426,13 +426,14 @@ export default function SportsCalendar() {
   const eventPropGetter = (event: any) => {
     const rosterCount = getRosterCount(event.resource.id);
     const homeAway = event.resource.home_away;
+    const eventType = event.resource.event_type;
     const isTLC = currentCompany?.id === '1d296ccf-31e1-4176-af57-50a4a4820f82';
     
     let backgroundColor = rosterCount === 0 ? '#ef4444' : '#22c55e';
     
-    // For Timber Lake Camp: color by home/away
-    if (isTLC && homeAway === 'away') backgroundColor = '#f97316'; // Orange
-    if (isTLC && homeAway === 'home') backgroundColor = '#166534'; // Dark Green
+    // For Timber Lake Camp: color by home/away field OR event_type
+    if (isTLC && (homeAway === 'away' || eventType === 'Away')) backgroundColor = '#f97316'; // Orange
+    if (isTLC && (homeAway === 'home' || eventType === 'Home')) backgroundColor = '#166534'; // Dark Green
     
     let borderColor = !isTLC ? (homeAway === 'home' ? '#3b82f6' : homeAway === 'away' ? '#ec4899' : 'transparent') : 'transparent';
     
@@ -1003,6 +1004,8 @@ export default function SportsCalendar() {
                   <SelectValue placeholder="Select event type" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="Away">Away</SelectItem>
+                  <SelectItem value="Home">Home</SelectItem>
                   <SelectItem value="WC One Day Tournament">WC One Day Tournament</SelectItem>
                   <SelectItem value="WC Knock Out Tournament">WC Knock Out Tournament</SelectItem>
                   <SelectItem value="Exhibition/Friendly">Exhibition/Friendly</SelectItem>
