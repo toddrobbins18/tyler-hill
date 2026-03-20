@@ -204,6 +204,32 @@ export default function MasterCalendar() {
         });
       }
 
+      // Tiger Times events - each field becomes a separate event on that date
+      if (tigerTimesRes.data) {
+        const ttFields: { field: string; label: string; colorKey: string }[] = [
+          { field: 'laundry_info', label: 'Laundry', colorKey: 'TT: Laundry' },
+          { field: 'phone_calls_info', label: 'Phone Calls', colorKey: 'TT: Phone Calls' },
+          { field: 'outside_event', label: 'Outside Events', colorKey: 'TT: Outside Events' },
+          { field: 'staff_days_off', label: 'Staff Days Off', colorKey: 'TT: Staff Days Off' },
+          { field: 'od_notes', label: 'OD Notes', colorKey: 'TT: OD Notes' },
+        ];
+        tigerTimesRes.data.forEach((entry: any) => {
+          ttFields.forEach(({ field, label, colorKey }) => {
+            if (entry[field] && entry[field].trim()) {
+              unifiedEvents.push({
+                id: `tt_${entry.id}_${field}`,
+                title: `🐯 ${label}: ${entry[field]}`,
+                event_date: entry.date,
+                description: entry[field],
+                source: 'tiger_times',
+                type: colorKey,
+                originalData: { ...entry, tiger_times_category: colorKey },
+              });
+            }
+          });
+        });
+      }
+
       // Filter events by user's accessible divisions
       let filteredUnifiedEvents = unifiedEvents;
       const divisionFilter = getDivisionFilter();
