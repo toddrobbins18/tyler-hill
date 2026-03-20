@@ -396,7 +396,7 @@ export default function DailyWolfManagement() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card style={{ borderTopWidth: '3px', borderTopColor: tigerTimesColors["OD Notes"] }}>
             <CardHeader>
               <CardTitle>💗 OD Notes</CardTitle>
               <CardDescription>Officer of the Day notes</CardDescription>
