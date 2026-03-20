@@ -52,6 +52,7 @@ export default function ActivitiesFieldTrips() {
     title: "",
     description: "",
     activity_type: "",
+    sub_category: "",
     depart_from_camp: "",
     depart_from_activity: "",
     location: "",
@@ -62,6 +63,29 @@ export default function ActivitiesFieldTrips() {
     meal_options: [] as string[],
     meal_notes: "",
   });
+
+  const isTimberLakeCamp = currentCompany?.id === '1d296ccf-31e1-4176-af57-50a4a4820f82';
+
+  const tripSubCategories = [
+    { label: "Teen Trip", color: "bg-black text-white" },
+    { label: "Collegiate Trip", color: "bg-blue-600 text-white" },
+    { label: "Senior Trip", color: "bg-red-600 text-white" },
+    { label: "Junior Trip", color: "bg-purple-600 text-white" },
+  ];
+
+  const getTripSubCategoryColor = (subCategory: string): string | undefined => {
+    return tripSubCategories.find(s => s.label === subCategory)?.color;
+  };
+
+  const getTripSubCategoryHex = (subCategory: string): string | undefined => {
+    const hexMap: Record<string, string> = {
+      "Teen Trip": "#000000",
+      "Collegiate Trip": "#2563eb",
+      "Senior Trip": "#dc2626",
+      "Junior Trip": "#9333ea",
+    };
+    return hexMap[subCategory];
+  };
   const { toast } = useToast();
 
   useEffect(() => {
