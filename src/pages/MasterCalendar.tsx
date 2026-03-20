@@ -688,6 +688,11 @@ export default function MasterCalendar() {
                   {getSourceLabel(selectedEvent.source)}
                 </Badge>
                 <Badge variant="outline">{selectedEvent.type}</Badge>
+                {selectedEvent.originalData?.sub_category && (
+                  <Badge className={getSubCategoryColor(selectedEvent.originalData?.event_type, selectedEvent.originalData.sub_category) || ""}>
+                    {selectedEvent.originalData.sub_category}
+                  </Badge>
+                )}
               </div>
 
               {/* Division */}
