@@ -446,17 +446,17 @@ export default function SportsCalendar() {
     const homeAway = event.resource.home_away;
     const eventType = event.resource.event_type;
     const isTLC = currentCompany?.id === '1d296ccf-31e1-4176-af57-50a4a4820f82';
+    const cc = customColors;
     
-    let backgroundColor = rosterCount === 0 ? '#ef4444' : '#22c55e';
+    let backgroundColor = rosterCount === 0 ? (cc["No Roster"] || '#ef4444') : (cc["Has Roster"] || '#22c55e');
     
-    // For Timber Lake Camp: color by home/away field OR event_type
-    if (isTLC && (homeAway === 'away' || eventType === 'Away')) backgroundColor = '#1e3a5f'; // Navy
-    if (isTLC && (homeAway === 'home' || eventType === 'Home')) backgroundColor = '#166534'; // Dark Green
-    if (isTLC && (eventType === 'Gordon' || eventType === 'Jacobs' || eventType === 'Bocian/Melter Bowl')) backgroundColor = '#39ff14'; // Neon Green
+    if (isTLC && (homeAway === 'away' || eventType === 'Away')) backgroundColor = cc["Away"] || '#1e3a5f';
+    if (isTLC && (homeAway === 'home' || eventType === 'Home')) backgroundColor = cc["Home"] || '#166534';
+    if (isTLC && (eventType === 'Gordon' || eventType === 'Jacobs' || eventType === 'Bocian/Melter Bowl')) backgroundColor = cc[eventType] || '#39ff14';
     
     let borderColor = !isTLC ? (homeAway === 'home' ? '#3b82f6' : homeAway === 'away' ? '#ec4899' : 'transparent') : 'transparent';
     
-    const isNeonGreen = isTLC && (eventType === 'Gordon' || eventType === 'Jacobs' || eventType === 'Bocian/Melter Bowl');
+    const isNeonGreen = backgroundColor === '#39ff14';
     
     return {
       style: {
