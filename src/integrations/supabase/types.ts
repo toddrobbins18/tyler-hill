@@ -2392,6 +2392,7 @@ export type Database = {
           created_by: string | null
           description: string | null
           division_id: string | null
+          emoji: string | null
           end_time: string | null
           event_date: string
           event_type: string
@@ -2412,6 +2413,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           division_id?: string | null
+          emoji?: string | null
           end_time?: string | null
           event_date: string
           event_type: string
@@ -2432,6 +2434,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           division_id?: string | null
+          emoji?: string | null
           end_time?: string | null
           event_date?: string
           event_type?: string
