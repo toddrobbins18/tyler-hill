@@ -54,10 +54,10 @@ export default function ElectiveSignUp() {
   const [newElectiveName, setNewElectiveName] = useState("");
 
   useEffect(() => {
-    if (currentCompany?.id) {
+    if (currentCompany?.id && !permissionsLoading) {
       fetchData();
     }
-  }, [currentCompany, selectedSeason, weekStart, selectedDay, selectedPeriod]);
+  }, [currentCompany, currentSeason, weekStart, selectedDay, selectedPeriod, permissionsLoading, userDivisions]);
 
   const fetchData = async () => {
     setLoading(true);
