@@ -565,6 +565,11 @@ export default function ActivitiesFieldTrips() {
                     <CardContent className="space-y-2">
                       <div className="flex gap-2 flex-wrap">
                         <Badge>{event.activity_type}</Badge>
+                        {event.sub_category && (
+                          <Badge className={getTripSubCategoryColor(event.sub_category) || ""}>
+                            {event.sub_category}
+                          </Badge>
+                        )}
                         {event.is_multi_day && event.end_date && (
                           (() => {
                             const start = new Date(event.event_date + 'T00:00:00');
