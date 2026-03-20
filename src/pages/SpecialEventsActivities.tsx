@@ -56,6 +56,29 @@ export default function SpecialEventsActivities() {
 
   const isTimberLakeCamp = currentCompany?.id === '1d296ccf-31e1-4176-af57-50a4a4820f82';
 
+  // Color settings for event types
+  const specialEventsDefaultColors: Record<string, string> = {
+    "special-event": "#3b82f6",
+    "evening-activity": "#8b5cf6",
+    ...(isTimberLakeCamp ? {
+      "rookie-day": "#22c55e",
+      "tour": "#000000",
+      "divisional-night": "#bf00ff",
+      "campus-night": "#4d4dff",
+      "full-camp": "#ff6600",
+    } : {}),
+    "campfire": "#f59e0b",
+    "movie-night": "#6366f1",
+    "talent-show": "#ec4899",
+    "game-night": "#14b8a6",
+    "other": "#6b7280",
+  };
+  const [eventTypeColors, setEventTypeColors] = useState<Record<string, string>>(specialEventsDefaultColors);
+
+  const getEventTypeColor = (eventType: string): string => {
+    return eventTypeColors[eventType] || "#6b7280";
+  };
+
   const subCategoryMap: Record<string, { label: string; color?: string }[]> = {};
 
   const getSubCategoryColor = (eventType: string, subCategory: string): string | undefined => {
