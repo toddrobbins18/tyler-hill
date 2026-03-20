@@ -189,6 +189,7 @@ export default function ActivitiesFieldTrips() {
       title: formData.title,
       description: formData.description,
       activity_type: formData.activity_type,
+      sub_category: formData.sub_category || null,
       depart_from_camp: formData.depart_from_camp || null,
       depart_from_activity: formData.depart_from_activity || null,
       location: formData.location,
