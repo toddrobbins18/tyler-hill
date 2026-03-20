@@ -775,7 +775,7 @@ export default function SportsCalendar() {
 
                 return {
                   id: event.id,
-                  title: `${getDisplaySport(event)}: ${event.title}`,
+                  title: `${event.emoji ? event.emoji + ' ' : ''}${getDisplaySport(event)}: ${event.title}`,
                   start,
                   end,
                   allDay: !normalizedTime,
