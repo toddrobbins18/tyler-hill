@@ -5,6 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { Calendar as CalendarIcon, Plus, List, Pencil, Trash2, Search, X, Trophy, Users, Star, Sparkles, MapPin, Clock, Home, Plane, FileText, Download } from "lucide-react";
+import { CalendarColorSettings } from "@/components/CalendarColorSettings";
+import { CalendarZoomWrapper } from "@/components/CalendarZoomWrapper";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -64,6 +66,29 @@ export default function MasterCalendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState<UnifiedEvent | null>(null);
   const { toast } = useToast();
+  const [customColors, setCustomColors] = useState<Record<string, string>>({});
+
+  const masterCalendarDefaultColors: Record<string, string> = {
+    "Sports (Default)": "#3b82f6",
+    "Field Trip (Default)": "#22c55e",
+    "Special Event (Default)": "#a855f7",
+    "Teen Trip": "#6b7280",
+    "Collegiate Trip": "#14b8a6",
+    "Senior Trip": "#7f1d1d",
+    "Junior Trip": "#9333ea",
+    "Olympics": "#000000",
+    "Wacky Wednesday": "#000000",
+    "Divisional Night": "#bf00ff",
+    "Campus Night": "#4d4dff",
+    "Full Camp": "#ff6600",
+    "Rookie Day": "#22c55e",
+    "Tour": "#000000",
+    "Away (Sports)": "#1e3a5f",
+    "Home (Sports)": "#166534",
+    "Gordon": "#39ff14",
+    "Jacobs": "#39ff14",
+    "Bocian/Melter Bowl": "#39ff14",
+  };
 
   useEffect(() => {
     fetchAllEvents();
@@ -415,41 +440,30 @@ export default function MasterCalendar() {
     const eventType = event.resource.originalData?.event_type || event.resource.originalData?.activity_type;
     const homeAway = event.resource.originalData?.home_away;
 
-    // Trip colors - check both sub_category (legacy) and activity_type (new direct values)
-    const tripColors: Record<string, string> = {
-      "Teen Trip": "#6b7280", "Collegiate Trip": "#14b8a6", "Senior Trip": "#7f1d1d", "Junior Trip": "#9333ea",
-      "teen-trip": "#6b7280", "collegiate-trip": "#14b8a6", "senior-trip": "#7f1d1d", "junior-trip": "#9333ea",
-      "olympics": "#000000", "Olympics": "#000000", "wacky-wednesday": "#000000", "Wacky Wednesday": "#000000",
-    };
-
-    // Special Events colors for TLC
-    const specialEventColors: Record<string, string> = {
-      "divisional-night": "#bf00ff", "Divisional Night": "#bf00ff",  // Neon Purple
-      "campus-night": "#4d4dff", "Campus Night": "#4d4dff",          // Neon Blue
-      "full-camp": "#ff6600", "Full Camp": "#ff6600",                  // Neon Orange
-      "rookie-day": "#22c55e", "Rookie Day": "#22c55e",              // Green
-      "tour": "#000000", "Tour": "#000000",                            // Black
-    };
+    // Trip colors - use customColors (which includes user overrides)
+    const cc = customColors;
 
     let bgColor: string | undefined;
-    if (subCategory && tripColors[subCategory]) bgColor = tripColors[subCategory];
-    if (!bgColor && eventType && tripColors[eventType]) bgColor = tripColors[eventType];
-    if (!bgColor && eventType && specialEventColors[eventType]) bgColor = specialEventColors[eventType];
+    if (subCategory && cc[subCategory]) bgColor = cc[subCategory];
+    if (!bgColor && eventType && cc[eventType]) bgColor = cc[eventType];
     // Sports calendar home/away and Gordon/Jacobs/Bocian colors
-    if (source === 'sports_calendar' && (homeAway === 'away' || event.resource.originalData?.event_type === 'Away')) bgColor = '#1e3a5f'; // Navy
-    if (source === 'sports_calendar' && (homeAway === 'home' || event.resource.originalData?.event_type === 'Home')) bgColor = '#166534'; // Dark Green
-    if (source === 'sports_calendar' && ['Gordon', 'Jacobs', 'Bocian/Melter Bowl'].includes(event.resource.originalData?.event_type)) bgColor = '#39ff14'; // Neon Green
+    if (source === 'sports_calendar' && (homeAway === 'away' || event.resource.originalData?.event_type === 'Away')) bgColor = cc["Away (Sports)"] || '#1e3a5f';
+    if (source === 'sports_calendar' && (homeAway === 'home' || event.resource.originalData?.event_type === 'Home')) bgColor = cc["Home (Sports)"] || '#166534';
+    if (source === 'sports_calendar' && ['Gordon', 'Jacobs', 'Bocian/Melter Bowl'].includes(event.resource.originalData?.event_type)) bgColor = cc[event.resource.originalData?.event_type] || '#39ff14';
 
-    const colors: Record<EventSource, string> = {
-      'sports_calendar': '#3b82f6',
-      'activities_field_trips': '#22c55e',
-      'special_events_activities': '#a855f7'
+    const sourceColors: Record<EventSource, string> = {
+      'sports_calendar': cc["Sports (Default)"] || '#3b82f6',
+      'activities_field_trips': cc["Field Trip (Default)"] || '#22c55e',
+      'special_events_activities': cc["Special Event (Default)"] || '#a855f7'
     };
+    
+    const finalBg = bgColor || sourceColors[source];
+    const isNeonGreen = finalBg === '#39ff14';
     
     return {
       style: {
-        backgroundColor: bgColor || colors[source],
-        color: 'white',
+        backgroundColor: finalBg,
+        color: isNeonGreen ? '#000000' : 'white',
         borderRadius: '4px',
         padding: '2px 5px',
       }
@@ -466,6 +480,11 @@ export default function MasterCalendar() {
           </div>
         </div>
         <div className="flex gap-2">
+          <CalendarColorSettings
+            calendarId="master-calendar"
+            defaultColors={masterCalendarDefaultColors}
+            onColorsChange={setCustomColors}
+          />
           <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
             <ToggleGroupItem value="calendar" aria-label="Calendar view">
               <CalendarIcon className="h-4 w-4" />
@@ -571,70 +590,70 @@ export default function MasterCalendar() {
       ) : viewMode === "calendar" ? (
         <Card>
           <CardContent className="p-6">
-            <Calendar
-              localizer={localizer}
-              events={filteredAndSortedEvents.map(event => {
-                // For multi-day field trips, use end_date; otherwise same day
-                const isMultiDay = event.source === 'activities_field_trips' && 
-                  event.originalData.is_multi_day && 
-                  event.originalData.end_date;
-                
-                // Check if event has specific start/end times (especially for special events)
-                const hasSpecificTime = event.source === 'special_events_activities' && 
-                  event.originalData.start_time && 
-                  event.originalData.end_time;
-                
-                let startDate: Date;
-                let endDate: Date;
-                let allDay = false;
-                
-                if (hasSpecificTime) {
-                  // Normalize start/end times for special events
-                  const normStart = getNormalizedEventTime({ ...event, time: event.originalData.start_time, originalData: { ...event.originalData, start_time_field: event.originalData.start_time } });
-                  const normEnd = getNormalizedEventTime({ ...event, time: event.originalData.end_time, originalData: { ...event.originalData, start_time_field: event.originalData.end_time } });
-                  if (normStart && normEnd) {
-                    startDate = new Date(event.event_date + 'T' + normStart + ':00');
-                    endDate = new Date(event.event_date + 'T' + normEnd + ':00');
-                  } else {
-                    startDate = new Date(event.event_date + 'T' + event.originalData.start_time);
-                    endDate = new Date(event.event_date + 'T' + event.originalData.end_time);
-                  }
-                } else if (isMultiDay) {
-                  startDate = new Date(event.event_date + 'T00:00:00');
-                  endDate = addDays(new Date(event.originalData.end_date + 'T00:00:00'), 1);
-                  allDay = true;
-                } else {
-                  // Use normalized time for all other events
-                  const normalizedTime = getNormalizedEventTime(event);
-                  if (normalizedTime) {
-                    startDate = new Date(event.event_date + 'T' + normalizedTime + ':00');
-                    endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
-                  } else {
-                    startDate = new Date(event.event_date + 'T00:00:00');
-                    endDate = new Date(event.event_date + 'T23:59:59');
-                    allDay = true;
-                  }
-                }
-                
-                return {
-                  id: event.id,
-                  title: (event.originalData?.emoji ? `${event.originalData.emoji} ` : '') + event.title,
-                  start: startDate,
-                  end: endDate,
-                  allDay,
-                  resource: event,
-                };
-              })}
-              startAccessor="start"
-              endAccessor="end"
-              style={{ height: 600 }}
-              view={calendarView}
-              onView={setCalendarView}
-              date={currentDate}
-              onNavigate={setCurrentDate}
-              onSelectEvent={(event: any) => setSelectedEvent(event.resource)}
-              eventPropGetter={eventPropGetter}
-            />
+            <CalendarZoomWrapper>
+              {(height) => (
+                <Calendar
+                  localizer={localizer}
+                  events={filteredAndSortedEvents.map(event => {
+                    const isMultiDay = event.source === 'activities_field_trips' && 
+                      event.originalData.is_multi_day && 
+                      event.originalData.end_date;
+                    
+                    const hasSpecificTime = event.source === 'special_events_activities' && 
+                      event.originalData.start_time && 
+                      event.originalData.end_time;
+                    
+                    let startDate: Date;
+                    let endDate: Date;
+                    let allDay = false;
+                    
+                    if (hasSpecificTime) {
+                      const normStart = getNormalizedEventTime({ ...event, time: event.originalData.start_time, originalData: { ...event.originalData, start_time_field: event.originalData.start_time } });
+                      const normEnd = getNormalizedEventTime({ ...event, time: event.originalData.end_time, originalData: { ...event.originalData, start_time_field: event.originalData.end_time } });
+                      if (normStart && normEnd) {
+                        startDate = new Date(event.event_date + 'T' + normStart + ':00');
+                        endDate = new Date(event.event_date + 'T' + normEnd + ':00');
+                      } else {
+                        startDate = new Date(event.event_date + 'T' + event.originalData.start_time);
+                        endDate = new Date(event.event_date + 'T' + event.originalData.end_time);
+                      }
+                    } else if (isMultiDay) {
+                      startDate = new Date(event.event_date + 'T00:00:00');
+                      endDate = addDays(new Date(event.originalData.end_date + 'T00:00:00'), 1);
+                      allDay = true;
+                    } else {
+                      const normalizedTime = getNormalizedEventTime(event);
+                      if (normalizedTime) {
+                        startDate = new Date(event.event_date + 'T' + normalizedTime + ':00');
+                        endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
+                      } else {
+                        startDate = new Date(event.event_date + 'T00:00:00');
+                        endDate = new Date(event.event_date + 'T23:59:59');
+                        allDay = true;
+                      }
+                    }
+                    
+                    return {
+                      id: event.id,
+                      title: (event.originalData?.emoji ? `${event.originalData.emoji} ` : '') + event.title,
+                      start: startDate,
+                      end: endDate,
+                      allDay,
+                      resource: event,
+                    };
+                  })}
+                  startAccessor="start"
+                  endAccessor="end"
+                  style={{ height }}
+                  view={calendarView}
+                  onView={setCalendarView}
+                  date={currentDate}
+                  onNavigate={setCurrentDate}
+                  onSelectEvent={(event: any) => setSelectedEvent(event.resource)}
+                  eventPropGetter={eventPropGetter}
+                />
+              )}
+            </CalendarZoomWrapper>
           </CardContent>
         </Card>
       ) : (

@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Trophy, Plus, List, Pencil, Trash2, Calendar as CalendarIcon, UserCheck, Search, X, Users } from "lucide-react";
+import { CalendarColorSettings } from "@/components/CalendarColorSettings";
+import { CalendarZoomWrapper } from "@/components/CalendarZoomWrapper";
 import { Badge } from "@/components/ui/badge";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -52,6 +54,17 @@ export default function SportsCalendar() {
   const [showRosterPopup, setShowRosterPopup] = useState<any>(null);
   const [rosterCounts, setRosterCounts] = useState<Record<string, number>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [customColors, setCustomColors] = useState<Record<string, string>>({});
+
+  const sportsDefaultColors: Record<string, string> = {
+    "Away": "#1e3a5f",
+    "Home": "#166534",
+    "Gordon": "#39ff14",
+    "Jacobs": "#39ff14",
+    "Bocian/Melter Bowl": "#39ff14",
+    "No Roster": "#ef4444",
+    "Has Roster": "#22c55e",
+  };
   const [formData, setFormData] = useState({
     event_date: new Date().toISOString().split('T')[0],
     title: "",
@@ -433,17 +446,17 @@ export default function SportsCalendar() {
     const homeAway = event.resource.home_away;
     const eventType = event.resource.event_type;
     const isTLC = currentCompany?.id === '1d296ccf-31e1-4176-af57-50a4a4820f82';
+    const cc = customColors;
     
-    let backgroundColor = rosterCount === 0 ? '#ef4444' : '#22c55e';
+    let backgroundColor = rosterCount === 0 ? (cc["No Roster"] || '#ef4444') : (cc["Has Roster"] || '#22c55e');
     
-    // For Timber Lake Camp: color by home/away field OR event_type
-    if (isTLC && (homeAway === 'away' || eventType === 'Away')) backgroundColor = '#1e3a5f'; // Navy
-    if (isTLC && (homeAway === 'home' || eventType === 'Home')) backgroundColor = '#166534'; // Dark Green
-    if (isTLC && (eventType === 'Gordon' || eventType === 'Jacobs' || eventType === 'Bocian/Melter Bowl')) backgroundColor = '#39ff14'; // Neon Green
+    if (isTLC && (homeAway === 'away' || eventType === 'Away')) backgroundColor = cc["Away"] || '#1e3a5f';
+    if (isTLC && (homeAway === 'home' || eventType === 'Home')) backgroundColor = cc["Home"] || '#166534';
+    if (isTLC && (eventType === 'Gordon' || eventType === 'Jacobs' || eventType === 'Bocian/Melter Bowl')) backgroundColor = cc[eventType] || '#39ff14';
     
     let borderColor = !isTLC ? (homeAway === 'home' ? '#3b82f6' : homeAway === 'away' ? '#ec4899' : 'transparent') : 'transparent';
     
-    const isNeonGreen = isTLC && (eventType === 'Gordon' || eventType === 'Jacobs' || eventType === 'Bocian/Melter Bowl');
+    const isNeonGreen = backgroundColor === '#39ff14';
     
     return {
       style: {
@@ -620,6 +633,11 @@ export default function SportsCalendar() {
           </div>
         </div>
         <div className="flex gap-2">
+          <CalendarColorSettings
+            calendarId="sports-calendar"
+            defaultColors={sportsDefaultColors}
+            onColorsChange={setCustomColors}
+          />
           <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
             <ToggleGroupItem value="calendar" aria-label="Calendar view">
               <CalendarIcon className="h-4 w-4" />
@@ -762,41 +780,45 @@ export default function SportsCalendar() {
       ) : viewMode === "calendar" ? (
         <Card>
           <CardContent className="p-6">
-            <Calendar
-              localizer={localizer}
-              events={filteredAndSortedEvents.map(event => {
-                const normalizedTime = getNormalizedEventTime(event);
-                const start = normalizedTime
-                  ? new Date(`${event.event_date}T${normalizedTime}:00`)
-                  : new Date(`${event.event_date}T00:00:00`);
-                const end = normalizedTime
-                  ? new Date(start.getTime() + 60 * 60 * 1000)
-                  : new Date(`${event.event_date}T23:59:59`);
+            <CalendarZoomWrapper>
+              {(height) => (
+                <Calendar
+                  localizer={localizer}
+                  events={filteredAndSortedEvents.map(event => {
+                    const normalizedTime = getNormalizedEventTime(event);
+                    const start = normalizedTime
+                      ? new Date(`${event.event_date}T${normalizedTime}:00`)
+                      : new Date(`${event.event_date}T00:00:00`);
+                    const end = normalizedTime
+                      ? new Date(start.getTime() + 60 * 60 * 1000)
+                      : new Date(`${event.event_date}T23:59:59`);
 
-                return {
-                  id: event.id,
-                  title: `${event.emoji ? event.emoji + ' ' : ''}${getDisplaySport(event)}: ${event.title}`,
-                  start,
-                  end,
-                  allDay: !normalizedTime,
-                  resource: event,
-                };
-              })}
-              startAccessor="start"
-              endAccessor="end"
-              style={{ height: 600 }}
-              view={calendarView}
-              onView={setCalendarView}
-              date={currentDate}
-              onNavigate={setCurrentDate}
-              onSelectEvent={(event: any) => setShowRosterPopup(event.resource)}
-              onSelectSlot={(slotInfo: any) => {
-                setFormData({ ...formData, event_date: format(slotInfo.start, 'yyyy-MM-dd') });
-                setShowDialog(true);
-              }}
-              eventPropGetter={eventPropGetter}
-              selectable
-            />
+                    return {
+                      id: event.id,
+                      title: `${event.emoji ? event.emoji + ' ' : ''}${getDisplaySport(event)}: ${event.title}`,
+                      start,
+                      end,
+                      allDay: !normalizedTime,
+                      resource: event,
+                    };
+                  })}
+                  startAccessor="start"
+                  endAccessor="end"
+                  style={{ height }}
+                  view={calendarView}
+                  onView={setCalendarView}
+                  date={currentDate}
+                  onNavigate={setCurrentDate}
+                  onSelectEvent={(event: any) => setShowRosterPopup(event.resource)}
+                  onSelectSlot={(slotInfo: any) => {
+                    setFormData({ ...formData, event_date: format(slotInfo.start, 'yyyy-MM-dd') });
+                    setShowDialog(true);
+                  }}
+                  eventPropGetter={eventPropGetter}
+                  selectable
+                />
+              )}
+            </CalendarZoomWrapper>
           </CardContent>
         </Card>
       ) : (

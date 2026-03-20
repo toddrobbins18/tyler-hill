@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Palmtree, Plus, List, Pencil, Trash2, Calendar as CalendarIcon, CalendarRange } from "lucide-react";
+import { CalendarColorSettings } from "@/components/CalendarColorSettings";
+import { CalendarZoomWrapper } from "@/components/CalendarZoomWrapper";
 import { Badge } from "@/components/ui/badge";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -45,6 +47,17 @@ export default function ActivitiesFieldTrips() {
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [calendarView, setCalendarView] = useState<View>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [customColors, setCustomColors] = useState<Record<string, string>>({});
+
+  const activitiesDefaultColors: Record<string, string> = {
+    "Teen Trip": "#6b7280",
+    "Collegiate Trip": "#14b8a6",
+    "Senior Trip": "#7f1d1d",
+    "Junior Trip": "#9333ea",
+    "Olympics": "#000000",
+    "Wacky Wednesday": "#000000",
+    "Default": "#22c55e",
+  };
   const [formData, setFormData] = useState({
     event_date: new Date().toISOString().split('T')[0],
     end_date: "",
@@ -424,8 +437,21 @@ export default function ActivitiesFieldTrips() {
       return new Date(a.event_date).getTime() - new Date(b.event_date).getTime();
     });
 
+  const eventPropGetter = (event: any) => {
+    const cc = customColors;
+    const subCategory = event.resource?.sub_category || event.resource?.activity_type;
+    const bgColor = (subCategory && cc[subCategory]) || cc["Default"] || '#22c55e';
+    return {
+      style: {
+        backgroundColor: bgColor,
+        color: 'white',
+        borderRadius: '4px',
+        padding: '2px 5px',
+      }
+    };
+  };
+
   const groupedEvents: Record<string, any[]> = filteredAndSortedEvents.reduce((acc, event) => {
-    // Append T00:00:00 to prevent timezone issues with date-only strings
     const date = new Date(event.event_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
     if (!acc[date]) acc[date] = [];
     acc[date].push(event);
@@ -445,6 +471,11 @@ export default function ActivitiesFieldTrips() {
           </div>
         </div>
         <div className="flex gap-2">
+          <CalendarColorSettings
+            calendarId="activities-field-trips"
+            defaultColors={activitiesDefaultColors}
+            onColorsChange={setCustomColors}
+          />
           <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
             <ToggleGroupItem value="calendar" aria-label="Calendar view">
               <CalendarIcon className="h-4 w-4" />
@@ -495,32 +526,37 @@ export default function ActivitiesFieldTrips() {
       ) : viewMode === "calendar" ? (
         <Card>
           <CardContent className="p-6">
-            <Calendar
-              localizer={localizer}
-              events={filteredAndSortedEvents.map(event => ({
-                id: event.id,
-                title: `${event.emoji ? event.emoji + ' ' : ''}${event.activity_type}: ${event.title}${event.is_multi_day ? ' (Multi-Day)' : ''}`,
-                start: new Date(event.event_date + 'T00:00:00'),
-                end: event.is_multi_day && event.end_date 
-                  ? new Date(event.end_date + 'T23:59:59')
-                  : new Date(event.event_date + 'T23:59:59'),
-                resource: event,
-                allDay: true,
-              }))}
-              startAccessor="start"
-              endAccessor="end"
-              style={{ height: 600 }}
-              view={calendarView}
-              onView={setCalendarView}
-              date={currentDate}
-              onNavigate={setCurrentDate}
-              onSelectEvent={(event: any) => handleEdit(event.resource)}
-              onSelectSlot={(slotInfo: any) => {
-                setFormData({ ...formData, event_date: format(slotInfo.start, 'yyyy-MM-dd') });
-                setShowDialog(true);
-              }}
-              selectable
-            />
+            <CalendarZoomWrapper>
+              {(height) => (
+                <Calendar
+                  localizer={localizer}
+                  events={filteredAndSortedEvents.map(event => ({
+                    id: event.id,
+                    title: `${event.emoji ? event.emoji + ' ' : ''}${event.activity_type}: ${event.title}${event.is_multi_day ? ' (Multi-Day)' : ''}`,
+                    start: new Date(event.event_date + 'T00:00:00'),
+                    end: event.is_multi_day && event.end_date 
+                      ? new Date(event.end_date + 'T23:59:59')
+                      : new Date(event.event_date + 'T23:59:59'),
+                    resource: event,
+                    allDay: true,
+                  }))}
+                  startAccessor="start"
+                  endAccessor="end"
+                  style={{ height }}
+                  view={calendarView}
+                  onView={setCalendarView}
+                  date={currentDate}
+                  onNavigate={setCurrentDate}
+                  onSelectEvent={(event: any) => handleEdit(event.resource)}
+                  onSelectSlot={(slotInfo: any) => {
+                    setFormData({ ...formData, event_date: format(slotInfo.start, 'yyyy-MM-dd') });
+                    setShowDialog(true);
+                  }}
+                  eventPropGetter={eventPropGetter}
+                  selectable
+                />
+              )}
+            </CalendarZoomWrapper>
           </CardContent>
         </Card>
       ) : (
