@@ -495,17 +495,6 @@ export default function MasterCalendar() {
           </ToggleGroup>
         </div>
       </div>
-        <div className="flex gap-2">
-          <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
-            <ToggleGroupItem value="calendar" aria-label="Calendar view">
-              <CalendarIcon className="h-4 w-4" />
-            </ToggleGroupItem>
-            <ToggleGroupItem value="list" aria-label="List view">
-              <List className="h-4 w-4" />
-            </ToggleGroupItem>
-          </ToggleGroup>
-        </div>
-      </div>
 
       {/* Advanced Filter Bar */}
       <Card>
