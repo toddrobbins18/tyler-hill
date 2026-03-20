@@ -570,7 +570,7 @@ export default function ActivitiesFieldTrips() {
                     </CardHeader>
                     <CardContent className="space-y-2">
                       <div className="flex gap-2 flex-wrap">
-                        <Badge>{event.activity_type}</Badge>
+                        <Badge>{event.emoji ? `${event.emoji} ` : ''}{event.activity_type}</Badge>
                         {event.sub_category && (
                           <Badge className={getTripSubCategoryColor(event.sub_category) || ""}>
                             {event.sub_category}
