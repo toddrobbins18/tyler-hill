@@ -43,6 +43,7 @@ export default function SpecialEventsActivities() {
     description: "",
     event_type: "",
     sub_category: "",
+    emoji: "",
     start_time: "",
     end_time: "",
     location: "",
@@ -61,9 +62,9 @@ export default function SpecialEventsActivities() {
       { label: "Full Camp" },
     ],
     "wednesday-event": [
-      { label: "GORDON" },
-      { label: "JACOBS" },
-      { label: "BOCIAN/MELTER BOWL" },
+      { label: "Gordon" },
+      { label: "Jacobs" },
+      { label: "Bocian/Melter Bowl" },
       { label: "Olympics" },
       { label: "Wacky Wednesday" },
     ],
@@ -194,6 +195,7 @@ export default function SpecialEventsActivities() {
       description: formData.description,
       event_type: formData.event_type,
       sub_category: formData.sub_category || null,
+      emoji: formData.emoji || null,
       time_slot: timeSlot,
       start_time: formData.start_time || null,
       end_time: formData.end_time || null,
@@ -299,6 +301,7 @@ export default function SpecialEventsActivities() {
       description: "",
       event_type: "",
       sub_category: "",
+      emoji: "",
       start_time: "",
       end_time: "",
       location: "",
@@ -376,6 +379,7 @@ export default function SpecialEventsActivities() {
       description: event.description || "",
       event_type: event.event_type,
       sub_category: event.sub_category || "",
+      emoji: event.emoji || "",
       start_time: event.start_time || "",
       end_time: event.end_time || "",
       location: event.location || "",
@@ -531,7 +535,7 @@ export default function SpecialEventsActivities() {
                         </CardHeader>
                         <CardContent className="space-y-2">
                           <div className="flex gap-2 flex-wrap">
-                            <Badge>{event.event_type}</Badge>
+                            <Badge>{event.emoji ? `${event.emoji} ` : ''}{event.event_type}</Badge>
                             {event.sub_category && (
                               <Badge className={getSubCategoryColor(event.event_type, event.sub_category) || ""}>
                                 {event.sub_category}
@@ -604,9 +608,9 @@ export default function SpecialEventsActivities() {
                       <SelectItem value="campus-night">Campus Night</SelectItem>
                       <SelectItem value="full-camp">Full Camp</SelectItem>
                       <SelectItem value="wednesday-event">Wednesday Event</SelectItem>
-                      <SelectItem value="gordon">GORDON</SelectItem>
-                      <SelectItem value="jacobs">JACOBS</SelectItem>
-                      <SelectItem value="bocian-melter-bowl">BOCIAN/MELTER BOWL</SelectItem>
+                      <SelectItem value="gordon">Gordon</SelectItem>
+                      <SelectItem value="jacobs">Jacobs</SelectItem>
+                      <SelectItem value="bocian-melter-bowl">Bocian/Melter Bowl</SelectItem>
                       <SelectItem value="olympics">Olympics</SelectItem>
                       <SelectItem value="wacky-wednesday">Wacky Wednesday</SelectItem>
                     </>
@@ -618,6 +622,33 @@ export default function SpecialEventsActivities() {
                   <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Emoji Icon (optional)</Label>
+              <div className="flex flex-col gap-2">
+                <Input
+                  value={formData.emoji}
+                  onChange={(e) => setFormData({ ...formData, emoji: e.target.value })}
+                  placeholder="Paste an emoji e.g. 🌙 🏕️ 🎪"
+                  className="w-full"
+                  maxLength={4}
+                />
+                <div className="flex gap-1 flex-wrap">
+                  {["🌙", "🏕️", "🎪", "⚽", "🏆", "🎯", "🚌", "🎨", "🎭", "🎵", "📸", "🍕"].map((e) => (
+                    <Button
+                      key={e}
+                      type="button"
+                      variant={formData.emoji === e ? "default" : "outline"}
+                      size="sm"
+                      className="text-lg px-2 py-1 h-8"
+                      onClick={() => setFormData({ ...formData, emoji: formData.emoji === e ? "" : e })}
+                    >
+                      {e}
+                    </Button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
