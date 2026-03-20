@@ -810,7 +810,7 @@ export default function SportsCalendar() {
                     <CardHeader>
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <CardTitle className="text-lg">{event.title}</CardTitle>
+                          <CardTitle className="text-lg">{event.emoji ? `${event.emoji} ` : ''}{event.title}</CardTitle>
                           <p className="text-sm text-muted-foreground mt-1">
                             {new Date(event.event_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                           </p>
