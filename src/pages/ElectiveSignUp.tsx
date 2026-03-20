@@ -49,6 +49,14 @@ export default function ElectiveSignUp() {
   const [selectedElectiveFilter, setSelectedElectiveFilter] = useState("all");
   const [analyticsDivision, setAnalyticsDivision] = useState("all");
 
+  // History state
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyDivision, setHistoryDivision] = useState("all");
+  const [historyResults, setHistoryResults] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyChildId, setHistoryChildId] = useState<string | null>(null);
+  const [allChildren, setAllChildren] = useState<any[]>([]);
+
   // Add elective dialog
   const [addElectiveOpen, setAddElectiveOpen] = useState(false);
   const [newElectiveName, setNewElectiveName] = useState("");
