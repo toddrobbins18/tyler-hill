@@ -415,16 +415,18 @@ export default function MasterCalendar() {
     const eventType = event.resource.originalData?.event_type || event.resource.originalData?.activity_type;
     const homeAway = event.resource.originalData?.home_away;
 
-    // Trip sub-category colors (Activities & Field Trips)
+    // Trip colors - check both sub_category (legacy) and activity_type (new direct values)
     const tripColors: Record<string, string> = {
       "Teen Trip": "#000000", "Collegiate Trip": "#2563eb", "Senior Trip": "#dc2626", "Junior Trip": "#9333ea",
+      "teen-trip": "#000000", "collegiate-trip": "#2563eb", "senior-trip": "#dc2626", "junior-trip": "#9333ea",
     };
 
     let bgColor: string | undefined;
     if (subCategory && tripColors[subCategory]) bgColor = tripColors[subCategory];
-    // Sports calendar home/away colors
-    if (source === 'sports_calendar' && homeAway === 'away') bgColor = '#f97316';
-    if (source === 'sports_calendar' && homeAway === 'home') bgColor = '#166534';
+    if (!bgColor && eventType && tripColors[eventType]) bgColor = tripColors[eventType];
+    // Sports calendar home/away colors (field or event_type)
+    if (source === 'sports_calendar' && (homeAway === 'away' || event.resource.originalData?.event_type === 'Away')) bgColor = '#f97316';
+    if (source === 'sports_calendar' && (homeAway === 'home' || event.resource.originalData?.event_type === 'Home')) bgColor = '#166534';
 
     const colors: Record<EventSource, string> = {
       'sports_calendar': '#3b82f6',
