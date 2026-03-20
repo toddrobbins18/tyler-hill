@@ -24,7 +24,7 @@ import { toast } from "sonner";
 
 // Items that need conditional rendering will be handled in the component
 const getMenuItems = (companySlug?: string) => {
-  const baseItems = [
+  const baseItems: Array<{ title: string; url: string; icon: any; menuId: string; external?: boolean }> = [
     { title: companySlug === 'timber-lake-west' ? "Athletics" : "Sports Calendar", url: "/athletics", icon: Trophy, menuId: "sports-calendar" },
     { title: "Camper", url: "/roster", icon: Users, menuId: "roster" },
     { title: "Dashboard", url: "/", icon: Home, menuId: "dashboard" },
