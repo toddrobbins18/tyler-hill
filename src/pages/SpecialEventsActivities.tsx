@@ -312,6 +312,7 @@ export default function SpecialEventsActivities() {
       title: "",
       description: "",
       event_type: "",
+      sub_category: "",
       start_time: "",
       end_time: "",
       location: "",
