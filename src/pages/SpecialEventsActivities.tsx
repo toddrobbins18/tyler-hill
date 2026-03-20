@@ -57,16 +57,9 @@ export default function SpecialEventsActivities() {
 
   const subCategoryMap: Record<string, { label: string; color?: string }[]> = isTimberLakeCamp ? {
     "evening-activity": [
-      { label: "Divisional Night" },
-      { label: "Campus Night" },
-      { label: "Full Camp" },
-    ],
-    "wednesday-event": [
-      { label: "Gordon" },
-      { label: "Jacobs" },
-      { label: "Bocian/Melter Bowl" },
-      { label: "Olympics" },
-      { label: "Wacky Wednesday" },
+      { label: "Divisional Night", color: "bg-[#bf00ff] text-white" },
+      { label: "Campus Night", color: "bg-[#4d4dff] text-white" },
+      { label: "Full Camp", color: "bg-[#ff6600] text-white" },
     ],
   } : {};
 
