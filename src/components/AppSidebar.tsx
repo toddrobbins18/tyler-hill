@@ -1,4 +1,4 @@
-import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, ClipboardEdit, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree, BookOpen, Building2, LogOut, BarChart3, ListChecks, ClipboardCheck, Stethoscope, ExternalLink } from "lucide-react";
+import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, ClipboardEdit, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree, BookOpen, Building2, LogOut, BarChart3, ListChecks, ClipboardCheck, Stethoscope, ExternalLink, ClipboardPen } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
