@@ -113,6 +113,9 @@ export default function DailyWolfManagement() {
           phone_calls_info: data.phone_calls_info || '',
           quote_of_the_day: data.quote_of_the_day || '',
           notes: data.notes || '',
+          picture_day: (data as any).picture_day || '',
+          outside_event: (data as any).outside_event || '',
+          staff_days_off: (data as any).staff_days_off || '',
         });
       } else {
         setContent({
@@ -121,6 +124,9 @@ export default function DailyWolfManagement() {
           phone_calls_info: '',
           quote_of_the_day: '',
           notes: '',
+          picture_day: '',
+          outside_event: '',
+          staff_days_off: '',
         });
       }
     } catch (error: any) {
