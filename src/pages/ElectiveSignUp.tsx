@@ -77,7 +77,7 @@ export default function ElectiveSignUp() {
       divisionsQuery = divisionsQuery.in("id", divisionFilter);
     }
 
-    const [divisionsRes, electivesRes, signupsRes] = await Promise.all([
+    const [divisionsRes, electivesRes, signupsRes, allChildrenRes] = await Promise.all([
       divisionsQuery,
       supabase.from("electives").select("*").eq("company_id", companyId).eq("is_active", true).order("name"),
       supabase.from("elective_signups").select("*, children(name, division_id), electives(name)")
@@ -85,11 +85,16 @@ export default function ElectiveSignUp() {
         .eq("week_start_date", weekStart)
         .eq("day_of_week", selectedDay)
         .eq("period", selectedPeriod),
+      supabase.from("children").select("id, name, division_id")
+        .eq("company_id", companyId)
+        .eq("season", currentSeason)
+        .order("name"),
     ]);
 
     if (divisionsRes.data) setDivisions(sortDivisionsGirlsFirst(divisionsRes.data));
     if (electivesRes.data) setElectives(electivesRes.data);
     if (signupsRes.data) setSignups(signupsRes.data);
+    if (allChildrenRes.data) setAllChildren(allChildrenRes.data);
     setLoading(false);
   };
 
