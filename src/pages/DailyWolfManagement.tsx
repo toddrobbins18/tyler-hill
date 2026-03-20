@@ -37,6 +37,9 @@ export default function DailyWolfManagement() {
     phone_calls_info: '',
     quote_of_the_day: '',
     notes: '',
+    picture_day: '',
+    outside_event: '',
+    staff_days_off: '',
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
