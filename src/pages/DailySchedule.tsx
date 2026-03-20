@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CalendarIcon, Clock, MapPin, Users, ChevronLeft, ChevronRight, Filter, Loader2, FileText, Camera, Shirt, Phone, Globe, CalendarOff } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTigerTimesColors } from "@/hooks/useTigerTimesColors";
 import DivisionScheduleUploader from "@/components/admin/DivisionScheduleUploader";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 
