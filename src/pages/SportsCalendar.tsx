@@ -59,6 +59,7 @@ export default function SportsCalendar() {
     sport_type: "",
     custom_sport_type: "",
     event_type: "",
+    emoji: "",
     depart_time: "",
     start_time_field: "",
     location: "",
@@ -204,6 +205,7 @@ export default function SportsCalendar() {
         sport_type: formData.sport_type === "Other" ? "Other" : formData.sport_type,
         custom_sport_type: formData.sport_type === "Other" || formData.event_type === "Other" ? formData.custom_sport_type : null,
         event_type: formData.event_type || null,
+        emoji: formData.emoji || null,
         depart_time: formData.depart_time || null,
         start_time_field: formData.start_time_field || null,
         location: formData.location,
@@ -311,6 +313,7 @@ export default function SportsCalendar() {
         sport_type: "",
         custom_sport_type: "",
         event_type: "",
+        emoji: "",
         depart_time: "",
         start_time_field: "",
         location: "",
@@ -339,6 +342,7 @@ export default function SportsCalendar() {
       sport_type: "",
       custom_sport_type: "",
       event_type: "",
+      emoji: "",
       depart_time: "",
       start_time_field: "",
       location: "",
@@ -367,6 +371,7 @@ export default function SportsCalendar() {
       sport_type: event.sport_type,
       custom_sport_type: event.custom_sport_type || "",
       event_type: event.event_type || "",
+      emoji: event.emoji || "",
       depart_time: event.depart_time || "",
       start_time_field: event.start_time_field || "",
       location: event.location || "",
@@ -770,7 +775,7 @@ export default function SportsCalendar() {
 
                 return {
                   id: event.id,
-                  title: `${getDisplaySport(event)}: ${event.title}`,
+                  title: `${event.emoji ? event.emoji + ' ' : ''}${getDisplaySport(event)}: ${event.title}`,
                   start,
                   end,
                   allDay: !normalizedTime,
@@ -805,7 +810,7 @@ export default function SportsCalendar() {
                     <CardHeader>
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <CardTitle className="text-lg">{event.title}</CardTitle>
+                          <CardTitle className="text-lg">{event.emoji ? `${event.emoji} ` : ''}{event.title}</CardTitle>
                           <p className="text-sm text-muted-foreground mt-1">
                             {new Date(event.event_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                           </p>
@@ -1032,6 +1037,33 @@ export default function SportsCalendar() {
                   className="mt-2"
                 />
               )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Emoji Icon (optional)</Label>
+              <div className="flex flex-col gap-2">
+                <Input
+                  value={formData.emoji}
+                  onChange={(e) => setFormData({ ...formData, emoji: e.target.value })}
+                  placeholder="Paste an emoji e.g. ⚽ 🏀 🏈"
+                  className="w-full"
+                  maxLength={4}
+                />
+                <div className="flex gap-1 flex-wrap">
+                  {["⚽", "🏀", "🏈", "⚾", "🎾", "🏐", "🏊", "🏃", "🥍", "🏆", "🎯", "🏒"].map((e) => (
+                    <Button
+                      key={e}
+                      type="button"
+                      variant={formData.emoji === e ? "default" : "outline"}
+                      size="sm"
+                      className="text-lg px-2 py-1 h-8"
+                      onClick={() => setFormData({ ...formData, emoji: formData.emoji === e ? "" : e })}
+                    >
+                      {e}
+                    </Button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="space-y-2">

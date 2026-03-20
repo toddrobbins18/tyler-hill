@@ -26,6 +26,7 @@ export type Database = {
           depart_from_camp: string | null
           description: string | null
           division_id: string | null
+          emoji: string | null
           end_date: string | null
           event_date: string
           home_away: string | null
@@ -50,6 +51,7 @@ export type Database = {
           depart_from_camp?: string | null
           description?: string | null
           division_id?: string | null
+          emoji?: string | null
           end_date?: string | null
           event_date: string
           home_away?: string | null
@@ -74,6 +76,7 @@ export type Database = {
           depart_from_camp?: string | null
           description?: string | null
           division_id?: string | null
+          emoji?: string | null
           end_date?: string | null
           event_date?: string
           home_away?: string | null
@@ -2670,6 +2673,7 @@ export type Database = {
           division_id: string | null
           division_provides_coach: boolean | null
           division_provides_ref: boolean | null
+          emoji: string | null
           event_date: string
           event_type: string | null
           home_away: string | null
@@ -2695,6 +2699,7 @@ export type Database = {
           division_id?: string | null
           division_provides_coach?: boolean | null
           division_provides_ref?: boolean | null
+          emoji?: string | null
           event_date: string
           event_type?: string | null
           home_away?: string | null
@@ -2720,6 +2725,7 @@ export type Database = {
           division_id?: string | null
           division_provides_coach?: boolean | null
           division_provides_ref?: boolean | null
+          emoji?: string | null
           event_date?: string
           event_type?: string | null
           home_away?: string | null

@@ -53,6 +53,7 @@ export default function ActivitiesFieldTrips() {
     description: "",
     activity_type: "",
     sub_category: "",
+    emoji: "",
     depart_from_camp: "",
     depart_from_activity: "",
     location: "",
@@ -192,6 +193,7 @@ export default function ActivitiesFieldTrips() {
       description: formData.description,
       activity_type: formData.activity_type,
       sub_category: formData.sub_category || null,
+      emoji: formData.emoji || null,
       depart_from_camp: formData.depart_from_camp || null,
       depart_from_activity: formData.depart_from_activity || null,
       location: formData.location,
@@ -329,6 +331,7 @@ export default function ActivitiesFieldTrips() {
       description: "",
       activity_type: "",
       sub_category: "",
+      emoji: "",
       depart_from_camp: "",
       depart_from_activity: "",
       location: "",
@@ -361,6 +364,7 @@ export default function ActivitiesFieldTrips() {
       description: event.description || "",
       activity_type: event.activity_type,
       sub_category: event.sub_category || "",
+      emoji: event.emoji || "",
       depart_from_camp: event.depart_from_camp || "",
       depart_from_activity: event.depart_from_activity || "",
       location: event.location || "",
@@ -495,7 +499,7 @@ export default function ActivitiesFieldTrips() {
               localizer={localizer}
               events={filteredAndSortedEvents.map(event => ({
                 id: event.id,
-                title: `${event.activity_type}: ${event.title}${event.is_multi_day ? ' (Multi-Day)' : ''}`,
+                title: `${event.emoji ? event.emoji + ' ' : ''}${event.activity_type}: ${event.title}${event.is_multi_day ? ' (Multi-Day)' : ''}`,
                 start: new Date(event.event_date + 'T00:00:00'),
                 end: event.is_multi_day && event.end_date 
                   ? new Date(event.end_date + 'T23:59:59')
@@ -531,7 +535,7 @@ export default function ActivitiesFieldTrips() {
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <CardTitle className="text-lg flex items-center gap-2">
-                            {event.title}
+                            {event.emoji ? `${event.emoji} ` : ''}{event.title}
                             {event.is_multi_day && (
                               <CalendarRange className="h-4 w-4 text-muted-foreground" />
                             )}
@@ -566,7 +570,7 @@ export default function ActivitiesFieldTrips() {
                     </CardHeader>
                     <CardContent className="space-y-2">
                       <div className="flex gap-2 flex-wrap">
-                        <Badge>{event.activity_type}</Badge>
+                        <Badge>{event.emoji ? `${event.emoji} ` : ''}{event.activity_type}</Badge>
                         {event.sub_category && (
                           <Badge className={getTripSubCategoryColor(event.sub_category) || ""}>
                             {event.sub_category}
@@ -736,6 +740,33 @@ export default function ActivitiesFieldTrips() {
                   <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Emoji Icon (optional)</Label>
+              <div className="flex flex-col gap-2">
+                <Input
+                  value={formData.emoji}
+                  onChange={(e) => setFormData({ ...formData, emoji: e.target.value })}
+                  placeholder="Paste an emoji e.g. 🚌 🏕️ 🎨"
+                  className="w-full"
+                  maxLength={4}
+                />
+                <div className="flex gap-1 flex-wrap">
+                  {["🚌", "🏕️", "🎨", "🌊", "⛺", "🎭", "🏆", "🎯", "🌲", "🎪", "🏊", "🚶"].map((e) => (
+                    <Button
+                      key={e}
+                      type="button"
+                      variant={formData.emoji === e ? "default" : "outline"}
+                      size="sm"
+                      className="text-lg px-2 py-1 h-8"
+                      onClick={() => setFormData({ ...formData, emoji: formData.emoji === e ? "" : e })}
+                    >
+                      {e}
+                    </Button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="space-y-2">
