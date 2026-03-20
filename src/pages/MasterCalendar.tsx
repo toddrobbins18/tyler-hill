@@ -29,7 +29,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
 
-type EventSource = 'sports_calendar' | 'activities_field_trips' | 'special_events_activities';
+type EventSource = 'sports_calendar' | 'activities_field_trips' | 'special_events_activities' | 'tiger_times';
 
 interface UnifiedEvent {
   id: string;
@@ -88,6 +88,12 @@ export default function MasterCalendar() {
     "Gordon": "#39ff14",
     "Jacobs": "#39ff14",
     "Bocian/Melter Bowl": "#39ff14",
+    "Tiger Times (Default)": "#f59e0b",
+    "TT: Laundry": "#3b82f6",
+    "TT: Phone Calls": "#ef4444",
+    "TT: Outside Events": "#eab308",
+    "TT: Staff Days Off": "#93c5fd",
+    "TT: OD Notes": "#ec4899",
   };
 
   useEffect(() => {
@@ -102,6 +108,7 @@ export default function MasterCalendar() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sports_calendar' }, () => fetchAllEvents())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'activities_field_trips' }, () => fetchAllEvents())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'special_events_activities' }, () => fetchAllEvents())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_wolf_content' }, () => fetchAllEvents())
       .subscribe();
 
     return () => {
@@ -119,13 +126,14 @@ export default function MasterCalendar() {
       }
 
       // Fetch all events in parallel with batch fetching - filtered by company
-      const [sportsBatch1, sportsBatch2, fieldTripsBatch1, fieldTripsBatch2, specialBatch1, specialBatch2] = await Promise.all([
+      const [sportsBatch1, sportsBatch2, fieldTripsBatch1, fieldTripsBatch2, specialBatch1, specialBatch2, tigerTimesRes] = await Promise.all([
         supabase.from("sports_calendar").select(`*, division:divisions(id, name, gender), sports_calendar_divisions(division_id, division:divisions(id, name, gender))`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(0, 999),
         supabase.from("sports_calendar").select(`*, division:divisions(id, name, gender), sports_calendar_divisions(division_id, division:divisions(id, name, gender))`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(1000, 1999),
         supabase.from("activities_field_trips").select(`*, division:divisions(id, name, gender)`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(0, 999),
         supabase.from("activities_field_trips").select(`*, division:divisions(id, name, gender)`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(1000, 1999),
         supabase.from("special_events_activities").select(`*, division:divisions(id, name, gender)`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(0, 999),
-        supabase.from("special_events_activities").select(`*, division:divisions(id, name, gender)`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(1000, 1999)
+        supabase.from("special_events_activities").select(`*, division:divisions(id, name, gender)`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(1000, 1999),
+        supabase.from("daily_wolf_content").select("*").eq('company_id', currentCompany.id).eq('season', currentSeason).order("date", { ascending: true }),
       ]);
 
       // Combine batches
@@ -196,6 +204,32 @@ export default function MasterCalendar() {
         });
       }
 
+      // Tiger Times events - each field becomes a separate event on that date
+      if (tigerTimesRes.data) {
+        const ttFields: { field: string; label: string; colorKey: string }[] = [
+          { field: 'laundry_info', label: 'Laundry', colorKey: 'TT: Laundry' },
+          { field: 'phone_calls_info', label: 'Phone Calls', colorKey: 'TT: Phone Calls' },
+          { field: 'outside_event', label: 'Outside Events', colorKey: 'TT: Outside Events' },
+          { field: 'staff_days_off', label: 'Staff Days Off', colorKey: 'TT: Staff Days Off' },
+          { field: 'od_notes', label: 'OD Notes', colorKey: 'TT: OD Notes' },
+        ];
+        tigerTimesRes.data.forEach((entry: any) => {
+          ttFields.forEach(({ field, label, colorKey }) => {
+            if (entry[field] && entry[field].trim()) {
+              unifiedEvents.push({
+                id: `tt_${entry.id}_${field}`,
+                title: `🐯 ${label}: ${entry[field]}`,
+                event_date: entry.date,
+                description: entry[field],
+                source: 'tiger_times',
+                type: colorKey,
+                originalData: { ...entry, tiger_times_category: colorKey },
+              });
+            }
+          });
+        });
+      }
+
       // Filter events by user's accessible divisions
       let filteredUnifiedEvents = unifiedEvents;
       const divisionFilter = getDivisionFilter();
@@ -206,6 +240,8 @@ export default function MasterCalendar() {
           const eventDivisions = event.originalData?.divisions?.map((d: any) => d.id) || 
                                  event.originalData?.sports_calendar_divisions?.map((d: any) => d.division_id) || [];
           if (eventDivisionId) eventDivisions.push(eventDivisionId);
+          // Tiger Times events have no division, always show them
+          if (event.source === 'tiger_times') return true;
           return eventDivisions.some((divId: string) => divisionFilter.includes(divId)) || eventDivisions.length === 0;
         });
       }
@@ -408,6 +444,7 @@ export default function MasterCalendar() {
       case 'sports_calendar': return <Trophy className="h-4 w-4" />;
       case 'activities_field_trips': return <Users className="h-4 w-4" />;
       case 'special_events_activities': return <Sparkles className="h-4 w-4" />;
+      case 'tiger_times': return <Star className="h-4 w-4" />;
     }
   };
 
@@ -416,6 +453,7 @@ export default function MasterCalendar() {
       case 'sports_calendar': return "bg-blue-500/20 text-blue-700 border-blue-500/30";
       case 'activities_field_trips': return "bg-green-500/20 text-green-700 border-green-500/30";
       case 'special_events_activities': return "bg-purple-500/20 text-purple-700 border-purple-500/30";
+      case 'tiger_times': return "bg-amber-500/20 text-amber-700 border-amber-500/30";
     }
   };
 
@@ -431,6 +469,7 @@ export default function MasterCalendar() {
       case 'sports_calendar': return "Sports";
       case 'activities_field_trips': return "Field Trip";
       case 'special_events_activities': return "Special Event";
+      case 'tiger_times': return "Tiger Times";
     }
   };
 
@@ -450,11 +489,17 @@ export default function MasterCalendar() {
     if (source === 'sports_calendar' && (homeAway === 'away' || event.resource.originalData?.event_type === 'Away')) bgColor = cc["Away (Sports)"] || '#1e3a5f';
     if (source === 'sports_calendar' && (homeAway === 'home' || event.resource.originalData?.event_type === 'Home')) bgColor = cc["Home (Sports)"] || '#166534';
     if (source === 'sports_calendar' && ['Gordon', 'Jacobs', 'Bocian/Melter Bowl'].includes(event.resource.originalData?.event_type)) bgColor = cc[event.resource.originalData?.event_type] || '#39ff14';
+    // Tiger Times category colors
+    if (source === 'tiger_times') {
+      const ttCategory = event.resource.originalData?.tiger_times_category;
+      if (ttCategory && cc[ttCategory]) bgColor = cc[ttCategory];
+    }
 
     const sourceColors: Record<EventSource, string> = {
       'sports_calendar': cc["Sports (Default)"] || '#3b82f6',
       'activities_field_trips': cc["Field Trip (Default)"] || '#22c55e',
-      'special_events_activities': cc["Special Event (Default)"] || '#a855f7'
+      'special_events_activities': cc["Special Event (Default)"] || '#a855f7',
+      'tiger_times': cc["Tiger Times (Default)"] || '#f59e0b',
     };
     
     const finalBg = bgColor || sourceColors[source];
