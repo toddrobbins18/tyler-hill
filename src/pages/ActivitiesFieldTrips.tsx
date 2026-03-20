@@ -58,7 +58,6 @@ export default function ActivitiesFieldTrips() {
     "Wacky Wednesday": "#000000",
     "Default": "#22c55e",
   };
-  const [currentDate, setCurrentDate] = useState(new Date());
   const [formData, setFormData] = useState({
     event_date: new Date().toISOString().split('T')[0],
     end_date: "",
