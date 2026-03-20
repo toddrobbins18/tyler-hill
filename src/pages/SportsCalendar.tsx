@@ -1067,6 +1067,7 @@ export default function SportsCalendar() {
             </div>
 
             <div className="space-y-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <Label>Divisions (optional)</Label>
                 {divisions.length > 0 && (
                   <div className="flex gap-2 flex-wrap">
