@@ -195,6 +195,7 @@ export default function SpecialEventsActivities() {
       description: formData.description,
       event_type: formData.event_type,
       sub_category: formData.sub_category || null,
+      emoji: formData.emoji || null,
       time_slot: timeSlot,
       start_time: formData.start_time || null,
       end_time: formData.end_time || null,
