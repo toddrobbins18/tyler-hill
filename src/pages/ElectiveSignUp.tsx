@@ -62,9 +62,15 @@ export default function ElectiveSignUp() {
   const fetchData = async () => {
     setLoading(true);
     const companyId = currentCompany!.id;
+    const divisionFilter = getDivisionFilter();
+
+    let divisionsQuery = supabase.from("divisions").select("*").eq("company_id", companyId).eq("is_active", true).order("sort_order");
+    if (divisionFilter !== null && divisionFilter.length > 0) {
+      divisionsQuery = divisionsQuery.in("id", divisionFilter);
+    }
 
     const [divisionsRes, electivesRes, signupsRes] = await Promise.all([
-      supabase.from("divisions").select("*").eq("company_id", companyId).eq("is_active", true).order("sort_order"),
+      divisionsQuery,
       supabase.from("electives").select("*").eq("company_id", companyId).eq("is_active", true).order("name"),
       supabase.from("elective_signups").select("*, children(name, division_id), electives(name)")
         .eq("company_id", companyId)
