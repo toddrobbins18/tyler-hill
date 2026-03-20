@@ -390,6 +390,23 @@ export default function DailyWolfManagement() {
             </CardContent>
           </Card>
 
+          <Card>
+            <CardHeader>
+              <CardTitle>💗 OD Notes</CardTitle>
+              <CardDescription>Officer of the Day notes</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={content.od_notes}
+                onChange={(e) => handleFieldChange('od_notes', e.target.value)}
+                onBlur={(e) => handleFieldBlur('od_notes', e.target.value)}
+                placeholder="Enter OD notes"
+                rows={4}
+                disabled={saving}
+              />
+            </CardContent>
+          </Card>
+
           <Card className="md:col-span-2">
             <CardHeader>
               <CardTitle>🗓️ Staff Days Off</CardTitle>
