@@ -500,6 +500,93 @@ export default function ElectiveSignUp() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* HISTORY TAB */}
+        <TabsContent value="history">
+          <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Select Camper</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search campers..."
+                    value={historySearch}
+                    onChange={(e) => setHistorySearch(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+                <Select value={historyDivision} onValueChange={setHistoryDivision}>
+                  <SelectTrigger><SelectValue placeholder="All Divisions" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Divisions</SelectItem>
+                    {divisions.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="max-h-[400px] overflow-y-auto space-y-0.5">
+                  {filteredHistoryChildren.map((child) => (
+                    <button
+                      key={child.id}
+                      onClick={() => fetchCamperHistory(child.id)}
+                      className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${
+                        historyChildId === child.id
+                          ? "bg-primary/10 text-primary font-medium"
+                          : "hover:bg-muted/50"
+                      }`}
+                    >
+                      {child.name}
+                    </button>
+                  ))}
+                  {filteredHistoryChildren.length === 0 && (
+                    <p className="text-muted-foreground text-sm text-center py-4">No campers found</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>{historyChildName ? `${historyChildName}'s Elective History` : "Camper History"}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {!historyChildId ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                    <History className="h-10 w-10 mb-3 opacity-40" />
+                    <p>Select a camper to view their elective history</p>
+                  </div>
+                ) : historyLoading ? (
+                  <p className="text-muted-foreground text-center py-8">Loading...</p>
+                ) : historyResults.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-8">No elective history found for this camper</p>
+                ) : (
+                  <div className="space-y-1">
+                    <div className="grid grid-cols-4 gap-4 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground border-b">
+                      <span>Week</span>
+                      <span>Day</span>
+                      <span>Period</span>
+                      <span>Elective</span>
+                    </div>
+                    {historyResults.map((r) => {
+                      const pInfo = PERIODS.find((p) => p.id === r.period);
+                      return (
+                        <div key={r.id} className="grid grid-cols-4 gap-4 px-3 py-2.5 text-sm rounded-md hover:bg-muted/30 border-b last:border-b-0">
+                          <span>{r.week_start_date}</span>
+                          <span>{r.day_of_week}</span>
+                          <span>{pInfo?.label || r.period}</span>
+                          <Badge variant="secondary">{(r.electives as any)?.name || "Unknown"}</Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
       </Tabs>
     </div>
   );
