@@ -108,6 +108,7 @@ export default function MasterCalendar() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sports_calendar' }, () => fetchAllEvents())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'activities_field_trips' }, () => fetchAllEvents())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'special_events_activities' }, () => fetchAllEvents())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_wolf_content' }, () => fetchAllEvents())
       .subscribe();
 
     return () => {
