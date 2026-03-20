@@ -444,6 +444,7 @@ export default function MasterCalendar() {
       case 'sports_calendar': return <Trophy className="h-4 w-4" />;
       case 'activities_field_trips': return <Users className="h-4 w-4" />;
       case 'special_events_activities': return <Sparkles className="h-4 w-4" />;
+      case 'tiger_times': return <Star className="h-4 w-4" />;
     }
   };
 
