@@ -2398,6 +2398,7 @@ export type Database = {
           location: string | null
           season: string | null
           start_time: string | null
+          sub_category: string | null
           time_slot: string
           title: string
         }
@@ -2417,6 +2418,7 @@ export type Database = {
           location?: string | null
           season?: string | null
           start_time?: string | null
+          sub_category?: string | null
           time_slot: string
           title: string
         }
@@ -2436,6 +2438,7 @@ export type Database = {
           location?: string | null
           season?: string | null
           start_time?: string | null
+          sub_category?: string | null
           time_slot?: string
           title?: string
         }
