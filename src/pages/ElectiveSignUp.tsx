@@ -161,16 +161,38 @@ export default function ElectiveSignUp() {
     const { error } = await supabase.from("electives").insert({
       company_id: currentCompany!.id,
       name: newElectiveName.trim(),
-    });
+      capacity: newElectiveCapacity || null,
+    } as any);
     if (error) {
       toast({ title: error.message.includes("duplicate") ? "Elective already exists" : "Error adding elective", variant: "destructive" });
       return;
     }
     toast({ title: "Elective added" });
     setNewElectiveName("");
+    setNewElectiveCapacity(10);
     setAddElectiveOpen(false);
     fetchData();
   };
+
+  const handleSaveCapacity = async (electiveId: string) => {
+    const cap = editingCapacities[electiveId];
+    const { error } = await supabase.from("electives").update({ capacity: cap === "" ? null : cap } as any).eq("id", electiveId);
+    if (error) {
+      toast({ title: "Error saving capacity", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Capacity updated" });
+    fetchData();
+  };
+
+  // Count signups per elective for the current period/day/week
+  const signupCountByElective = useMemo(() => {
+    const counts: Record<string, number> = {};
+    signups.forEach((s) => {
+      counts[s.elective_id] = (counts[s.elective_id] || 0) + 1;
+    });
+    return counts;
+  }, [signups]);
 
   const handleDeleteElective = async (id: string) => {
     const { error } = await supabase.from("electives").update({ is_active: false }).eq("id", id);
