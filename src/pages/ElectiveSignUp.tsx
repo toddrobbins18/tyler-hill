@@ -631,6 +631,57 @@ export default function ElectiveSignUp() {
             </Card>
           </div>
         </TabsContent>
+
+        {/* SETTINGS / MANAGE ELECTIVES TAB */}
+        <TabsContent value="settings">
+          <Card>
+            <CardHeader>
+              <CardTitle>Manage Electives & Capacities</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {electives.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">No electives yet. Add one above.</p>
+              ) : (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-[1fr_120px_100px_80px] gap-4 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground border-b">
+                    <span>Elective</span>
+                    <span>Capacity</span>
+                    <span>Enrolled</span>
+                    <span>Actions</span>
+                  </div>
+                  {electives.map((e) => {
+                    const count = signupCountByElective[e.id] || 0;
+                    const cap = (e as any).capacity;
+                    const editCap = editingCapacities[e.id];
+                    const currentCap = editCap !== undefined ? editCap : (cap ?? "");
+                    return (
+                      <div key={e.id} className="grid grid-cols-[1fr_120px_100px_80px] gap-4 items-center px-3 py-2.5 rounded-md border hover:bg-muted/30">
+                        <span className="font-medium text-sm">{e.name}</span>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            min={1}
+                            className="h-8 w-20"
+                            value={currentCap}
+                            onChange={(ev) => setEditingCapacities((prev) => ({ ...prev, [e.id]: ev.target.value ? parseInt(ev.target.value) : "" }))}
+                            onBlur={() => handleSaveCapacity(e.id)}
+                            onKeyDown={(ev) => ev.key === "Enter" && handleSaveCapacity(e.id)}
+                          />
+                        </div>
+                        <Badge variant={cap != null && count >= cap ? "destructive" : "secondary"}>
+                          {count}{cap != null ? `/${cap}` : ""}
+                        </Badge>
+                        <button onClick={() => handleDeleteElective(e.id)} className="text-muted-foreground hover:text-destructive transition-colors">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   );
