@@ -1218,6 +1218,7 @@ export type Database = {
       }
       electives: {
         Row: {
+          capacity: number | null
           company_id: string
           created_at: string | null
           id: string
@@ -1226,6 +1227,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          capacity?: number | null
           company_id: string
           created_at?: string | null
           id?: string
@@ -1234,6 +1236,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          capacity?: number | null
           company_id?: string
           created_at?: string | null
           id?: string
