@@ -553,6 +553,7 @@ export default function ActivitiesFieldTrips() {
                     setShowDialog(true);
                   }}
                   eventPropGetter={eventPropGetter}
+                  showAllEvents
                   selectable
                 />
               )}

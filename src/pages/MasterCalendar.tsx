@@ -713,6 +713,7 @@ export default function MasterCalendar() {
                   onNavigate={setCurrentDate}
                   onSelectEvent={(event: any) => setSelectedEvent(event.resource)}
                   eventPropGetter={eventPropGetter}
+                  showAllEvents
                 />
               )}
             </CalendarZoomWrapper>
