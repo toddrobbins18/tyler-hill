@@ -815,6 +815,7 @@ export default function SportsCalendar() {
                     setShowDialog(true);
                   }}
                   eventPropGetter={eventPropGetter}
+                  showAllEvents
                   selectable
                 />
               )}
