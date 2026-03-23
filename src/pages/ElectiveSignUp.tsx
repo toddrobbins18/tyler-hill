@@ -60,6 +60,8 @@ export default function ElectiveSignUp() {
   // Add elective dialog
   const [addElectiveOpen, setAddElectiveOpen] = useState(false);
   const [newElectiveName, setNewElectiveName] = useState("");
+  const [newElectiveCapacity, setNewElectiveCapacity] = useState<number | "">(10);
+  const [editingCapacities, setEditingCapacities] = useState<Record<string, number | "">>({});
 
   useEffect(() => {
     if (currentCompany?.id && !permissionsLoading) {
