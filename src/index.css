@@ -125,3 +125,19 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* react-big-calendar: ensure showAllEvents works with CalendarZoomWrapper */
+.rbc-month-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.rbc-month-view .rbc-month-row {
+  flex: 1 1 0;
+  overflow: visible;
+}
+
+.rbc-row-content-scrollable .rbc-row-content-scroll-container {
+  overflow-y: auto !important;
+}
