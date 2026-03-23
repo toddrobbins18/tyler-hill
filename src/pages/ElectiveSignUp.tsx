@@ -12,7 +12,7 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
-import { Plus, Trash2, Users, ClipboardList, BarChart3, Clock, History, Search } from "lucide-react";
+import { Plus, Trash2, Users, ClipboardList, BarChart3, Clock, History, Search, Settings2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { startOfWeek, format } from "date-fns";
@@ -60,6 +60,8 @@ export default function ElectiveSignUp() {
   // Add elective dialog
   const [addElectiveOpen, setAddElectiveOpen] = useState(false);
   const [newElectiveName, setNewElectiveName] = useState("");
+  const [newElectiveCapacity, setNewElectiveCapacity] = useState<number | "">(10);
+  const [editingCapacities, setEditingCapacities] = useState<Record<string, number | "">>({});
 
   useEffect(() => {
     if (currentCompany?.id && !permissionsLoading) {
@@ -159,16 +161,38 @@ export default function ElectiveSignUp() {
     const { error } = await supabase.from("electives").insert({
       company_id: currentCompany!.id,
       name: newElectiveName.trim(),
-    });
+      capacity: newElectiveCapacity || null,
+    } as any);
     if (error) {
       toast({ title: error.message.includes("duplicate") ? "Elective already exists" : "Error adding elective", variant: "destructive" });
       return;
     }
     toast({ title: "Elective added" });
     setNewElectiveName("");
+    setNewElectiveCapacity(10);
     setAddElectiveOpen(false);
     fetchData();
   };
+
+  const handleSaveCapacity = async (electiveId: string) => {
+    const cap = editingCapacities[electiveId];
+    const { error } = await supabase.from("electives").update({ capacity: cap === "" ? null : cap } as any).eq("id", electiveId);
+    if (error) {
+      toast({ title: "Error saving capacity", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Capacity updated" });
+    fetchData();
+  };
+
+  // Count signups per elective for the current period/day/week
+  const signupCountByElective = useMemo(() => {
+    const counts: Record<string, number> = {};
+    signups.forEach((s) => {
+      counts[s.elective_id] = (counts[s.elective_id] || 0) + 1;
+    });
+    return counts;
+  }, [signups]);
 
   const handleDeleteElective = async (id: string) => {
     const { error } = await supabase.from("electives").update({ is_active: false }).eq("id", id);
@@ -270,6 +294,16 @@ export default function ElectiveSignUp() {
                   onKeyDown={(e) => e.key === "Enter" && handleAddElective()}
                 />
               </div>
+              <div className="space-y-2">
+                <Label>Capacity</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={newElectiveCapacity}
+                  onChange={(e) => setNewElectiveCapacity(e.target.value ? parseInt(e.target.value) : "")}
+                  placeholder="Max campers"
+                />
+              </div>
               <Button onClick={handleAddElective} className="w-full">Add Elective</Button>
 
               {electives.length > 0 && (
@@ -344,6 +378,9 @@ export default function ElectiveSignUp() {
           <TabsTrigger value="history" className="flex items-center gap-1.5">
             <History className="h-4 w-4" />Camper History
           </TabsTrigger>
+          <TabsTrigger value="settings" className="flex items-center gap-1.5">
+            <Settings2 className="h-4 w-4" />Manage Electives
+          </TabsTrigger>
         </TabsList>
 
         {/* SIGN-UP TAB */}
@@ -395,14 +432,21 @@ export default function ElectiveSignUp() {
                             value={signup?.elective_id || "none"}
                             onValueChange={(val) => handleAssignElective(child.id, val === "none" ? null : val)}
                           >
-                            <SelectTrigger className="w-48">
+                            <SelectTrigger className="w-56">
                               <SelectValue placeholder="Select elective" />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="none">— None —</SelectItem>
-                              {electives.map((e) => (
-                                <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
-                              ))}
+                              {electives.map((e) => {
+                                const count = signupCountByElective[e.id] || 0;
+                                const cap = (e as any).capacity;
+                                const isFull = cap != null && count >= cap;
+                                return (
+                                  <SelectItem key={e.id} value={e.id} disabled={isFull && signup?.elective_id !== e.id}>
+                                    {e.name} {cap != null ? `(${count}/${cap})` : `(${count})`}
+                                  </SelectItem>
+                                );
+                              })}
                             </SelectContent>
                           </Select>
                         </div>
@@ -586,6 +630,57 @@ export default function ElectiveSignUp() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* SETTINGS / MANAGE ELECTIVES TAB */}
+        <TabsContent value="settings">
+          <Card>
+            <CardHeader>
+              <CardTitle>Manage Electives & Capacities</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {electives.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">No electives yet. Add one above.</p>
+              ) : (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-[1fr_120px_100px_80px] gap-4 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground border-b">
+                    <span>Elective</span>
+                    <span>Capacity</span>
+                    <span>Enrolled</span>
+                    <span>Actions</span>
+                  </div>
+                  {electives.map((e) => {
+                    const count = signupCountByElective[e.id] || 0;
+                    const cap = (e as any).capacity;
+                    const editCap = editingCapacities[e.id];
+                    const currentCap = editCap !== undefined ? editCap : (cap ?? "");
+                    return (
+                      <div key={e.id} className="grid grid-cols-[1fr_120px_100px_80px] gap-4 items-center px-3 py-2.5 rounded-md border hover:bg-muted/30">
+                        <span className="font-medium text-sm">{e.name}</span>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            min={1}
+                            className="h-8 w-20"
+                            value={currentCap}
+                            onChange={(ev) => setEditingCapacities((prev) => ({ ...prev, [e.id]: ev.target.value ? parseInt(ev.target.value) : "" }))}
+                            onBlur={() => handleSaveCapacity(e.id)}
+                            onKeyDown={(ev) => ev.key === "Enter" && handleSaveCapacity(e.id)}
+                          />
+                        </div>
+                        <Badge variant={cap != null && count >= cap ? "destructive" : "secondary"}>
+                          {count}{cap != null ? `/${cap}` : ""}
+                        </Badge>
+                        <button onClick={() => handleDeleteElective(e.id)} className="text-muted-foreground hover:text-destructive transition-colors">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
