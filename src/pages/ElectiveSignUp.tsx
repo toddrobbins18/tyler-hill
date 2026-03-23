@@ -294,6 +294,16 @@ export default function ElectiveSignUp() {
                   onKeyDown={(e) => e.key === "Enter" && handleAddElective()}
                 />
               </div>
+              <div className="space-y-2">
+                <Label>Capacity</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={newElectiveCapacity}
+                  onChange={(e) => setNewElectiveCapacity(e.target.value ? parseInt(e.target.value) : "")}
+                  placeholder="Max campers"
+                />
+              </div>
               <Button onClick={handleAddElective} className="w-full">Add Elective</Button>
 
               {electives.length > 0 && (
