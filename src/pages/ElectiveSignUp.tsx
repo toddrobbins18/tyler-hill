@@ -429,14 +429,21 @@ export default function ElectiveSignUp() {
                             value={signup?.elective_id || "none"}
                             onValueChange={(val) => handleAssignElective(child.id, val === "none" ? null : val)}
                           >
-                            <SelectTrigger className="w-48">
+                            <SelectTrigger className="w-56">
                               <SelectValue placeholder="Select elective" />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="none">— None —</SelectItem>
-                              {electives.map((e) => (
-                                <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
-                              ))}
+                              {electives.map((e) => {
+                                const count = signupCountByElective[e.id] || 0;
+                                const cap = (e as any).capacity;
+                                const isFull = cap != null && count >= cap;
+                                return (
+                                  <SelectItem key={e.id} value={e.id} disabled={isFull && signup?.elective_id !== e.id}>
+                                    {e.name} {cap != null ? `(${count}/${cap})` : `(${count})`}
+                                  </SelectItem>
+                                );
+                              })}
                             </SelectContent>
                           </Select>
                         </div>
