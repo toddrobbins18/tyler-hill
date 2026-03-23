@@ -378,6 +378,9 @@ export default function ElectiveSignUp() {
           <TabsTrigger value="history" className="flex items-center gap-1.5">
             <History className="h-4 w-4" />Camper History
           </TabsTrigger>
+          <TabsTrigger value="settings" className="flex items-center gap-1.5">
+            <Settings2 className="h-4 w-4" />Manage Electives
+          </TabsTrigger>
         </TabsList>
 
         {/* SIGN-UP TAB */}
