@@ -594,6 +594,44 @@ export type Database = {
           },
         ]
       }
+      campminder_transactions: {
+        Row: {
+          amount: number
+          cm_transaction_id: string
+          company_id: string
+          id: string
+          person_id: string
+          synced_at: string | null
+          transaction_type: string
+        }
+        Insert: {
+          amount: number
+          cm_transaction_id: string
+          company_id: string
+          id?: string
+          person_id: string
+          synced_at?: string | null
+          transaction_type?: string
+        }
+        Update: {
+          amount?: number
+          cm_transaction_id?: string
+          company_id?: string
+          id?: string
+          person_id?: string
+          synced_at?: string | null
+          transaction_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campminder_transactions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       children: {
         Row: {
           age: number | null
@@ -3971,6 +4009,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      increment_camper_balance: {
+        Args: { _amount: number; _child_id: string }
+        Returns: number
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_division_leader: {
