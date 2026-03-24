@@ -1399,6 +1399,56 @@ async function performFullSync(
       camperInsertedCount = camperResult.inserted;
       camperUpdatedCount = camperResult.updated;
       console.log(`Synced ${camperResult.inserted + camperResult.updated} campers (${usedCamperFallbackData} from fallback)`);
+
+      // =====================================================
+      // PHASE 6b: Mark dropped campers as inactive
+      // Campers in DB but NOT in enrolled attendees list
+      // =====================================================
+      console.log('\n--- CLEANING UP DROPPED CAMPERS ---');
+      
+      const enrolledPersonIdSet = new Set(camperData.map(c => c.person_id));
+      
+      // Fetch all existing active campers for this company + season
+      const { data: existingCampers, error: fetchCampersError } = await supabase
+        .from('children')
+        .select('id, person_id, name, status')
+        .eq('company_id', companyId)
+        .eq('season', season)
+        .neq('status', 'inactive');
+      
+      if (fetchCampersError) {
+        console.error('[Camper Cleanup] Error fetching existing campers:', fetchCampersError);
+      } else {
+        const droppedCampers = (existingCampers || []).filter(
+          (c: any) => c.person_id && !enrolledPersonIdSet.has(c.person_id)
+        );
+        
+        console.log(`[Camper Cleanup] Found ${droppedCampers.length} campers to mark inactive (${existingCampers?.length || 0} total in DB, ${enrolledPersonIdSet.size} enrolled)`);
+        
+        if (droppedCampers.length > 0) {
+          // Log first 10 for debugging
+          droppedCampers.slice(0, 10).forEach((c: any) => {
+            console.log(`  - Marking inactive: ${c.name} (person_id: ${c.person_id})`);
+          });
+          
+          const droppedIds = droppedCampers.map((c: any) => c.id);
+          
+          // Update in batches of 100
+          for (let i = 0; i < droppedIds.length; i += 100) {
+            const batch = droppedIds.slice(i, i + 100);
+            const { error: updateError } = await supabase
+              .from('children')
+              .update({ status: 'inactive', updated_at: new Date().toISOString() })
+              .in('id', batch);
+            
+            if (updateError) {
+              console.error(`[Camper Cleanup] Error marking batch inactive:`, updateError);
+            }
+          }
+          
+          console.log(`[Camper Cleanup] Successfully marked ${droppedCampers.length} dropped campers as inactive`);
+        }
+      }
     }
     } // End of camper sync (syncType === 'campers' || syncType === 'full')
 
