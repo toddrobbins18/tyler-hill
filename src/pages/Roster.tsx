@@ -85,7 +85,7 @@ export default function Roster() {
       query = query.in('division_id', divisionFilter);
     }
     
-    const { data, error } = await query.order("name");
+    const { data, error } = await query.neq('status', 'inactive').order("name");
     
     if (!error && data) {
       setChildren(data);
