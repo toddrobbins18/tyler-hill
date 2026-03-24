@@ -228,7 +228,7 @@ const OwlPayTransactionSummary = ({
 
           {(cart.length > 0 || isFirstScanToday) && (
             <Button
-              className="w-full"
+              className="w-full owlpay-gradient-header text-white shadow-xl text-lg active:scale-95 transition-transform"
               size="lg"
               onClick={handleComplete}
               disabled={processing || (!isFirstScanToday && newBalance < 0)}
