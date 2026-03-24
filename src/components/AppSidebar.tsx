@@ -56,7 +56,8 @@ const getMenuItems = (companySlug?: string) => {
   // Special Meals only for Tyler Hill Camp
   if (companySlug === 'tyler-hill-camp') {
     baseItems.push(
-      { title: "Special Meals", url: "/special-meals", icon: Utensils, menuId: "special-meals" }
+      { title: "Special Meals", url: "/special-meals", icon: Utensils, menuId: "special-meals" },
+      { title: "Owl Pay", url: "/owl-pay", icon: CreditCard, menuId: "owl-pay" }
     );
   }
 
