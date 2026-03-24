@@ -8,6 +8,7 @@ const CM_DIVISIONS_URL = 'https://api.campminder.com/divisions';
 const CM_SESSIONS_URL = 'https://api.campminder.com/sessions';
 const CM_BUNKS_URL = 'https://api.campminder.com/bunks';
 const CM_FAMILIES_URL = 'https://api.campminder.com/families';
+const CM_FINANCIALS_URL = 'https://api.campminder.com/financials/transactionreporting/transactiondetails';
 
 
 // Rate limiting: 300ms between calls (~3.3 calls/sec = ~200/min)
