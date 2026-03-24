@@ -27,6 +27,7 @@ const OwlPayTransactionSummary = ({
   camper,
   cart,
   isFirstScanToday,
+  isStaff = false,
   onUpdateCart,
   onComplete,
 }: OwlPayTransactionSummaryProps) => {
