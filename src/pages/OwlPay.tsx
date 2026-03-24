@@ -175,7 +175,7 @@ export default function OwlPay() {
       window.removeEventListener("keydown", handleKeyPress);
       if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
     };
-  }, [scanBuffer, lastKeyTime, campers]);
+  }, [scanBuffer, lastKeyTime, campers, staffMembers]);
 
   const filteredCampers = campers.filter(c =>
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
