@@ -5,13 +5,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
-import { Search, ShoppingCart, Package, BarChart3, DollarSign, Scan, CheckCircle, XCircle } from "lucide-react";
+import { Search, ShoppingCart, Package, BarChart3, DollarSign, Scan, CheckCircle, XCircle, Users } from "lucide-react";
 import OwlPayCamperCard, { type OwlPayCamper } from "@/components/owlpay/OwlPayCamperCard";
 import OwlPayItemGrid, { type OwlPayItem, type OwlPayCartItem } from "@/components/owlpay/OwlPayItemGrid";
 import OwlPayTransactionSummary from "@/components/owlpay/OwlPayTransactionSummary";
 import OwlPayItemManagement from "@/components/owlpay/OwlPayItemManagement";
 import OwlPayReports from "@/components/owlpay/OwlPayReports";
 import OwlPayBalanceManagement from "@/components/owlpay/OwlPayBalanceManagement";
+
+interface StaffMember {
+  id: string;
+  name: string;
+  rfid: string | null;
+  photo_url: string | null;
+}
 
 export default function OwlPay() {
   const [searchTerm, setSearchTerm] = useState("");
