@@ -242,7 +242,7 @@ const OwlPayTransactionSummary = ({
             </Button>
           )}
 
-          {!isFirstScanToday && newBalance < 0 && cart.length > 0 && (
+          {!isStaff && !isFirstScanToday && newBalance < 0 && cart.length > 0 && (
             <p className="text-sm text-destructive text-center">⚠️ Insufficient funds</p>
           )}
         </CardContent>
