@@ -96,6 +96,7 @@ export default function OwlPay() {
   const handleCamperSelect = async (camper: OwlPayCamper) => {
     setSelectedCamper(camper);
     setCart([]);
+    setIsStaffSelected(false);
     const isFirst = await checkFirstScanToday(camper.id);
     setIsFirstScanToday(isFirst);
     if (isFirst) {
