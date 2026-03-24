@@ -117,7 +117,7 @@ export default function OwlPay() {
     const staffMatch = staffMembers.find(s => s.rfid?.toLowerCase() === rfid.toLowerCase());
     if (staffMatch) {
       setScanStatus("success");
-      // Convert staff to camper-like object (staff get everything free, no balance)
+      // Convert staff to camper-like object (staff pay normally, no free first scan)
       const staffAsCamper: OwlPayCamper = {
         id: staffMatch.id,
         name: staffMatch.name,
@@ -128,7 +128,7 @@ export default function OwlPay() {
       };
       setSelectedCamper(staffAsCamper);
       setCart([]);
-      setIsFirstScanToday(true); // Staff always get free items
+      setIsFirstScanToday(false); // Staff do NOT get free first scan
       toast({ title: "✓ Staff Found", description: staffMatch.name, duration: 2000 });
       setTimeout(() => { setSearchTerm(""); setScanStatus("idle"); }, 1000);
       return;
