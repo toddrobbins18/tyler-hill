@@ -43,7 +43,8 @@ const OwlPayTransactionSummary = ({
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const total = isFirstScanToday ? 0 : subtotal;
-  const newBalance = camper.owl_pay_balance - total;
+  // Staff: running tab totals up; Campers: deduct from balance
+  const newBalance = isStaff ? camper.owl_pay_balance + total : camper.owl_pay_balance - total;
   const animatedBalance = useCountAnimation(newBalance, 500);
 
   const updateQuantity = (itemId: string, change: number) => {
