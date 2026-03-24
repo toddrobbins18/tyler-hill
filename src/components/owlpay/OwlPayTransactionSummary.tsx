@@ -160,7 +160,7 @@ const OwlPayTransactionSummary = ({
             </Avatar>
             <div className="text-center mt-3">
               <div className="font-semibold text-lg">{camper.name}</div>
-              <div className="text-sm text-muted-foreground">Current Balance: ${camper.owl_pay_balance.toFixed(2)}</div>
+              <div className="text-sm text-muted-foreground">{isStaff ? "Running Tab" : `Current Balance: $${camper.owl_pay_balance.toFixed(2)}`}</div>
             </div>
             {isFirstScanToday && (
               <Badge className="bg-green-500 text-white mt-2">
