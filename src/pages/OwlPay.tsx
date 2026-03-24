@@ -45,11 +45,12 @@ export default function OwlPay() {
   }, [currentCompany, selectedSeason]);
 
   const loadCampers = async () => {
-    if (!currentCompany?.id) return;
+    if (!currentCompany?.id || !selectedSeason) return;
     const { data, error } = await supabase
       .from("children")
       .select("id, name, rfid, photo_url, owl_pay_balance, person_id")
       .eq("company_id", currentCompany.id)
+      .eq("season", selectedSeason)
       .neq("status", "inactive")
       .order("name");
     if (error) { console.error(error); return; }
