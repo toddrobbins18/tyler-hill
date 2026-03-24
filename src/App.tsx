@@ -50,6 +50,7 @@ import DailySchedule from "./pages/DailySchedule";
 import Appointments from "./pages/Appointments";
 import NotificationPreferences from "./pages/NotificationPreferences";
 import ElectiveSignUp from "./pages/ElectiveSignUp";
+import OwlPay from "./pages/OwlPay";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 import UpdatePassword from "./pages/UpdatePassword";
