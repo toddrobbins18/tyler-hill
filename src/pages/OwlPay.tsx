@@ -263,6 +263,7 @@ export default function OwlPay() {
                   camper={selectedCamper}
                   cart={cart}
                   isFirstScanToday={isFirstScanToday}
+                  isStaff={isStaffSelected}
                   onUpdateCart={setCart}
                   onComplete={() => {
                     setSelectedCamper(null);
