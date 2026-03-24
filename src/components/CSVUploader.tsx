@@ -65,26 +65,6 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
     return mapping;
   };
 
-  const markDroppedCampersInactive = async () => {
-    if (droppedCampers.length === 0) return;
-    
-    const ids = droppedCampers.map(c => c.id);
-    const { error } = await supabase
-      .from('children')
-      .update({ status: 'inactive' } as any)
-      .in('id', ids);
-    
-    if (error) {
-      console.error('Error marking dropped campers:', error);
-      toast.error('Failed to mark dropped campers as inactive');
-    } else {
-      toast.success(`${droppedCampers.length} dropped camper(s) marked as inactive`);
-    }
-    setDroppedCampers([]);
-    setShowDroppedDialog(false);
-    onUploadComplete?.();
-  };
-
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
