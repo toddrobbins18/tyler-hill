@@ -28,6 +28,7 @@ export default function OwlPay() {
   const [items, setItems] = useState<OwlPayItem[]>([]);
   const [cart, setCart] = useState<OwlPayCartItem[]>([]);
   const [isFirstScanToday, setIsFirstScanToday] = useState(false);
+  const [isStaffSelected, setIsStaffSelected] = useState(false);
   const [scanStatus, setScanStatus] = useState<"idle" | "scanning" | "success" | "error">("idle");
   const [scanBuffer, setScanBuffer] = useState("");
   const [lastKeyTime, setLastKeyTime] = useState(0);
