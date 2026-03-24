@@ -28,8 +28,6 @@ const STAFF_PERSON_ID_TABLES = ['staff'];
 export default function CSVUploader({ tableName, onUploadComplete }: CSVUploaderProps) {
   const [uploading, setUploading] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
-  const [droppedCampers, setDroppedCampers] = useState<{ id: string; name: string; person_id: string }[]>([]);
-  const [showDroppedDialog, setShowDroppedDialog] = useState(false);
   const { currentCompany } = useCompany();
   const { selectedSeason } = useSeason();
 
