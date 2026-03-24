@@ -5,13 +5,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
-import { Search, ShoppingCart, Package, BarChart3, DollarSign, Scan, CheckCircle, XCircle, Users } from "lucide-react";
+import { Search, ShoppingCart, Package, BarChart3, DollarSign, Scan, CheckCircle, XCircle, Users, Settings } from "lucide-react";
 import OwlPayCamperCard, { type OwlPayCamper } from "@/components/owlpay/OwlPayCamperCard";
 import OwlPayItemGrid, { type OwlPayItem, type OwlPayCartItem } from "@/components/owlpay/OwlPayItemGrid";
 import OwlPayTransactionSummary from "@/components/owlpay/OwlPayTransactionSummary";
 import OwlPayItemManagement from "@/components/owlpay/OwlPayItemManagement";
 import OwlPayReports from "@/components/owlpay/OwlPayReports";
 import OwlPayBalanceManagement from "@/components/owlpay/OwlPayBalanceManagement";
+import OwlPayEmailSettings from "@/components/owlpay/OwlPayEmailSettings";
 
 interface StaffMember {
   id: string;
@@ -208,6 +209,7 @@ export default function OwlPay() {
           <TabsTrigger value="items"><Package className="h-4 w-4 mr-1" /> Items</TabsTrigger>
           <TabsTrigger value="balances"><DollarSign className="h-4 w-4 mr-1" /> Balances</TabsTrigger>
           <TabsTrigger value="reports"><BarChart3 className="h-4 w-4 mr-1" /> Reports</TabsTrigger>
+          <TabsTrigger value="settings"><Settings className="h-4 w-4 mr-1" /> Settings</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pos">
@@ -286,6 +288,10 @@ export default function OwlPay() {
 
         <TabsContent value="reports">
           <OwlPayReports />
+        </TabsContent>
+
+        <TabsContent value="settings">
+          <OwlPayEmailSettings />
         </TabsContent>
       </Tabs>
     </div>

@@ -2133,6 +2133,53 @@ export type Database = {
           },
         ]
       }
+      owl_pay_email_config: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          id: string
+          low_balance_alerts_enabled: boolean
+          low_balance_recipient_email: string | null
+          low_balance_threshold: number
+          staff_purchase_reports_enabled: boolean
+          staff_report_frequency: string
+          staff_report_recipient_email: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          id?: string
+          low_balance_alerts_enabled?: boolean
+          low_balance_recipient_email?: string | null
+          low_balance_threshold?: number
+          staff_purchase_reports_enabled?: boolean
+          staff_report_frequency?: string
+          staff_report_recipient_email?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          low_balance_alerts_enabled?: boolean
+          low_balance_recipient_email?: string | null
+          low_balance_threshold?: number
+          staff_purchase_reports_enabled?: boolean
+          staff_report_frequency?: string
+          staff_report_recipient_email?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "owl_pay_email_config_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       owl_pay_items: {
         Row: {
           active: boolean
