@@ -916,5 +916,226 @@ Body: { "param1": "value1" }</pre>
 • Use Supabase client libraries (Swift, Kotlin, Flutter) for easier integration vs raw HTTP.
 </div>
 
+<hr class="section-divider">
+
+<h1>27. Owl Pay (Canteen POS & Financials)</h1>
+
+<p>Owl Pay is the point-of-sale canteen system with RFID scanning, balance management, and transaction tracking. Campers have pre-loaded balances that deduct on purchase; staff accumulate a running tab.</p>
+
+<h2>27.1 Camper Balance</h2>
+<p>The camper's Owl Pay balance is stored on the <code>children</code> table in the <code>owl_pay_balance</code> column (numeric, default 0).</p>
+
+<h4>Get Camper Balance</h4>
+<pre>
+GET /rest/v1/children?select=id,name,owl_pay_balance,rfid,photo_url&company_id=eq.{company_id}&season=eq.{season}&status=neq.inactive&order=name
+Authorization: Bearer {access_token}
+apikey: {anon_key}
+</pre>
+
+<h4>Update Camper Balance (after purchase)</h4>
+<pre>
+PATCH /rest/v1/children?id=eq.{child_id}
+Authorization: Bearer {access_token}
+apikey: {anon_key}
+Content-Type: application/json
+
+{ "owl_pay_balance": 42.50 }
+</pre>
+
+<h2>27.2 Owl Pay Items</h2>
+<p>Manage canteen items available for purchase.</p>
+
+<table>
+<tr><th>Column</th><th>Type</th><th>Required</th><th>Default</th><th>Description</th></tr>
+<tr><td>id</td><td>uuid</td><td>Auto</td><td>gen_random_uuid()</td><td>Primary key</td></tr>
+<tr><td>company_id</td><td>uuid</td><td>Yes</td><td>-</td><td>FK to companies</td></tr>
+<tr><td>name</td><td>text</td><td>Yes</td><td>-</td><td>Item name</td></tr>
+<tr><td>price</td><td>numeric</td><td>Yes</td><td>0</td><td>Item price</td></tr>
+<tr><td>category</td><td>text</td><td>Yes</td><td>'snacks'</td><td>Category: food, snacks, drinks</td></tr>
+<tr><td>active</td><td>boolean</td><td>Yes</td><td>true</td><td>Whether item is available</td></tr>
+<tr><td>created_at</td><td>timestamptz</td><td>Auto</td><td>now()</td><td>Created timestamp</td></tr>
+<tr><td>updated_at</td><td>timestamptz</td><td>Auto</td><td>now()</td><td>Updated timestamp</td></tr>
+</table>
+
+<h4>List Active Items</h4>
+<pre>
+GET /rest/v1/owl_pay_items?company_id=eq.{company_id}&active=eq.true&order=name
+Authorization: Bearer {access_token}
+apikey: {anon_key}
+</pre>
+
+<h4>Create Item</h4>
+<pre>
+POST /rest/v1/owl_pay_items
+Authorization: Bearer {access_token}
+apikey: {anon_key}
+Content-Type: application/json
+
+{
+  "company_id": "{company_id}",
+  "name": "Ice Cream Sandwich",
+  "price": 3.50,
+  "category": "snacks"
+}
+</pre>
+
+<h4>Update Item</h4>
+<pre>
+PATCH /rest/v1/owl_pay_items?id=eq.{item_id}
+Authorization: Bearer {access_token}
+apikey: {anon_key}
+Content-Type: application/json
+
+{ "price": 4.00, "active": false }
+</pre>
+
+<h2>27.3 Owl Pay Transactions (Ledger)</h2>
+<p>Complete financial ledger of all purchases and free scans.</p>
+
+<table>
+<tr><th>Column</th><th>Type</th><th>Required</th><th>Default</th><th>Description</th></tr>
+<tr><td>id</td><td>uuid</td><td>Auto</td><td>gen_random_uuid()</td><td>Primary key</td></tr>
+<tr><td>company_id</td><td>uuid</td><td>Yes</td><td>-</td><td>FK to companies</td></tr>
+<tr><td>child_id</td><td>uuid</td><td>No</td><td>null</td><td>FK to children (or staff id)</td></tr>
+<tr><td>item_id</td><td>uuid</td><td>No</td><td>null</td><td>FK to owl_pay_items</td></tr>
+<tr><td>amount</td><td>numeric</td><td>Yes</td><td>0</td><td>Transaction amount</td></tr>
+<tr><td>is_free</td><td>boolean</td><td>Yes</td><td>false</td><td>Whether this was a free item</td></tr>
+<tr><td>transaction_type</td><td>text</td><td>Yes</td><td>'purchase'</td><td>'purchase' or 'first_scan'</td></tr>
+<tr><td>notes</td><td>text</td><td>No</td><td>null</td><td>Transaction notes</td></tr>
+<tr><td>created_by</td><td>uuid</td><td>No</td><td>null</td><td>User who processed</td></tr>
+<tr><td>created_at</td><td>timestamptz</td><td>Auto</td><td>now()</td><td>Transaction timestamp</td></tr>
+</table>
+
+<h4>List Transactions (with item details)</h4>
+<pre>
+GET /rest/v1/owl_pay_transactions?select=*,owl_pay_items(name,category)&company_id=eq.{company_id}&order=created_at.desc
+Authorization: Bearer {access_token}
+apikey: {anon_key}
+</pre>
+
+<h4>List Transactions for a Camper</h4>
+<pre>
+GET /rest/v1/owl_pay_transactions?child_id=eq.{child_id}&company_id=eq.{company_id}&order=created_at.desc
+Authorization: Bearer {access_token}
+apikey: {anon_key}
+</pre>
+
+<h4>Record Purchase Transaction</h4>
+<pre>
+POST /rest/v1/owl_pay_transactions
+Authorization: Bearer {access_token}
+apikey: {anon_key}
+Content-Type: application/json
+
+{
+  "company_id": "{company_id}",
+  "child_id": "{child_id}",
+  "item_id": "{item_id}",
+  "amount": 3.50,
+  "is_free": false,
+  "transaction_type": "purchase",
+  "created_by": "{user_id}"
+}
+</pre>
+
+<h4>Record First Scan (Free Entry)</h4>
+<pre>
+POST /rest/v1/owl_pay_transactions
+Authorization: Bearer {access_token}
+apikey: {anon_key}
+Content-Type: application/json
+
+{
+  "company_id": "{company_id}",
+  "child_id": "{child_id}",
+  "amount": 0,
+  "is_free": true,
+  "transaction_type": "first_scan",
+  "notes": "First scan of the day - free entry",
+  "created_by": "{user_id}"
+}
+</pre>
+
+<h2>27.4 Daily Scans (First Scan Tracking)</h2>
+<p>Tracks whether a camper has already scanned today. Each camper gets one free item per day (resets daily). Staff do not receive free scans.</p>
+
+<table>
+<tr><th>Column</th><th>Type</th><th>Required</th><th>Default</th><th>Description</th></tr>
+<tr><td>id</td><td>uuid</td><td>Auto</td><td>gen_random_uuid()</td><td>Primary key</td></tr>
+<tr><td>company_id</td><td>uuid</td><td>Yes</td><td>-</td><td>FK to companies</td></tr>
+<tr><td>child_id</td><td>uuid</td><td>Yes</td><td>-</td><td>FK to children</td></tr>
+<tr><td>scan_date</td><td>date</td><td>Yes</td><td>CURRENT_DATE</td><td>Date of scan</td></tr>
+<tr><td>created_at</td><td>timestamptz</td><td>Auto</td><td>now()</td><td>Created timestamp</td></tr>
+</table>
+
+<div class="note">
+<strong>Unique Constraint:</strong> <code>(company_id, child_id, scan_date)</code> ensures only one daily scan record per camper per day.
+</div>
+
+<h4>Check if Camper Has Scanned Today</h4>
+<pre>
+GET /rest/v1/owl_pay_daily_scans?child_id=eq.{child_id}&scan_date=eq.{today}&select=id
+Authorization: Bearer {access_token}
+apikey: {anon_key}
+
+→ Empty array = first scan (free item eligible)
+→ Has record = already scanned today
+</pre>
+
+<h4>Record Daily Scan</h4>
+<pre>
+POST /rest/v1/owl_pay_daily_scans
+Authorization: Bearer {access_token}
+apikey: {anon_key}
+Content-Type: application/json
+
+{
+  "company_id": "{company_id}",
+  "child_id": "{child_id}"
+}
+</pre>
+
+<h2>27.5 Reporting Queries</h2>
+
+<h4>Revenue by Date Range</h4>
+<pre>
+GET /rest/v1/owl_pay_transactions?company_id=eq.{company_id}&is_free=eq.false&created_at=gte.{start_date}&created_at=lte.{end_date}&select=amount,created_at
+Authorization: Bearer {access_token}
+apikey: {anon_key}
+</pre>
+
+<h4>Top Selling Items</h4>
+<pre>
+GET /rest/v1/owl_pay_transactions?company_id=eq.{company_id}&transaction_type=eq.purchase&select=item_id,owl_pay_items(name,category)&order=created_at.desc
+Authorization: Bearer {access_token}
+apikey: {anon_key}
+</pre>
+
+<h4>Low Balance Campers</h4>
+<pre>
+GET /rest/v1/children?company_id=eq.{company_id}&season=eq.{season}&owl_pay_balance=lt.5&status=neq.inactive&select=id,name,owl_pay_balance&order=owl_pay_balance
+Authorization: Bearer {access_token}
+apikey: {anon_key}
+</pre>
+
+<h2>27.6 RLS Policies</h2>
+<div class="note">
+<strong>Access Rules:</strong><br>
+• <strong>owl_pay_items:</strong> Admin/staff can manage; all authenticated users in company can view.<br>
+• <strong>owl_pay_transactions:</strong> Admin/staff can manage; all authenticated users in company can view.<br>
+• <strong>owl_pay_daily_scans:</strong> Admin/staff can manage; all authenticated users in company can view.<br>
+• <strong>children.owl_pay_balance:</strong> Follows existing children table RLS (admin/staff can update).<br>
+• All tables are company-scoped via <code>get_user_company(auth.uid())</code>.
+</div>
+
+<h2>27.7 Business Logic Notes</h2>
+<div class="warning">
+<strong>Key Rules:</strong><br>
+• <strong>First Scan Free:</strong> Each camper gets one free item per day. Check <code>owl_pay_daily_scans</code> before processing. Staff do NOT get free scans.<br>
+• <strong>Camper Balance:</strong> Deducted from <code>children.owl_pay_balance</code> on purchase. Reject if insufficient funds.<br>
+• <strong>Staff Tab:</strong> Staff purchases are recorded in transactions but do NOT deduct from a balance — they accumulate a running tab total.<br>
+• <strong>RFID:</strong> Both <code>children.rfid</code> and <code>staff.rfid</code> fields are used for POS scanning. Check campers first, then staff.
+</div>
+
 </body>
 </html>
