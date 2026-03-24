@@ -2029,18 +2029,53 @@ async function performFullSync(
         // Canteen spending money category ID
         const CANTEEN_CATEGORY_ID = '9076';
 
-        const financialTransactions = await fetchAllPaginated(
+        // Fetch all financial transactions - CampMinder may not honour the categoryid
+        // query param, so we always filter client-side as well.
+        const allFinancialTransactions = await fetchAllPaginated(
           CM_FINANCIALS_URL,
           token,
           subscriptionKey,
           { clientid: clientId, categoryid: CANTEEN_CATEGORY_ID, season: season }
         );
 
-        console.log(`[Financials] Found ${financialTransactions.length} canteen transactions from CampMinder`);
-        if (financialTransactions.length > 0) {
-          console.log(`[Financials DEBUG] Sample transaction keys: ${JSON.stringify(Object.keys(financialTransactions[0]))}`);
-          console.log(`[Financials DEBUG] Sample transaction: ${JSON.stringify(financialTransactions[0])}`);
+        console.log(`[Financials] Fetched ${allFinancialTransactions.length} total financial transactions from CampMinder`);
+
+        // Log a sample to help debug field names
+        if (allFinancialTransactions.length > 0) {
+          console.log(`[Financials DEBUG] Sample transaction keys: ${JSON.stringify(Object.keys(allFinancialTransactions[0]))}`);
+          console.log(`[Financials DEBUG] Sample transaction: ${JSON.stringify(allFinancialTransactions[0]).substring(0, 2000)}`);
         }
+
+        // Helper to get field value with inconsistent casing from CampMinder
+        const getFieldEarly = (obj: any, ...names: string[]): any => {
+          for (const name of names) {
+            if (obj[name] !== undefined) return obj[name];
+            const lower = name.toLowerCase();
+            const upper = name.charAt(0).toUpperCase() + name.slice(1);
+            const allCaps = name.toUpperCase();
+            if (obj[lower] !== undefined) return obj[lower];
+            if (obj[upper] !== undefined) return obj[upper];
+            if (obj[allCaps] !== undefined) return obj[allCaps];
+          }
+          const lowerNames = names.map(n => n.toLowerCase());
+          for (const key of Object.keys(obj)) {
+            if (lowerNames.includes(key.toLowerCase())) return obj[key];
+          }
+          return undefined;
+        };
+
+        // Client-side filter: only keep canteen/spending transactions
+        const financialTransactions = allFinancialTransactions.filter((tx: any) => {
+          const catId = String(getFieldEarly(tx, 'financialCategoryId', 'FinancialCategoryId', 'FinancialCategoryID', 'categoryId', 'CategoryId', 'CategoryID') || '');
+          const desc = String(getFieldEarly(tx, 'description', 'Description') || '').toLowerCase();
+
+          // Match by category ID or description keywords
+          if (catId === CANTEEN_CATEGORY_ID) return true;
+          if (desc.includes('canteen') || desc.includes('spending')) return true;
+          return false;
+        });
+
+        console.log(`[Financials] After canteen filter: ${financialTransactions.length} of ${allFinancialTransactions.length} transactions`);
 
         if (financialTransactions.length > 0) {
           // Get already-synced transaction IDs to avoid double-counting
