@@ -56,6 +56,18 @@ export default function OwlPay() {
     setCampers((data as any) || []);
   };
 
+  const loadStaff = async () => {
+    if (!currentCompany?.id) return;
+    const { data, error } = await supabase
+      .from("staff")
+      .select("id, name, rfid, photo_url")
+      .eq("company_id", currentCompany.id)
+      .neq("status", "inactive")
+      .order("name");
+    if (error) { console.error(error); return; }
+    setStaffMembers((data as any) || []);
+  };
+
   const loadItems = async () => {
     if (!currentCompany?.id) return;
     const { data, error } = await supabase
@@ -90,14 +102,38 @@ export default function OwlPay() {
   };
 
   const selectByRFID = async (rfid: string) => {
-    const match = campers.find(c => c.rfid?.toLowerCase() === rfid.toLowerCase());
-    if (match) {
+    // Check campers first
+    const camperMatch = campers.find(c => c.rfid?.toLowerCase() === rfid.toLowerCase());
+    if (camperMatch) {
       setScanStatus("success");
-      await handleCamperSelect(match);
-      toast({ title: "✓ Camper Found", description: match.name, duration: 2000 });
+      await handleCamperSelect(camperMatch);
+      toast({ title: "✓ Camper Found", description: camperMatch.name, duration: 2000 });
       setTimeout(() => { setSearchTerm(""); setScanStatus("idle"); }, 1000);
-    } else {
-      setScanStatus("error");
+      return;
+    }
+
+    // Check staff
+    const staffMatch = staffMembers.find(s => s.rfid?.toLowerCase() === rfid.toLowerCase());
+    if (staffMatch) {
+      setScanStatus("success");
+      // Convert staff to camper-like object (staff get everything free, no balance)
+      const staffAsCamper: OwlPayCamper = {
+        id: staffMatch.id,
+        name: staffMatch.name,
+        rfid: staffMatch.rfid,
+        photo_url: staffMatch.photo_url,
+        owl_pay_balance: 0,
+        person_id: staffMatch.id,
+      };
+      setSelectedCamper(staffAsCamper);
+      setCart([]);
+      setIsFirstScanToday(true); // Staff always get free items
+      toast({ title: "✓ Staff Found", description: staffMatch.name, duration: 2000 });
+      setTimeout(() => { setSearchTerm(""); setScanStatus("idle"); }, 1000);
+      return;
+    }
+
+    setScanStatus("error");
       toast({ title: "RFID not found", description: `No camper with RFID: ${rfid}`, variant: "destructive", duration: 3000 });
       setTimeout(() => setScanStatus("idle"), 2000);
     }
