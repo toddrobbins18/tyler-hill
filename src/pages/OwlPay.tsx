@@ -28,6 +28,7 @@ export default function OwlPay() {
   const [items, setItems] = useState<OwlPayItem[]>([]);
   const [cart, setCart] = useState<OwlPayCartItem[]>([]);
   const [isFirstScanToday, setIsFirstScanToday] = useState(false);
+  const [isStaffSelected, setIsStaffSelected] = useState(false);
   const [scanStatus, setScanStatus] = useState<"idle" | "scanning" | "success" | "error">("idle");
   const [scanBuffer, setScanBuffer] = useState("");
   const [lastKeyTime, setLastKeyTime] = useState(0);
@@ -95,6 +96,7 @@ export default function OwlPay() {
   const handleCamperSelect = async (camper: OwlPayCamper) => {
     setSelectedCamper(camper);
     setCart([]);
+    setIsStaffSelected(false);
     const isFirst = await checkFirstScanToday(camper.id);
     setIsFirstScanToday(isFirst);
     if (isFirst) {
@@ -128,7 +130,8 @@ export default function OwlPay() {
       };
       setSelectedCamper(staffAsCamper);
       setCart([]);
-      setIsFirstScanToday(false); // Staff do NOT get free first scan
+      setIsFirstScanToday(false);
+      setIsStaffSelected(true);
       toast({ title: "✓ Staff Found", description: staffMatch.name, duration: 2000 });
       setTimeout(() => { setSearchTerm(""); setScanStatus("idle"); }, 1000);
       return;
@@ -260,6 +263,7 @@ export default function OwlPay() {
                   camper={selectedCamper}
                   cart={cart}
                   isFirstScanToday={isFirstScanToday}
+                  isStaff={isStaffSelected}
                   onUpdateCart={setCart}
                   onComplete={() => {
                     setSelectedCamper(null);

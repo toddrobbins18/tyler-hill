@@ -18,6 +18,7 @@ interface OwlPayTransactionSummaryProps {
   camper: OwlPayCamper;
   cart: OwlPayCartItem[];
   isFirstScanToday: boolean;
+  isStaff?: boolean;
   onUpdateCart: (cart: OwlPayCartItem[]) => void;
   onComplete: () => void;
 }
@@ -26,6 +27,7 @@ const OwlPayTransactionSummary = ({
   camper,
   cart,
   isFirstScanToday,
+  isStaff = false,
   onUpdateCart,
   onComplete,
 }: OwlPayTransactionSummaryProps) => {
@@ -41,7 +43,8 @@ const OwlPayTransactionSummary = ({
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const total = isFirstScanToday ? 0 : subtotal;
-  const newBalance = camper.owl_pay_balance - total;
+  // Staff: running tab totals up; Campers: deduct from balance
+  const newBalance = isStaff ? camper.owl_pay_balance + total : camper.owl_pay_balance - total;
   const animatedBalance = useCountAnimation(newBalance, 500);
 
   const updateQuantity = (itemId: string, change: number) => {
@@ -66,7 +69,7 @@ const OwlPayTransactionSummary = ({
       return;
     }
 
-    if (!isFirstScanToday && newBalance < 0) {
+    if (!isStaff && !isFirstScanToday && newBalance < 0) {
       toast({ title: "Insufficient funds", variant: "destructive" });
       return;
     }
@@ -112,12 +115,14 @@ const OwlPayTransactionSummary = ({
           .insert(transactionInserts);
         if (txError) throw txError;
 
-        // Update balance
-        const { error: balError } = await supabase
-          .from("children")
-          .update({ owl_pay_balance: newBalance } as any)
-          .eq("id", camper.id);
-        if (balError) throw balError;
+        // Only deduct balance for campers (not staff)
+        if (!isStaff) {
+          const { error: balError } = await supabase
+            .from("children")
+            .update({ owl_pay_balance: newBalance } as any)
+            .eq("id", camper.id);
+          if (balError) throw balError;
+        }
       }
 
       setSuccessData({ show: true, chargedAmount: total, newBalance });
@@ -155,7 +160,7 @@ const OwlPayTransactionSummary = ({
             </Avatar>
             <div className="text-center mt-3">
               <div className="font-semibold text-lg">{camper.name}</div>
-              <div className="text-sm text-muted-foreground">Current Balance: ${camper.owl_pay_balance.toFixed(2)}</div>
+              <div className="text-sm text-muted-foreground">{isStaff ? "Running Tab" : `Current Balance: $${camper.owl_pay_balance.toFixed(2)}`}</div>
             </div>
             {isFirstScanToday && (
               <Badge className="bg-green-500 text-white mt-2">
@@ -207,8 +212,8 @@ const OwlPayTransactionSummary = ({
                   <span className="text-primary">${total.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between p-2 rounded-lg bg-muted/50">
-                  <span className="text-sm">New Balance:</span>
-                  <span className={`font-bold ${newBalance < 5 ? "text-destructive" : newBalance < 15 ? "text-yellow-600" : "text-green-600"}`}>
+                  <span className="text-sm">{isStaff ? "Tab Total:" : "New Balance:"}</span>
+                  <span className={`font-bold ${isStaff ? "text-primary" : newBalance < 5 ? "text-destructive" : newBalance < 15 ? "text-yellow-600" : "text-green-600"}`}>
                     ${animatedBalance.toFixed(2)}
                   </span>
                 </div>
@@ -231,13 +236,13 @@ const OwlPayTransactionSummary = ({
               className="w-full owlpay-gradient-header text-white shadow-xl text-lg active:scale-95 transition-transform"
               size="lg"
               onClick={handleComplete}
-              disabled={processing || (!isFirstScanToday && newBalance < 0)}
+              disabled={processing || (!isStaff && !isFirstScanToday && newBalance < 0)}
             >
               {processing ? "Processing..." : isFirstScanToday && cart.length === 0 ? "🎉 Record First Scan" : "💳 Complete Transaction"}
             </Button>
           )}
 
-          {!isFirstScanToday && newBalance < 0 && cart.length > 0 && (
+          {!isStaff && !isFirstScanToday && newBalance < 0 && cart.length > 0 && (
             <p className="text-sm text-destructive text-center">⚠️ Insufficient funds</p>
           )}
         </CardContent>
