@@ -21,20 +21,20 @@ interface OwlPayItemGridProps {
 }
 
 const getCategoryIcon = (category: string) => {
-  switch (category) {
-    case "food": return <Pizza className="h-6 w-6" />;
-    case "snacks": return <Candy className="h-6 w-6" />;
-    case "drinks": return <Coffee className="h-6 w-6" />;
-    default: return <IceCream className="h-6 w-6" />;
+  switch (category.toLowerCase()) {
+    case "food": return <Pizza className="h-8 w-8" />;
+    case "snacks": return <Candy className="h-8 w-8" />;
+    case "drinks": return <Coffee className="h-8 w-8" />;
+    default: return <IceCream className="h-8 w-8" />;
   }
 };
 
-const getCategoryColor = (category: string) => {
-  switch (category) {
-    case "food": return "bg-primary/10 text-primary";
-    case "snacks": return "bg-yellow-500/10 text-yellow-600";
-    case "drinks": return "bg-green-500/10 text-green-600";
-    default: return "bg-accent/10 text-accent-foreground";
+const getCategoryGradient = (category: string) => {
+  switch (category.toLowerCase()) {
+    case "food": return "owlpay-gradient-food";
+    case "snacks": return "owlpay-gradient-snacks";
+    case "drinks": return "owlpay-gradient-drinks";
+    default: return "owlpay-gradient-default";
   }
 };
 
@@ -45,24 +45,31 @@ const OwlPayItemGrid = ({ items, cart, onAddToCart }: OwlPayItemGridProps) => {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold">🍦 Select Items</h2>
-      <div className="grid grid-cols-2 gap-3">
+      <h2 className="text-2xl font-bold">🍦 Select Items</h2>
+      <div className="grid grid-cols-2 gap-4">
         {items.map((item) => {
           const quantity = getItemQuantity(item.id);
+          const gradientClass = getCategoryGradient(item.category);
+
           return (
-            <Card key={item.id} className="relative overflow-hidden hover:shadow-md transition-all">
+            <Card
+              key={item.id}
+              className="relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl rounded-xl group"
+            >
               <Button
                 variant="ghost"
-                className="w-full h-full p-4 flex flex-col items-center gap-2 hover:bg-transparent"
+                className="w-full h-full p-5 flex flex-col items-center gap-3 hover:bg-transparent"
                 onClick={() => onAddToCart(item)}
               >
-                <div className={`w-full h-14 rounded-lg flex items-center justify-center ${getCategoryColor(item.category)}`}>
+                <div className={`${gradientClass} w-full h-20 rounded-lg flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform duration-300`}>
                   {getCategoryIcon(item.category)}
                 </div>
-                <div className="text-sm font-medium text-center">{item.name}</div>
-                <div className="text-lg font-bold text-primary">${item.price.toFixed(2)}</div>
+                <div className="text-sm font-semibold text-center">{item.name}</div>
+                <div className="text-xl font-bold text-primary">
+                  ${item.price.toFixed(2)}
+                </div>
                 {quantity > 0 && (
-                  <Badge className="absolute top-2 right-2 bg-primary text-primary-foreground">
+                  <Badge className="absolute top-2 right-2 bg-primary text-primary-foreground shadow-lg px-3 py-1 text-sm font-bold">
                     {quantity}
                   </Badge>
                 )}

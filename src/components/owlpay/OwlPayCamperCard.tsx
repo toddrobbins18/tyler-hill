@@ -28,31 +28,33 @@ const OwlPayCamperCard = ({ camper, isSelected, onSelect }: OwlPayCamperCardProp
 
   return (
     <Card
-      className={`p-3 cursor-pointer transition-all duration-200 ${
+      className={`p-4 cursor-pointer transition-all duration-300 rounded-xl ${
         isSelected
-          ? "ring-2 ring-primary bg-primary/5"
-          : "hover:shadow-md"
+          ? "ring-2 ring-primary shadow-xl bg-primary/5 scale-[1.02]"
+          : "hover:shadow-xl hover:-translate-y-0.5"
       }`}
       onClick={() => onSelect(camper)}
     >
       <div className="flex items-center gap-3">
-        <div className="flex-shrink-0">
+        <div className="flex-shrink-0 relative">
           {(signedUrl || camper.photo_url) ? (
-            <img
-              src={signedUrl || camper.photo_url || ""}
-              alt={camper.name}
-              className="w-10 h-10 rounded-full object-cover border-2 border-muted"
-            />
+            <div className={`relative ${isSelected ? 'animate-pulse' : ''}`}>
+              <img
+                src={signedUrl || camper.photo_url || ""}
+                alt={camper.name}
+                className="w-12 h-12 rounded-full object-cover border-2 border-primary/30 shadow-md"
+              />
+            </div>
           ) : (
-            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-              <User className="h-5 w-5 text-muted-foreground" />
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+              <User className="h-6 w-6 text-primary" />
             </div>
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="font-medium text-sm truncate">{camper.name}</div>
+          <div className="font-semibold text-base truncate">{camper.name}</div>
         </div>
-        <Badge variant="outline" className={`${balanceColor} font-bold text-sm`}>
+        <Badge variant="outline" className={`${balanceColor} font-bold text-sm px-3 py-1 shadow-sm`}>
           ${camper.owl_pay_balance.toFixed(2)}
         </Badge>
       </div>

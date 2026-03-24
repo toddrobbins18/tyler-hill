@@ -145,17 +145,17 @@ const OwlPayTransactionSummary = ({
         isFirstScan={isFirstScanToday}
       />
 
-      <Card className="sticky top-4">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">💳 Transaction</CardTitle>
-          <div className="flex flex-col items-center pt-3">
-            <Avatar className="h-20 w-20 border-4 border-primary/30 shadow-xl">
+      <Card className="sticky top-4 rounded-xl shadow-xl">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-2xl">💳 Transaction</CardTitle>
+          <div className="flex flex-col items-center pt-4 pb-2">
+            <Avatar className="h-24 w-24 border-4 border-primary/30 shadow-xl ring-2 ring-primary/20 ring-offset-2 ring-offset-background">
               {photoSrc && <AvatarImage src={photoSrc} alt={camper.name} className="object-cover" />}
-              <AvatarFallback className="bg-primary/10 text-primary font-bold text-xl">{initials}</AvatarFallback>
+              <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20 text-2xl font-bold text-primary">{initials}</AvatarFallback>
             </Avatar>
-            <div className="text-center mt-2">
+            <div className="text-center mt-3">
               <div className="font-semibold text-lg">{camper.name}</div>
-              <div className="text-sm text-muted-foreground">Balance: ${camper.owl_pay_balance.toFixed(2)}</div>
+              <div className="text-sm text-muted-foreground">Current Balance: ${camper.owl_pay_balance.toFixed(2)}</div>
             </div>
             {isFirstScanToday && (
               <Badge className="bg-green-500 text-white mt-2">
@@ -228,7 +228,7 @@ const OwlPayTransactionSummary = ({
 
           {(cart.length > 0 || isFirstScanToday) && (
             <Button
-              className="w-full"
+              className="w-full owlpay-gradient-header text-white shadow-xl text-lg active:scale-95 transition-transform"
               size="lg"
               onClick={handleComplete}
               disabled={processing || (!isFirstScanToday && newBalance < 0)}
