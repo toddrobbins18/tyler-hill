@@ -130,7 +130,8 @@ export default function OwlPay() {
       };
       setSelectedCamper(staffAsCamper);
       setCart([]);
-      setIsFirstScanToday(false); // Staff do NOT get free first scan
+      setIsFirstScanToday(false);
+      setIsStaffSelected(true);
       toast({ title: "✓ Staff Found", description: staffMatch.name, duration: 2000 });
       setTimeout(() => { setSearchTerm(""); setScanStatus("idle"); }, 1000);
       return;
