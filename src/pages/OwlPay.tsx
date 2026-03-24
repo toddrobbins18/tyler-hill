@@ -209,6 +209,7 @@ export default function OwlPay() {
           <TabsTrigger value="items"><Package className="h-4 w-4 mr-1" /> Items</TabsTrigger>
           <TabsTrigger value="balances"><DollarSign className="h-4 w-4 mr-1" /> Balances</TabsTrigger>
           <TabsTrigger value="reports"><BarChart3 className="h-4 w-4 mr-1" /> Reports</TabsTrigger>
+          <TabsTrigger value="settings"><Settings className="h-4 w-4 mr-1" /> Settings</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pos">
