@@ -24,6 +24,7 @@ export default function OwlPay() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCamper, setSelectedCamper] = useState<OwlPayCamper | null>(null);
   const [campers, setCampers] = useState<OwlPayCamper[]>([]);
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [items, setItems] = useState<OwlPayItem[]>([]);
   const [cart, setCart] = useState<OwlPayCartItem[]>([]);
   const [isFirstScanToday, setIsFirstScanToday] = useState(false);
