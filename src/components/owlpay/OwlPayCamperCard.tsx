@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { User } from "lucide-react";
+import { useSignedPhotoUrl } from "@/hooks/useSignedPhotoUrl";
 
 export interface OwlPayCamper {
   id: string;
@@ -18,6 +19,7 @@ interface OwlPayCamperCardProps {
 }
 
 const OwlPayCamperCard = ({ camper, isSelected, onSelect }: OwlPayCamperCardProps) => {
+  const { signedUrl } = useSignedPhotoUrl(camper.photo_url);
   const balanceColor = camper.owl_pay_balance < 5
     ? "text-destructive"
     : camper.owl_pay_balance < 15
@@ -35,9 +37,9 @@ const OwlPayCamperCard = ({ camper, isSelected, onSelect }: OwlPayCamperCardProp
     >
       <div className="flex items-center gap-3">
         <div className="flex-shrink-0">
-          {camper.photo_url ? (
+          {(signedUrl || camper.photo_url) ? (
             <img
-              src={camper.photo_url}
+              src={signedUrl || camper.photo_url || ""}
               alt={camper.name}
               className="w-10 h-10 rounded-full object-cover border-2 border-muted"
             />

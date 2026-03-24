@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Minus, Plus, Trash2, CheckCircle, AlertCircle, Sparkles } from "lucide-react";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useCountAnimation } from "@/hooks/useCountAnimation";
+import { useSignedPhotoUrl } from "@/hooks/useSignedPhotoUrl";
 import type { OwlPayCamper } from "./OwlPayCamperCard";
 import type { OwlPayCartItem } from "./OwlPayItemGrid";
 import OwlPaySuccessModal from "./OwlPaySuccessModal";
@@ -36,6 +37,7 @@ const OwlPayTransactionSummary = ({
   } | null>(null);
   const { toast } = useToast();
   const { currentCompany } = useCompany();
+  const { signedUrl } = useSignedPhotoUrl(camper.photo_url);
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const total = isFirstScanToday ? 0 : subtotal;
@@ -128,6 +130,7 @@ const OwlPayTransactionSummary = ({
   };
 
   const initials = camper.name.split(' ').map(n => n[0]).join('').toUpperCase();
+  const photoSrc = signedUrl || camper.photo_url;
 
   return (
     <>
@@ -146,12 +149,12 @@ const OwlPayTransactionSummary = ({
         <CardHeader className="pb-3">
           <CardTitle className="text-lg">💳 Transaction</CardTitle>
           <div className="flex flex-col items-center pt-3">
-            <Avatar className="h-16 w-16 border-2 border-primary/30">
-              {camper.photo_url && <AvatarImage src={camper.photo_url} alt={camper.name} className="object-cover" />}
-              <AvatarFallback className="bg-primary/10 text-primary font-bold">{initials}</AvatarFallback>
+            <Avatar className="h-20 w-20 border-4 border-primary/30 shadow-xl">
+              {photoSrc && <AvatarImage src={photoSrc} alt={camper.name} className="object-cover" />}
+              <AvatarFallback className="bg-primary/10 text-primary font-bold text-xl">{initials}</AvatarFallback>
             </Avatar>
             <div className="text-center mt-2">
-              <div className="font-semibold">{camper.name}</div>
+              <div className="font-semibold text-lg">{camper.name}</div>
               <div className="text-sm text-muted-foreground">Balance: ${camper.owl_pay_balance.toFixed(2)}</div>
             </div>
             {isFirstScanToday && (
