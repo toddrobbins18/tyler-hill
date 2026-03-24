@@ -144,6 +144,7 @@ function AppContent() {
                                 <Route path="/appointments" element={<Appointments />} />
                                 <Route path="/daily-schedule" element={<DailySchedule />} />
                                 <Route path="/elective-signup" element={<ElectiveSignUp />} />
+                                <Route path="/owl-pay" element={<OwlPay />} />
                                 <Route path="/notification-preferences" element={<NotificationPreferences />} />
                                 <Route path="*" element={<NotFound />} />
                               </Routes>

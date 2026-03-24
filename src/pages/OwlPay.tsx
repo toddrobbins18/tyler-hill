@@ -24,7 +24,7 @@ export default function OwlPay() {
   const [scanBuffer, setScanBuffer] = useState("");
   const [lastKeyTime, setLastKeyTime] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { toast } = useToast();
   const { currentCompany } = useCompany();
