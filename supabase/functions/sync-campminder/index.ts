@@ -2067,14 +2067,34 @@ async function performFullSync(
           const newTransactions: any[] = [];
           const balanceAdjustments = new Map<string, number>(); // child_id -> total adjustment
 
+          // Log first transaction to discover field names
+          if (financialTransactions.length > 0) {
+            const sample = financialTransactions[0];
+            console.log(`[Financials DEBUG] First tx keys: ${JSON.stringify(Object.keys(sample))}`);
+            console.log(`[Financials DEBUG] First tx full: ${JSON.stringify(sample).substring(0, 2000)}`);
+            // Find any key containing 'person' or 'Person'
+            const personKeys = Object.keys(sample).filter(k => k.toLowerCase().includes('person'));
+            console.log(`[Financials DEBUG] Person-related keys: ${JSON.stringify(personKeys)}`);
+          }
+
           for (const tx of financialTransactions) {
-            const txId = String(tx.TransactionID || tx.Id || tx.transactionId || '');
+            const txId = String(tx.TransactionID || tx.Id || tx.transactionId || tx.TransactionId || tx.ID || '');
             if (!txId || syncedIds.has(txId)) {
               financialSkipped++;
               continue;
             }
 
-            const personId = String(tx.PersonID || tx.personId || tx.PersonId || '');
+            // Try all possible person ID field names
+            const personId = String(
+              tx.PersonID || tx.personId || tx.PersonId || 
+              tx.PayerPersonId || tx.PayerPersonID || tx.payerPersonId ||
+              tx.AccountPersonId || tx.AccountPersonID ||
+              tx.BillToPersonId || tx.BillToPersonID ||
+              tx.RelatedPersonId || tx.RelatedPersonID ||
+              tx.Payer?.PersonID || tx.Payer?.PersonId ||
+              tx.Person?.ID || tx.Person?.Id ||
+              ''
+            );
             const amount = Number(tx.Amount || tx.amount || 0);
             const isReversed = tx.IsReversed || tx.isReversed || tx.Reversed || false;
             const isDeleted = tx.IsDeleted || tx.isDeleted || tx.Deleted || false;
