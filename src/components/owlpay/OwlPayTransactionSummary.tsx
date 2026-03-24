@@ -18,6 +18,7 @@ interface OwlPayTransactionSummaryProps {
   camper: OwlPayCamper;
   cart: OwlPayCartItem[];
   isFirstScanToday: boolean;
+  isStaff?: boolean;
   onUpdateCart: (cart: OwlPayCartItem[]) => void;
   onComplete: () => void;
 }
