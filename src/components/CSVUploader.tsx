@@ -14,6 +14,16 @@ import {
   parseIncidentReportRow, parseMedicationRow, parseCalendarEventRow, parseSportsCalendarRow, parseDailyWolfContentRow
 } from "@/lib/validationSchemas";
 import { z } from "zod";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface CSVUploaderProps {
   tableName: string;
@@ -28,6 +38,8 @@ const STAFF_PERSON_ID_TABLES = ['staff'];
 export default function CSVUploader({ tableName, onUploadComplete }: CSVUploaderProps) {
   const [uploading, setUploading] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [droppedCampers, setDroppedCampers] = useState<{ id: string; name: string; person_id: string }[]>([]);
+  const [showDroppedDialog, setShowDroppedDialog] = useState(false);
   const { currentCompany } = useCompany();
   const { selectedSeason } = useSeason();
 
@@ -63,6 +75,26 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
       if (staff.person_id) mapping.set(staff.person_id, staff.id);
     });
     return mapping;
+  };
+
+  const markDroppedCampersInactive = async () => {
+    if (droppedCampers.length === 0) return;
+    
+    const ids = droppedCampers.map(c => c.id);
+    const { error } = await supabase
+      .from('children')
+      .update({ status: 'inactive' } as any)
+      .in('id', ids);
+    
+    if (error) {
+      console.error('Error marking dropped campers:', error);
+      toast.error('Failed to mark dropped campers as inactive');
+    } else {
+      toast.success(`${droppedCampers.length} dropped camper(s) marked as inactive`);
+    }
+    setDroppedCampers([]);
+    setShowDroppedDialog(false);
+    onUploadComplete?.();
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -167,6 +199,84 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
       if (errors.length > 0) {
         toast.error(`Validation failed:\n${errors.slice(0, 5).join("\n")}${errors.length > 5 ? `\n...and ${errors.length - 5} more errors` : ""}`);
         setUploading(false);
+        return;
+      }
+
+      // --- CHILDREN: Upsert by person_id + detect dropped campers ---
+      if (tableName === 'children') {
+        const csvPersonIds = new Set(validatedRows.map(r => r.person_id).filter(Boolean));
+
+        // Fetch all existing active children for this company + season
+        const { data: existingChildren } = await supabase
+          .from('children')
+          .select('id, name, person_id, status')
+          .eq('company_id', currentCompany?.id)
+          .eq('season', selectedSeason)
+          .neq('status', 'inactive');
+
+        const existingMap = new Map<string, { id: string; name: string; person_id: string }>();
+        (existingChildren || []).forEach(child => {
+          if (child.person_id) existingMap.set(child.person_id, child);
+        });
+
+        // Split into updates and inserts
+        const toUpdate: any[] = [];
+        const toInsert: any[] = [];
+
+        for (const row of validatedRows) {
+          const rowData: any = {
+            ...row,
+            company_id: currentCompany?.id,
+            season: selectedSeason,
+            status: 'active',
+          };
+
+          if (row.person_id && existingMap.has(row.person_id)) {
+            // Update existing
+            toUpdate.push({ existingId: existingMap.get(row.person_id)!.id, data: rowData });
+          } else {
+            // New camper
+            toInsert.push(rowData);
+          }
+        }
+
+        // Perform inserts
+        if (toInsert.length > 0) {
+          const { error: insertError } = await supabase.from('children').insert(toInsert as any);
+          if (insertError) throw insertError;
+        }
+
+        // Perform updates
+        let updateErrors = 0;
+        for (const item of toUpdate) {
+          const { existingId, data } = item;
+          delete data.person_id; // Don't overwrite person_id
+          const { error: updateError } = await supabase
+            .from('children')
+            .update(data as any)
+            .eq('id', existingId);
+          if (updateError) updateErrors++;
+        }
+
+        // Detect dropped campers (in DB but not in CSV)
+        const dropped = (existingChildren || []).filter(
+          child => child.person_id && !csvPersonIds.has(child.person_id) && child.status !== 'inactive'
+        );
+
+        const summary = [];
+        if (toInsert.length > 0) summary.push(`${toInsert.length} added`);
+        if (toUpdate.length > 0) summary.push(`${toUpdate.length} updated`);
+        if (updateErrors > 0) summary.push(`${updateErrors} update errors`);
+        toast.success(`Camper sync complete: ${summary.join(', ')}`);
+
+        if (dropped.length > 0) {
+          setDroppedCampers(dropped.map(c => ({ id: c.id, name: c.name, person_id: c.person_id })));
+          setShowDroppedDialog(true);
+        }
+
+        onUploadComplete?.();
+        setUploading(false);
+        event.target.value = '';
         return;
       }
 
@@ -276,6 +386,34 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
         </Button>
       </div>
       <CSVFormatGuide open={showGuide} onOpenChange={setShowGuide} />
+
+      {/* Dropped Campers Confirmation Dialog */}
+      <AlertDialog open={showDroppedDialog} onOpenChange={setShowDroppedDialog}>
+        <AlertDialogContent className="max-h-[80vh] overflow-y-auto">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Dropped Campers Detected</AlertDialogTitle>
+            <AlertDialogDescription>
+              The following {droppedCampers.length} camper(s) were not found in the uploaded CSV and may have dropped from enrollment. Would you like to mark them as inactive?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-60 overflow-y-auto border rounded-md p-2 space-y-1">
+            {droppedCampers.map(c => (
+              <div key={c.id} className="flex items-center justify-between text-sm py-1 px-2 rounded bg-muted/50">
+                <span className="font-medium">{c.name}</span>
+                <span className="text-muted-foreground text-xs">{c.person_id}</span>
+              </div>
+            ))}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setDroppedCampers([]); setShowDroppedDialog(false); }}>
+              Keep Active
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={markDroppedCampersInactive} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Mark as Inactive
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
