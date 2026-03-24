@@ -258,21 +258,29 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
           if (updateError) updateErrors++;
         }
 
-        // Detect dropped campers (in DB but not in CSV)
+        // Auto-mark dropped campers as inactive (like staff sync)
         const dropped = (existingChildren || []).filter(
           child => child.person_id && !csvPersonIds.has(child.person_id) && child.status !== 'inactive'
         );
 
+        if (dropped.length > 0) {
+          const droppedIds = dropped.map(c => c.id);
+          const { error: dropError } = await supabase
+            .from('children')
+            .update({ status: 'inactive' } as any)
+            .in('id', droppedIds);
+          
+          if (dropError) {
+            console.error('Error marking dropped campers:', dropError);
+          }
+        }
+
         const summary = [];
         if (toInsert.length > 0) summary.push(`${toInsert.length} added`);
         if (toUpdate.length > 0) summary.push(`${toUpdate.length} updated`);
+        if (dropped.length > 0) summary.push(`${dropped.length} dropped`);
         if (updateErrors > 0) summary.push(`${updateErrors} update errors`);
         toast.success(`Camper sync complete: ${summary.join(', ')}`);
-
-        if (dropped.length > 0) {
-          setDroppedCampers(dropped.map(c => ({ id: c.id, name: c.name, person_id: c.person_id })));
-          setShowDroppedDialog(true);
-        }
 
         onUploadComplete?.();
         setUploading(false);
