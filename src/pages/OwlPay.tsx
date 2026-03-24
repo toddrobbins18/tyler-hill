@@ -40,6 +40,7 @@ export default function OwlPay() {
 
   useEffect(() => {
     loadCampers();
+    loadStaff();
     loadItems();
   }, [currentCompany, selectedSeason]);
 
