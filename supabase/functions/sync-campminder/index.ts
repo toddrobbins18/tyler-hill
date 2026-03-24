@@ -2067,37 +2067,47 @@ async function performFullSync(
           const newTransactions: any[] = [];
           const balanceAdjustments = new Map<string, number>(); // child_id -> total adjustment
 
+          // Helper to get field value with inconsistent casing from CampMinder
+          const getField = (obj: any, ...names: string[]): any => {
+            for (const name of names) {
+              // Try exact match first
+              if (obj[name] !== undefined) return obj[name];
+              // Try common casing variants
+              const lower = name.toLowerCase();
+              const upper = name.charAt(0).toUpperCase() + name.slice(1);
+              const allCaps = name.toUpperCase();
+              if (obj[lower] !== undefined) return obj[lower];
+              if (obj[upper] !== undefined) return obj[upper];
+              if (obj[allCaps] !== undefined) return obj[allCaps];
+            }
+            // Last resort: case-insensitive search through all keys
+            const lowerNames = names.map(n => n.toLowerCase());
+            for (const key of Object.keys(obj)) {
+              if (lowerNames.includes(key.toLowerCase())) return obj[key];
+            }
+            return undefined;
+          };
+
           // Log first transaction to discover field names
           if (financialTransactions.length > 0) {
             const sample = financialTransactions[0];
             console.log(`[Financials DEBUG] First tx keys: ${JSON.stringify(Object.keys(sample))}`);
             console.log(`[Financials DEBUG] First tx full: ${JSON.stringify(sample).substring(0, 2000)}`);
-            // Find any key containing 'person' or 'Person'
-            const personKeys = Object.keys(sample).filter(k => k.toLowerCase().includes('person'));
-            console.log(`[Financials DEBUG] Person-related keys: ${JSON.stringify(personKeys)}`);
+            const personVal = getField(sample, 'personId', 'PersonId', 'PersonID');
+            console.log(`[Financials DEBUG] getField personId result: ${personVal}`);
           }
 
           for (const tx of financialTransactions) {
-            const txId = String(tx.TransactionID || tx.Id || tx.transactionId || tx.TransactionId || tx.ID || '');
+            const txId = String(getField(tx, 'transactionId', 'TransactionId', 'TransactionID', 'Id', 'ID') || '');
             if (!txId || syncedIds.has(txId)) {
               financialSkipped++;
               continue;
             }
 
-            // Try all possible person ID field names
-            const personId = String(
-              tx.PersonID || tx.personId || tx.PersonId || 
-              tx.PayerPersonId || tx.PayerPersonID || tx.payerPersonId ||
-              tx.AccountPersonId || tx.AccountPersonID ||
-              tx.BillToPersonId || tx.BillToPersonID ||
-              tx.RelatedPersonId || tx.RelatedPersonID ||
-              tx.Payer?.PersonID || tx.Payer?.PersonId ||
-              tx.Person?.ID || tx.Person?.Id ||
-              ''
-            );
-            const amount = Number(tx.Amount || tx.amount || 0);
-            const isReversed = tx.IsReversed || tx.isReversed || tx.Reversed || false;
-            const isDeleted = tx.IsDeleted || tx.isDeleted || tx.Deleted || false;
+            const personId = String(getField(tx, 'personId', 'PersonId', 'PersonID') || '');
+            const amount = Number(getField(tx, 'amount', 'Amount') || 0);
+            const isReversed = getField(tx, 'isReversed', 'IsReversed', 'Reversed') || false;
+            const isDeleted = getField(tx, 'isDeleted', 'IsDeleted', 'Deleted') || false;
 
             const child = personToChildMap.get(personId);
             if (!child) {
