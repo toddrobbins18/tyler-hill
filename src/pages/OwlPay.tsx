@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
-import { Search, ShoppingCart, Package, BarChart3, DollarSign, Scan, CheckCircle, XCircle, Users } from "lucide-react";
+import { Search, ShoppingCart, Package, BarChart3, DollarSign, Scan, CheckCircle, XCircle, Users, Settings } from "lucide-react";
 import OwlPayCamperCard, { type OwlPayCamper } from "@/components/owlpay/OwlPayCamperCard";
 import OwlPayItemGrid, { type OwlPayItem, type OwlPayCartItem } from "@/components/owlpay/OwlPayItemGrid";
 import OwlPayTransactionSummary from "@/components/owlpay/OwlPayTransactionSummary";
