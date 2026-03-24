@@ -115,12 +115,14 @@ const OwlPayTransactionSummary = ({
           .insert(transactionInserts);
         if (txError) throw txError;
 
-        // Update balance
-        const { error: balError } = await supabase
-          .from("children")
-          .update({ owl_pay_balance: newBalance } as any)
-          .eq("id", camper.id);
-        if (balError) throw balError;
+        // Only deduct balance for campers (not staff)
+        if (!isStaff) {
+          const { error: balError } = await supabase
+            .from("children")
+            .update({ owl_pay_balance: newBalance } as any)
+            .eq("id", camper.id);
+          if (balError) throw balError;
+        }
       }
 
       setSuccessData({ show: true, chargedAmount: total, newBalance });
