@@ -383,33 +383,6 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
       </div>
       <CSVFormatGuide open={showGuide} onOpenChange={setShowGuide} />
 
-      {/* Dropped Campers Confirmation Dialog */}
-      <AlertDialog open={showDroppedDialog} onOpenChange={setShowDroppedDialog}>
-        <AlertDialogContent className="max-h-[80vh] overflow-y-auto">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Dropped Campers Detected</AlertDialogTitle>
-            <AlertDialogDescription>
-              The following {droppedCampers.length} camper(s) were not found in the uploaded CSV and may have dropped from enrollment. Would you like to mark them as inactive?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="max-h-60 overflow-y-auto border rounded-md p-2 space-y-1">
-            {droppedCampers.map(c => (
-              <div key={c.id} className="flex items-center justify-between text-sm py-1 px-2 rounded bg-muted/50">
-                <span className="font-medium">{c.name}</span>
-                <span className="text-muted-foreground text-xs">{c.person_id}</span>
-              </div>
-            ))}
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => { setDroppedCampers([]); setShowDroppedDialog(false); }}>
-              Keep Active
-            </AlertDialogCancel>
-            <AlertDialogAction onClick={markDroppedCampersInactive} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Mark as Inactive
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 }
