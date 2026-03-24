@@ -12,6 +12,7 @@ import OwlPayTransactionSummary from "@/components/owlpay/OwlPayTransactionSumma
 import OwlPayItemManagement from "@/components/owlpay/OwlPayItemManagement";
 import OwlPayReports from "@/components/owlpay/OwlPayReports";
 import OwlPayBalanceManagement from "@/components/owlpay/OwlPayBalanceManagement";
+import OwlPayEmailSettings from "@/components/owlpay/OwlPayEmailSettings";
 
 interface StaffMember {
   id: string;
