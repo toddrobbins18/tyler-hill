@@ -69,7 +69,7 @@ const OwlPayTransactionSummary = ({
       return;
     }
 
-    if (!isFirstScanToday && newBalance < 0) {
+    if (!isStaff && !isFirstScanToday && newBalance < 0) {
       toast({ title: "Insufficient funds", variant: "destructive" });
       return;
     }
