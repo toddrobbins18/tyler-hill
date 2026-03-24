@@ -625,6 +625,7 @@ export type Database = {
           leader_id: string | null
           medical_notes: string | null
           name: string
+          owl_pay_balance: number
           person_id: string
           photo_url: string | null
           rfid: string | null
@@ -664,6 +665,7 @@ export type Database = {
           leader_id?: string | null
           medical_notes?: string | null
           name: string
+          owl_pay_balance?: number
           person_id: string
           photo_url?: string | null
           rfid?: string | null
@@ -703,6 +705,7 @@ export type Database = {
           leader_id?: string | null
           medical_notes?: string | null
           name?: string
+          owl_pay_balance?: number
           person_id?: string
           photo_url?: string | null
           rfid?: string | null
@@ -2087,6 +2090,147 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      owl_pay_daily_scans: {
+        Row: {
+          child_id: string
+          company_id: string
+          created_at: string | null
+          id: string
+          scan_date: string
+        }
+        Insert: {
+          child_id: string
+          company_id: string
+          created_at?: string | null
+          id?: string
+          scan_date?: string
+        }
+        Update: {
+          child_id?: string
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          scan_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "owl_pay_daily_scans_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "owl_pay_daily_scans_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      owl_pay_items: {
+        Row: {
+          active: boolean
+          category: string
+          company_id: string
+          created_at: string | null
+          id: string
+          name: string
+          price: number
+          updated_at: string | null
+        }
+        Insert: {
+          active?: boolean
+          category?: string
+          company_id: string
+          created_at?: string | null
+          id?: string
+          name: string
+          price?: number
+          updated_at?: string | null
+        }
+        Update: {
+          active?: boolean
+          category?: string
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          name?: string
+          price?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "owl_pay_items_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      owl_pay_transactions: {
+        Row: {
+          amount: number
+          child_id: string | null
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          is_free: boolean
+          item_id: string | null
+          notes: string | null
+          transaction_type: string
+        }
+        Insert: {
+          amount?: number
+          child_id?: string | null
+          company_id: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_free?: boolean
+          item_id?: string | null
+          notes?: string | null
+          transaction_type?: string
+        }
+        Update: {
+          amount?: number
+          child_id?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_free?: boolean
+          item_id?: string | null
+          notes?: string | null
+          transaction_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "owl_pay_transactions_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "owl_pay_transactions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "owl_pay_transactions_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "owl_pay_items"
             referencedColumns: ["id"]
           },
         ]
