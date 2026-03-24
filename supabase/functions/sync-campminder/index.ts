@@ -2033,7 +2033,7 @@ async function performFullSync(
           CM_FINANCIALS_URL,
           token,
           subscriptionKey,
-          { clientid: clientId, categoryid: CANTEEN_CATEGORY_ID }
+          { clientid: clientId, categoryid: CANTEEN_CATEGORY_ID, season: season }
         );
 
         console.log(`[Financials] Found ${financialTransactions.length} canteen transactions from CampMinder`);
