@@ -212,8 +212,8 @@ const OwlPayTransactionSummary = ({
                   <span className="text-primary">${total.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between p-2 rounded-lg bg-muted/50">
-                  <span className="text-sm">New Balance:</span>
-                  <span className={`font-bold ${newBalance < 5 ? "text-destructive" : newBalance < 15 ? "text-yellow-600" : "text-green-600"}`}>
+                  <span className="text-sm">{isStaff ? "Tab Total:" : "New Balance:"}</span>
+                  <span className={`font-bold ${isStaff ? "text-primary" : newBalance < 5 ? "text-destructive" : newBalance < 15 ? "text-yellow-600" : "text-green-600"}`}>
                     ${animatedBalance.toFixed(2)}
                   </span>
                 </div>
