@@ -2037,6 +2037,10 @@ async function performFullSync(
         );
 
         console.log(`[Financials] Found ${financialTransactions.length} canteen transactions from CampMinder`);
+        if (financialTransactions.length > 0) {
+          console.log(`[Financials DEBUG] Sample transaction keys: ${JSON.stringify(Object.keys(financialTransactions[0]))}`);
+          console.log(`[Financials DEBUG] Sample transaction: ${JSON.stringify(financialTransactions[0])}`);
+        }
 
         if (financialTransactions.length > 0) {
           // Get already-synced transaction IDs to avoid double-counting
