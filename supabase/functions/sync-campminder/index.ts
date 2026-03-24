@@ -2167,6 +2167,9 @@ async function performFullSync(
       staff_updated: staffUpdatedCount,
       parentEmails: parentEmailMap.size,
       parentPhones: parentPhoneMap.size,
+      financial_deposits: financialDeposits,
+      financial_reversals: financialReversals,
+      financial_skipped: financialSkipped,
       season: season,
       missing_campers_count: missingCamperIds.length,
       fallback_data_used: {
