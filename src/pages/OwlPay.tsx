@@ -134,9 +134,8 @@ export default function OwlPay() {
     }
 
     setScanStatus("error");
-      toast({ title: "RFID not found", description: `No camper with RFID: ${rfid}`, variant: "destructive", duration: 3000 });
-      setTimeout(() => setScanStatus("idle"), 2000);
-    }
+    toast({ title: "RFID not found", description: `No camper or staff with RFID: ${rfid}`, variant: "destructive", duration: 3000 });
+    setTimeout(() => setScanStatus("idle"), 2000);
   };
 
   // RFID keyboard listener
