@@ -189,6 +189,135 @@ serve(async (req) => {
           });
         }
       }
+
+      // =====================================================
+      // CAMPER CLEANUP: Mark dropped campers as inactive
+      // =====================================================
+      if (cleanup_type === 'campers' || cleanup_type === 'all') {
+        console.log(`[Cleanup] Starting camper cleanup for ${company.name}...`);
+
+        // Get CampMinder credentials (reuse from staff if already fetched)
+        const camperApiKeyEncrypted = company.campminder_api_key_encrypted;
+        const camperSubKeyEncrypted = company.campminder_subscription_key_encrypted;
+
+        if (!camperApiKeyEncrypted || !camperSubKeyEncrypted) {
+          console.log(`[Cleanup] Skipping camper cleanup for ${company.name} - missing credentials`);
+          results.push({ company: company.name, type: 'campers', status: 'skipped', reason: 'Missing credentials' });
+        } else {
+          const { data: decApiKey } = await supabase.rpc('decrypt_secret', { encrypted: camperApiKeyEncrypted });
+          const { data: decSubKey } = await supabase.rpc('decrypt_secret', { encrypted: camperSubKeyEncrypted });
+
+          if (!decApiKey || !decSubKey) {
+            results.push({ company: company.name, type: 'campers', status: 'skipped', reason: 'Decryption failed' });
+          } else {
+            // Auth
+            const camperAuthResponse = await fetch('https://api.campminder.com/auth/apikey', {
+              method: 'GET',
+              headers: {
+                'Authorization': decApiKey,
+                'Ocp-Apim-Subscription-Key': decSubKey,
+              },
+            });
+
+            if (!camperAuthResponse.ok) {
+              results.push({ company: company.name, type: 'campers', status: 'error', reason: 'Auth failed' });
+            } else {
+              const camperAuthData = await camperAuthResponse.json();
+              const camperToken = camperAuthData.Token;
+              const camperClientId = camperAuthData.ClientIDs ? String(camperAuthData.ClientIDs).split(',')[0].trim() : '';
+
+              if (!camperToken) {
+                results.push({ company: company.name, type: 'campers', status: 'error', reason: 'No token' });
+              } else {
+                // Fetch enrolled attendees from CampMinder
+                console.log(`[Cleanup] Fetching enrolled attendees for ${company.name}, season ${season}...`);
+                const attendeesUrl = `https://api.campminder.com/sessions/attendees?clientid=${camperClientId}&seasonid=${season}&status=2&pagenumber=1&pagesize=500`;
+                
+                const attendeesResponse = await fetch(attendeesUrl, {
+                  method: 'GET',
+                  headers: {
+                    'Authorization': `Bearer ${camperToken}`,
+                    'Ocp-Apim-Subscription-Key': decSubKey,
+                  },
+                });
+
+                if (!attendeesResponse.ok) {
+                  const errorText = await attendeesResponse.text();
+                  console.error(`[Cleanup] Failed to fetch attendees: ${attendeesResponse.status} - ${errorText}`);
+                  results.push({ company: company.name, type: 'campers', status: 'error', reason: 'Attendee fetch failed' });
+                } else {
+                  const attendeesData = await attendeesResponse.json();
+                  const enrolledList = attendeesData?.Results || attendeesData?.data || attendeesData || [];
+
+                  const enrolledPersonIds = new Set<string>();
+                  for (const attendee of enrolledList) {
+                    const personId = String(attendee.PersonID || attendee.ID || '');
+                    if (personId) enrolledPersonIds.add(personId);
+                  }
+
+                  console.log(`[Cleanup] Found ${enrolledPersonIds.size} enrolled campers in CampMinder`);
+
+                  // Get existing active campers from database
+                  const { data: existingCampers, error: camperFetchError } = await supabase
+                    .from('children')
+                    .select('id, person_id, name, status')
+                    .eq('company_id', company.id)
+                    .eq('season', season)
+                    .neq('status', 'inactive');
+
+                  if (camperFetchError) {
+                    console.error(`[Cleanup] Error fetching existing campers:`, camperFetchError);
+                    results.push({ company: company.name, type: 'campers', status: 'error', reason: 'DB fetch failed' });
+                  } else {
+                    const campersToDeactivate = (existingCampers || []).filter(
+                      (c: any) => c.person_id && !enrolledPersonIds.has(c.person_id)
+                    );
+
+                    console.log(`[Cleanup] Found ${campersToDeactivate.length} campers to mark inactive (${existingCampers?.length || 0} total in DB)`);
+
+                    if (campersToDeactivate.length > 0) {
+                      campersToDeactivate.slice(0, 10).forEach((c: any) => {
+                        console.log(`  - Marking inactive: ${c.name} (person_id: ${c.person_id})`);
+                      });
+
+                      const idsToDeactivate = campersToDeactivate.map((c: any) => c.id);
+                      const { error: updateError } = await supabase
+                        .from('children')
+                        .update({ status: 'inactive', updated_at: new Date().toISOString() })
+                        .in('id', idsToDeactivate);
+
+                      if (updateError) {
+                        console.error(`[Cleanup] Error marking campers inactive:`, updateError);
+                        results.push({ company: company.name, type: 'campers', status: 'error', reason: 'Update failed' });
+                      } else {
+                        console.log(`[Cleanup] Successfully marked ${campersToDeactivate.length} dropped campers as inactive`);
+                        results.push({
+                          company: company.name,
+                          type: 'campers',
+                          status: 'success',
+                          deactivated: campersToDeactivate.length,
+                          remaining_active: (existingCampers?.length || 0) - campersToDeactivate.length,
+                          enrolled_in_campminder: enrolledPersonIds.size,
+                        });
+                      }
+                    } else {
+                      results.push({
+                        company: company.name,
+                        type: 'campers',
+                        status: 'success',
+                        deactivated: 0,
+                        remaining_active: existingCampers?.length || 0,
+                        enrolled_in_campminder: enrolledPersonIds.size,
+                        message: 'No dropped campers to deactivate',
+                      });
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
 
     return new Response(JSON.stringify({ 
