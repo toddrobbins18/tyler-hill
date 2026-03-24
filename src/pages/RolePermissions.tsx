@@ -70,7 +70,10 @@ const getCompanyMenuItems = (companySlug?: string) => {
 
   // Special Meals - ONLY for tyler-hill-camp (matches AppSidebar)
   if (companySlug === 'tyler-hill-camp') {
-    baseItems.push({ id: "special-meals", label: "Special Meals", icon: "🍽️" });
+    baseItems.push(
+      { id: "special-meals", label: "Special Meals", icon: "🍽️" },
+      { id: "owl-pay", label: "Owl Pay", icon: "🦉" }
+    );
   }
 
   // Admin items (all companies)
