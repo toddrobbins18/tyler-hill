@@ -236,7 +236,7 @@ const OwlPayTransactionSummary = ({
               className="w-full owlpay-gradient-header text-white shadow-xl text-lg active:scale-95 transition-transform"
               size="lg"
               onClick={handleComplete}
-              disabled={processing || (!isFirstScanToday && newBalance < 0)}
+              disabled={processing || (!isStaff && !isFirstScanToday && newBalance < 0)}
             >
               {processing ? "Processing..." : isFirstScanToday && cart.length === 0 ? "🎉 Record First Scan" : "💳 Complete Transaction"}
             </Button>
