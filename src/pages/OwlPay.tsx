@@ -289,6 +289,10 @@ export default function OwlPay() {
         <TabsContent value="reports">
           <OwlPayReports />
         </TabsContent>
+
+        <TabsContent value="settings">
+          <OwlPayEmailSettings />
+        </TabsContent>
       </Tabs>
     </div>
   );
