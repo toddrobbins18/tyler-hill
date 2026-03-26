@@ -881,6 +881,7 @@ export default function ReportingCenter() {
       re_enrollment: 'RE-ENROLLMENT REPORT',
       appointments: 'APPOINTMENTS REPORT',
       tshirt_sizes: 'T-SHIRT SIZE REPORT',
+      birthdays: 'BIRTHDAY REPORT',
     };
     
     const title = titleMap[reportType] || reportType.replace('_', ' ').toUpperCase();
