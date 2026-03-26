@@ -17,7 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
 
-type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'conflicts' | 'medications' | 'allergies' | 're_enrollment' | 'appointments' | 'tshirt_sizes';
+type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'conflicts' | 'medications' | 'allergies' | 're_enrollment' | 'appointments' | 'tshirt_sizes' | 'birthdays';
 
 export default function ReportingCenter() {
   const [reportType, setReportType] = useState<ReportType>('incidents');
@@ -673,6 +673,101 @@ export default function ReportingCenter() {
             ),
           };
           break;
+
+        case 'birthdays':
+          let birthdayQuery = supabase
+            .from('children')
+            .select(`
+              name,
+              date_of_birth,
+              division_id,
+              divisions (name),
+              gender,
+              birthday_cake_type,
+              birthday_cake_message,
+              birthday_frosting_colors,
+              birthday_toppings,
+              birthday_cake_allergies,
+              birthday_party_type,
+              birthday_party_comments,
+              birthday_cake_meal,
+              birthday_group,
+              status
+            `)
+            .eq('company_id', currentCompany.id)
+            .eq('season', selectedSeason)
+            .eq('status', 'active');
+
+          if (allowedDivisionIds !== null && allowedDivisionIds.length > 0) {
+            birthdayQuery = birthdayQuery.in('division_id', allowedDivisionIds);
+          }
+
+          const { data: birthdayCampers } = await birthdayQuery.order('name');
+
+          // Also fetch staff with birthdays
+          const { data: birthdayStaff } = await supabase
+            .from('staff')
+            .select('name, date_of_birth, department, role, status')
+            .eq('company_id', currentCompany.id)
+            .eq('season', selectedSeason)
+            .eq('status', 'active')
+            .order('name');
+
+          const camperBirthdayRows = birthdayCampers?.map(c => ({
+            Name: c.name,
+            Type: 'Camper',
+            Division: (c.divisions as any)?.name || 'N/A',
+            'Date of Birth': c.date_of_birth || 'N/A',
+            'Birthday Month': c.date_of_birth ? format(new Date(c.date_of_birth + 'T12:00:00'), 'MMMM') : 'N/A',
+            'Cake Type': c.birthday_cake_type || 'Not Set',
+            'Cake Message': c.birthday_cake_message || '',
+            'Frosting Colors': Array.isArray(c.birthday_frosting_colors) ? c.birthday_frosting_colors.join(', ') : c.birthday_frosting_colors || '',
+            'Toppings': Array.isArray(c.birthday_toppings) ? c.birthday_toppings.join(', ') : c.birthday_toppings || '',
+            'Cake Allergies': Array.isArray(c.birthday_cake_allergies) ? c.birthday_cake_allergies.join(', ') : c.birthday_cake_allergies || '',
+            'Party Type': c.birthday_party_type || '',
+            'Party Comments': c.birthday_party_comments || '',
+            'Cake Meal': c.birthday_cake_meal || '',
+            'Birthday Group': c.birthday_group || '',
+          })) || [];
+
+          const staffBirthdayRows = birthdayStaff?.filter(s => s.date_of_birth).map(s => ({
+            Name: s.name,
+            Type: 'Staff',
+            Division: s.department || 'N/A',
+            'Date of Birth': s.date_of_birth || 'N/A',
+            'Birthday Month': s.date_of_birth ? format(new Date(s.date_of_birth + 'T12:00:00'), 'MMMM') : 'N/A',
+            'Cake Type': '',
+            'Cake Message': '',
+            'Frosting Colors': '',
+            'Toppings': '',
+            'Cake Allergies': '',
+            'Party Type': '',
+            'Party Comments': '',
+            'Cake Meal': '',
+            'Birthday Group': '',
+          })) || [];
+
+          data = [...camperBirthdayRows, ...staffBirthdayRows];
+
+          // Month breakdown
+          const monthCounts: Record<string, number> = {};
+          data.forEach(r => {
+            const month = r['Birthday Month'];
+            if (month && month !== 'N/A') {
+              monthCounts[month] = (monthCounts[month] || 0) + 1;
+            }
+          });
+
+          const withCakePrefs = camperBirthdayRows.filter(r => r['Cake Type'] !== 'Not Set').length;
+
+          summaryData = {
+            'Total People': data.length,
+            'Campers': camperBirthdayRows.length,
+            'Staff': staffBirthdayRows.length,
+            'Campers with Cake Preferences': withCakePrefs,
+            'Missing Cake Preferences': camperBirthdayRows.length - withCakePrefs,
+          };
+          break;
       }
 
       setReportData(data);
@@ -786,6 +881,7 @@ export default function ReportingCenter() {
       re_enrollment: 'RE-ENROLLMENT REPORT',
       appointments: 'APPOINTMENTS REPORT',
       tshirt_sizes: 'T-SHIRT SIZE REPORT',
+      birthdays: 'BIRTHDAY REPORT',
     };
     
     const title = titleMap[reportType] || reportType.replace('_', ' ').toUpperCase();
@@ -807,6 +903,7 @@ export default function ReportingCenter() {
       { value: 'allergies', label: 'Allergy Report' },
       { value: 're_enrollment', label: 'Re-Enrollment Report' },
       { value: 'tshirt_sizes', label: 'T-Shirt Sizes' },
+      { value: 'birthdays', label: 'Birthday Report' },
     ];
 
     // Only add these report types if the company has the corresponding pages
