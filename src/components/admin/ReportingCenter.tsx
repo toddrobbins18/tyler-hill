@@ -903,6 +903,7 @@ export default function ReportingCenter() {
       { value: 'allergies', label: 'Allergy Report' },
       { value: 're_enrollment', label: 'Re-Enrollment Report' },
       { value: 'tshirt_sizes', label: 'T-Shirt Sizes' },
+      { value: 'birthdays', label: 'Birthday Report' },
     ];
 
     // Only add these report types if the company has the corresponding pages
