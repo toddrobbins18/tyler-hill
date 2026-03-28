@@ -228,7 +228,7 @@ export function AppSidebar() {
                   <Building2 className="mr-2 h-4 w-4" />
                   <SelectValue placeholder="Select company..." />
                 </SelectTrigger>
-                <SelectContent className="bg-popover text-popover-foreground border z-[9999]" position="popper" sideOffset={4}>
+                <SelectContent className="bg-popover text-popover-foreground border z-50">
                   {availableCompanies.map(company => (
                     <SelectItem 
                       key={company.id} 
