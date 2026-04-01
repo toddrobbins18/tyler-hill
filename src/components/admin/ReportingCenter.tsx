@@ -25,6 +25,7 @@ export default function ReportingCenter() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [reportData, setReportData] = useState<any[]>([]);
+  const [birthdayData, setBirthdayData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<Record<string, any>>({});
   const [sortColumn, setSortColumn] = useState<string | null>(null);
