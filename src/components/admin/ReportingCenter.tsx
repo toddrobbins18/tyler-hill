@@ -1117,7 +1117,7 @@ export default function ReportingCenter() {
             </div>
           )}
 
-          {reportData.length > 0 && (
+          {(reportData.length > 0 || (reportType === 'birthdays' && birthdayData.length > 0)) && (
             <div className="space-y-4">
               <div className="flex gap-2">
                 <Button onClick={handleExportCSV} variant="outline" size="sm">
@@ -1130,47 +1130,54 @@ export default function ReportingCenter() {
                 </Button>
               </div>
 
-              <div className="border rounded-lg overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-muted">
-                      <tr>
-                        {Object.keys(reportData[0]).map((header) => (
-                          <th 
-                            key={header} 
-                            className="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-muted/80 transition-colors select-none"
-                            onClick={() => handleSort(header)}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span>{header}</span>
-                              {sortColumn === header ? (
-                                sortDirection === 'asc' ? (
-                                  <ArrowUp className="h-4 w-4 text-primary" />
+              {reportType === 'birthdays' && birthdayData.length > 0 ? (
+                <BirthdayReportTable 
+                  data={birthdayData} 
+                  onDataUpdate={fetchReportData} 
+                />
+              ) : (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-muted">
+                        <tr>
+                          {Object.keys(reportData[0]).map((header) => (
+                            <th 
+                              key={header} 
+                              className="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-muted/80 transition-colors select-none"
+                              onClick={() => handleSort(header)}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span>{header}</span>
+                                {sortColumn === header ? (
+                                  sortDirection === 'asc' ? (
+                                    <ArrowUp className="h-4 w-4 text-primary" />
+                                  ) : (
+                                    <ArrowDown className="h-4 w-4 text-primary" />
+                                  )
                                 ) : (
-                                  <ArrowDown className="h-4 w-4 text-primary" />
-                                )
-                              ) : (
-                                <ArrowUpDown className="h-4 w-4 text-muted-foreground/50" />
-                              )}
-                            </div>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {sortedData.map((row, index) => (
-                        <tr key={index} className="hover:bg-muted/50">
-                          {Object.values(row).map((value: any, cellIndex) => (
-                            <td key={cellIndex} className="px-4 py-3 text-sm">
-                              {value?.toString() || '-'}
-                            </td>
+                                  <ArrowUpDown className="h-4 w-4 text-muted-foreground/50" />
+                                )}
+                              </div>
+                            </th>
                           ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y">
+                        {sortedData.map((row, index) => (
+                          <tr key={index} className="hover:bg-muted/50">
+                            {Object.values(row).map((value: any, cellIndex) => (
+                              <td key={cellIndex} className="px-4 py-3 text-sm">
+                                {value?.toString() || '-'}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
