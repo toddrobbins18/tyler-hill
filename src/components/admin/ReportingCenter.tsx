@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import BirthdayReportTable from "./BirthdayReportTable";
 
 type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'conflicts' | 'medications' | 'allergies' | 're_enrollment' | 'appointments' | 'tshirt_sizes' | 'birthdays';
 
@@ -24,6 +25,7 @@ export default function ReportingCenter() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [reportData, setReportData] = useState<any[]>([]);
+  const [birthdayData, setBirthdayData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<Record<string, any>>({});
   const [sortColumn, setSortColumn] = useState<string | null>(null);
@@ -678,6 +680,7 @@ export default function ReportingCenter() {
           let birthdayQuery = supabase
             .from('children')
             .select(`
+              id,
               name,
               date_of_birth,
               division_id,
@@ -707,11 +710,51 @@ export default function ReportingCenter() {
           // Also fetch staff with birthdays
           const { data: birthdayStaff } = await supabase
             .from('staff')
-            .select('name, date_of_birth, department, role, status')
+            .select('id, name, date_of_birth, department, role, status')
             .eq('company_id', currentCompany.id)
             .eq('season', selectedSeason)
             .eq('status', 'active')
             .order('name');
+
+          // Build inline-editable birthday data
+          const camperBdayEditable = birthdayCampers?.map(c => ({
+            id: c.id,
+            name: c.name,
+            type: 'Camper' as const,
+            division: (c.divisions as any)?.name || 'N/A',
+            date_of_birth: c.date_of_birth || null,
+            birthday_month: c.date_of_birth ? format(new Date(c.date_of_birth + 'T12:00:00'), 'MMMM') : 'N/A',
+            birthday_cake_type: c.birthday_cake_type || '',
+            birthday_cake_message: c.birthday_cake_message || '',
+            birthday_frosting_colors: Array.isArray(c.birthday_frosting_colors) ? c.birthday_frosting_colors.join(', ') : c.birthday_frosting_colors || '',
+            birthday_toppings: Array.isArray(c.birthday_toppings) ? c.birthday_toppings.join(', ') : c.birthday_toppings || '',
+            birthday_cake_allergies: Array.isArray(c.birthday_cake_allergies) ? c.birthday_cake_allergies.join(', ') : c.birthday_cake_allergies || '',
+            birthday_party_type: c.birthday_party_type || '',
+            birthday_party_comments: c.birthday_party_comments || '',
+            birthday_cake_meal: c.birthday_cake_meal || '',
+            birthday_group: c.birthday_group || '',
+          })) || [];
+
+          const staffBdayEditable = birthdayStaff?.filter(s => s.date_of_birth).map(s => ({
+            id: s.id,
+            name: s.name,
+            type: 'Staff' as const,
+            division: s.department || 'N/A',
+            date_of_birth: s.date_of_birth || null,
+            birthday_month: s.date_of_birth ? format(new Date(s.date_of_birth + 'T12:00:00'), 'MMMM') : 'N/A',
+            birthday_cake_type: '',
+            birthday_cake_message: '',
+            birthday_frosting_colors: '',
+            birthday_toppings: '',
+            birthday_cake_allergies: '',
+            birthday_party_type: '',
+            birthday_party_comments: '',
+            birthday_cake_meal: '',
+            birthday_group: '',
+          })) || [];
+
+          setBirthdayData([...camperBdayEditable, ...staffBdayEditable]);
+
 
           const camperBirthdayRows = birthdayCampers?.map(c => ({
             Name: c.name,
@@ -1074,7 +1117,7 @@ export default function ReportingCenter() {
             </div>
           )}
 
-          {reportData.length > 0 && (
+          {(reportData.length > 0 || (reportType === 'birthdays' && birthdayData.length > 0)) && (
             <div className="space-y-4">
               <div className="flex gap-2">
                 <Button onClick={handleExportCSV} variant="outline" size="sm">
@@ -1087,47 +1130,54 @@ export default function ReportingCenter() {
                 </Button>
               </div>
 
-              <div className="border rounded-lg overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-muted">
-                      <tr>
-                        {Object.keys(reportData[0]).map((header) => (
-                          <th 
-                            key={header} 
-                            className="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-muted/80 transition-colors select-none"
-                            onClick={() => handleSort(header)}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span>{header}</span>
-                              {sortColumn === header ? (
-                                sortDirection === 'asc' ? (
-                                  <ArrowUp className="h-4 w-4 text-primary" />
+              {reportType === 'birthdays' && birthdayData.length > 0 ? (
+                <BirthdayReportTable 
+                  data={birthdayData} 
+                  onDataUpdate={fetchReportData} 
+                />
+              ) : (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-muted">
+                        <tr>
+                          {Object.keys(reportData[0]).map((header) => (
+                            <th 
+                              key={header} 
+                              className="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-muted/80 transition-colors select-none"
+                              onClick={() => handleSort(header)}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span>{header}</span>
+                                {sortColumn === header ? (
+                                  sortDirection === 'asc' ? (
+                                    <ArrowUp className="h-4 w-4 text-primary" />
+                                  ) : (
+                                    <ArrowDown className="h-4 w-4 text-primary" />
+                                  )
                                 ) : (
-                                  <ArrowDown className="h-4 w-4 text-primary" />
-                                )
-                              ) : (
-                                <ArrowUpDown className="h-4 w-4 text-muted-foreground/50" />
-                              )}
-                            </div>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {sortedData.map((row, index) => (
-                        <tr key={index} className="hover:bg-muted/50">
-                          {Object.values(row).map((value: any, cellIndex) => (
-                            <td key={cellIndex} className="px-4 py-3 text-sm">
-                              {value?.toString() || '-'}
-                            </td>
+                                  <ArrowUpDown className="h-4 w-4 text-muted-foreground/50" />
+                                )}
+                              </div>
+                            </th>
                           ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y">
+                        {sortedData.map((row, index) => (
+                          <tr key={index} className="hover:bg-muted/50">
+                            {Object.values(row).map((value: any, cellIndex) => (
+                              <td key={cellIndex} className="px-4 py-3 text-sm">
+                                {value?.toString() || '-'}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
