@@ -716,7 +716,46 @@ export default function ReportingCenter() {
             .eq('status', 'active')
             .order('name');
 
-          const camperBirthdayRows = birthdayCampers?.map(c => ({
+          // Build inline-editable birthday data
+          const camperBdayEditable = birthdayCampers?.map(c => ({
+            id: c.id,
+            name: c.name,
+            type: 'Camper' as const,
+            division: (c.divisions as any)?.name || 'N/A',
+            date_of_birth: c.date_of_birth || null,
+            birthday_month: c.date_of_birth ? format(new Date(c.date_of_birth + 'T12:00:00'), 'MMMM') : 'N/A',
+            birthday_cake_type: c.birthday_cake_type || '',
+            birthday_cake_message: c.birthday_cake_message || '',
+            birthday_frosting_colors: Array.isArray(c.birthday_frosting_colors) ? c.birthday_frosting_colors.join(', ') : c.birthday_frosting_colors || '',
+            birthday_toppings: Array.isArray(c.birthday_toppings) ? c.birthday_toppings.join(', ') : c.birthday_toppings || '',
+            birthday_cake_allergies: Array.isArray(c.birthday_cake_allergies) ? c.birthday_cake_allergies.join(', ') : c.birthday_cake_allergies || '',
+            birthday_party_type: c.birthday_party_type || '',
+            birthday_party_comments: c.birthday_party_comments || '',
+            birthday_cake_meal: c.birthday_cake_meal || '',
+            birthday_group: c.birthday_group || '',
+          })) || [];
+
+          const staffBdayEditable = birthdayStaff?.filter(s => s.date_of_birth).map(s => ({
+            id: s.id,
+            name: s.name,
+            type: 'Staff' as const,
+            division: s.department || 'N/A',
+            date_of_birth: s.date_of_birth || null,
+            birthday_month: s.date_of_birth ? format(new Date(s.date_of_birth + 'T12:00:00'), 'MMMM') : 'N/A',
+            birthday_cake_type: '',
+            birthday_cake_message: '',
+            birthday_frosting_colors: '',
+            birthday_toppings: '',
+            birthday_cake_allergies: '',
+            birthday_party_type: '',
+            birthday_party_comments: '',
+            birthday_cake_meal: '',
+            birthday_group: '',
+          })) || [];
+
+          setBirthdayData([...camperBdayEditable, ...staffBdayEditable]);
+
+
             Name: c.name,
             Type: 'Camper',
             Division: (c.divisions as any)?.name || 'N/A',
