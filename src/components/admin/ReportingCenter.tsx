@@ -680,6 +680,7 @@ export default function ReportingCenter() {
           let birthdayQuery = supabase
             .from('children')
             .select(`
+              id,
               name,
               date_of_birth,
               division_id,
