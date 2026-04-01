@@ -710,7 +710,7 @@ export default function ReportingCenter() {
           // Also fetch staff with birthdays
           const { data: birthdayStaff } = await supabase
             .from('staff')
-            .select('name, date_of_birth, department, role, status')
+            .select('id, name, date_of_birth, department, role, status')
             .eq('company_id', currentCompany.id)
             .eq('season', selectedSeason)
             .eq('status', 'active')
