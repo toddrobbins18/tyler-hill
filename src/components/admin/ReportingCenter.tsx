@@ -756,6 +756,7 @@ export default function ReportingCenter() {
           setBirthdayData([...camperBdayEditable, ...staffBdayEditable]);
 
 
+          const camperBirthdayRows = birthdayCampers?.map(c => ({
             Name: c.name,
             Type: 'Camper',
             Division: (c.divisions as any)?.name || 'N/A',
