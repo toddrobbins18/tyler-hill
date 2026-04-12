@@ -498,6 +498,11 @@ export default function SportsAcademy() {
                             <User className="h-4 w-4" />
                             {enrollment.child?.name || "Unknown"}
                           </CardTitle>
+                          {enrollment.child?.division?.name && (
+                            <Badge variant="outline" className="mt-1 w-fit">
+                              {enrollment.child.division.name}
+                            </Badge>
+                          )}
                           <Badge className={sportColors[enrollment.sport_name] || "bg-muted"}>
                             {enrollment.sport_name}
                           </Badge>
