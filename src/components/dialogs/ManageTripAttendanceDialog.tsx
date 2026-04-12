@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useConflictDetection, Conflict } from "@/hooks/useConflictDetection";
 import ConflictWarningDialog from "./ConflictWarningDialog";
-import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 
 interface ManageTripAttendanceDialogProps {
   tripId: string | null;
@@ -62,7 +62,7 @@ export default function ManageTripAttendanceDialog({
       .eq("season", currentSeason)
       .order("name");
 
-    if (divisionsData) setDivisions(sortDivisionsGirlsFirst(divisionsData));
+    if (divisionsData) setDivisions(sortDivisionsAlternatingGender(divisionsData));
     if (childrenData) setChildren(childrenData);
   };
 

@@ -24,7 +24,7 @@ import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useCompany } from "@/contexts/CompanyContext";
-import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
 import { StaffMultiSelect } from "@/components/StaffMultiSelect";
 import { notifyStaffAssignment } from "@/lib/notifyStaffAssignment";
@@ -191,7 +191,7 @@ export default function ActivitiesFieldTrips() {
       .eq('is_active', true);
     
     if (data) {
-      setDivisions(sortDivisionsGirlsFirst(data));
+      setDivisions(sortDivisionsAlternatingGender(data));
     }
   };
 

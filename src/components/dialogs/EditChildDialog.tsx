@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { childSchema } from "@/lib/validationSchemas";
 import { z } from "zod";
 import { useCompany } from "@/contexts/CompanyContext";
-import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { Radio, CheckCircle2 } from "lucide-react";
 
 interface EditChildDialogProps {
@@ -97,7 +97,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
       .select("*")
       .eq("company_id", currentCompany.id)
       .eq("is_active", true);
-    setDivisions(sortDivisionsGirlsFirst(data || []));
+    setDivisions(sortDivisionsAlternatingGender(data || []));
   };
 
   const fetchBunks = async () => {

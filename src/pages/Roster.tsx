@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCompany } from "@/contexts/CompanyContext";
-import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -107,7 +107,7 @@ export default function Roster() {
       .eq('is_active', true);
     
     if (data) {
-      setDivisions(sortDivisionsGirlsFirst(data));
+      setDivisions(sortDivisionsAlternatingGender(data));
     }
   };
 

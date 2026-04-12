@@ -8,7 +8,7 @@ import { Users, Shield, Building2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 
 export default function DivisionPermissions() {
   const [divisions, setDivisions] = useState<any[]>([]);
@@ -94,7 +94,7 @@ export default function DivisionPermissions() {
       role: rolesMap[user.id] || 'viewer'
     }));
 
-    setDivisions(sortDivisionsGirlsFirst(divisionsData || []));
+    setDivisions(sortDivisionsAlternatingGender(divisionsData || []));
     setUsers(usersWithRoles);
     setPermissions(permissionMap);
     setLoading(false);

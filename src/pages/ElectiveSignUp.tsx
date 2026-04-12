@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { usePermissions } from "@/hooks/usePermissions";
-import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { Plus, Trash2, Users, ClipboardList, BarChart3, Clock, History, Search, Settings2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -93,7 +93,7 @@ export default function ElectiveSignUp() {
         .order("name"),
     ]);
 
-    if (divisionsRes.data) setDivisions(sortDivisionsGirlsFirst(divisionsRes.data));
+    if (divisionsRes.data) setDivisions(sortDivisionsAlternatingGender(divisionsRes.data));
     if (electivesRes.data) setElectives(electivesRes.data);
     if (signupsRes.data) setSignups(signupsRes.data);
     if (allChildrenRes.data) setAllChildren(allChildrenRes.data);

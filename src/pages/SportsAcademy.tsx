@@ -17,7 +17,7 @@ import { format, isSameDay, parseISO } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
-import { sortDivisionsGirlsFirst, sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
+import { sortDivisionsAlternatingGender, sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
 
