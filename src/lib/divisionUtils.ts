@@ -20,6 +20,49 @@ export const sortDivisionsGirlsFirst = (divisions: Division[]): Division[] => {
 };
 
 /**
+ * Sorts divisions in alternating gender order by level.
+ * e.g., Freshmen A Girls, Freshmen A Boys, Freshmen B Girls, Freshmen B Boys, Cadet Girls, Cadet Boys...
+ * Groups by base name (without gender suffix), then alternates Girls/Boys within each group.
+ */
+export const sortDivisionsAlternatingGender = (divisions: Division[]): Division[] => {
+  // Extract base name by removing " Girls" or " Boys" suffix
+  const getBaseName = (name: string): string => {
+    return name.replace(/\s+(Girls|Boys)$/i, '').trim();
+  };
+
+  // Group divisions by base name, preserving order from sort_order
+  const sorted = [...divisions].sort((a, b) => a.sort_order - b.sort_order);
+  const baseNameOrder: string[] = [];
+  const groups: Record<string, Division[]> = {};
+
+  for (const div of sorted) {
+    const base = getBaseName(div.name);
+    if (!groups[base]) {
+      groups[base] = [];
+      baseNameOrder.push(base);
+    }
+    groups[base].push(div);
+  }
+
+  // Within each group, sort Girls first then Boys
+  const result: Division[] = [];
+  for (const base of baseNameOrder) {
+    const group = groups[base];
+    // Sort: Girls before Boys within each group
+    group.sort((a, b) => {
+      const aIsGirls = a.gender.toLowerCase() === 'girls' || a.name.toLowerCase().includes('girls');
+      const bIsGirls = b.gender.toLowerCase() === 'girls' || b.name.toLowerCase().includes('girls');
+      if (aIsGirls && !bIsGirls) return -1;
+      if (!aIsGirls && bIsGirls) return 1;
+      return 0;
+    });
+    result.push(...group);
+  }
+
+  return result;
+};
+
+/**
  * Sorts an array of items by their division using the database sort_order
  */
 export const sortByDivisionGirlsFirst = <T extends { division?: Division | null; divisions?: Division[] }>(

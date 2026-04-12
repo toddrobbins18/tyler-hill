@@ -17,7 +17,7 @@ import { format, isSameDay, parseISO } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
-import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import { sortDivisionsGirlsFirst, sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
 
@@ -160,7 +160,7 @@ export default function SportsAcademy() {
       .order("sort_order");
     
     if (data) {
-      setDivisions(sortDivisionsGirlsFirst(data));
+      setDivisions(sortDivisionsAlternatingGender(data));
     }
   };
 
@@ -498,6 +498,11 @@ export default function SportsAcademy() {
                             <User className="h-4 w-4" />
                             {enrollment.child?.name || "Unknown"}
                           </CardTitle>
+                          {enrollment.child?.division?.name && (
+                            <Badge variant="outline" className="mt-1 w-fit">
+                              {enrollment.child.division.name}
+                            </Badge>
+                          )}
                           <Badge className={sportColors[enrollment.sport_name] || "bg-muted"}>
                             {enrollment.sport_name}
                           </Badge>
@@ -563,6 +568,11 @@ export default function SportsAcademy() {
                             <User className="h-4 w-4" />
                             {enrollment.child?.name || "Unknown"}
                           </CardTitle>
+                          {enrollment.child?.division?.name && (
+                            <Badge variant="outline" className="mt-1 w-fit">
+                              {enrollment.child.division.name}
+                            </Badge>
+                          )}
                           {enrollment.child?.age && (
                             <p className="text-sm text-muted-foreground mt-1">
                               Age: {enrollment.child.age}
