@@ -160,7 +160,7 @@ export default function SportsAcademy() {
       .order("sort_order");
     
     if (data) {
-      setDivisions(sortDivisionsGirlsFirst(data));
+      setDivisions(sortDivisionsAlternatingGender(data));
     }
   };
 
@@ -563,6 +563,11 @@ export default function SportsAcademy() {
                             <User className="h-4 w-4" />
                             {enrollment.child?.name || "Unknown"}
                           </CardTitle>
+                          {enrollment.child?.division?.name && (
+                            <Badge variant="outline" className="mt-1 w-fit">
+                              {enrollment.child.division.name}
+                            </Badge>
+                          )}
                           {enrollment.child?.age && (
                             <p className="text-sm text-muted-foreground mt-1">
                               Age: {enrollment.child.age}
