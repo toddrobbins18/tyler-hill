@@ -12,7 +12,7 @@ import { staffSchema } from "@/lib/validationSchemas";
 import { z } from "zod";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
-import { sortDivisionsGirlsFirst, Division } from "@/lib/divisionUtils";
+import { sortDivisionsAlternatingGender, Division } from "@/lib/divisionUtils";
 
 export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }) {
   const [open, setOpen] = useState(false);
@@ -54,7 +54,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
       .eq("company_id", currentCompany.id)
       .eq("is_active", true)
       .order("sort_order");
-    setDivisions(sortDivisionsGirlsFirst(data || []));
+    setDivisions(sortDivisionsAlternatingGender(data || []));
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {

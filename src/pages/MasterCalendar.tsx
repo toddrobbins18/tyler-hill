@@ -23,7 +23,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { formatTime12Hour } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useCompany } from "@/contexts/CompanyContext";
-import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
 
 const locales = { 'en-US': enUS };
@@ -283,7 +283,7 @@ export default function MasterCalendar() {
       return;
     }
     const { data } = await supabase.from("divisions").select("*").eq('company_id', currentCompany.id).eq('is_active', true);
-    if (data) setDivisions(sortDivisionsGirlsFirst(data));
+    if (data) setDivisions(sortDivisionsAlternatingGender(data));
   };
 
   const fetchChildren = async () => {

@@ -17,7 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { formatTime12Hour } from "@/lib/utils";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
-import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
 import { toast as sonnerToast } from "sonner";
 import { StaffMultiSelect } from "@/components/StaffMultiSelect";
@@ -182,7 +182,7 @@ export default function SpecialEventsActivities() {
       .eq('is_active', true);
     
     if (data) {
-      setDivisions(sortDivisionsGirlsFirst(data));
+      setDivisions(sortDivisionsAlternatingGender(data));
     }
   };
 

@@ -15,7 +15,7 @@ import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
-import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 
 const TSHIRT_SIZES = [
   "Youth S", "Youth M", "Youth L", "Youth XL",
@@ -76,7 +76,7 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
       .select("*")
       .eq("company_id", currentCompany.id)
       .eq("is_active", true);
-    setDivisions(sortDivisionsGirlsFirst(data || []));
+    setDivisions(sortDivisionsAlternatingGender(data || []));
   };
 
   const onSubmit = async (values: z.infer<typeof childSchema>) => {

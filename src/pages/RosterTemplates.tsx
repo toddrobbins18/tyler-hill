@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { Users, Plus, Trash2, Search, Edit, Copy } from "lucide-react";
-import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 
 interface RosterTemplate {
   id: string;
@@ -86,7 +86,7 @@ export default function RosterTemplates() {
 
       setTemplates(templatesResult.data || []);
       setChildren(childrenResult.data || []);
-      setDivisions(sortDivisionsGirlsFirst(divisionsResult.data || []));
+      setDivisions(sortDivisionsAlternatingGender(divisionsResult.data || []));
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({ title: "Error loading data", variant: "destructive" });

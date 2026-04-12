@@ -16,7 +16,7 @@ import { format } from "date-fns";
 import { Calendar as CalendarIcon, Plus, Pencil, Trash2, Search, X, Filter } from "lucide-react";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
-import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
 
 interface Enrollment {
@@ -160,7 +160,7 @@ const TutoringTherapy = () => {
     try {
       const { data, error } = await supabase.from("divisions").select("*").eq('company_id', currentCompany.id).eq('is_active', true);
       if (error) throw error;
-      setDivisions(sortDivisionsGirlsFirst(data || []));
+      setDivisions(sortDivisionsAlternatingGender(data || []));
     } catch (error) {
       console.error("Error fetching divisions:", error);
     }

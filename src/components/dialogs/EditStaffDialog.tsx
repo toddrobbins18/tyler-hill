@@ -12,7 +12,7 @@ import { z } from "zod";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { Radio, CheckCircle2 } from "lucide-react";
-import { sortDivisionsGirlsFirst, Division } from "@/lib/divisionUtils";
+import { sortDivisionsAlternatingGender, Division } from "@/lib/divisionUtils";
 
 interface EditStaffDialogProps {
   staffId: string;
@@ -85,7 +85,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
       .eq("company_id", currentCompany.id)
       .eq("is_active", true)
       .order("sort_order");
-    setDivisions(sortDivisionsGirlsFirst(data || []));
+    setDivisions(sortDivisionsAlternatingGender(data || []));
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {

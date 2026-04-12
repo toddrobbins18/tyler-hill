@@ -16,7 +16,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { format, isBefore, startOfDay, isToday } from "date-fns";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
-import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
 import { EditMedicationDialog } from "@/components/dialogs/EditMedicationDialog";
 
@@ -184,7 +184,7 @@ export default function Nurse() {
       toast({ title: "Error fetching divisions", variant: "destructive" });
       return;
     }
-    setDivisions(sortDivisionsGirlsFirst(data || []));
+    setDivisions(sortDivisionsAlternatingGender(data || []));
   };
 
   // Meal time order for sorting

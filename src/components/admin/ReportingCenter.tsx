@@ -15,7 +15,7 @@ import { format } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { sortDivisionsGirlsFirst } from "@/lib/divisionUtils";
+import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import BirthdayReportTable from "./BirthdayReportTable";
 
 type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'conflicts' | 'medications' | 'allergies' | 're_enrollment' | 'appointments' | 'tshirt_sizes' | 'birthdays';
@@ -62,7 +62,7 @@ export default function ReportingCenter() {
       
       const { data } = await query;
       if (data) {
-        setDivisions(sortDivisionsGirlsFirst(data));
+        setDivisions(sortDivisionsAlternatingGender(data));
       }
     };
     fetchDivisions();
