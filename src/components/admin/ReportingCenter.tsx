@@ -89,7 +89,7 @@ export default function ReportingCenter() {
           // Incidents are linked to children, so we need to filter by child's division
           let incidentsQuery = supabase
             .from('incident_reports')
-            .select('*, children(name, division_id)')
+            .select('*, children(name, division_id, divisions(name))')
             .eq('company_id', currentCompany.id)
             .eq('season', selectedSeason)
             .gte('date', startDate || '1900-01-01')
@@ -106,6 +106,7 @@ export default function ReportingCenter() {
           data = filteredIncidents?.map(i => ({
             Date: i.date,
             Child: i.children?.name || 'Unknown',
+            Division: (i.children as any)?.divisions?.name || 'N/A',
             Type: i.type,
             Severity: i.severity,
             Status: i.status,
