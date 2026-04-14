@@ -72,7 +72,7 @@ export default function DivisionScheduleUploader() {
     if (error) {
       console.error("Error fetching divisions:", error);
     } else {
-      setDivisions(data || []);
+      setDivisions(sortDivisionsAlternatingGender(data || []));
     }
   };
 

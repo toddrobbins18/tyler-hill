@@ -106,7 +106,7 @@ export default function DailySchedule() {
       console.error("Error fetching divisions:", error);
       toast({ title: "Error loading divisions", variant: "destructive" });
     } else {
-      setDivisions(data || []);
+      setDivisions(sortDivisionsAlternatingGender(data || []));
       
       // Auto-select first accessible division for restricted users
       if (divisionFilter && divisionFilter.length > 0 && data) {

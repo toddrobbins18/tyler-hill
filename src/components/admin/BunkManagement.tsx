@@ -112,7 +112,7 @@ export default function BunkManagement({ onClose }: BunkManagementProps) {
       }
       if (bunkStaffRes.data) setBunkStaff(bunkStaffRes.data as unknown as BunkStaff[]);
       if (staffRes.data) setStaff(staffRes.data);
-      if (divisionsRes.data) setDivisions(divisionsRes.data);
+      if (divisionsRes.data) setDivisions(sortDivisionsAlternatingGender(divisionsRes.data));
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({ title: "Error loading data", variant: "destructive" });
