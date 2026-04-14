@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
@@ -97,7 +98,7 @@ export default function DailySchedule() {
 
     const { data, error } = await supabase
       .from("divisions")
-      .select("id, name, gender")
+      .select("*")
       .eq("company_id", currentCompany.id)
       .eq("is_active", true)
       .order("sort_order");
@@ -106,7 +107,7 @@ export default function DailySchedule() {
       console.error("Error fetching divisions:", error);
       toast({ title: "Error loading divisions", variant: "destructive" });
     } else {
-      setDivisions(data || []);
+      setDivisions(sortDivisionsAlternatingGender(data || []));
       
       // Auto-select first accessible division for restricted users
       if (divisionFilter && divisionFilter.length > 0 && data) {

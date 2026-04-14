@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -64,7 +65,7 @@ export default function DivisionScheduleUploader() {
 
     const { data, error } = await supabase
       .from("divisions")
-      .select("id, name, gender")
+      .select("*")
       .eq("company_id", currentCompany.id)
       .eq("is_active", true)
       .order("sort_order");
@@ -72,7 +73,7 @@ export default function DivisionScheduleUploader() {
     if (error) {
       console.error("Error fetching divisions:", error);
     } else {
-      setDivisions(data || []);
+      setDivisions(sortDivisionsAlternatingGender(data || []));
     }
   };
 

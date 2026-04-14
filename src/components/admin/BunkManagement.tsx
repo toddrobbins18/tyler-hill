@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -98,7 +99,7 @@ export default function BunkManagement({ onClose }: BunkManagementProps) {
           .order("name"),
         supabase
           .from("divisions")
-          .select("id, name")
+          .select("*")
           .eq("company_id", currentCompany.id)
           .eq("is_active", true)
           .order("sort_order")
@@ -112,7 +113,7 @@ export default function BunkManagement({ onClose }: BunkManagementProps) {
       }
       if (bunkStaffRes.data) setBunkStaff(bunkStaffRes.data as unknown as BunkStaff[]);
       if (staffRes.data) setStaff(staffRes.data);
-      if (divisionsRes.data) setDivisions(divisionsRes.data);
+      if (divisionsRes.data) setDivisions(sortDivisionsAlternatingGender(divisionsRes.data));
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({ title: "Error loading data", variant: "destructive" });
