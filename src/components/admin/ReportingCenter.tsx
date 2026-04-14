@@ -856,15 +856,17 @@ export default function ReportingCenter() {
   const filteredReportData = useMemo(() => {
     if (selectedDivisions.length === 0) return reportData;
     
-    // Only filter reports that have a Division column
+    // Get division names from selected IDs
+    const selectedDivisionNames = divisions
+      .filter(d => selectedDivisions.includes(d.id))
+      .map(d => d.name);
+    
     return reportData.filter(row => {
       const divisionValue = row['Division'];
-      if (!divisionValue) return true; // Include rows without division info
-      
-      // Get division names from selected IDs
-      const selectedDivisionNames = divisions
-        .filter(d => selectedDivisions.includes(d.id))
-        .map(d => d.name);
+      // If no Division column exists at all for this report type, include all rows
+      if (divisionValue === undefined) return true;
+      // If Division is N/A or empty, exclude when filtering
+      if (!divisionValue || divisionValue === 'N/A') return false;
       
       return selectedDivisionNames.includes(divisionValue);
     });
