@@ -246,7 +246,7 @@ export default function ReportingCenter() {
         case 'activities':
           const { data: activities } = await supabase
             .from('activities_field_trips')
-            .select('*')
+            .select('*, divisions(name)')
             .eq('company_id', currentCompany.id)
             .eq('season', selectedSeason)
             .gte('event_date', startDate || '1900-01-01')
@@ -257,6 +257,7 @@ export default function ReportingCenter() {
             Date: a.event_date,
             Title: a.title,
             Type: a.activity_type,
+            Division: (a.divisions as any)?.name || 'N/A',
             Location: a.location,
             Time: a.time,
             Staff: a.chaperone,
@@ -464,7 +465,7 @@ export default function ReportingCenter() {
             'Years Attended': c.seasons.length,
             'Seasons': c.seasons.sort().join(', '),
             'First Season': c.seasons.sort()[0] || 'N/A',
-            'Latest Division': c.latestDivision || 'N/A',
+            Division: c.latestDivision || 'N/A',
             'Latest Grade': c.latestGrade || 'N/A',
             Gender: c.gender || 'N/A',
             'Latest Session': c.latestSession || 'N/A',
