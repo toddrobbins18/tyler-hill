@@ -80,11 +80,13 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
 
       const validatedData = staffSchema.parse(data) as Record<string, any>;
 
-      const { error } = await supabase.from("staff").insert([{
+      const insertData = {
         ...validatedData,
         company_id: currentCompany?.id,
-        season: currentSeason
-      }]);
+        season: currentSeason,
+      } as any;
+
+      const { error } = await supabase.from("staff").insert([insertData]);
 
       if (error) {
         toast.error("Failed to add staff member");
