@@ -89,7 +89,7 @@ export default function ReportingCenter() {
           // Incidents are linked to children, so we need to filter by child's division
           let incidentsQuery = supabase
             .from('incident_reports')
-            .select('*, children(name, division_id)')
+            .select('*, children(name, division_id, divisions(name))')
             .eq('company_id', currentCompany.id)
             .eq('season', selectedSeason)
             .gte('date', startDate || '1900-01-01')
@@ -106,6 +106,7 @@ export default function ReportingCenter() {
           data = filteredIncidents?.map(i => ({
             Date: i.date,
             Child: i.children?.name || 'Unknown',
+            Division: (i.children as any)?.divisions?.name || 'N/A',
             Type: i.type,
             Severity: i.severity,
             Status: i.status,
@@ -133,14 +134,16 @@ export default function ReportingCenter() {
           const staffIds = [...new Set(evals?.map(e => e.staff_id).filter(Boolean))];
           const { data: staffData } = await supabase
             .from('staff')
-            .select('id, name')
+            .select('id, name, department')
             .in('id', staffIds);
           
           const staffMap = new Map(staffData?.map(s => [s.id, s.name]));
+          const staffDeptMap = new Map(staffData?.map(s => [s.id, s.department]));
           
           data = evals?.map(e => ({
             Date: e.date,
             Staff: staffMap.get(e.staff_id!) || 'Unknown',
+            Division: staffDeptMap.get(e.staff_id!) || 'N/A',
             Category: e.category,
             Rating: e.rating,
             Evaluator: e.evaluator,
@@ -243,7 +246,7 @@ export default function ReportingCenter() {
         case 'activities':
           const { data: activities } = await supabase
             .from('activities_field_trips')
-            .select('*')
+            .select('*, divisions(name)')
             .eq('company_id', currentCompany.id)
             .eq('season', selectedSeason)
             .gte('event_date', startDate || '1900-01-01')
@@ -254,6 +257,7 @@ export default function ReportingCenter() {
             Date: a.event_date,
             Title: a.title,
             Type: a.activity_type,
+            Division: (a.divisions as any)?.name || 'N/A',
             Location: a.location,
             Time: a.time,
             Staff: a.chaperone,
@@ -461,7 +465,7 @@ export default function ReportingCenter() {
             'Years Attended': c.seasons.length,
             'Seasons': c.seasons.sort().join(', '),
             'First Season': c.seasons.sort()[0] || 'N/A',
-            'Latest Division': c.latestDivision || 'N/A',
+            Division: c.latestDivision || 'N/A',
             'Latest Grade': c.latestGrade || 'N/A',
             Gender: c.gender || 'N/A',
             'Latest Session': c.latestSession || 'N/A',
@@ -852,15 +856,17 @@ export default function ReportingCenter() {
   const filteredReportData = useMemo(() => {
     if (selectedDivisions.length === 0) return reportData;
     
-    // Only filter reports that have a Division column
+    // Get division names from selected IDs
+    const selectedDivisionNames = divisions
+      .filter(d => selectedDivisions.includes(d.id))
+      .map(d => d.name);
+    
     return reportData.filter(row => {
       const divisionValue = row['Division'];
-      if (!divisionValue) return true; // Include rows without division info
-      
-      // Get division names from selected IDs
-      const selectedDivisionNames = divisions
-        .filter(d => selectedDivisions.includes(d.id))
-        .map(d => d.name);
+      // If no Division column exists at all for this report type, include all rows
+      if (divisionValue === undefined) return true;
+      // If Division is N/A or empty, exclude when filtering
+      if (!divisionValue || divisionValue === 'N/A') return false;
       
       return selectedDivisionNames.includes(divisionValue);
     });
