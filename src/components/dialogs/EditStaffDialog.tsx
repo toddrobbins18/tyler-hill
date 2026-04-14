@@ -113,11 +113,11 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
         division_id: divisionId || null,
       };
 
-      const validatedData = staffSchema.parse(data);
+      const validatedData = staffSchema.parse(data) as Record<string, any>;
 
       const { error } = await supabase
         .from("staff")
-        .update(validatedData)
+        .update(validatedData as any)
         .eq("id", staffId);
 
       if (error) {

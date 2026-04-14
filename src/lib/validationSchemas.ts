@@ -41,8 +41,15 @@ export const staffSchema = z.object({
   email: z.union([z.string().trim().email().max(255), z.literal("")]).nullable().optional(),
   phone: z.string().trim().max(20).nullable().optional(),
   hire_date: z.string().nullable().optional(),
+  date_of_birth: z.string().nullable().optional(),
   leader_id: z.string().uuid().nullable().optional(),
-  staff_type: z.enum(["general_counselor", "specialist", "both"]).nullable().optional(),
+  staff_type: z.enum(["general_counselor", "specialist", "support", "leadership", "both"]).nullable().optional(),
+  season: z.string().nullable().optional(),
+  session: z.string().nullable().optional(),
+  allergies: z.string().nullable().optional(),
+  rfid: z.string().nullable().optional(),
+  tshirt_size: z.string().nullable().optional(),
+  division_id: z.string().uuid().nullable().optional(),
 });
 
 // Award validation schema
