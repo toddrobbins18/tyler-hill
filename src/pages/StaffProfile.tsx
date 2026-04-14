@@ -196,7 +196,10 @@ export default function StaffProfile() {
             {staff.staff_type && (
               <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
                 {staff.staff_type === "general_counselor" ? "General Counselor" : 
-                 staff.staff_type === "specialist" ? "Specialist" : "Both"}
+                 staff.staff_type === "specialist" ? "Specialist" :
+                 staff.staff_type === "support" ? "Support" :
+                 staff.staff_type === "leadership" ? "Leadership" :
+                 staff.staff_type === "both" ? "Both" : staff.staff_type}
               </Badge>
             )}
           </div>
