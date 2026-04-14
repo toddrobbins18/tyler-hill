@@ -20,6 +20,40 @@ import BirthdayReportTable from "./BirthdayReportTable";
 
 type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'conflicts' | 'medications' | 'allergies' | 're_enrollment' | 'appointments' | 'tshirt_sizes' | 'birthdays';
 
+type DivisionAwareRow = Record<string, any> & {
+  __divisionIds?: string[];
+  __divisionNames?: string[];
+};
+
+const withDivisionMeta = <T extends Record<string, any>>(
+  row: T,
+  divisionIds: Array<string | null | undefined> = [],
+  divisionNames: Array<string | null | undefined> = []
+): T & DivisionAwareRow => {
+  const uniqueIds = Array.from(new Set(divisionIds.filter((value): value is string => Boolean(value))));
+  const uniqueNames = Array.from(new Set(divisionNames.filter((value): value is string => Boolean(value))));
+
+  Object.defineProperties(row, {
+    __divisionIds: { value: uniqueIds, enumerable: false, configurable: true },
+    __divisionNames: { value: uniqueNames, enumerable: false, configurable: true },
+  });
+
+  return row as T & DivisionAwareRow;
+};
+
+const getDivisionNamesFromRow = (row: DivisionAwareRow) => {
+  if (row.__divisionNames?.length) return row.__divisionNames;
+
+  return Array.from(
+    new Set(
+      [row['Division'], row['Latest Division']]
+        .flatMap((value) => (typeof value === 'string' ? value.split(',') : []))
+        .map((value) => value.trim())
+        .filter(Boolean)
+    )
+  );
+};
+
 export default function ReportingCenter() {
   const [reportType, setReportType] = useState<ReportType>('incidents');
   const [startDate, setStartDate] = useState('');
@@ -39,11 +73,24 @@ export default function ReportingCenter() {
 
   // Get allowed divisions for the current user
   const allowedDivisionIds = getDivisionFilter();
+  const selectedDivisionNames = useMemo(
+    () => divisions.filter((division) => selectedDivisions.includes(division.id)).map((division) => division.name),
+    [divisions, selectedDivisions]
+  );
+
+  useEffect(() => {
+    setSelectedDivisions([]);
+  }, [currentCompany?.id]);
+
+  useEffect(() => {
+    const validDivisionIds = new Set(divisions.map((division) => division.id));
+    setSelectedDivisions((previous) => previous.filter((divisionId) => validDivisionIds.has(divisionId)));
+  }, [divisions]);
 
   // Fetch divisions on mount - filter by user's allowed divisions
   useEffect(() => {
     const fetchDivisions = async () => {
-      if (!currentCompany?.id) return;
+      if (!currentCompany?.id || permissionsLoading) return;
       
       let query = supabase
         .from("divisions")
@@ -66,7 +113,7 @@ export default function ReportingCenter() {
       }
     };
     fetchDivisions();
-  }, [currentCompany?.id, allowedDivisionIds]);
+  }, [currentCompany?.id, allowedDivisionIds, permissionsLoading]);
 
   const fetchReportData = async () => {
     if (!currentCompany?.id) return;
@@ -89,7 +136,7 @@ export default function ReportingCenter() {
           // Incidents are linked to children, so we need to filter by child's division
           let incidentsQuery = supabase
             .from('incident_reports')
-            .select('*, children(name, division_id)')
+            .select('*, children(name, division_id, divisions(name))')
             .eq('company_id', currentCompany.id)
             .eq('season', selectedSeason)
             .gte('date', startDate || '1900-01-01')
@@ -106,11 +153,20 @@ export default function ReportingCenter() {
           data = filteredIncidents?.map(i => ({
             Date: i.date,
             Child: i.children?.name || 'Unknown',
+            Division: i.children?.divisions?.name || 'N/A',
             Type: i.type,
             Severity: i.severity,
             Status: i.status,
             Description: i.description,
-          })) || [];
+          }).__divisionIds ? {} : withDivisionMeta({
+            Date: i.date,
+            Child: i.children?.name || 'Unknown',
+            Division: i.children?.divisions?.name || 'N/A',
+            Type: i.type,
+            Severity: i.severity,
+            Status: i.status,
+            Description: i.description,
+          }, [i.children?.division_id], [i.children?.divisions?.name])) || [];
           
           summaryData = {
             'Total Incidents': filteredIncidents?.length || 0,
@@ -176,14 +232,14 @@ export default function ReportingCenter() {
             ? awards?.filter(a => a.children?.division_id && allowedDivisionIds.includes(a.children.division_id))
             : awards;
           
-          data = filteredAwards?.map(a => ({
+          data = filteredAwards?.map(a => withDivisionMeta({
             Date: a.date,
             Child: a.children?.name || 'Unknown',
             Division: a.children?.divisions?.name || 'N/A',
             Title: a.title,
             Category: a.category,
             Description: a.description,
-          })) || [];
+          }, [a.children?.division_id], [a.children?.divisions?.name])) || [];
           
           summaryData = {
             'Total Awards': filteredAwards?.length || 0,
@@ -193,25 +249,40 @@ export default function ReportingCenter() {
         case 'sports_events':
           const { data: sports } = await supabase
             .from('sports_calendar')
-            .select('*')
+            .select(`
+              *,
+              division:divisions(id, name),
+              sports_calendar_divisions(division_id, division:divisions(id, name))
+            `)
             .eq('company_id', currentCompany.id)
             .eq('season', selectedSeason)
             .gte('event_date', startDate || '1900-01-01')
             .lte('event_date', endDate || '2100-12-31')
             .order('event_date', { ascending: false });
           
-          data = sports?.map(s => ({
-            Date: s.event_date,
-            Title: s.title,
-            Sport: s.sport_type,
-            Team: s.team,
-            Opponent: s.opponent,
-            Location: s.location,
-            Time: s.time,
-          })) || [];
+          data = sports?.map((s: any) => {
+            const relatedDivisionIds = s.sports_calendar_divisions?.map((division: any) => division.division_id) || [];
+            const relatedDivisionNames = s.sports_calendar_divisions
+              ?.map((division: any) => division.division?.name)
+              .filter(Boolean) || [];
+
+            const divisionIds = [s.division_id, ...relatedDivisionIds];
+            const divisionNames = [s.division?.name, ...relatedDivisionNames];
+
+            return withDivisionMeta({
+              Date: s.event_date,
+              Title: s.title,
+              Sport: s.sport_type,
+              Team: s.team,
+              Opponent: s.opponent,
+              Division: Array.from(new Set(divisionNames.filter(Boolean))).join(', ') || 'All Divisions',
+              Location: s.location,
+              Time: s.time,
+            }, divisionIds, divisionNames);
+          }) || [];
           
           summaryData = {
-            'Total Events': sports?.length || 0,
+            'Total Events': data.length,
           };
           break;
 
@@ -241,26 +312,48 @@ export default function ReportingCenter() {
           break;
 
         case 'activities':
-          const { data: activities } = await supabase
-            .from('activities_field_trips')
-            .select('*')
-            .eq('company_id', currentCompany.id)
-            .eq('season', selectedSeason)
-            .gte('event_date', startDate || '1900-01-01')
-            .lte('event_date', endDate || '2100-12-31')
-            .order('event_date', { ascending: false });
+          const [activitiesResult, activityDivisionLinksResult] = await Promise.all([
+            supabase
+              .from('activities_field_trips')
+              .select('*, division:divisions(id, name)')
+              .eq('company_id', currentCompany.id)
+              .eq('season', selectedSeason)
+              .gte('event_date', startDate || '1900-01-01')
+              .lte('event_date', endDate || '2100-12-31')
+              .order('event_date', { ascending: false }),
+            supabase
+              .from('activities_field_trips_divisions')
+              .select('activity_id, division_id, divisions(id, name)')
+              .eq('company_id', currentCompany.id),
+          ]);
+
+          const activityDivisionMap = new Map<string, { ids: string[]; names: string[] }>();
+
+          (activityDivisionLinksResult.data || []).forEach((link: any) => {
+            const entry = activityDivisionMap.get(link.activity_id) || { ids: [], names: [] };
+            entry.ids.push(link.division_id);
+            if (link.divisions?.name) entry.names.push(link.divisions.name);
+            activityDivisionMap.set(link.activity_id, entry);
+          });
           
-          data = activities?.map(a => ({
-            Date: a.event_date,
-            Title: a.title,
-            Type: a.activity_type,
-            Location: a.location,
-            Time: a.time,
-            Staff: a.chaperone,
-          })) || [];
+          data = (activitiesResult.data || []).map((activity: any) => {
+            const linkedDivisions = activityDivisionMap.get(activity.id) || { ids: [], names: [] };
+            const divisionIds = [activity.division_id, ...linkedDivisions.ids];
+            const divisionNames = [activity.division?.name, ...linkedDivisions.names];
+
+            return withDivisionMeta({
+              Date: activity.event_date,
+              Title: activity.title,
+              Type: activity.activity_type,
+              Division: Array.from(new Set(divisionNames.filter(Boolean))).join(', ') || 'All Divisions',
+              Location: activity.location,
+              Time: activity.time,
+              Staff: activity.chaperone,
+            }, divisionIds, divisionNames);
+          });
           
           summaryData = {
-            'Total Activities': activities?.length || 0,
+            'Total Activities': data.length,
           };
           break;
 
@@ -315,7 +408,7 @@ export default function ReportingCenter() {
             ? meds?.filter(m => m.children?.division_id && allowedDivisionIds.includes(m.children.division_id))
             : meds;
           
-          data = filteredMeds?.map(m => ({
+          data = filteredMeds?.map(m => withDivisionMeta({
             Date: m.date,
             Child: m.children?.name || 'Unknown',
             Division: m.children?.divisions?.name || 'N/A',
@@ -325,7 +418,7 @@ export default function ReportingCenter() {
             'Scheduled Time': m.scheduled_time || 'N/A',
             Administered: m.administered ? 'Yes' : 'No',
             Notes: m.notes || '',
-          })) || [];
+          }, [m.children?.division_id], [m.children?.divisions?.name])) || [];
           
           const uniqueChildren = new Set(filteredMeds?.map(m => m.child_id));
           const uniqueMedications = new Set(filteredMeds?.map(m => m.medication_name));
@@ -364,13 +457,13 @@ export default function ReportingCenter() {
           
           const { data: allergicChildren } = await allergiesQuery.order('name');
           
-          data = allergicChildren?.map(c => ({
+          data = allergicChildren?.map(c => withDivisionMeta({
             Child: c.name,
             Division: c.divisions?.name || 'No Division',
             Allergies: c.allergies,
             'Medical Notes': c.medical_notes || 'None',
             Status: c.status || 'active',
-          })) || [];
+          }, [c.division_id], [c.divisions?.name])) || [];
           
           const totalWithAllergies = allergicChildren?.length || 0;
           const activeWithAllergies = allergicChildren?.filter(c => c.status === 'active').length || 0;
@@ -411,6 +504,7 @@ export default function ReportingCenter() {
             name: string;
             person_id: string;
             seasons: string[];
+            latestDivisionId: string | null;
             latestDivision: string | null;
             latestGrade: string | null;
             gender: string | null;
@@ -431,6 +525,7 @@ export default function ReportingCenter() {
                 name: c.name,
                 person_id: c.person_id,
                 seasons: [],
+                  latestDivisionId: null,
                 latestDivision: null,
                 latestGrade: null,
                 gender: c.gender,
@@ -445,6 +540,7 @@ export default function ReportingCenter() {
             }
             // Update with latest info
             entry.name = c.name;
+            entry.latestDivisionId = c.division_id || entry.latestDivisionId;
             entry.latestDivision = (c.divisions as any)?.name || entry.latestDivision;
             entry.latestGrade = c.grade || entry.latestGrade;
             entry.latestSession = c.session || entry.latestSession;
@@ -455,18 +551,22 @@ export default function ReportingCenter() {
           const allSeasons = [...new Set(sortedCampers.map(c => c.season).filter(Boolean))].sort();
           
           // Transform to report data
-          data = Array.from(camperHistory.values()).map(c => ({
-            Name: c.name,
-            'Person ID': c.person_id,
-            'Years Attended': c.seasons.length,
-            'Seasons': c.seasons.sort().join(', '),
-            'First Season': c.seasons.sort()[0] || 'N/A',
-            'Latest Division': c.latestDivision || 'N/A',
-            'Latest Grade': c.latestGrade || 'N/A',
-            Gender: c.gender || 'N/A',
-            'Latest Session': c.latestSession || 'N/A',
-            [`In ${selectedSeason}`]: c.seasons.includes(selectedSeason) ? 'Yes' : 'No',
-          }));
+          data = Array.from(camperHistory.values()).map(c => {
+            const sortedSeasons = [...c.seasons].sort();
+
+            return withDivisionMeta({
+              Name: c.name,
+              'Person ID': c.person_id,
+              'Years Attended': c.seasons.length,
+              'Seasons': sortedSeasons.join(', '),
+              'First Season': sortedSeasons[0] || 'N/A',
+              'Latest Division': c.latestDivision || 'N/A',
+              'Latest Grade': c.latestGrade || 'N/A',
+              Gender: c.gender || 'N/A',
+              'Latest Session': c.latestSession || 'N/A',
+              [`In ${selectedSeason}`]: c.seasons.includes(selectedSeason) ? 'Yes' : 'No',
+            }, [c.latestDivisionId], [c.latestDivision]);
+          });
 
           // Calculate summary statistics
           const totalUniqueCampers = camperHistory.size;
@@ -547,7 +647,7 @@ export default function ReportingCenter() {
               })
             : appointments;
           
-          data = filteredAppointments?.map(a => ({
+          data = filteredAppointments?.map(a => withDivisionMeta({
             Date: a.appointment_date,
             Time: a.appointment_time || 'N/A',
             Person: a.child?.name || a.staff?.name || 'Unknown',
@@ -561,7 +661,7 @@ export default function ReportingCenter() {
             'Follow-up Required': a.follow_up_required ? 'Yes' : 'No',
             'Follow-up Date': a.follow_up_date || 'N/A',
             Notes: a.notes || '',
-          })) || [];
+          }, [a.child?.division_id], [a.child?.divisions?.name])) || [];
           
           const totalAppointments = filteredAppointments?.length || 0;
           const scheduledCount = filteredAppointments?.filter(a => a.status === 'scheduled').length || 0;
@@ -624,13 +724,13 @@ export default function ReportingCenter() {
             .order('name');
           
           // Combine data
-          const camperRows = camperSizes?.map(c => ({
+          const camperRows = camperSizes?.map(c => withDivisionMeta({
             Name: c.name,
             Type: 'Camper',
             Division: c.divisions?.name || 'No Division',
             'T-Shirt Size': c.tshirt_size || 'Not Set',
             Gender: c.gender || 'N/A',
-          })) || [];
+          }, [c.division_id], [c.divisions?.name])) || [];
           
           const staffRows = staffSizes?.map(s => ({
             Name: s.name,
@@ -717,7 +817,7 @@ export default function ReportingCenter() {
             .order('name');
 
           // Build inline-editable birthday data
-          const camperBdayEditable = birthdayCampers?.map(c => ({
+          const camperBdayEditable = birthdayCampers?.map(c => withDivisionMeta({
             id: c.id,
             name: c.name,
             type: 'Camper' as const,
@@ -733,7 +833,7 @@ export default function ReportingCenter() {
             birthday_party_comments: c.birthday_party_comments || '',
             birthday_cake_meal: c.birthday_cake_meal || '',
             birthday_group: c.birthday_group || '',
-          })) || [];
+          }, [c.division_id], [(c.divisions as any)?.name])) || [];
 
           const staffBdayEditable = birthdayStaff?.filter(s => s.date_of_birth).map(s => ({
             id: s.id,
@@ -756,7 +856,7 @@ export default function ReportingCenter() {
           setBirthdayData([...camperBdayEditable, ...staffBdayEditable]);
 
 
-          const camperBirthdayRows = birthdayCampers?.map(c => ({
+          const camperBirthdayRows = birthdayCampers?.map(c => withDivisionMeta({
             Name: c.name,
             Type: 'Camper',
             Division: (c.divisions as any)?.name || 'N/A',
@@ -771,7 +871,7 @@ export default function ReportingCenter() {
             'Party Comments': c.birthday_party_comments || '',
             'Cake Meal': c.birthday_cake_meal || '',
             'Birthday Group': c.birthday_group || '',
-          })) || [];
+          }, [c.division_id], [(c.divisions as any)?.name])) || [];
 
           const staffBirthdayRows = birthdayStaff?.filter(s => s.date_of_birth).map(s => ({
             Name: s.name,
@@ -834,6 +934,21 @@ export default function ReportingCenter() {
     setSortDirection('asc');
   }, [reportData]);
 
+  const matchesSelectedDivisions = useCallback((row: DivisionAwareRow) => {
+    if (selectedDivisions.length === 0) return true;
+
+    if (row.__divisionIds?.length) {
+      return row.__divisionIds.some((divisionId) => selectedDivisions.includes(divisionId));
+    }
+
+    const rowDivisionNames = getDivisionNamesFromRow(row);
+    if (rowDivisionNames.length > 0) {
+      return rowDivisionNames.some((divisionName) => selectedDivisionNames.includes(divisionName));
+    }
+
+    return true;
+  }, [selectedDivisions, selectedDivisionNames]);
+
   const handleSort = (column: string) => {
     if (sortColumn === column) {
       if (sortDirection === 'asc') {
@@ -850,21 +965,194 @@ export default function ReportingCenter() {
 
   // Filter report data by selected divisions
   const filteredReportData = useMemo(() => {
-    if (selectedDivisions.length === 0) return reportData;
-    
-    // Only filter reports that have a Division column
-    return reportData.filter(row => {
-      const divisionValue = row['Division'];
-      if (!divisionValue) return true; // Include rows without division info
-      
-      // Get division names from selected IDs
-      const selectedDivisionNames = divisions
-        .filter(d => selectedDivisions.includes(d.id))
-        .map(d => d.name);
-      
-      return selectedDivisionNames.includes(divisionValue);
-    });
-  }, [reportData, selectedDivisions, divisions]);
+    return reportData.filter((row) => matchesSelectedDivisions(row as DivisionAwareRow));
+  }, [reportData, matchesSelectedDivisions]);
+
+  const filteredBirthdayData = useMemo(() => {
+    return birthdayData.filter((row) => matchesSelectedDivisions(row as DivisionAwareRow));
+  }, [birthdayData, matchesSelectedDivisions]);
+
+  const filteredSummary = useMemo(() => {
+    if (selectedDivisions.length === 0) return summary;
+
+    switch (reportType) {
+      case 'incidents':
+        return {
+          'Total Incidents': filteredReportData.length,
+          'Open': filteredReportData.filter((row) => row.Status === 'open').length,
+          'Resolved': filteredReportData.filter((row) => row.Status === 'resolved').length,
+        };
+      case 'staff_evaluations': {
+        const averageRating = filteredReportData.length > 0
+          ? filteredReportData.reduce((sum, row) => sum + (Number(row.Rating) || 0), 0) / filteredReportData.length
+          : 0;
+
+        return {
+          'Total Evaluations': filteredReportData.length,
+          'Average Rating': averageRating.toFixed(2),
+        };
+      }
+      case 'awards':
+        return {
+          'Total Awards': filteredReportData.length,
+        };
+      case 'sports_events':
+        return {
+          'Total Events': filteredReportData.length,
+        };
+      case 'trips':
+        return {
+          'Total Trips': filteredReportData.length,
+        };
+      case 'activities':
+        return {
+          'Total Activities': filteredReportData.length,
+        };
+      case 'conflicts':
+        return {
+          'Total Conflicts': filteredReportData.length,
+          'Unresolved': filteredReportData.filter((row) => row.Resolved !== 'Yes').length,
+          'Resolved': filteredReportData.filter((row) => row.Resolved === 'Yes').length,
+        };
+      case 'medications': {
+        const uniqueChildren = new Set(filteredReportData.map((row) => row.Child));
+        const uniqueMedications = new Set(filteredReportData.map((row) => row.Medication));
+
+        return {
+          'Total Medication Entries': filteredReportData.length,
+          'Unique Children': uniqueChildren.size,
+          'Different Medications': uniqueMedications.size,
+          'Administered': filteredReportData.filter((row) => row.Administered === 'Yes').length,
+          'Pending': filteredReportData.filter((row) => row.Administered !== 'Yes').length,
+        };
+      }
+      case 'allergies': {
+        const byDivision: Record<string, number> = {};
+
+        filteredReportData.forEach((row) => {
+          const divisionName = row.Division || 'No Division';
+          byDivision[divisionName] = (byDivision[divisionName] || 0) + 1;
+        });
+
+        return {
+          'Total Children with Allergies': filteredReportData.length,
+          'Active with Allergies': filteredReportData.filter((row) => row.Status === 'active').length,
+          'Most Affected Division': Object.entries(byDivision).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A',
+        };
+      }
+      case 're_enrollment': {
+        const seasonKey = `In ${selectedSeason}`;
+        const seasonLists = filteredReportData.map((row) =>
+          String(row['Seasons'] || '')
+            .split(',')
+            .map((value) => value.trim())
+            .filter(Boolean)
+        );
+        const allSeasons = [...new Set(seasonLists.flat())].sort();
+        const currentSeasonIndex = allSeasons.indexOf(selectedSeason);
+        let previousSeason: string | null = null;
+
+        for (let index = currentSeasonIndex - 1; index >= 0; index -= 1) {
+          if (allSeasons[index] !== '2025') {
+            previousSeason = allSeasons[index];
+            break;
+          }
+        }
+
+        let retentionRate = 'N/A';
+
+        if (previousSeason) {
+          const enrolledPreviousSeason = seasonLists.filter((seasons) => seasons.includes(previousSeason!)).length;
+          const returnedFromPrevious = seasonLists.filter(
+            (seasons) => seasons.includes(previousSeason!) && seasons.includes(selectedSeason)
+          ).length;
+
+          if (enrolledPreviousSeason > 0) {
+            retentionRate = `${((returnedFromPrevious / enrolledPreviousSeason) * 100).toFixed(1)}%`;
+          }
+        }
+
+        const enrolledCurrentSeason = filteredReportData.filter((row) => row[seasonKey] === 'Yes').length;
+        const returningCampers = filteredReportData.filter(
+          (row) => row[seasonKey] === 'Yes' && Number(row['Years Attended']) > 1
+        ).length;
+        const newCampers = filteredReportData.filter(
+          (row) => row[seasonKey] === 'Yes' && Number(row['Years Attended']) === 1
+        ).length;
+        const averageTenure = filteredReportData.length > 0
+          ? (
+              filteredReportData.reduce((sum, row) => sum + (Number(row['Years Attended']) || 0), 0) /
+              filteredReportData.length
+            ).toFixed(1)
+          : '0';
+
+        return {
+          'Total Unique Campers (All Time)': filteredReportData.length,
+          [`Enrolled in ${selectedSeason}`]: enrolledCurrentSeason,
+          'Returning Campers': returningCampers,
+          'New Campers': newCampers,
+          [`Retention Rate${previousSeason ? ` (from ${previousSeason})` : ''}`]: retentionRate,
+          'Avg Years Attended': averageTenure,
+        };
+      }
+      case 'appointments': {
+        const byType: Record<string, number> = {};
+
+        filteredReportData.forEach((row) => {
+          byType[row.Type] = (byType[row.Type] || 0) + 1;
+        });
+
+        return {
+          'Total Appointments': filteredReportData.length,
+          'Scheduled': filteredReportData.filter((row) => row.Status === 'scheduled').length,
+          'Completed': filteredReportData.filter((row) => row.Status === 'completed').length,
+          'Cancelled': filteredReportData.filter((row) => row.Status === 'cancelled').length,
+          'No Show': filteredReportData.filter((row) => row.Status === 'no_show').length,
+          'Camper Appointments': filteredReportData.filter((row) => row['Person Type'] === 'Camper').length,
+          'Staff Appointments': filteredReportData.filter((row) => row['Person Type'] === 'Staff').length,
+          'Follow-up Required': filteredReportData.filter((row) => row['Follow-up Required'] === 'Yes').length,
+          'Most Common Type': Object.entries(byType).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A',
+        };
+      }
+      case 'tshirt_sizes': {
+        const sizeCounts: Record<string, number> = {};
+
+        filteredReportData.forEach((row) => {
+          sizeCounts[row['T-Shirt Size']] = (sizeCounts[row['T-Shirt Size']] || 0) + 1;
+        });
+
+        const notSetCount = sizeCounts['Not Set'] || 0;
+
+        return {
+          'Total People': filteredReportData.length,
+          'Campers': filteredReportData.filter((row) => row.Type === 'Camper').length,
+          'Staff': filteredReportData.filter((row) => row.Type === 'Staff').length,
+          'With Size Set': filteredReportData.length - notSetCount,
+          'Missing Size': notSetCount,
+          ...Object.fromEntries(
+            Object.entries(sizeCounts)
+              .filter(([size]) => size !== 'Not Set')
+              .sort((a, b) => b[1] - a[1])
+          ),
+        };
+      }
+      case 'birthdays': {
+        const campers = filteredBirthdayData.filter((row) => row.type === 'Camper');
+        const staff = filteredBirthdayData.filter((row) => row.type === 'Staff');
+        const campersWithCakePreferences = campers.filter((row) => row.birthday_cake_type?.trim()).length;
+
+        return {
+          'Total People': filteredBirthdayData.length,
+          'Campers': campers.length,
+          'Staff': staff.length,
+          'Campers with Cake Preferences': campersWithCakePreferences,
+          'Missing Cake Preferences': campers.length - campersWithCakePreferences,
+        };
+      }
+      default:
+        return summary;
+    }
+  }, [filteredBirthdayData, filteredReportData, reportType, selectedDivisions.length, selectedSeason, summary]);
 
   const sortedData = useMemo(() => {
     if (!sortColumn || filteredReportData.length === 0) return filteredReportData;
@@ -903,7 +1191,7 @@ export default function ReportingCenter() {
 
   const handleExportCSV = () => {
     const filename = `${reportType}_report`;
-    exportToCSV(reportData, filename);
+    exportToCSV(filteredReportData, filename);
     toast({ title: "CSV exported successfully" });
   };
 
@@ -930,9 +1218,11 @@ export default function ReportingCenter() {
     const title = titleMap[reportType] || reportType.replace('_', ' ').toUpperCase();
     const dateRange = startDate && endDate ? `${startDate} to ${endDate}` : 'All Dates';
     
-    exportToPDF(reportData, filename, title, currentCompany?.name, dateRange, summary);
+    exportToPDF(filteredReportData, filename, title, currentCompany?.name, dateRange, filteredSummary);
     toast({ title: "PDF exported successfully" });
   };
+
+  const hasVisibleData = reportType === 'birthdays' ? filteredBirthdayData.length > 0 : sortedData.length > 0;
 
   // Get report options based on company's available pages
   const reportTypeOptions = useMemo(() => {
@@ -1104,9 +1394,9 @@ export default function ReportingCenter() {
               </Button>
             </div>
           )}
-          {Object.keys(summary).length > 0 && (
+          {Object.keys(filteredSummary).length > 0 && (
             <div className="grid gap-4 md:grid-cols-3">
-              {Object.entries(summary).map(([key, value]) => (
+              {Object.entries(filteredSummary).map(([key, value]) => (
                 <Card key={key}>
                   <CardContent className="pt-6">
                     <div className="text-2xl font-bold">{value}</div>
@@ -1117,7 +1407,7 @@ export default function ReportingCenter() {
             </div>
           )}
 
-          {(reportData.length > 0 || (reportType === 'birthdays' && birthdayData.length > 0)) && (
+          {hasVisibleData && (
             <div className="space-y-4">
               <div className="flex gap-2">
                 <Button onClick={handleExportCSV} variant="outline" size="sm">
@@ -1130,9 +1420,9 @@ export default function ReportingCenter() {
                 </Button>
               </div>
 
-              {reportType === 'birthdays' && birthdayData.length > 0 ? (
+              {reportType === 'birthdays' && filteredBirthdayData.length > 0 ? (
                 <BirthdayReportTable 
-                  data={birthdayData} 
+                  data={filteredBirthdayData} 
                   onDataUpdate={fetchReportData} 
                 />
               ) : (
@@ -1141,7 +1431,7 @@ export default function ReportingCenter() {
                     <table className="w-full">
                       <thead className="bg-muted">
                         <tr>
-                          {Object.keys(reportData[0]).map((header) => (
+                          {Object.keys(sortedData[0]).map((header) => (
                             <th 
                               key={header} 
                               className="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-muted/80 transition-colors select-none"
@@ -1181,7 +1471,7 @@ export default function ReportingCenter() {
             </div>
           )}
 
-          {!loading && reportData.length === 0 && (
+          {!loading && !hasVisibleData && (
             <div className="text-center py-12 text-muted-foreground">
               <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
               <p>No data available for the selected criteria</p>
