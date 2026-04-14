@@ -827,7 +827,7 @@ export default function ReportingCenter() {
     if (currentCompany?.id && !permissionsLoading) {
       fetchReportData();
     }
-  }, [reportType, currentCompany, selectedSeason, allowedDivisionIds, permissionsLoading]);
+  }, [reportType, currentCompany, selectedSeason, allowedDivisionIds, permissionsLoading, startDate, endDate]);
 
   useEffect(() => {
     setSortColumn(null);
