@@ -150,15 +150,7 @@ export default function ReportingCenter() {
             ? incidents?.filter(i => i.children?.division_id && allowedDivisionIds.includes(i.children.division_id))
             : incidents;
           
-          data = filteredIncidents?.map(i => ({
-            Date: i.date,
-            Child: i.children?.name || 'Unknown',
-            Division: i.children?.divisions?.name || 'N/A',
-            Type: i.type,
-            Severity: i.severity,
-            Status: i.status,
-            Description: i.description,
-          }).__divisionIds ? {} : withDivisionMeta({
+          data = filteredIncidents?.map(i => withDivisionMeta({
             Date: i.date,
             Child: i.children?.name || 'Unknown',
             Division: i.children?.divisions?.name || 'N/A',
