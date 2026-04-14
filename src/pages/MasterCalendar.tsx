@@ -153,8 +153,8 @@ export default function MasterCalendar() {
         supabase.from("sports_calendar").select(`*, division:divisions(id, name, gender), sports_calendar_divisions(division_id, division:divisions(id, name, gender))`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(1000, 1999),
         supabase.from("activities_field_trips").select(`*, division:divisions(id, name, gender)`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(0, 999),
         supabase.from("activities_field_trips").select(`*, division:divisions(id, name, gender)`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(1000, 1999),
-        supabase.from("special_events_activities").select(`*, division:divisions(id, name, gender)`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(0, 999),
-        supabase.from("special_events_activities").select(`*, division:divisions(id, name, gender)`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(1000, 1999),
+        supabase.from("special_events_activities").select(`*, division:divisions(id, name, gender), special_events_divisions(division_id, division:divisions(id, name, gender))`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(0, 999),
+        supabase.from("special_events_activities").select(`*, division:divisions(id, name, gender), special_events_divisions(division_id, division:divisions(id, name, gender))`).eq('company_id', currentCompany.id).order("event_date", { ascending: true }).range(1000, 1999),
         supabase.from("daily_wolf_content").select("*").eq('company_id', currentCompany.id).eq('season', currentSeason).order("date", { ascending: true }),
       ]);
 
@@ -211,6 +211,7 @@ export default function MasterCalendar() {
       // Special Events events
       if (specialEventsFiltered) {
         specialEventsFiltered.forEach((event: any) => {
+          const divisions = event.special_events_divisions?.map((d: any) => d.division).filter(Boolean) || (event.division ? [event.division] : []);
           unifiedEvents.push({
             id: `special_${event.id}`,
             title: event.title,
@@ -220,8 +221,8 @@ export default function MasterCalendar() {
             description: event.description,
             source: 'special_events_activities',
             type: event.event_type || 'Special Event',
-            division: event.division,
-            originalData: event
+            division: divisions[0] || event.division,
+            originalData: { ...event, divisions }
           });
         });
       }
