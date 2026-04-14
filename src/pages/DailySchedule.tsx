@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";

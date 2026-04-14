@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
