@@ -99,7 +99,7 @@ export default function BunkManagement({ onClose }: BunkManagementProps) {
           .order("name"),
         supabase
           .from("divisions")
-          .select("id, name")
+          .select("*")
           .eq("company_id", currentCompany.id)
           .eq("is_active", true)
           .order("sort_order")

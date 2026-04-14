@@ -65,7 +65,7 @@ export default function DivisionScheduleUploader() {
 
     const { data, error } = await supabase
       .from("divisions")
-      .select("id, name, gender")
+      .select("*")
       .eq("company_id", currentCompany.id)
       .eq("is_active", true)
       .order("sort_order");
