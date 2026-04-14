@@ -134,14 +134,16 @@ export default function ReportingCenter() {
           const staffIds = [...new Set(evals?.map(e => e.staff_id).filter(Boolean))];
           const { data: staffData } = await supabase
             .from('staff')
-            .select('id, name')
+            .select('id, name, department')
             .in('id', staffIds);
           
           const staffMap = new Map(staffData?.map(s => [s.id, s.name]));
+          const staffDeptMap = new Map(staffData?.map(s => [s.id, s.department]));
           
           data = evals?.map(e => ({
             Date: e.date,
             Staff: staffMap.get(e.staff_id!) || 'Unknown',
+            Division: staffDeptMap.get(e.staff_id!) || 'N/A',
             Category: e.category,
             Rating: e.rating,
             Evaluator: e.evaluator,
