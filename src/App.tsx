@@ -54,6 +54,7 @@ import OwlPay from "./pages/OwlPay";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 import UpdatePassword from "./pages/UpdatePassword";
+import Privacy from "./pages/Privacy";
 
 const queryClient = new QueryClient();
 
