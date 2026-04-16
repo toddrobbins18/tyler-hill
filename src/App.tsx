@@ -94,6 +94,7 @@ function AppContent() {
       <Routes>
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/update-password" element={<UpdatePassword />} />
+                <Route path="/privacy" element={<Privacy />} />
                 <Route
                   path="*"
                   element={
