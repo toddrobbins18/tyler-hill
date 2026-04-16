@@ -54,6 +54,7 @@ import OwlPay from "./pages/OwlPay";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 import UpdatePassword from "./pages/UpdatePassword";
+import Privacy from "./pages/Privacy";
 
 const queryClient = new QueryClient();
 
@@ -93,6 +94,7 @@ function AppContent() {
       <Routes>
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/update-password" element={<UpdatePassword />} />
+                <Route path="/privacy" element={<Privacy />} />
                 <Route
                   path="*"
                   element={
