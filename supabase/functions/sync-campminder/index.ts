@@ -2199,6 +2199,58 @@ async function performFullSync(
             }
           }
 
+          // Reconciliation guard:
+          // If historical transactions were inserted earlier without balance application,
+          // rebuild balances from the transaction ledger so UI never stays stale at $0.
+          const { data: ledgerSums, error: ledgerErr } = await supabase
+            .from('campminder_transactions')
+            .select('person_id, amount')
+            .eq('company_id', companyId);
+
+          if (ledgerErr) {
+            console.error('[Financials] Error loading ledger sums for reconciliation:', ledgerErr);
+          } else {
+            const sumByPerson = new Map<string, number>();
+            (ledgerSums || []).forEach((row: any) => {
+              const pid = String(row.person_id || '');
+              if (!pid) return;
+              const prev = sumByPerson.get(pid) || 0;
+              sumByPerson.set(pid, prev + Number(row.amount || 0));
+            });
+
+            const { data: seasonCampers, error: campersErr } = await supabase
+              .from('children')
+              .select('id, person_id, owl_pay_balance')
+              .eq('company_id', companyId)
+              .eq('season', season);
+
+            if (campersErr) {
+              console.error('[Financials] Error loading campers for reconciliation:', campersErr);
+            } else {
+              const updates = (seasonCampers || [])
+                .map((c: any) => {
+                  const expected = Number(sumByPerson.get(String(c.person_id || '')) || 0);
+                  const current = Number(c.owl_pay_balance || 0);
+                  return { id: c.id, expected, current };
+                })
+                .filter((x: any) => Math.abs(x.expected - x.current) > 0.0001);
+
+              for (const u of updates) {
+                const { error: updateErr } = await supabase
+                  .from('children')
+                  .update({ owl_pay_balance: u.expected, updated_at: new Date().toISOString() })
+                  .eq('id', u.id);
+                if (updateErr) {
+                  console.error(`[Financials] Reconciliation update failed for child ${u.id}:`, updateErr);
+                }
+              }
+
+              if (updates.length > 0) {
+                console.log(`[Financials] Reconciled ${updates.length} camper balances from ledger net totals`);
+              }
+            }
+          }
+
           console.log(`[Financials] Processed: ${financialDeposits} deposits, ${financialReversals} reversals, ${financialSkipped} skipped (already synced or no match)`);
           console.log(`[Financials] Balance adjustments applied to ${balanceAdjustments.size} campers`);
         }

@@ -1,4 +1,4 @@
-project_id = "gdcxtefbarvnrtvacqln"
+project_id = "qjbkvnzeejbqxbcbskdu"
 
 [functions.check-medication-alerts]
 verify_jwt = false
