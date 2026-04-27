@@ -14,6 +14,30 @@ interface AddUserDialogProps {
   onUserAdded: () => void;
 }
 
+async function getFunctionErrorMessage(error: unknown): Promise<string> {
+  const err = error as {
+    message?: string;
+    context?: {
+      json?: () => Promise<{ error?: string; message?: string }>;
+      status?: number;
+    };
+  };
+
+  const fallback = err?.message || "Request failed";
+
+  try {
+    if (typeof err?.context?.json === "function") {
+      const body = await err.context.json();
+      if (typeof body?.error === "string" && body.error.trim().length > 0) return body.error;
+      if (typeof body?.message === "string" && body.message.trim().length > 0) return body.message;
+    }
+  } catch {
+    // Ignore parse errors and use fallback.
+  }
+
+  return fallback;
+}
+
 export default function AddUserDialog({ onUserAdded }: AddUserDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -51,9 +75,9 @@ export default function AddUserDialog({ onUserAdded }: AddUserDialogProps) {
       setRole("staff");
       setOpen(false);
       onUserAdded();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error creating user:", error);
-      toast.error(error.message || "Failed to create user");
+      toast.error(await getFunctionErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -78,9 +102,9 @@ export default function AddUserDialog({ onUserAdded }: AddUserDialogProps) {
       setInviteFullName("");
       setInviteRole("staff");
       setOpen(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error sending invitation:", error);
-      toast.error(error.message || "Failed to send invitation");
+      toast.error(await getFunctionErrorMessage(error));
     } finally {
       setLoading(false);
     }

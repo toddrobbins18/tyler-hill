@@ -225,7 +225,9 @@ export default function SpecialEventsActivities() {
         .eq("id", editingEvent.id);
 
       if (error) {
-        toast({ title: "Error updating event", variant: "destructive" });
+        const detail = [error.message, (error as any).details, (error as any).hint].filter(Boolean).join(" — ");
+        toast({ title: "Error updating event", description: detail || undefined, variant: "destructive" });
+        console.error("special_events_activities update:", error);
         return;
       }
 
@@ -269,7 +271,10 @@ export default function SpecialEventsActivities() {
         .single();
 
       if (error || !newEvent) {
-        toast({ title: "Error adding event", variant: "destructive" });
+        const e = error as any;
+        const detail = e ? [e.message, e.details, e.hint].filter(Boolean).join(" — ") : "No row returned";
+        toast({ title: "Error adding event", description: detail, variant: "destructive" });
+        console.error("special_events_activities insert:", error);
         return;
       }
 

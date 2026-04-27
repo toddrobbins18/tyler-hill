@@ -21,23 +21,66 @@ export default function UpdatePassword() {
   useEffect(() => {
     // Check if user arrived via password recovery link
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      // Check URL hash for recovery token (Supabase sends type=recovery)
-      const hash = window.location.hash;
-      const isRecovery = hash.includes('type=recovery') || hash.includes('type=signup');
-      
-      if (session || isRecovery) {
-        setIsValidSession(true);
-      } else {
-        toast({
-          title: "Invalid Link",
-          description: "This password reset link is invalid or has expired. Please request a new one.",
-          variant: "destructive",
-        });
-        navigate("/auth");
+      try {
+        let { data: { session } } = await supabase.auth.getSession();
+        const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+        const queryParams = new URLSearchParams(window.location.search);
+
+        // Legacy recovery links include access_token + refresh_token in hash.
+        // Hydrate auth session explicitly if SDK did not process it yet.
+        const accessToken = hashParams.get("access_token");
+        const refreshToken = hashParams.get("refresh_token");
+        if (!session && accessToken && refreshToken) {
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (!error) {
+            session = data.session;
+          }
+        }
+
+        // Newer recovery links may include ?code=... in query.
+        // Exchange it for a session if present.
+        const code = queryParams.get("code");
+        if (!session && code) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (!error) {
+            session = data.session;
+          }
+        }
+
+        // Some Supabase recovery links use token_hash + type=recovery.
+        const tokenHash = queryParams.get("token_hash");
+        const recoveryType = queryParams.get("type");
+        if (!session && tokenHash && recoveryType === "recovery") {
+          const { data, error } = await supabase.auth.verifyOtp({
+            type: "recovery",
+            token_hash: tokenHash,
+          });
+          if (!error) {
+            session = data.session;
+          }
+        }
+
+        const isRecoveryLink =
+          hashParams.get("type") === "recovery" ||
+          hashParams.get("type") === "signup" ||
+          queryParams.get("type") === "recovery";
+
+        if (session || isRecoveryLink) {
+          setIsValidSession(true);
+        } else {
+          toast({
+            title: "Invalid Link",
+            description: "This password reset link is invalid or has expired. Please request a new one.",
+            variant: "destructive",
+          });
+          navigate("/auth");
+        }
+      } finally {
+        setCheckingSession(false);
       }
-      setCheckingSession(false);
     };
 
     // Listen for auth state changes (recovery token processing)
@@ -76,6 +119,52 @@ export default function UpdatePassword() {
 
     setLoading(true);
     try {
+      // Safety: ensure we still have a valid session at submit time.
+      let { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+        const queryParams = new URLSearchParams(window.location.search);
+        const accessToken = hashParams.get("access_token");
+        const refreshToken = hashParams.get("refresh_token");
+        if (accessToken && refreshToken) {
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (!error) {
+            session = data.session;
+          }
+        }
+
+        if (!session) {
+          const code = queryParams.get("code");
+          if (code) {
+            const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+            if (!error) {
+              session = data.session;
+            }
+          }
+        }
+
+        if (!session) {
+          const tokenHash = queryParams.get("token_hash");
+          const recoveryType = queryParams.get("type");
+          if (tokenHash && recoveryType === "recovery") {
+            const { data, error } = await supabase.auth.verifyOtp({
+              type: "recovery",
+              token_hash: tokenHash,
+            });
+            if (!error) {
+              session = data.session;
+            }
+          }
+        }
+      }
+
+      if (!session) {
+        throw new Error("Reset session expired. Please request a new password reset link.");
+      }
+
       const { error } = await supabase.auth.updateUser({ password });
 
       if (error) throw error;

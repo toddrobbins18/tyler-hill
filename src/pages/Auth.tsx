@@ -11,17 +11,24 @@ export default function Auth() {
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const authRedirectTo = `${window.location.origin}/auth`;
 
   // Extract company_id and email from URL query parameters
   const companyId = searchParams.get('company_id');
   const inviteEmail = searchParams.get('email');
 
   useEffect(() => {
-    // Check if this is a password recovery redirect (has recovery token in hash)
+    // Handle password recovery redirects (hash-based and query-based)
     const hash = window.location.hash;
-    if (hash && (hash.includes('type=recovery') || hash.includes('type=signup'))) {
-      // Redirect to update-password page with the hash
-      navigate('/update-password' + hash);
+    const queryParams = new URLSearchParams(window.location.search);
+    const hasRecoveryHash = hash.includes('type=recovery') || hash.includes('type=signup');
+    const hasRecoveryQuery =
+      queryParams.get('type') === 'recovery' ||
+      !!queryParams.get('code') ||
+      !!queryParams.get('token_hash');
+
+    if (hasRecoveryHash || hasRecoveryQuery) {
+      navigate('/update-password' + window.location.search + window.location.hash);
       return;
     }
 
@@ -36,7 +43,7 @@ export default function Auth() {
     } = supabase.auth.onAuthStateChange((event, session) => {
       // Handle password recovery event
       if (event === 'PASSWORD_RECOVERY') {
-        navigate('/update-password');
+        navigate('/update-password' + window.location.search + window.location.hash);
         return;
       }
       
@@ -108,6 +115,7 @@ export default function Auth() {
             </div>
             <SupabaseAuth
               supabaseClient={supabase}
+              redirectTo={authRedirectTo}
               appearance={{
                 theme: ThemeSupa,
                 variables: {

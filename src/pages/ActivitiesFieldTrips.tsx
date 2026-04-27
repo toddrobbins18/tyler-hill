@@ -226,7 +226,9 @@ export default function ActivitiesFieldTrips() {
         .eq("id", editingEvent.id);
 
       if (error) {
-        toast({ title: "Error updating field trip", variant: "destructive" });
+        const detail = [error.message, (error as any).details, (error as any).hint].filter(Boolean).join(" — ");
+        toast({ title: "Error updating field trip", description: detail || undefined, variant: "destructive" });
+        console.error("activities_field_trips update:", error);
         return;
       }
 
@@ -269,7 +271,10 @@ export default function ActivitiesFieldTrips() {
         .single();
 
       if (error || !newActivity) {
-        toast({ title: "Error adding field trip", variant: "destructive" });
+        const e = error as any;
+        const detail = e ? [e.message, e.details, e.hint].filter(Boolean).join(" — ") : "No row returned";
+        toast({ title: "Error adding field trip", description: detail, variant: "destructive" });
+        console.error("activities_field_trips insert:", error);
         return;
       }
 

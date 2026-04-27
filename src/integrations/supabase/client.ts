@@ -13,5 +13,11 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
+    // Parse tokens from the URL on load (recovery links, magic links, OAuth return).
+    detectSessionInUrl: true,
+    // PKCE requires the same browser that clicked "Forgot password" to hold code_verifier.
+    // Emails are often opened on another device → exchange fails and updateUser says session missing.
+    // Implicit flow uses hash tokens in the link; works for password reset across devices.
+    flowType: "implicit",
   }
 });
