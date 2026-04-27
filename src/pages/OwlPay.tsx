@@ -13,6 +13,7 @@ import OwlPayItemManagement from "@/components/owlpay/OwlPayItemManagement";
 import OwlPayReports from "@/components/owlpay/OwlPayReports";
 import OwlPayBalanceManagement from "@/components/owlpay/OwlPayBalanceManagement";
 import OwlPayEmailSettings from "@/components/owlpay/OwlPayEmailSettings";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface StaffMember {
   id: string;
@@ -39,12 +40,56 @@ export default function OwlPay() {
   const { toast } = useToast();
   const { currentCompany } = useCompany();
   const { selectedSeason } = useSeason();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     loadCampers();
     loadStaff();
     loadItems();
   }, [currentCompany, selectedSeason]);
+
+  useEffect(() => {
+    if (!currentCompany?.id) return;
+
+    const channel = supabase
+      .channel(`owlpay-web-pos-${currentCompany.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "children", filter: `company_id=eq.${currentCompany.id}` },
+        () => {
+          loadCampers();
+          queryClient.invalidateQueries({ queryKey: ["owl-pay-reports"] });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "staff", filter: `company_id=eq.${currentCompany.id}` },
+        () => {
+          loadStaff();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "owl_pay_items", filter: `company_id=eq.${currentCompany.id}` },
+        () => {
+          loadItems();
+          queryClient.invalidateQueries({ queryKey: ["owl-pay-reports"] });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "owl_pay_transactions", filter: `company_id=eq.${currentCompany.id}` },
+        () => {
+          loadCampers();
+          queryClient.invalidateQueries({ queryKey: ["owl-pay-reports"] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentCompany?.id, queryClient, selectedSeason]);
 
   const loadCampers = async () => {
     if (!currentCompany?.id || !selectedSeason) return;

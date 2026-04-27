@@ -32,6 +32,22 @@ const OwlPayItemManagement = () => {
 
   useEffect(() => { fetchItems(); }, [currentCompany]);
 
+  useEffect(() => {
+    if (!currentCompany?.id) return;
+    const channel = supabase
+      .channel(`owlpay-web-items-${currentCompany.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "owl_pay_items", filter: `company_id=eq.${currentCompany.id}` },
+        () => fetchItems()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentCompany?.id]);
+
   const fetchItems = async () => {
     if (!currentCompany?.id) return;
     const { data, error } = await supabase

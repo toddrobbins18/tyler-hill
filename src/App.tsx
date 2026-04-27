@@ -56,7 +56,23 @@ import Auth from "./pages/Auth";
 import UpdatePassword from "./pages/UpdatePassword";
 import Privacy from "./pages/Privacy";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Reduce stale cross-screen data without changing product workflows.
+      staleTime: 5000,
+      gcTime: 5 * 60 * 1000,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      refetchInterval: 15000,
+      refetchIntervalInBackground: false,
+      retry: 1,
+    },
+    mutations: {
+      retry: 1,
+    },
+  },
+});
 
 // Hook to handle password recovery redirects at app level
 function usePasswordRecoveryRedirect() {

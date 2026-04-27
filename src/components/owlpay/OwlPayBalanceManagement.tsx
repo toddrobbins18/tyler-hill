@@ -26,6 +26,22 @@ const OwlPayBalanceManagement = () => {
 
   useEffect(() => { fetchCampers(); }, [currentCompany, selectedSeason]);
 
+  useEffect(() => {
+    if (!currentCompany?.id || !selectedSeason) return;
+    const channel = supabase
+      .channel(`owlpay-web-balances-${currentCompany.id}-${selectedSeason}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "children", filter: `company_id=eq.${currentCompany.id}` },
+        () => fetchCampers()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentCompany?.id, selectedSeason]);
+
   const fetchCampers = async () => {
     if (!currentCompany?.id || !selectedSeason) return;
     const { data, error } = await supabase

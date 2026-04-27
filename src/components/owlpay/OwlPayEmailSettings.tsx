@@ -41,6 +41,22 @@ const OwlPayEmailSettings = () => {
     loadConfig();
   }, [currentCompany]);
 
+  useEffect(() => {
+    if (!currentCompany?.id) return;
+    const channel = supabase
+      .channel(`owlpay-web-settings-${currentCompany.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "owl_pay_email_config", filter: `company_id=eq.${currentCompany.id}` },
+        () => loadConfig()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentCompany?.id]);
+
   const loadConfig = async () => {
     if (!currentCompany?.id) return;
     const { data, error } = await supabase

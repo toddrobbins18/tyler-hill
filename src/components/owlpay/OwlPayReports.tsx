@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,11 +13,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar as CalendarIcon, DollarSign, Package, TrendingUp, Receipt } from "lucide-react";
 import { format, startOfDay, endOfDay, startOfWeek, startOfMonth } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 
 const OwlPayReports = () => {
   const { currentCompany } = useCompany();
+  const queryClient = useQueryClient();
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
     from: startOfDay(new Date()),
     to: endOfDay(new Date()),
@@ -117,6 +119,27 @@ const OwlPayReports = () => {
   const filteredPurchases = data?.purchases?.filter(
     (p: any) => p.camper_name.toLowerCase().includes(searchTerm.toLowerCase()) || p.item_name.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
+
+  useEffect(() => {
+    if (!currentCompany?.id) return;
+    const channel = supabase
+      .channel(`owlpay-web-reports-${currentCompany.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "owl_pay_transactions", filter: `company_id=eq.${currentCompany.id}` },
+        () => queryClient.invalidateQueries({ queryKey: ["owl-pay-reports"] })
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "owl_pay_items", filter: `company_id=eq.${currentCompany.id}` },
+        () => queryClient.invalidateQueries({ queryKey: ["owl-pay-reports"] })
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentCompany?.id, queryClient]);
 
   return (
     <div className="space-y-4">
