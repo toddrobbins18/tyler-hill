@@ -35,15 +35,52 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
   const [rfidJustScanned, setRfidJustScanned] = useState(false);
   const [tshirtSize, setTshirtSize] = useState<string>("");
   const [divisionId, setDivisionId] = useState<string>("");
+  const [bunks, setBunks] = useState<Array<{ id: string; bunk_number: number; bunk_name: string | null }>>([]);
+  const [bunkId, setBunkId] = useState<string>("");
+  const [showAddBunkDialog, setShowAddBunkDialog] = useState(false);
+  const [newBunkNumber, setNewBunkNumber] = useState("");
+  const [newBunkName, setNewBunkName] = useState("");
+  const [addingBunk, setAddingBunk] = useState(false);
   const rfidInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (open && staffId) {
+    if (open && staffId && currentCompany?.id) {
       fetchStaff();
       fetchSupervisors();
       fetchDivisions();
     }
-  }, [open, staffId, currentSeason]);
+  }, [open, staffId, currentSeason, currentCompany?.id]);
+
+  const fetchBunksForSeason = async (seasonKey: string) => {
+    if (!currentCompany?.id || !seasonKey) return;
+    let query = supabase
+      .from("bunks")
+      .select("id, bunk_number, bunk_name")
+      .eq("company_id", currentCompany.id)
+      .eq("is_active", true)
+      .order("bunk_number", { ascending: true })
+      .eq("season", seasonKey);
+
+    const { data } = await query;
+    setBunks(data || []);
+  };
+
+  /** OD Management reads bunk coverage from bunk_staff — same linkage as Add Staff Member. */
+  const fetchAssignedBunk = async (
+    resolvedStaffId: string,
+    companyId: string,
+    seasonKey: string
+  ) => {
+    const { data: rows } = await supabase
+      .from("bunk_staff")
+      .select("bunk_id, is_primary")
+      .eq("staff_id", resolvedStaffId)
+      .eq("company_id", companyId)
+      .eq("season", seasonKey);
+
+    const primary = rows?.find((r) => r.is_primary) ?? rows?.[0];
+    setBunkId(primary?.bunk_id || "");
+  };
 
   const fetchStaff = async () => {
     const { data, error } = await supabase
@@ -60,6 +97,15 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
       setRfidValue(data.rfid || "");
       setTshirtSize(data.tshirt_size || "");
       setDivisionId(data.division_id || "");
+
+      const seasonKey = data.season || currentSeason || "";
+      if (currentCompany?.id && seasonKey) {
+        await fetchBunksForSeason(seasonKey);
+        await fetchAssignedBunk(data.id, currentCompany.id, seasonKey);
+      } else {
+        setBunks([]);
+        setBunkId("");
+      }
     }
   };
 
@@ -86,6 +132,84 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
       .eq("is_active", true)
       .order("sort_order");
     setDivisions(sortDivisionsAlternatingGender(data || []));
+  };
+
+  const syncBunkStaffAssignment = async (
+    resolvedSeason: string | null,
+    bunkIdResolved: string
+  ) => {
+    if (!currentCompany?.id) return;
+    const seasonKey = resolvedSeason?.trim() || currentSeason;
+
+    /** Clear all OD bunk links for this staff at this camp (handles season changes). */
+    await supabase
+      .from("bunk_staff")
+      .delete()
+      .eq("staff_id", staffId)
+      .eq("company_id", currentCompany.id);
+
+    if (bunkIdResolved) {
+      const { error: bunkErr } = await supabase.from("bunk_staff").insert([
+        {
+          bunk_id: bunkIdResolved,
+          staff_id: staffId,
+          company_id: currentCompany.id,
+          season: seasonKey,
+          is_primary: true,
+        },
+      ]);
+      if (bunkErr) {
+        toast.warning("Staff saved, but bunk assignment failed", {
+          description: bunkErr.message,
+        });
+        console.error(bunkErr);
+      }
+    }
+  };
+
+  const handleAddBunk = async () => {
+    if (!currentCompany?.id) return;
+    const seasonKey = staff?.season || currentSeason;
+    const bunkNumber = Number(newBunkNumber);
+    if (!Number.isInteger(bunkNumber) || bunkNumber <= 0) {
+      toast.error("Please enter a valid bunk number");
+      return;
+    }
+
+    setAddingBunk(true);
+    try {
+      const { data, error } = await supabase
+        .from("bunks")
+        .insert([
+          {
+            company_id: currentCompany.id,
+            season: seasonKey,
+            bunk_number: bunkNumber,
+            bunk_name: newBunkName.trim() || null,
+            is_active: true,
+          },
+        ])
+        .select("id, bunk_number, bunk_name")
+        .single();
+
+      if (error) {
+        toast.error("Failed to add bunk");
+        console.error(error);
+        return;
+      }
+
+      if (data) {
+        setBunks((prev) => [...prev, data].sort((a, b) => a.bunk_number - b.bunk_number));
+        setBunkId(data.id);
+      }
+
+      toast.success("Bunk added");
+      setShowAddBunkDialog(false);
+      setNewBunkNumber("");
+      setNewBunkName("");
+    } finally {
+      setAddingBunk(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -124,6 +248,12 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
         toast.error("Failed to update staff member");
         console.error(error);
       } else {
+        const seasonSaved =
+          (validatedData.season as string | null | undefined)?.trim() ||
+          staff?.season ||
+          currentSeason;
+        await syncBunkStaffAssignment(seasonSaved, bunkId);
+
         toast.success("Staff member updated successfully");
         onOpenChange(false);
         onSuccess?.();
@@ -143,6 +273,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
   if (!staff) return null;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -252,6 +383,31 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
             </Select>
           </div>
           <div>
+            <div className="flex items-center justify-between mb-2">
+              <Label>Bunk</Label>
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowAddBunkDialog(true)}>
+                Add Bunk
+              </Button>
+            </div>
+            <Select value={bunkId || "none"} onValueChange={(val) => setBunkId(val === "none" ? "" : val)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select bunk" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No Bunk</SelectItem>
+                {bunks.map((bunk) => (
+                  <SelectItem key={bunk.id} value={bunk.id}>
+                    Bunk {bunk.bunk_number}
+                    {bunk.bunk_name ? ` - ${bunk.bunk_name}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Uses this season's bunk list. Saved to bunk_staff so OD Management can assign coverage by bunk.
+            </p>
+          </div>
+          <div>
             <Label htmlFor="allergies">Allergies</Label>
             <Textarea 
               id="allergies" 
@@ -330,5 +486,42 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
         </form>
       </DialogContent>
     </Dialog>
+    <Dialog open={showAddBunkDialog} onOpenChange={setShowAddBunkDialog}>
+      <DialogContent className="sm:max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle>Add Bunk</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="bunk_number_edit">Bunk Number *</Label>
+            <Input
+              id="bunk_number_edit"
+              type="number"
+              min={1}
+              value={newBunkNumber}
+              onChange={(e) => setNewBunkNumber(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="bunk_name_edit">Bunk Name (optional)</Label>
+            <Input
+              id="bunk_name_edit"
+              value={newBunkName}
+              onChange={(e) => setNewBunkName(e.target.value)}
+              placeholder="e.g. Freshmen Boys"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setShowAddBunkDialog(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void handleAddBunk()} disabled={addingBunk}>
+              {addingBunk ? "Adding..." : "Add Bunk"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
