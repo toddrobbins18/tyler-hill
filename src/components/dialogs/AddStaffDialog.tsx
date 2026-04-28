@@ -19,10 +19,16 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
   const [loading, setLoading] = useState(false);
   const [supervisors, setSupervisors] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
+  const [bunks, setBunks] = useState<Array<{ id: string; bunk_number: number; bunk_name: string | null }>>([]);
   const [leaderId, setLeaderId] = useState("");
   const [staffType, setStaffType] = useState<string>("");
   const [session, setSession] = useState<string>("");
   const [divisionId, setDivisionId] = useState<string>("");
+  const [bunkId, setBunkId] = useState<string>("");
+  const [showAddBunkDialog, setShowAddBunkDialog] = useState(false);
+  const [newBunkNumber, setNewBunkNumber] = useState("");
+  const [newBunkName, setNewBunkName] = useState("");
+  const [addingBunk, setAddingBunk] = useState(false);
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
 
@@ -30,6 +36,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
     if (open) {
       fetchSupervisors();
       fetchDivisions();
+      fetchBunks();
     }
   }, [open, currentSeason]);
 
@@ -55,6 +62,24 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
       .eq("is_active", true)
       .order("sort_order");
     setDivisions(sortDivisionsAlternatingGender(data || []));
+  };
+
+  const fetchBunks = async () => {
+    if (!currentCompany?.id) return;
+
+    let query = supabase
+      .from("bunks")
+      .select("id, bunk_number, bunk_name")
+      .eq("company_id", currentCompany.id)
+      .eq("is_active", true)
+      .order("bunk_number", { ascending: true });
+
+    if (currentSeason) {
+      query = query.eq("season", currentSeason);
+    }
+
+    const { data } = await query;
+    setBunks(data || []);
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -86,18 +111,40 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
         season: currentSeason,
       } as any;
 
-      const { error } = await supabase.from("staff").insert([insertData]);
+      const { data: insertedStaff, error } = await supabase
+        .from("staff")
+        .insert([insertData])
+        .select("id")
+        .single();
 
       if (error) {
         toast.error("Failed to add staff member");
         console.error(error);
       } else {
+        if (bunkId && insertedStaff?.id && currentCompany?.id) {
+          const { error: bunkAssignError } = await supabase.from("bunk_staff").insert([
+            {
+              bunk_id: bunkId,
+              staff_id: insertedStaff.id,
+              company_id: currentCompany.id,
+              season: currentSeason,
+              is_primary: true,
+            },
+          ]);
+
+          if (bunkAssignError) {
+            toast.warning("Staff created, but bunk assignment failed");
+            console.error(bunkAssignError);
+          }
+        }
+
         toast.success("Staff member added successfully");
         setOpen(false);
         setLeaderId("");
         setStaffType("");
         setSession("");
         setDivisionId("");
+        setBunkId("");
         onSuccess?.();
       }
     } catch (error) {
@@ -112,7 +159,53 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
     }
   };
 
+  const handleAddBunk = async () => {
+    if (!currentCompany?.id) return;
+
+    const bunkNumber = Number(newBunkNumber);
+    if (!Number.isInteger(bunkNumber) || bunkNumber <= 0) {
+      toast.error("Please enter a valid bunk number");
+      return;
+    }
+
+    setAddingBunk(true);
+    try {
+      const { data, error } = await supabase
+        .from("bunks")
+        .insert([
+          {
+            company_id: currentCompany.id,
+            season: currentSeason,
+            bunk_number: bunkNumber,
+            bunk_name: newBunkName.trim() || null,
+            is_active: true,
+          },
+        ])
+        .select("id, bunk_number, bunk_name")
+        .single();
+
+      if (error) {
+        toast.error("Failed to add bunk");
+        console.error(error);
+        return;
+      }
+
+      if (data) {
+        setBunks((prev) => [...prev, data].sort((a, b) => a.bunk_number - b.bunk_number));
+        setBunkId(data.id);
+      }
+
+      toast.success("Bunk added");
+      setShowAddBunkDialog(false);
+      setNewBunkNumber("");
+      setNewBunkName("");
+    } finally {
+      setAddingBunk(false);
+    }
+  };
+
   return (
+    <>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button>
@@ -120,7 +213,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
           Add Staff Member
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>Add New Staff Member</DialogTitle>
         </DialogHeader>
@@ -237,6 +330,28 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
             </Select>
           </div>
           <div>
+            <div className="flex items-center justify-between mb-2">
+              <Label>Bunk</Label>
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowAddBunkDialog(true)}>
+                Add Bunk
+              </Button>
+            </div>
+            <Select value={bunkId || "none"} onValueChange={(val) => setBunkId(val === "none" ? "" : val)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select bunk" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No Bunk</SelectItem>
+                {bunks.map((bunk) => (
+                  <SelectItem key={bunk.id} value={bunk.id}>
+                    Bunk {bunk.bunk_number}
+                    {bunk.bunk_name ? ` - ${bunk.bunk_name}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
             <Label>Reports To (Supervisor)</Label>
             <Select value={leaderId || "none"} onValueChange={(val) => setLeaderId(val === "none" ? "" : val)}>
               <SelectTrigger>
@@ -263,5 +378,43 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
         </form>
       </DialogContent>
     </Dialog>
+    <Dialog open={showAddBunkDialog} onOpenChange={setShowAddBunkDialog}>
+      <DialogContent className="sm:max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle>Add Bunk</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="bunk_number">Bunk Number *</Label>
+            <Input
+              id="bunk_number"
+              type="number"
+              min={1}
+              value={newBunkNumber}
+              onChange={(e) => setNewBunkNumber(e.target.value)}
+              placeholder="e.g., 12"
+            />
+          </div>
+          <div>
+            <Label htmlFor="bunk_name">Bunk Name</Label>
+            <Input
+              id="bunk_name"
+              value={newBunkName}
+              onChange={(e) => setNewBunkName(e.target.value)}
+              placeholder="Optional (e.g., Cabin A)"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setShowAddBunkDialog(false)}>
+              Cancel
+            </Button>
+            <Button type="button" disabled={addingBunk} onClick={() => void handleAddBunk()}>
+              {addingBunk ? "Adding..." : "Add"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

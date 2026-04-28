@@ -329,8 +329,6 @@ export default function Staff() {
           <BulkRfidAssignmentDialog type="staff" onSuccess={fetchStaff} />
           <CSVUploader tableName="staff" onUploadComplete={fetchStaff} />
           <AddStaffDialog onSuccess={fetchStaff} />
-          <CSVUploader tableName="staff" onUploadComplete={fetchStaff} />
-          <AddStaffDialog onSuccess={fetchStaff} />
         </div>
       </div>
 

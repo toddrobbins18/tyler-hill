@@ -24,15 +24,15 @@ interface FormatDef {
 const ALL_FORMATS: Record<string, FormatDef> = {
   children: {
     title: "Children Roster",
-    columns: "first_name, last_name, person_id, age, grade, gender, guardian_phone, guardian_email, medical_notes, allergies, emergency_contact, status, season",
-    example: "John, Doe, P12345, 10, 5, Male, 555-1234, parent@email.com, None, Peanuts, Jane Doe 555-5678, active, Summer 2024",
-    notes: "REQUIRED: first_name and last_name (or name). All other fields are optional. person_id is recommended for matching records."
+    columns: "first_name, last_name, person_id",
+    example: "John, Doe, P12345",
+    notes: "Only these three columns are required."
   },
   staff: {
     title: "Staff Directory",
-    columns: "first_name, last_name, person_id, email, phone, role, department, hire_date, status, season",
-    example: "Jane, Smith, S98765, jane@camp.com, 555-9876, Counselor, Activities, 2024-01-15, active, Summer 2024",
-    notes: "REQUIRED: first_name (or name) and last_name. Role defaults to 'Staff' if not provided. All other fields are optional."
+    columns: "first_name, last_name, person_id",
+    example: "Jane, Smith, S98765",
+    notes: "Only these three columns are required."
   },
   medication_logs: {
     title: "Medication Logs",

@@ -18,6 +18,7 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
+import { CalendarZoomWrapper } from "@/components/CalendarZoomWrapper";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -241,23 +242,27 @@ export default function SpecialMeals() {
       ) : viewMode === "calendar" ? (
         <Card>
           <CardContent className="p-6">
-            <Calendar
-              localizer={localizer}
-              events={calendarEvents}
-              startAccessor="start"
-              endAccessor="end"
-              style={{ height: 600 }}
-              view={calendarView}
-              onView={setCalendarView}
-              date={currentDate}
-              onNavigate={setCurrentDate}
-              onSelectEvent={(event) => openEditDialog(event.resource)}
-              onSelectSlot={(slotInfo) => {
-                setFormData({ ...formData, date: format(slotInfo.start, 'yyyy-MM-dd') });
-                setDialogOpen(true);
-              }}
-              selectable
-            />
+            <CalendarZoomWrapper>
+              {(height) => (
+                <Calendar
+                  localizer={localizer}
+                  events={calendarEvents}
+                  startAccessor="start"
+                  endAccessor="end"
+                  style={{ height }}
+                  view={calendarView}
+                  onView={setCalendarView}
+                  date={currentDate}
+                  onNavigate={setCurrentDate}
+                  onSelectEvent={(event) => openEditDialog(event.resource)}
+                  onSelectSlot={(slotInfo) => {
+                    setFormData({ ...formData, date: format(slotInfo.start, 'yyyy-MM-dd') });
+                    setDialogOpen(true);
+                  }}
+                  selectable
+                />
+              )}
+            </CalendarZoomWrapper>
           </CardContent>
         </Card>
       ) : (

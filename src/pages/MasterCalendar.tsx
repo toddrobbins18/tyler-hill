@@ -1,12 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useSeasonContext } from "@/contexts/SeasonContext";
-import { Calendar as CalendarIcon, Plus, List, Pencil, Trash2, Search, X, Trophy, Users, Star, Sparkles, MapPin, Clock, Home, Plane, FileText, Download } from "lucide-react";
+import { Calendar as CalendarIcon, Plus, Minus, Maximize2, List, Pencil, Trash2, Search, X, Trophy, Users, Star, Sparkles, MapPin, Clock, Home, Plane, FileText, Download } from "lucide-react";
 
-import { CalendarZoomWrapper } from "@/components/CalendarZoomWrapper";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -22,6 +21,7 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { formatTime12Hour } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Slider } from "@/components/ui/slider";
 import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -64,6 +64,9 @@ export default function MasterCalendar() {
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [calendarView, setCalendarView] = useState<View>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
+  const calendarContainerRef = useRef<HTMLDivElement>(null);
+  const [calendarAutoHeight, setCalendarAutoHeight] = useState(600);
+  const [calendarZoomOffset, setCalendarZoomOffset] = useState(0);
   const [selectedEvent, setSelectedEvent] = useState<UnifiedEvent | null>(null);
   const { toast } = useToast();
   // Aggregate colors from individual calendar settings in localStorage
@@ -137,6 +140,21 @@ export default function MasterCalendar() {
       supabase.removeChannel(channel);
     };
   }, [currentSeason]);
+
+  useEffect(() => {
+    const updateCalendarHeight = () => {
+      if (!calendarContainerRef.current) return;
+      const rect = calendarContainerRef.current.getBoundingClientRect();
+      const available = window.innerHeight - rect.top - 40;
+      setCalendarAutoHeight(Math.max(400, Math.min(1400, available)));
+    };
+
+    updateCalendarHeight();
+    window.addEventListener("resize", updateCalendarHeight);
+    return () => window.removeEventListener("resize", updateCalendarHeight);
+  }, []);
+
+  const effectiveCalendarHeight = Math.max(400, Math.min(1400, calendarAutoHeight + calendarZoomOffset));
 
   const fetchAllEvents = async () => {
     setLoading(true);
@@ -653,11 +671,53 @@ export default function MasterCalendar() {
       ) : viewMode === "calendar" ? (
         <Card>
           <CardContent className="p-6">
-            <CalendarZoomWrapper>
-              {(height) => (
-                <Calendar
-                  localizer={localizer}
-                  events={filteredAndSortedEvents.map(event => {
+            <div ref={calendarContainerRef}>
+              <div className="mb-3 rounded-md border bg-muted/40 p-2">
+                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground mb-2">
+                  <span>Calendar Zoom</span>
+                  <span>{Math.round((effectiveCalendarHeight / calendarAutoHeight) * 100)}%</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 justify-center sm:justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2"
+                  onClick={() => setCalendarZoomOffset((prev) => Math.max(prev - 100, 400 - calendarAutoHeight))}
+                  title="Zoom out"
+                >
+                  <Minus className="h-3.5 w-3.5" />
+                </Button>
+                <Slider
+                  value={[effectiveCalendarHeight]}
+                  min={400}
+                  max={1400}
+                  step={50}
+                  onValueChange={([v]) => setCalendarZoomOffset(v - calendarAutoHeight)}
+                  className="w-28 sm:w-24"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2"
+                  onClick={() => setCalendarZoomOffset((prev) => Math.min(prev + 100, 1400 - calendarAutoHeight))}
+                  title="Zoom in"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2"
+                  onClick={() => setCalendarZoomOffset(0)}
+                  title="Auto-fit to screen"
+                >
+                  <Maximize2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              </div>
+              <Calendar
+                localizer={localizer}
+                events={filteredAndSortedEvents.map(event => {
                     const isMultiDay = event.source === 'activities_field_trips' && 
                       event.originalData.is_multi_day && 
                       event.originalData.end_date;
@@ -704,20 +764,19 @@ export default function MasterCalendar() {
                       allDay,
                       resource: event,
                     };
-                  })}
-                  startAccessor="start"
-                  endAccessor="end"
-                  style={{ height }}
-                  view={calendarView}
-                  onView={setCalendarView}
-                  date={currentDate}
-                  onNavigate={setCurrentDate}
-                  onSelectEvent={(event: any) => setSelectedEvent(event.resource)}
-                  eventPropGetter={eventPropGetter}
-                  showAllEvents
-                />
-              )}
-            </CalendarZoomWrapper>
+                })}
+                startAccessor="start"
+                endAccessor="end"
+                style={{ height: effectiveCalendarHeight }}
+                view={calendarView}
+                onView={setCalendarView}
+                date={currentDate}
+                onNavigate={setCurrentDate}
+                onSelectEvent={(event: any) => setSelectedEvent(event.resource)}
+                eventPropGetter={eventPropGetter}
+                showAllEvents
+              />
+            </div>
           </CardContent>
         </Card>
       ) : (

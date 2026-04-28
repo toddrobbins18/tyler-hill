@@ -37,7 +37,7 @@ export function CalendarZoomWrapper({ children, minHeight = 400, maxHeight = 140
 
   return (
     <div ref={containerRef}>
-      <div className="flex items-center gap-2 mb-2 justify-end">
+      <div className="flex flex-wrap items-center gap-2 mb-2 justify-center sm:justify-end">
         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomOut} title="Zoom out (fewer days visible)">
           <Minus className="h-3.5 w-3.5" />
         </Button>
@@ -47,7 +47,7 @@ export function CalendarZoomWrapper({ children, minHeight = 400, maxHeight = 140
           max={maxHeight}
           step={50}
           onValueChange={([v]) => setZoomOffset(v - autoHeight)}
-          className="w-24"
+          className="w-28 sm:w-24"
         />
         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomIn} title="Zoom in (more days visible)">
           <Plus className="h-3.5 w-3.5" />
