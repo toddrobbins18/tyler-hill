@@ -35,6 +35,18 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 
+const normalizeDivisionNameForFilter = (name?: string | null): string => {
+  if (!name) return "";
+
+  // Treat "Super Girls" and "Super Senior Girls" as the same filter bucket.
+  return name.replace(/\bSuper\s+Senior\b/gi, "Super").trim();
+};
+
+const getDivisionDropdownLabel = (name?: string | null): string => {
+  if (!name) return "";
+  return name.trim().toLowerCase() === "super girls" ? "Super Senior Girls" : name;
+};
+
 export default function Roster() {
   const { currentSeason } = useSeasonContext();
   const { currentCompany } = useCompany();
@@ -124,6 +136,9 @@ export default function Roster() {
     setCurrentPage(1);
   }, [searchTerm, selectedDivision, selectedSession, currentSeason, sortBy]);
 
+  const selectedDivisionRecord = divisions.find((div) => div.id === selectedDivision);
+  const selectedDivisionNormalizedName = normalizeDivisionNameForFilter(selectedDivisionRecord?.name);
+
   const filteredChildren = children
     .filter((child) => {
       const matchesSearch = 
@@ -131,8 +146,12 @@ export default function Roster() {
         (child.grade?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
         (child.division?.name?.toLowerCase() || "").includes(searchTerm.toLowerCase());
       
-      const matchesDivision = 
-        selectedDivision === "all" || child.division_id === selectedDivision;
+      const childDivisionNormalizedName = normalizeDivisionNameForFilter(child.division?.name);
+      const matchesDivision =
+        selectedDivision === "all" ||
+        child.division_id === selectedDivision ||
+        (selectedDivisionNormalizedName.length > 0 &&
+          childDivisionNormalizedName === selectedDivisionNormalizedName);
       
       const matchesSession = 
         selectedSession === "all" || 
@@ -361,7 +380,7 @@ export default function Roster() {
           <option value="all">All Divisions</option>
           {divisions.map((div) => (
             <option key={div.id} value={div.id}>
-              {div.name}
+              {getDivisionDropdownLabel(div.name)}
             </option>
           ))}
         </select>
