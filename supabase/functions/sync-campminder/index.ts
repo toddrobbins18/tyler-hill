@@ -1911,103 +1911,109 @@ async function performFullSync(
       progress: { step: 'Cleaning up old records', staff: staffPersonIds.size, campers: campers.length, divisions: divisions.length, season },
     });
 
-    let campersDeleted = 0;
-    let staffDeleted = 0;
+    let campersInactivated = 0;
+    let staffInactivated = 0;
 
     try {
       // Get all person_ids that were synced from CampMinder
       const syncedCamperPersonIds = camperData.map(c => c.person_id);
       const syncedStaffPersonIds = staffData.map(s => s.person_id);
 
-      // Delete campers that are no longer in CampMinder (only for full or campers sync)
+      // Inactivate campers that are no longer in CampMinder (only for full or campers sync)
       if ((syncType === 'full' || syncType === 'campers') && syncedCamperPersonIds.length > 0) {
         console.log(`[Cleanup] Checking for campers not in CampMinder sync (${syncedCamperPersonIds.length} valid campers)...`);
         
-        // Get campers that exist in DB but were NOT in this sync
+        // Get active campers that exist in DB but were NOT in this sync
         const { data: existingCampers, error: fetchError } = await supabase
           .from('children')
           .select('id, person_id, first_name, last_name')
           .eq('company_id', companyId)
-          .eq('season', season);
+          .eq('season', season)
+          .neq('status', 'inactive');
 
         if (fetchError) {
           console.error('[Cleanup] Error fetching existing campers:', fetchError);
         } else if (existingCampers) {
           const camperPersonIdSet = new Set(syncedCamperPersonIds);
-          const campersToDelete = existingCampers.filter((c: { id: string; person_id: string; first_name: string; last_name: string }) => !camperPersonIdSet.has(c.person_id));
+          const campersToInactivate = existingCampers.filter((c: { id: string; person_id: string; first_name: string; last_name: string }) => !camperPersonIdSet.has(c.person_id));
           
-          if (campersToDelete.length > 0) {
-            console.log(`[Cleanup] Found ${campersToDelete.length} campers to remove (not enrolled in CampMinder):`);
-            campersToDelete.slice(0, 10).forEach((c: { id: string; person_id: string; first_name: string; last_name: string }) => {
+          if (campersToInactivate.length > 0) {
+            console.log(`[Cleanup] Found ${campersToInactivate.length} campers to inactivate (not enrolled in CampMinder):`);
+            campersToInactivate.slice(0, 10).forEach((c: { id: string; person_id: string; first_name: string; last_name: string }) => {
               console.log(`  - ${c.first_name} ${c.last_name} (person_id: ${c.person_id})`);
             });
-            if (campersToDelete.length > 10) {
-              console.log(`  ... and ${campersToDelete.length - 10} more`);
+            if (campersToInactivate.length > 10) {
+              console.log(`  ... and ${campersToInactivate.length - 10} more`);
             }
 
-            const idsToDelete = campersToDelete.map((c: { id: string }) => c.id);
-            const { error: deleteError } = await supabase
-              .from('children')
-              .delete()
-              .in('id', idsToDelete);
-
-            if (deleteError) {
-              console.error('[Cleanup] Error deleting campers:', deleteError);
-            } else {
-              campersDeleted = campersToDelete.length;
-              console.log(`[Cleanup] Successfully deleted ${campersDeleted} campers`);
+            const BATCH_SIZE = 100;
+            for (let i = 0; i < campersToInactivate.length; i += BATCH_SIZE) {
+              const batchIds = campersToInactivate.slice(i, i + BATCH_SIZE).map((c: { id: string }) => c.id);
+              const { error: updateError } = await supabase
+                .from('children')
+                .update({ status: 'inactive', updated_at: new Date().toISOString() })
+                .in('id', batchIds);
+              if (updateError) {
+                throw updateError;
+              }
             }
+
+            campersInactivated = campersToInactivate.length;
+            console.log(`[Cleanup] Successfully inactivated ${campersInactivated} campers`);
           } else {
-            console.log('[Cleanup] No campers to remove - all match CampMinder data');
+            console.log('[Cleanup] No campers to inactivate - all match CampMinder data');
           }
         }
       }
 
-      // Delete staff that are no longer in CampMinder (only for full or staff sync)
+      // Inactivate staff that are no longer in CampMinder (only for full or staff sync)
       if ((syncType === 'full' || syncType === 'staff') && syncedStaffPersonIds.length > 0) {
         console.log(`[Cleanup] Checking for staff not in CampMinder sync (${syncedStaffPersonIds.length} valid staff)...`);
         
-        // Get staff that exist in DB but were NOT in this sync
+        // Get active staff that exist in DB but were NOT in this sync
         const { data: existingStaff, error: fetchError } = await supabase
           .from('staff')
           .select('id, person_id, name')
           .eq('company_id', companyId)
-          .eq('season', season);
+          .eq('season', season)
+          .neq('status', 'inactive');
 
         if (fetchError) {
           console.error('[Cleanup] Error fetching existing staff:', fetchError);
         } else if (existingStaff) {
           const staffPersonIdSet = new Set(syncedStaffPersonIds);
-          const staffToDelete = existingStaff.filter((s: { id: string; person_id: string; name: string }) => !staffPersonIdSet.has(s.person_id));
+          const staffToInactivate = existingStaff.filter((s: { id: string; person_id: string; name: string }) => !staffPersonIdSet.has(s.person_id));
           
-          if (staffToDelete.length > 0) {
-            console.log(`[Cleanup] Found ${staffToDelete.length} staff to remove (not hired/active in CampMinder):`);
-            staffToDelete.slice(0, 10).forEach((s: { id: string; person_id: string; name: string }) => {
+          if (staffToInactivate.length > 0) {
+            console.log(`[Cleanup] Found ${staffToInactivate.length} staff to inactivate (not hired/active in CampMinder):`);
+            staffToInactivate.slice(0, 10).forEach((s: { id: string; person_id: string; name: string }) => {
               console.log(`  - ${s.name} (person_id: ${s.person_id})`);
             });
-            if (staffToDelete.length > 10) {
-              console.log(`  ... and ${staffToDelete.length - 10} more`);
+            if (staffToInactivate.length > 10) {
+              console.log(`  ... and ${staffToInactivate.length - 10} more`);
             }
 
-            const idsToDelete = staffToDelete.map((s: { id: string }) => s.id);
-            const { error: deleteError } = await supabase
-              .from('staff')
-              .delete()
-              .in('id', idsToDelete);
-
-            if (deleteError) {
-              console.error('[Cleanup] Error deleting staff:', deleteError);
-            } else {
-              staffDeleted = staffToDelete.length;
-              console.log(`[Cleanup] Successfully deleted ${staffDeleted} staff`);
+            const BATCH_SIZE = 100;
+            for (let i = 0; i < staffToInactivate.length; i += BATCH_SIZE) {
+              const batchIds = staffToInactivate.slice(i, i + BATCH_SIZE).map((s: { id: string }) => s.id);
+              const { error: updateError } = await supabase
+                .from('staff')
+                .update({ status: 'inactive', updated_at: new Date().toISOString() })
+                .in('id', batchIds);
+              if (updateError) {
+                throw updateError;
+              }
             }
+
+            staffInactivated = staffToInactivate.length;
+            console.log(`[Cleanup] Successfully inactivated ${staffInactivated} staff`);
           } else {
-            console.log('[Cleanup] No staff to remove - all match CampMinder data');
+            console.log('[Cleanup] No staff to inactivate - all match CampMinder data');
           }
         }
       }
 
-      console.log(`[Cleanup Summary] Deleted ${campersDeleted} campers, ${staffDeleted} staff`);
+      console.log(`[Cleanup Summary] Inactivated ${campersInactivated} campers, inactivated ${staffInactivated} staff`);
     } catch (error) {
       console.error('[Cleanup] Error during cleanup phase:', error);
     }
