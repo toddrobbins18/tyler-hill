@@ -36,7 +36,7 @@ const OwlPayReports = () => {
 
       const { data: transactions, error } = await supabase
         .from("owl_pay_transactions" as any)
-        .select("*, owl_pay_items(*), children(name)")
+        .select("*, owl_pay_items(*), children(name), staff(name)")
         .eq("company_id", currentCompany!.id)
         .eq("transaction_type", "purchase")
         .gte("created_at", start)
@@ -71,7 +71,7 @@ const OwlPayReports = () => {
 
           purchases.push({
             id: tx.id,
-            camper_name: tx.children?.name || "Unknown",
+            camper_name: tx.children?.name || tx.staff?.name || "Unknown",
             item_name: item.name,
             item_category: item.category,
             amount,

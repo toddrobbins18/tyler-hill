@@ -100,7 +100,8 @@ const OwlPayTransactionSummary = ({
       if (cart.length > 0 && !isFirstScanToday) {
         const transactionInserts = cart.flatMap(item =>
           Array(item.quantity).fill(null).map(() => ({
-            child_id: camper.id,
+            child_id: isStaff ? null : camper.id,
+            staff_id: isStaff ? camper.id : null,
             company_id: currentCompany.id,
             item_id: item.id,
             amount: item.price,
@@ -122,6 +123,22 @@ const OwlPayTransactionSummary = ({
             .update({ owl_pay_balance: newBalance } as any)
             .eq("id", camper.id);
           if (balError) throw balError;
+        }
+
+        // Notify low-balance alerts and periodic staff reports without blocking checkout success.
+        try {
+          await supabase.functions.invoke("send-owlpay-notifications", {
+            body: {
+              company_id: currentCompany.id,
+              transaction_type: "purchase",
+              child_id: isStaff ? null : camper.id,
+              staff_id: isStaff ? camper.id : null,
+              amount: total,
+              new_balance: isStaff ? null : newBalance,
+            },
+          });
+        } catch (notifyError) {
+          console.error("Owl Pay notification call failed:", notifyError);
         }
       }
 
