@@ -369,6 +369,48 @@ async function updateSyncJob(
   }
 }
 
+/** Edge timeouts often kill waitUntil work without running catch — jobs stay "running" forever. */
+async function failStaleCampminderSyncJobs(
+  supabase: any,
+  companyId: string,
+  staleMinutes: number = 120,
+): Promise<number> {
+  const cutoffIso = new Date(Date.now() - staleMinutes * 60 * 1000).toISOString();
+  const msg =
+    `Stale job auto-closed after ${staleMinutes}m (Edge worker timeout or crash — run sync again).`;
+
+  const { data: stale, error: selErr } = await supabase
+    .from('sync_jobs')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('entity_type', 'campminder')
+    .in('status', ['running', 'pending'])
+    .lt('created_at', cutoffIso);
+
+  if (selErr) {
+    console.error('failStaleCampminderSyncJobs:', selErr);
+    return 0;
+  }
+  if (!stale?.length) return 0;
+
+  const ids = stale.map((r: { id: string }) => r.id);
+  const { error: updErr } = await supabase
+    .from('sync_jobs')
+    .update({
+      status: 'failed',
+      completed_at: new Date().toISOString(),
+      error_message: msg,
+    })
+    .in('id', ids);
+
+  if (updErr) {
+    console.error('failStaleCampminderSyncJobs update:', updErr);
+    return 0;
+  }
+  console.log(`[Stale sync jobs] Marked ${ids.length} job(s) failed for company ${companyId}`);
+  return ids.length;
+}
+
 interface ChangeRecord {
   person_id: string;
   name: string;
@@ -2388,6 +2430,8 @@ serve(async (req) => {
           throw new Error('No client ID returned from CampMinder');
         }
 
+        const staleClosed = await failStaleCampminderSyncJobs(supabase, company.id, 120);
+
         // Determine if this should be an incremental sync
         const isIncremental = incremental === true && company.campminder_last_sync_at;
         const lastSyncAt = company.campminder_last_sync_at;
@@ -2431,8 +2475,11 @@ serve(async (req) => {
           company_id: company.id,
           status: 'started',
           job_id: job.id,
-          sync_type: isIncremental ? 'incremental' : 'full',
-          message: `${isIncremental ? 'Incremental' : 'Full'} sync running in background. Check sync_jobs table for progress.`,
+          sync_type: effectiveSyncType,
+          incremental_flag: isIncremental,
+          stale_jobs_closed: staleClosed,
+          message:
+            `${effectiveSyncType} sync running in background (${isIncremental ? 'incremental' : 'full'} mode). Check sync_jobs table for progress.`,
         });
 
       } catch (authError) {
