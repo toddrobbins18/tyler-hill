@@ -105,11 +105,12 @@ export default function OwlPay() {
   };
 
   const loadStaff = async () => {
-    if (!currentCompany?.id) return;
+    if (!currentCompany?.id || !selectedSeason) return;
     const { data, error } = await supabase
       .from("staff")
       .select("id, name, rfid, photo_url")
       .eq("company_id", currentCompany.id)
+      .eq("season", selectedSeason)
       .neq("status", "inactive")
       .order("name");
     if (error) { console.error(error); return; }
