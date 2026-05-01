@@ -13,6 +13,13 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import {
+  MEDICATION_BEDTIME_OPTIONS,
+  STANDARD_MEAL_SCHEDULE_HHMM,
+  STANDARD_MEAL_LABEL_ORDER,
+  findBedtimeOptionById,
+  findBedtimeOptionFromStoredMealLabel,
+} from "@/lib/medicationBedtimeOptions";
 
 interface EditMedicationDialogProps {
   medication: any;
@@ -21,15 +28,7 @@ interface EditMedicationDialogProps {
   onSuccess: () => void;
 }
 
-const MEAL_TIMES = [
-  "Before Breakfast",
-  "After Breakfast",
-  "Before Lunch",
-  "After Lunch",
-  "Before Dinner",
-  "After Dinner",
-  "Bedtime"
-];
+const STANDARD_MEAL_LABELS = [...STANDARD_MEAL_LABEL_ORDER];
 
 export function EditMedicationDialog({
   medication,
@@ -49,26 +48,97 @@ export function EditMedicationDialog({
     days_of_week: [] as string[],
     start_date: null as Date | null,
     end_date: null as Date | null,
+    bedtime_option_id: null as string | null,
   });
 
   useEffect(() => {
     if (medication) {
+      const rawMt = medication.meal_time;
+      const first = Array.isArray(rawMt) ? rawMt[0] : rawMt;
+      let bedtime_option_id: string | null = null;
+      let meal_time: string[] = [];
+
+      if (typeof first === "string") {
+        const legacyBed = findBedtimeOptionFromStoredMealLabel(first);
+        if (legacyBed) {
+          bedtime_option_id = legacyBed.id;
+          meal_time = ["Bedtime"];
+        } else if (first === "Bedtime") {
+          const st = medication.scheduled_time as string | undefined;
+          const fallback =
+            MEDICATION_BEDTIME_OPTIONS.find((o) => o.scheduledTimeHHmm === st)?.id ??
+            "bedtime-21-00-freshman";
+          bedtime_option_id = fallback;
+          meal_time = ["Bedtime"];
+        } else if (STANDARD_MEAL_LABELS.includes(first)) {
+          meal_time = [first];
+        }
+      } else if (medication.scheduled_time) {
+        const st = medication.scheduled_time as string;
+        const standardMatch = STANDARD_MEAL_LABELS.find((label) => STANDARD_MEAL_SCHEDULE_HHMM[label] === st);
+        if (standardMatch) {
+          meal_time = [standardMatch];
+        } else {
+          const btMatch = MEDICATION_BEDTIME_OPTIONS.find((o) => o.scheduledTimeHHmm === st);
+          if (btMatch) {
+            bedtime_option_id = btMatch.id;
+            meal_time = ["Bedtime"];
+          }
+        }
+      }
+
       setFormData({
         medication_name: medication.medication_name || "",
         dosage: medication.dosage || "",
-        meal_time: medication.meal_time || [],
+        meal_time,
         notes: medication.notes || "",
         is_recurring: medication.is_recurring || false,
         frequency: medication.frequency || "daily",
         days_of_week: medication.days_of_week || [],
         start_date: medication.date ? new Date(medication.date + "T00:00:00") : null,
         end_date: medication.end_date ? new Date(medication.end_date + "T00:00:00") : null,
+        bedtime_option_id,
       });
     }
   }, [medication]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const hasBedtime = formData.meal_time.includes("Bedtime");
+    const standardSelected = formData.meal_time.filter((t) => STANDARD_MEAL_LABELS.includes(t));
+    const bedtimeOpt = findBedtimeOptionById(formData.bedtime_option_id);
+
+    if (hasBedtime && standardSelected.length > 0) {
+      toast({
+        title: "Choose either Bedtime or one meal time for this row",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!hasBedtime && standardSelected.length !== 1) {
+      toast({ title: "Select exactly one meal time", variant: "destructive" });
+      return;
+    }
+
+    if (hasBedtime && !bedtimeOpt) {
+      toast({ title: "Select a division for Bedtime", variant: "destructive" });
+      return;
+    }
+
+    let meal_time: string[];
+    let scheduled_time: string;
+
+    if (hasBedtime && bedtimeOpt) {
+      meal_time = [bedtimeOpt.mealTimeLabel];
+      scheduled_time = bedtimeOpt.scheduledTimeHHmm;
+    } else {
+      const m = standardSelected[0];
+      meal_time = [m];
+      scheduled_time = STANDARD_MEAL_SCHEDULE_HHMM[m] ?? "12:00";
+    }
+
     setIsSubmitting(true);
 
     const { error } = await supabase
@@ -76,7 +146,8 @@ export function EditMedicationDialog({
       .update({
         medication_name: formData.medication_name,
         dosage: formData.dosage,
-        meal_time: formData.meal_time,
+        meal_time,
+        scheduled_time,
         notes: formData.notes,
         is_recurring: formData.is_recurring,
         frequency: formData.frequency,
@@ -187,27 +258,78 @@ export function EditMedicationDialog({
           <div className="space-y-2">
             <Label>Meal Time</Label>
             <div className="grid grid-cols-2 gap-2">
-              {MEAL_TIMES.map((mealTime) => (
+              {STANDARD_MEAL_LABEL_ORDER.map((mealTime) => (
                 <div key={mealTime} className="flex items-center space-x-2">
                   <Checkbox
                     id={`edit-${mealTime}`}
-                    checked={formData.meal_time.includes(mealTime)}
+                    checked={formData.meal_time.length === 1 && formData.meal_time[0] === mealTime}
                     onCheckedChange={(checked) => {
-                      const newTimes = checked
-                        ? [...formData.meal_time, mealTime]
-                        : formData.meal_time.filter(t => t !== mealTime);
-                      setFormData({ ...formData, meal_time: newTimes });
+                      if (checked) {
+                        setFormData({
+                          ...formData,
+                          meal_time: [mealTime],
+                          bedtime_option_id: null,
+                        });
+                      } else if (formData.meal_time[0] === mealTime) {
+                        setFormData({ ...formData, meal_time: [], bedtime_option_id: null });
+                      }
                     }}
                   />
-                  <Label 
-                    htmlFor={`edit-${mealTime}`} 
+                  <Label
+                    htmlFor={`edit-${mealTime}`}
                     className="font-normal cursor-pointer text-sm"
                   >
                     {mealTime}
                   </Label>
                 </div>
               ))}
+              <div key="Bedtime" className="flex items-center space-x-2">
+                <Checkbox
+                  id="edit-Bedtime"
+                  checked={formData.meal_time.includes("Bedtime")}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setFormData({
+                        ...formData,
+                        meal_time: ["Bedtime"],
+                        bedtime_option_id: formData.bedtime_option_id,
+                      });
+                    } else {
+                      setFormData({ ...formData, meal_time: [], bedtime_option_id: null });
+                    }
+                  }}
+                />
+                <Label htmlFor="edit-Bedtime" className="font-normal cursor-pointer text-sm">
+                  Bedtime
+                </Label>
+              </div>
             </div>
+            {formData.meal_time.includes("Bedtime") && (
+              <div className="space-y-2 pt-1">
+                <Label htmlFor="edit-bedtime-division-select">Division</Label>
+                <Select
+                  value={formData.bedtime_option_id ?? "none"}
+                  onValueChange={(value) =>
+                    setFormData({
+                      ...formData,
+                      bedtime_option_id: value === "none" ? null : value,
+                    })
+                  }
+                >
+                  <SelectTrigger id="edit-bedtime-division-select">
+                    <SelectValue placeholder="Select division" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Select division</SelectItem>
+                    {MEDICATION_BEDTIME_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.id} value={opt.id}>
+                        {opt.division}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">

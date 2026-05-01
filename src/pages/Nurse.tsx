@@ -19,6 +19,7 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
 import { EditMedicationDialog } from "@/components/dialogs/EditMedicationDialog";
+import { MEDICATION_BEDTIME_OPTIONS, STANDARD_MEAL_SCHEDULE_HHMM, STANDARD_MEAL_LABEL_ORDER, findBedtimeOptionById, findBedtimeOptionFromStoredMealLabel } from "@/lib/medicationBedtimeOptions";
 
 // Helper to check if we should show limited features for Timber Lake
 const useTimberLakeMode = () => {
@@ -81,6 +82,7 @@ export default function Nurse() {
     frequency: "daily",
     days_of_week: [] as string[],
     end_date: "",
+    bedtime_option_id: null as string | null,
   });
 
   useEffect(() => {
@@ -202,7 +204,9 @@ export default function Nurse() {
     if (!mealTime) return 999;
     const time = Array.isArray(mealTime) ? mealTime[0] : mealTime;
     const index = MEAL_TIME_ORDER.findIndex(mt => time?.includes(mt));
-    return index >= 0 ? index : 999;
+    if (index >= 0) return index;
+    if (findBedtimeOptionFromStoredMealLabel(time)) return 6;
+    return 999;
   };
 
   const sortMedicationsByMealTime = (meds: any[]) => {
@@ -271,29 +275,60 @@ export default function Nurse() {
       return;
     }
 
-    if (formData.meal_times.length === 0) {
-      toast({ title: "Please select at least one meal time", variant: "destructive" });
+    const bedtimeOpt = findBedtimeOptionById(formData.bedtime_option_id);
+    const standardMeals = formData.meal_times.filter((m) => m !== "Bedtime");
+    const hasBedtime = formData.meal_times.includes("Bedtime");
+
+    if (standardMeals.length === 0 && !hasBedtime) {
+      toast({ title: "Select at least one meal time", variant: "destructive" });
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (hasBedtime && !bedtimeOpt) {
+      toast({ title: "Select a division for Bedtime", variant: "destructive" });
       setIsSubmitting(false);
       return;
     }
 
     const today = new Date().toISOString().split('T')[0];
-    
-    // Create one medication log entry for each selected meal time
-    const inserts = formData.meal_times.map(mealTime => ({
-      child_id: selectedChild,
-      date: today,
-      medication_name: formData.medication_name,
-      dosage: formData.dosage,
-      meal_time: [mealTime],
-      notes: formData.notes,
-      is_recurring: formData.is_recurring,
-      frequency: formData.frequency,
-      days_of_week: formData.days_of_week,
-      end_date: formData.end_date || null,
-      company_id: currentCompany?.id,
-      season: currentSeason,
-    }));
+
+    const inserts = [
+      ...standardMeals.map((mealTime) => ({
+        child_id: selectedChild,
+        date: today,
+        medication_name: formData.medication_name,
+        dosage: formData.dosage,
+        meal_time: [mealTime],
+        scheduled_time: STANDARD_MEAL_SCHEDULE_HHMM[mealTime] ?? "12:00",
+        notes: formData.notes,
+        is_recurring: formData.is_recurring,
+        frequency: formData.frequency,
+        days_of_week: formData.days_of_week,
+        end_date: formData.end_date || null,
+        company_id: currentCompany?.id,
+        season: currentSeason,
+      })),
+      ...(hasBedtime && bedtimeOpt
+        ? [
+            {
+              child_id: selectedChild,
+              date: today,
+              medication_name: formData.medication_name,
+              dosage: formData.dosage,
+              meal_time: [bedtimeOpt.mealTimeLabel],
+              scheduled_time: bedtimeOpt.scheduledTimeHHmm,
+              notes: formData.notes,
+              is_recurring: formData.is_recurring,
+              frequency: formData.frequency,
+              days_of_week: formData.days_of_week,
+              end_date: formData.end_date || null,
+              company_id: currentCompany?.id,
+              season: currentSeason,
+            },
+          ]
+        : []),
+    ];
 
     const { error } = await supabase.from("medication_logs").insert(inserts);
 
@@ -304,7 +339,7 @@ export default function Nurse() {
       return;
     }
 
-    toast({ title: `Medication added successfully for ${formData.meal_times.length} time(s)` });
+    toast({ title: `Medication added successfully for ${inserts.length} schedule slot(s)` });
     setFormData({ 
       medication_name: "", 
       dosage: "", 
@@ -314,6 +349,7 @@ export default function Nurse() {
       frequency: "daily",
       days_of_week: [],
       end_date: "",
+      bedtime_option_id: null,
     });
     setSelectedChild("");
     setIsSubmitting(false);
@@ -990,7 +1026,7 @@ export default function Nurse() {
       {viewMode === 'list' && (
         <>
           <Tabs defaultValue="log" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-5">
           <TabsTrigger value="log">Daily Log</TabsTrigger>
           <TabsTrigger value="today">Today's Medications</TabsTrigger>
           <TabsTrigger value="health-center">Health Center</TabsTrigger>
@@ -1749,28 +1785,31 @@ export default function Nurse() {
                 <div className="space-y-2">
                   <Label>Meal Time</Label>
                   <div className="grid grid-cols-2 gap-2">
-                    {[
-                      "Before Breakfast",
-                      "After Breakfast", 
-                      "Before Lunch",
-                      "After Lunch",
-                      "Before Dinner",
-                      "After Dinner",
-                      "Bedtime"
-                    ].map((mealTime) => (
+                    {[...STANDARD_MEAL_LABEL_ORDER, "Bedtime"].map((mealTime) => (
                       <div key={mealTime} className="flex items-center space-x-2">
                         <Checkbox
                           id={mealTime}
                           checked={formData.meal_times.includes(mealTime)}
                           onCheckedChange={(checked) => {
-                            const newTimes = checked
-                              ? [...formData.meal_times, mealTime]
-                              : formData.meal_times.filter(t => t !== mealTime);
-                            setFormData({ ...formData, meal_times: newTimes });
+                            if (checked) {
+                              if (formData.meal_times.includes(mealTime)) return;
+                              setFormData({
+                                ...formData,
+                                meal_times: [...formData.meal_times, mealTime],
+                              });
+                              return;
+                            }
+                            const meal_times = formData.meal_times.filter((t) => t !== mealTime);
+                            setFormData({
+                              ...formData,
+                              meal_times,
+                              bedtime_option_id:
+                                mealTime === "Bedtime" ? null : formData.bedtime_option_id,
+                            });
                           }}
                         />
-                        <Label 
-                          htmlFor={mealTime} 
+                        <Label
+                          htmlFor={mealTime}
                           className="font-normal cursor-pointer text-sm"
                         >
                           {mealTime}
@@ -1778,6 +1817,32 @@ export default function Nurse() {
                       </div>
                     ))}
                   </div>
+                  {formData.meal_times.includes("Bedtime") && (
+                    <div className="space-y-2 pt-1">
+                      <Label htmlFor="bedtime-division-select">Division</Label>
+                      <Select
+                        value={formData.bedtime_option_id ?? "none"}
+                        onValueChange={(value) =>
+                          setFormData({
+                            ...formData,
+                            bedtime_option_id: value === "none" ? null : value,
+                          })
+                        }
+                      >
+                        <SelectTrigger id="bedtime-division-select">
+                          <SelectValue placeholder="Select division" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Select division</SelectItem>
+                          {MEDICATION_BEDTIME_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.id} value={opt.id}>
+                              {opt.division}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">

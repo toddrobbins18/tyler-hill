@@ -7,6 +7,39 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+/** Compare scheduled HH:mm to "now" in this timezone (camp-style Eastern wall clock). */
+const MISSED_MED_TIMEZONE = "America/New_York";
+
+function minutesSinceMidnightInTimezone(now: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const hour = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0", 10);
+  const minute = parseInt(parts.find((p) => p.type === "minute")?.value ?? "0", 10);
+  return hour * 60 + minute;
+}
+
+function scheduledTimeToMinutes(scheduled: string | null | undefined): number | null {
+  if (!scheduled || typeof scheduled !== "string") return null;
+  const trimmed = scheduled.trim();
+  const match = /^(\d{1,2}):(\d{2})$/.exec(trimmed);
+  if (!match) return null;
+  const h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  if (h > 23 || m > 59) return null;
+  return h * 60 + m;
+}
+
+function medicationAlertIsDue(now: Date, scheduledTime: string | null | undefined): boolean {
+  const slotMin = scheduledTimeToMinutes(scheduledTime);
+  if (slotMin === null) return true;
+  const nowMin = minutesSinceMidnightInTimezone(now, MISSED_MED_TIMEZONE);
+  return nowMin >= slotMin;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -60,7 +93,18 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Found ${missedMeds.length} missed medications`);
+    const now = new Date();
+    const dueMeds = missedMeds.filter((med: any) => medicationAlertIsDue(now, med.scheduled_time));
+
+    if (!dueMeds.length) {
+      console.log(`Found ${missedMeds.length} pending meds; none past scheduled time yet (${MISSED_MED_TIMEZONE})`);
+      return new Response(
+        JSON.stringify({ message: 'No medications past scheduled time yet', alerts_sent: 0 }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
+    }
+
+    console.log(`Found ${dueMeds.length} missed medications past scheduled time (${missedMeds.length} pending total)`);
 
     // Get recipients based on configuration
     const recipients = await getRecipientsForEmailType(supabase, 'missed_medication');
@@ -76,7 +120,7 @@ serve(async (req) => {
     let alertsSent = 0;
 
     // Group medications by child for better notifications
-    const medsByChild = missedMeds.reduce((acc: any, med: any) => {
+    const medsByChild = dueMeds.reduce((acc: any, med: any) => {
       const childId = med.child?.id;
       if (!childId) return acc;
       
