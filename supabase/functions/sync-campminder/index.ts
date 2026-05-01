@@ -132,39 +132,81 @@ async function rateLimitedFetch(url: string, options: RequestInit): Promise<Resp
   return fetch(url, options);
 }
 
-async function getJwtToken(subscriptionKey: string, apiKey: string): Promise<{ token: string; clientIds: string[] }> {
-  console.log('Authenticating with CampMinder...');
-  
-  const authResponse = await rateLimitedFetch(CM_AUTH_URL, {
-    method: 'GET',
-    headers: {
-      'Authorization': apiKey,
-      'Ocp-Apim-Subscription-Key': subscriptionKey,
-    },
-  });
-
-  const contentType = authResponse.headers.get('content-type');
-  const responseText = await authResponse.text();
-
-  if (!contentType?.includes('application/json')) {
-    throw new Error(`CampMinder returned non-JSON response (status ${authResponse.status}): ${responseText.substring(0, 200)}`);
+/** Extra cushion after CampMinder says "Try again in N seconds" */
+function parseCampminder429WaitMs(responseText: string, response: Response): number {
+  const retryAfter = response.headers.get('Retry-After');
+  if (retryAfter) {
+    const sec = parseInt(retryAfter, 10);
+    if (Number.isFinite(sec) && sec > 0) return Math.min(sec * 1000 + 1000, 120_000);
   }
-
-  let authData;
   try {
-    authData = JSON.parse(responseText);
-  } catch (parseError) {
-    throw new Error(`Failed to parse CampMinder response: ${responseText.substring(0, 200)}`);
+    const j = JSON.parse(responseText);
+    const msg = String(j.message || j.Message || '');
+    const m = msg.match(/(\d+)\s*seconds?/i);
+    if (m) return Math.min(parseInt(m[1], 10) * 1000 + 1000, 120_000);
+  } catch {
+    /* ignore */
+  }
+  return 12_000;
+}
+
+async function getJwtToken(subscriptionKey: string, apiKey: string): Promise<{ token: string; clientIds: string[] }> {
+  const maxAttempts = 8;
+  let lastError = '';
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    console.log(`Authenticating with CampMinder (attempt ${attempt}/${maxAttempts})...`);
+
+    const authResponse = await rateLimitedFetch(CM_AUTH_URL, {
+      method: 'GET',
+      headers: {
+        'Authorization': apiKey,
+        'Ocp-Apim-Subscription-Key': subscriptionKey,
+      },
+    });
+
+    const responseText = await authResponse.text();
+
+    if (authResponse.status === 429) {
+      const waitMs = parseCampminder429WaitMs(responseText, authResponse);
+      console.warn(`[Auth] HTTP 429 — backing off ${waitMs}ms before retry`);
+      await delay(waitMs);
+      lastError = responseText.substring(0, 300);
+      continue;
+    }
+
+    const contentType = authResponse.headers.get('content-type');
+    if (!contentType?.includes('application/json')) {
+      throw new Error(`CampMinder returned non-JSON response (status ${authResponse.status}): ${responseText.substring(0, 200)}`);
+    }
+
+    let authData: any;
+    try {
+      authData = JSON.parse(responseText);
+    } catch {
+      throw new Error(`Failed to parse CampMinder response: ${responseText.substring(0, 200)}`);
+    }
+
+    if (authData.statusCode === 429) {
+      const waitMs = parseCampminder429WaitMs(responseText, authResponse);
+      console.warn(`[Auth] JSON 429 — backing off ${waitMs}ms before retry`);
+      await delay(waitMs);
+      lastError = authData.message || JSON.stringify(authData);
+      continue;
+    }
+
+    if (!authResponse.ok || !authData.Token) {
+      lastError = authData.Message || authData.error || JSON.stringify(authData);
+      throw new Error(`Authentication failed: ${lastError}`);
+    }
+
+    const clientIds = authData.ClientIDs ? String(authData.ClientIDs).split(',').map((id: string) => id.trim()) : [];
+    console.log(`Authenticated successfully. ClientIDs: ${clientIds.join(', ')}`);
+
+    return { token: authData.Token, clientIds };
   }
 
-  if (!authResponse.ok || !authData.Token) {
-    throw new Error(`Authentication failed: ${authData.Message || authData.error || JSON.stringify(authData)}`);
-  }
-
-  const clientIds = authData.ClientIDs ? String(authData.ClientIDs).split(',').map((id: string) => id.trim()) : [];
-  console.log(`Authenticated successfully. ClientIDs: ${clientIds.join(', ')}`);
-  
-  return { token: authData.Token, clientIds };
+  throw new Error(`Authentication failed after ${maxAttempts} attempts (rate limited): ${lastError}`);
 }
 
 async function fetchAllPaginated(
@@ -379,21 +421,35 @@ async function failStaleCampminderSyncJobs(
   const msg =
     `Stale job auto-closed after ${staleMinutes}m (Edge worker timeout or crash — run sync again).`;
 
-  const { data: stale, error: selErr } = await supabase
+  // Pending: never left "pending" (worker died before performFullSync marked running).
+  const { data: stalePending, error: pendErr } = await supabase
     .from('sync_jobs')
     .select('id')
     .eq('company_id', companyId)
     .eq('entity_type', 'campminder')
-    .in('status', ['running', 'pending'])
+    .eq('status', 'pending')
     .lt('created_at', cutoffIso);
 
-  if (selErr) {
-    console.error('failStaleCampminderSyncJobs:', selErr);
+  // Running: no progress heartbeat (updated_at) — long camper fetch used to die here when only created_at mattered.
+  const { data: staleRunning, error: runErr } = await supabase
+    .from('sync_jobs')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('entity_type', 'campminder')
+    .eq('status', 'running')
+    .lt('updated_at', cutoffIso);
+
+  if (pendErr || runErr) {
+    console.error('failStaleCampminderSyncJobs:', pendErr || runErr);
     return 0;
   }
-  if (!stale?.length) return 0;
 
-  const ids = stale.map((r: { id: string }) => r.id);
+  const idSet = new Set<string>();
+  (stalePending || []).forEach((r: { id: string }) => idSet.add(r.id));
+  (staleRunning || []).forEach((r: { id: string }) => idSet.add(r.id));
+  const ids = [...idSet];
+  if (ids.length === 0) return 0;
+
   const { error: updErr } = await supabase
     .from('sync_jobs')
     .update({
@@ -990,6 +1046,22 @@ async function performFullSync(
         
         if ((i + 1) % 100 === 0 || i === enrolledPersonIdArray.length - 1) {
           console.log(`[Camper Fetch] Progress: ${i + 1}/${enrolledPersonIdArray.length} (${fetchedCount} success, ${failedCount} failed)`);
+        }
+
+        // Heartbeat so stale-job cleanup uses updated_at (sync can exceed 2h on large rosters).
+        if ((i + 1) % 50 === 0 || i === enrolledPersonIdArray.length - 1) {
+          await updateSyncJob(supabase, jobId, {
+            progress: {
+              step: 'Fetching camper person data',
+              camper_fetch_index: i + 1,
+              camper_fetch_total: enrolledPersonIdArray.length,
+              camper_fetch_ok: fetchedCount,
+              camper_fetch_failed: failedCount,
+              divisions: divisions.length,
+              season,
+              syncType,
+            },
+          });
         }
       }
       
@@ -2031,6 +2103,7 @@ async function performFullSync(
     let financialDeposits = 0;
     let financialReversals = 0;
     let financialSkipped = 0;
+    let financialUpdated = 0;
 
     if (syncType === 'full' || syncType === 'campers') {
       console.log('\n--- SYNCING FINANCIALS (Owl Pay Balances) ---');
@@ -2091,13 +2164,19 @@ async function performFullSync(
         console.log(`[Financials] After canteen filter: ${financialTransactions.length} of ${allFinancialTransactions.length} transactions`);
 
         if (financialTransactions.length > 0) {
-          // Get already-synced transaction IDs to avoid double-counting
-          const { data: existingSynced } = await supabase
+          // Existing ledger rows (same CM transaction id can change when CM reverses/cancels)
+          const { data: existingSyncedRows } = await supabase
             .from('campminder_transactions')
-            .select('cm_transaction_id')
+            .select('cm_transaction_id, amount, person_id')
             .eq('company_id', companyId);
 
-          const syncedIds = new Set((existingSynced || []).map((t: any) => t.cm_transaction_id));
+          const existingByTxId = new Map<string, { amount: number; person_id: string }>();
+          (existingSyncedRows || []).forEach((t: any) => {
+            existingByTxId.set(String(t.cm_transaction_id), {
+              amount: Number(t.amount),
+              person_id: String(t.person_id || ''),
+            });
+          });
 
           // Build a person_id -> child_id map from our camper data
           const { data: allCampers } = await supabase
@@ -2147,15 +2226,22 @@ async function performFullSync(
 
           for (const tx of financialTransactions) {
             const txId = String(getField(tx, 'transactionId', 'TransactionId', 'TransactionID', 'Id', 'ID') || '');
-            if (!txId || syncedIds.has(txId)) {
+            if (!txId) {
               financialSkipped++;
               continue;
             }
 
             const personId = String(getField(tx, 'personId', 'PersonId', 'PersonID') || '');
             const amount = Number(getField(tx, 'amount', 'Amount') || 0);
-            const isReversed = getField(tx, 'isReversed', 'IsReversed', 'Reversed') || false;
-            const isDeleted = getField(tx, 'isDeleted', 'IsDeleted', 'Deleted') || false;
+            const isReversed = !!(getField(tx, 'isReversed', 'IsReversed', 'Reversed') || false);
+            const isDeleted = !!(getField(tx, 'isDeleted', 'IsDeleted', 'Deleted') || false);
+            const statusRaw = String(
+              getField(tx, 'status', 'Status', 'transactionStatus', 'TransactionStatus') || ''
+            ).toLowerCase();
+            const statusIndicatesVoid = ['void', 'voided', 'cancel', 'cancelled', 'canceled', 'reversed'].some((k) =>
+              statusRaw.includes(k)
+            );
+            const reversed = isReversed || isDeleted || statusIndicatesVoid;
 
             const child = personToChildMap.get(personId);
             if (!child) {
@@ -2164,26 +2250,72 @@ async function performFullSync(
               continue;
             }
 
-            let adjustAmount = Math.abs(amount);
-            let txType = 'deposit';
+            const absAmt = Math.abs(amount);
+            const existingRow = existingByTxId.get(txId);
+            const oldContribution = existingRow !== undefined ? Number(existingRow.amount) : null;
 
-            if (isReversed || isDeleted) {
-              adjustAmount = -Math.abs(amount);
-              txType = 'reversal';
-              financialReversals++;
+            /** Net effect of this CM row on our ledger (one row per cm_transaction_id). */
+            let newContribution: number;
+            if (reversed) {
+              // Row we already imported as a deposit → cancelling zeros it; brand-new reversal-only line stays negative.
+              newContribution = oldContribution !== null ? 0 : -absAmt;
             } else {
-              financialDeposits++;
+              newContribution = absAmt;
             }
 
-            // Accumulate adjustments per child
+            if (oldContribution !== null) {
+              const delta = newContribution - oldContribution;
+              if (Math.abs(delta) < 0.0001) {
+                financialSkipped++;
+                continue;
+              }
+
+              const txType =
+                newContribution < 0 ? 'reversal' : newContribution > 0 ? 'deposit' : 'reversal';
+              const { error: updErr } = await supabase
+                .from('campminder_transactions')
+                .update({
+                  amount: newContribution,
+                  person_id: personId,
+                  transaction_type: txType,
+                  synced_at: new Date().toISOString(),
+                })
+                .eq('company_id', companyId)
+                .eq('cm_transaction_id', txId);
+
+              if (updErr) {
+                console.error(`[Financials] Error updating transaction ${txId}:`, updErr);
+                continue;
+              }
+
+              const currentAdj = balanceAdjustments.get(child.id) || 0;
+              balanceAdjustments.set(child.id, currentAdj + delta);
+              financialUpdated++;
+              if (delta < 0) financialReversals++;
+              else financialDeposits++;
+              console.log(
+                `[Financials] Updated tx ${txId}: ledger ${oldContribution} → ${newContribution} (balance delta ${delta})`
+              );
+              continue;
+            }
+
+            if (Math.abs(newContribution) < 0.0001) {
+              financialSkipped++;
+              continue;
+            }
+
+            const txType = newContribution < 0 ? 'reversal' : 'deposit';
+            if (txType === 'reversal') financialReversals++;
+            else financialDeposits++;
+
             const currentAdj = balanceAdjustments.get(child.id) || 0;
-            balanceAdjustments.set(child.id, currentAdj + adjustAmount);
+            balanceAdjustments.set(child.id, currentAdj + newContribution);
 
             newTransactions.push({
               company_id: companyId,
               cm_transaction_id: txId,
               person_id: personId,
-              amount: adjustAmount,
+              amount: newContribution,
               transaction_type: txType,
             });
           }
@@ -2264,7 +2396,9 @@ async function performFullSync(
             }
           }
 
-          console.log(`[Financials] Processed: ${financialDeposits} deposits, ${financialReversals} reversals, ${financialSkipped} skipped (already synced or no match)`);
+          console.log(
+            `[Financials] Processed: ${financialDeposits} deposits, ${financialReversals} reversals, ${financialUpdated} updated rows, ${financialSkipped} unchanged/skipped`
+          );
           console.log(`[Financials] Balance adjustments applied to ${balanceAdjustments.size} campers`);
         }
       } catch (finError) {
@@ -2272,11 +2406,14 @@ async function performFullSync(
       }
     }
 
-    // Update company sync timestamp
-    await supabase
+    // Last successful CampMinder sync (only reached if performFullSync completes without throwing)
+    const { error: lastSyncErr } = await supabase
       .from('companies')
       .update({ campminder_last_sync_at: new Date().toISOString() })
       .eq('id', companyId);
+    if (lastSyncErr) {
+      console.error('[Companies] Failed to update campminder_last_sync_at:', lastSyncErr);
+    }
 
     // Build change summary for the final stats
     const allChanges = [
@@ -2304,6 +2441,7 @@ async function performFullSync(
       financial_deposits: financialDeposits,
       financial_reversals: financialReversals,
       financial_skipped: financialSkipped,
+      financial_updated: financialUpdated,
       season: season,
       missing_campers_count: missingCamperIds.length,
       fallback_data_used: {
@@ -2400,6 +2538,20 @@ serve(async (req) => {
     }
 
     const results: any[] = [];
+    /** Run one camp after another so global CampMinder rate limiting doesn't interleave 3+ full-roster fetches. */
+    const queuedSyncs: Array<{
+      jobId: string;
+      companyId: string;
+      companyName: string;
+      token: string;
+      subscriptionKey: string;
+      clientId: string;
+      seasonId?: string;
+      isIncremental: boolean;
+      lastSyncAt?: string;
+      syncType: string;
+      staleClosed: number;
+    }> = [];
 
     for (const company of companies) {
       console.log(`Processing company: ${company.name}`);
@@ -2455,20 +2607,19 @@ serve(async (req) => {
 
         console.log(`Created sync job: ${job.id} (${isIncremental ? 'incremental' : 'full'})`);
 
-        EdgeRuntime.waitUntil(
-          performFullSync(
-            supabase,
-            job.id,
-            company.id,
-            token,
-            subKeyData,
-            clientId,
-            season_id,
-            isIncremental,
-            lastSyncAt,
-            effectiveSyncType
-          )
-        );
+        queuedSyncs.push({
+          jobId: job.id,
+          companyId: company.id,
+          companyName: company.name,
+          token,
+          subscriptionKey: subKeyData,
+          clientId,
+          seasonId: season_id,
+          isIncremental,
+          lastSyncAt,
+          syncType: effectiveSyncType,
+          staleClosed,
+        });
 
         results.push({
           company: company.name,
@@ -2479,7 +2630,7 @@ serve(async (req) => {
           incremental_flag: isIncremental,
           stale_jobs_closed: staleClosed,
           message:
-            `${effectiveSyncType} sync running in background (${isIncremental ? 'incremental' : 'full'} mode). Check sync_jobs table for progress.`,
+            `${effectiveSyncType} sync queued (${isIncremental ? 'incremental' : 'full'} mode). Companies run sequentially in background — check sync_jobs for progress.`,
         });
 
       } catch (authError) {
@@ -2492,12 +2643,43 @@ serve(async (req) => {
       }
     }
 
+    if (queuedSyncs.length > 0) {
+      EdgeRuntime.waitUntil(
+        (async () => {
+          for (let i = 0; i < queuedSyncs.length; i++) {
+            const q = queuedSyncs[i];
+            console.log(
+              `[CampMinder BG] (${i + 1}/${queuedSyncs.length}) Starting sync for ${q.companyName} job=${q.jobId}`,
+            );
+            try {
+              await performFullSync(
+                supabase,
+                q.jobId,
+                q.companyId,
+                q.token,
+                q.subscriptionKey,
+                q.clientId,
+                q.seasonId,
+                q.isIncremental,
+                q.lastSyncAt,
+                q.syncType,
+              );
+            } catch (bgErr) {
+              console.error(`[CampMinder BG] performFullSync failed for ${q.companyName}:`, bgErr);
+            }
+          }
+          console.log(`[CampMinder BG] Finished ${queuedSyncs.length} sequential company sync(s).`);
+        })(),
+      );
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Sync jobs started in background',
+        message: 'Sync jobs started in background (companies run one after another)',
         results,
-        note: 'Now fetches missing persons individually to ensure all staff and campers are synced.',
+        note:
+          'Large rosters fetch campers sequentially with ~300ms spacing between CampMinder calls; progress updates every 50 campers. Multiple camps no longer sync in parallel.',
       }),
       { 
         status: 200, 

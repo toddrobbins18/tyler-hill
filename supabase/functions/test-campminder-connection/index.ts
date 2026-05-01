@@ -103,14 +103,6 @@ serve(async (req) => {
 
     if (!contentType?.includes('application/json')) {
       console.error('CampMinder returned non-JSON response:', responseText.substring(0, 1000));
-      
-      // Update last test status
-      await supabase
-        .from('companies')
-        .update({ 
-          campminder_last_sync_at: new Date().toISOString(),
-        })
-        .eq('id', company_id);
 
       return new Response(
         JSON.stringify({ 
@@ -140,14 +132,6 @@ serve(async (req) => {
     // Check for successful response - expecting Token and ClientIDs
     if (!authResponse.ok || !authData.Token) {
       console.error('CampMinder auth failed:', authData);
-      
-      // Update last test status
-      await supabase
-        .from('companies')
-        .update({ 
-          campminder_last_sync_at: new Date().toISOString(),
-        })
-        .eq('id', company_id);
 
       return new Response(
         JSON.stringify({ 
@@ -160,14 +144,6 @@ serve(async (req) => {
 
     console.log('CampMinder connection successful for company:', company_id);
     console.log('ClientIDs:', authData.ClientIDs);
-
-    // Update last sync timestamp on success
-    await supabase
-      .from('companies')
-      .update({ 
-        campminder_last_sync_at: new Date().toISOString(),
-      })
-      .eq('id', company_id);
 
     return new Response(
       JSON.stringify({ 
