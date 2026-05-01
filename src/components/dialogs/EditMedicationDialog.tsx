@@ -14,10 +14,9 @@ import { Loader2, CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
-  MEDICATION_BEDTIME_OPTIONS,
   STANDARD_MEAL_SCHEDULE_HHMM,
   STANDARD_MEAL_LABEL_ORDER,
-  findBedtimeOptionById,
+  resolveBedtimeOptionFromDivisionName,
   findBedtimeOptionFromStoredMealLabel,
 } from "@/lib/medicationBedtimeOptions";
 
@@ -48,27 +47,16 @@ export function EditMedicationDialog({
     days_of_week: [] as string[],
     start_date: null as Date | null,
     end_date: null as Date | null,
-    bedtime_option_id: null as string | null,
   });
 
   useEffect(() => {
     if (medication) {
       const rawMt = medication.meal_time;
       const first = Array.isArray(rawMt) ? rawMt[0] : rawMt;
-      let bedtime_option_id: string | null = null;
       let meal_time: string[] = [];
 
       if (typeof first === "string") {
-        const legacyBed = findBedtimeOptionFromStoredMealLabel(first);
-        if (legacyBed) {
-          bedtime_option_id = legacyBed.id;
-          meal_time = ["Bedtime"];
-        } else if (first === "Bedtime") {
-          const st = medication.scheduled_time as string | undefined;
-          const fallback =
-            MEDICATION_BEDTIME_OPTIONS.find((o) => o.scheduledTimeHHmm === st)?.id ??
-            "bedtime-21-00-freshman";
-          bedtime_option_id = fallback;
+        if (findBedtimeOptionFromStoredMealLabel(first) || first === "Bedtime") {
           meal_time = ["Bedtime"];
         } else if (STANDARD_MEAL_LABELS.includes(first)) {
           meal_time = [first];
@@ -79,11 +67,7 @@ export function EditMedicationDialog({
         if (standardMatch) {
           meal_time = [standardMatch];
         } else {
-          const btMatch = MEDICATION_BEDTIME_OPTIONS.find((o) => o.scheduledTimeHHmm === st);
-          if (btMatch) {
-            bedtime_option_id = btMatch.id;
-            meal_time = ["Bedtime"];
-          }
+          meal_time = ["Bedtime"];
         }
       }
 
@@ -97,7 +81,6 @@ export function EditMedicationDialog({
         days_of_week: medication.days_of_week || [],
         start_date: medication.date ? new Date(medication.date + "T00:00:00") : null,
         end_date: medication.end_date ? new Date(medication.end_date + "T00:00:00") : null,
-        bedtime_option_id,
       });
     }
   }, [medication]);
@@ -107,7 +90,8 @@ export function EditMedicationDialog({
 
     const hasBedtime = formData.meal_time.includes("Bedtime");
     const standardSelected = formData.meal_time.filter((t) => STANDARD_MEAL_LABELS.includes(t));
-    const bedtimeOpt = findBedtimeOptionById(formData.bedtime_option_id);
+    const divisionName = medication?.children?.division?.name as string | undefined;
+    const bedtimeOpt = hasBedtime ? resolveBedtimeOptionFromDivisionName(divisionName) : undefined;
 
     if (hasBedtime && standardSelected.length > 0) {
       toast({
@@ -122,8 +106,21 @@ export function EditMedicationDialog({
       return;
     }
 
+    if (hasBedtime && !divisionName) {
+      toast({
+        title: "Camper has no division on file",
+        description: "Assign a roster division before saving Bedtime.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (hasBedtime && !bedtimeOpt) {
-      toast({ title: "Select a division for Bedtime", variant: "destructive" });
+      toast({
+        title: "Bedtime not mapped for this division",
+        description: divisionName ? `No rule matched "${divisionName}".` : undefined,
+        variant: "destructive",
+      });
       return;
     }
 
@@ -268,10 +265,9 @@ export function EditMedicationDialog({
                         setFormData({
                           ...formData,
                           meal_time: [mealTime],
-                          bedtime_option_id: null,
                         });
                       } else if (formData.meal_time[0] === mealTime) {
-                        setFormData({ ...formData, meal_time: [], bedtime_option_id: null });
+                        setFormData({ ...formData, meal_time: [] });
                       }
                     }}
                   />
@@ -292,10 +288,9 @@ export function EditMedicationDialog({
                       setFormData({
                         ...formData,
                         meal_time: ["Bedtime"],
-                        bedtime_option_id: formData.bedtime_option_id,
                       });
                     } else {
-                      setFormData({ ...formData, meal_time: [], bedtime_option_id: null });
+                      setFormData({ ...formData, meal_time: [] });
                     }
                   }}
                 />
@@ -305,29 +300,36 @@ export function EditMedicationDialog({
               </div>
             </div>
             {formData.meal_time.includes("Bedtime") && (
-              <div className="space-y-2 pt-1">
-                <Label htmlFor="edit-bedtime-division-select">Division</Label>
-                <Select
-                  value={formData.bedtime_option_id ?? "none"}
-                  onValueChange={(value) =>
-                    setFormData({
-                      ...formData,
-                      bedtime_option_id: value === "none" ? null : value,
-                    })
+              <div className="space-y-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+                {(() => {
+                  const divName = medication?.children?.division?.name as string | undefined;
+                  const resolved = resolveBedtimeOptionFromDivisionName(divName);
+                  if (!divName) {
+                    return (
+                      <p className="text-destructive">
+                        This camper has no roster division — assign one before using Bedtime.
+                      </p>
+                    );
                   }
-                >
-                  <SelectTrigger id="edit-bedtime-division-select">
-                    <SelectValue placeholder="Select division" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Select division</SelectItem>
-                    {MEDICATION_BEDTIME_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.id} value={opt.id}>
-                        {opt.division}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  if (!resolved) {
+                    return (
+                      <p className="text-destructive">
+                        No bedtime mapped for division &quot;{divName}&quot;. Update naming or bedtime rules.
+                      </p>
+                    );
+                  }
+                  return (
+                    <div className="space-y-1">
+                      <p className="font-medium text-foreground">
+                        BEDTIME: <span className="font-normal">{resolved.mealTimeLabel}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Uses camper division ({divName}). Missed-dose alerts run after this time US Eastern (
+                        America/New_York).
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>

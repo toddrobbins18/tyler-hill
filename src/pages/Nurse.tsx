@@ -19,7 +19,12 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
 import { EditMedicationDialog } from "@/components/dialogs/EditMedicationDialog";
-import { MEDICATION_BEDTIME_OPTIONS, STANDARD_MEAL_SCHEDULE_HHMM, STANDARD_MEAL_LABEL_ORDER, findBedtimeOptionById, findBedtimeOptionFromStoredMealLabel } from "@/lib/medicationBedtimeOptions";
+import {
+  STANDARD_MEAL_SCHEDULE_HHMM,
+  STANDARD_MEAL_LABEL_ORDER,
+  resolveBedtimeOptionFromDivisionName,
+  findBedtimeOptionFromStoredMealLabel,
+} from "@/lib/medicationBedtimeOptions";
 
 // Helper to check if we should show limited features for Timber Lake
 const useTimberLakeMode = () => {
@@ -82,7 +87,6 @@ export default function Nurse() {
     frequency: "daily",
     days_of_week: [] as string[],
     end_date: "",
-    bedtime_option_id: null as string | null,
   });
 
   useEffect(() => {
@@ -252,7 +256,7 @@ export default function Nurse() {
     const dateStr = date ? format(date, 'yyyy-MM-dd') : new Date().toISOString().split('T')[0];
     const { data, error } = await supabase
       .from("medication_logs")
-      .select("*, children(name), staff(name)")
+      .select("*, children(name, division:divisions(name)), staff(name)")
       .eq("date", dateStr)
       .eq("season", currentSeason)
       .eq("company_id", currentCompany?.id || '');
@@ -275,9 +279,11 @@ export default function Nurse() {
       return;
     }
 
-    const bedtimeOpt = findBedtimeOptionById(formData.bedtime_option_id);
     const standardMeals = formData.meal_times.filter((m) => m !== "Bedtime");
     const hasBedtime = formData.meal_times.includes("Bedtime");
+    const childRow = children.find((c) => c.id === selectedChild);
+    const divisionName = childRow?.division?.name as string | undefined;
+    const bedtimeOpt = hasBedtime ? resolveBedtimeOptionFromDivisionName(divisionName) : undefined;
 
     if (standardMeals.length === 0 && !hasBedtime) {
       toast({ title: "Select at least one meal time", variant: "destructive" });
@@ -285,8 +291,22 @@ export default function Nurse() {
       return;
     }
 
+    if (hasBedtime && !divisionName) {
+      toast({
+        title: "Camper has no division on file",
+        description: "Assign a roster division before scheduling Bedtime.",
+        variant: "destructive",
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
     if (hasBedtime && !bedtimeOpt) {
-      toast({ title: "Select a division for Bedtime", variant: "destructive" });
+      toast({
+        title: "Bedtime not mapped for this division",
+        description: `No bedtime rule matched "${divisionName}".`,
+        variant: "destructive",
+      });
       setIsSubmitting(false);
       return;
     }
@@ -349,7 +369,6 @@ export default function Nurse() {
       frequency: "daily",
       days_of_week: [],
       end_date: "",
-      bedtime_option_id: null,
     });
     setSelectedChild("");
     setIsSubmitting(false);
@@ -1803,8 +1822,6 @@ export default function Nurse() {
                             setFormData({
                               ...formData,
                               meal_times,
-                              bedtime_option_id:
-                                mealTime === "Bedtime" ? null : formData.bedtime_option_id,
                             });
                           }}
                         />
@@ -1818,29 +1835,41 @@ export default function Nurse() {
                     ))}
                   </div>
                   {formData.meal_times.includes("Bedtime") && (
-                    <div className="space-y-2 pt-1">
-                      <Label htmlFor="bedtime-division-select">Division</Label>
-                      <Select
-                        value={formData.bedtime_option_id ?? "none"}
-                        onValueChange={(value) =>
-                          setFormData({
-                            ...formData,
-                            bedtime_option_id: value === "none" ? null : value,
-                          })
-                        }
-                      >
-                        <SelectTrigger id="bedtime-division-select">
-                          <SelectValue placeholder="Select division" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Select division</SelectItem>
-                          {MEDICATION_BEDTIME_OPTIONS.map((opt) => (
-                            <SelectItem key={opt.id} value={opt.id}>
-                              {opt.division}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    <div className="space-y-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+                      {!selectedChild ? (
+                        <p className="text-muted-foreground">Select a camper to see their bedtime (from roster division, US Eastern).</p>
+                      ) : (
+                        (() => {
+                          const row = children.find((c) => c.id === selectedChild);
+                          const divName = row?.division?.name;
+                          const resolved = resolveBedtimeOptionFromDivisionName(divName);
+                          if (!divName) {
+                            return (
+                              <p className="text-destructive">
+                                This camper has no roster division — assign one before using Bedtime.
+                              </p>
+                            );
+                          }
+                          if (!resolved) {
+                            return (
+                              <p className="text-destructive">
+                                No bedtime mapped for division &quot;{divName}&quot;. Update naming or bedtime rules.
+                              </p>
+                            );
+                          }
+                          return (
+                            <div className="space-y-1">
+                              <p className="font-medium text-foreground">
+                                BEDTIME: <span className="font-normal">{resolved.mealTimeLabel}</span>
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Uses camper division ({divName}). Missed-dose alerts run after this time US Eastern (
+                                America/New_York).
+                              </p>
+                            </div>
+                          );
+                        })()
+                      )}
                     </div>
                   )}
                 </div>
