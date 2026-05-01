@@ -554,7 +554,7 @@ async function performFullSync(
       progress: { step: 'Starting sync', syncType: syncType, isIncremental },
     });
 
-    const season = '2026';
+    const season = seasonId ? String(seasonId) : '2026';
     console.log(`\n[Season] Using season: ${season}\n`);
     
     await updateSyncJob(supabase, jobId, {
@@ -1688,43 +1688,8 @@ async function performFullSync(
         staffInsertedCount = staffResult.inserted;
         staffUpdatedCount = staffResult.updated;
         
-        // CLEANUP: Delete staff not in current active list
-        // This handles staff who were Resigned, Dismissed, or Cancelled
-        const activePersonIds = staffData.map(s => s.person_id);
-        console.log(`[Staff Cleanup] Removing staff not in active list (${activePersonIds.length} active)`);
-        
-        const { data: existingStaff, error: fetchError } = await supabase
-          .from('staff')
-          .select('id, person_id, name')
-          .eq('company_id', companyId)
-          .eq('season', season);
-        
-        if (!fetchError && existingStaff) {
-          const staffToRemove = existingStaff.filter((s: { id: string; person_id: string; name: string }) => !activePersonIds.includes(s.person_id));
-          
-          if (staffToRemove.length > 0) {
-            console.log(`[Staff Cleanup] Found ${staffToRemove.length} staff to remove (not in active list)`);
-            
-            // Log first 5 for debugging
-            staffToRemove.slice(0, 5).forEach((s: { id: string; person_id: string; name: string }) => {
-              console.log(`  - Removing: ${s.name} (person_id: ${s.person_id})`);
-            });
-            
-            const idsToRemove = staffToRemove.map((s: { id: string }) => s.id);
-            const { error: deleteError } = await supabase
-              .from('staff')
-              .delete()
-              .in('id', idsToRemove);
-            
-            if (deleteError) {
-              console.error('[Staff Cleanup] Error removing inactive staff:', deleteError);
-            } else {
-              console.log(`[Staff Cleanup] Removed ${staffToRemove.length} inactive staff`);
-            }
-          } else {
-            console.log('[Staff Cleanup] No inactive staff to remove');
-          }
-        }
+        // Staff cleanup is handled in the global cleanup phase below (soft-inactivate only).
+        console.log('[Staff Cleanup] Deferred to global cleanup phase (soft inactivate).');
       }
     } else {
       console.log('[Staff Sync] No staff found from any source. Check if staff data exists in CampMinder for this season.');

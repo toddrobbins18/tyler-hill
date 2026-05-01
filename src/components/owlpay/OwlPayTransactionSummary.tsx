@@ -79,13 +79,14 @@ const OwlPayTransactionSummary = ({
       const { data: { user } } = await supabase.auth.getUser();
 
       // Record first scan if applicable
-      if (isFirstScanToday) {
-        await supabase.from("owl_pay_daily_scans" as any).insert({
+      if (isFirstScanToday && !isStaff) {
+        const { error: scanError } = await supabase.from("owl_pay_daily_scans" as any).insert({
           child_id: camper.id,
           company_id: currentCompany.id,
         });
+        if (scanError) throw scanError;
 
-        await supabase.from("owl_pay_transactions" as any).insert({
+        const { error: firstScanError } = await supabase.from("owl_pay_transactions" as any).insert({
           child_id: camper.id,
           company_id: currentCompany.id,
           amount: 0,
@@ -94,18 +95,19 @@ const OwlPayTransactionSummary = ({
           notes: "First scan of the day - free entry",
           created_by: user?.id,
         });
+        if (firstScanError) throw firstScanError;
       }
 
-      // Process paid items
-      if (cart.length > 0 && !isFirstScanToday) {
+      // Record item-level purchases (one row per quantity). First scan keeps rows but amounts are free ($0).
+      if (cart.length > 0) {
         const transactionInserts = cart.flatMap(item =>
           Array(item.quantity).fill(null).map(() => ({
             child_id: isStaff ? null : camper.id,
             staff_id: isStaff ? camper.id : null,
             company_id: currentCompany.id,
             item_id: item.id,
-            amount: item.price,
-            is_free: false,
+            amount: isFirstScanToday ? 0 : item.price,
+            is_free: isFirstScanToday,
             transaction_type: "purchase",
             created_by: user?.id,
           }))
@@ -116,12 +118,12 @@ const OwlPayTransactionSummary = ({
           .insert(transactionInserts);
         if (txError) throw txError;
 
-        // Only deduct balance for campers (not staff)
-        if (!isStaff) {
-          const { error: balError } = await supabase
-            .from("children")
-            .update({ owl_pay_balance: newBalance } as any)
-            .eq("id", camper.id);
+        // Only deduct balance for campers (not staff), using RPC for atomic adjustments.
+        if (!isStaff && total !== 0) {
+          const { error: balError } = await supabase.rpc("increment_camper_balance", {
+            _child_id: camper.id,
+            _amount: -total,
+          } as any);
           if (balError) throw balError;
         }
 
