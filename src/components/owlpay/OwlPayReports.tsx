@@ -10,25 +10,59 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Line, LineChart, Area, AreaChart } from "recharts";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as CalendarIcon, DollarSign, Package, TrendingUp, Receipt } from "lucide-react";
+import { Calendar as CalendarIcon, DollarSign, Package, TrendingUp, Receipt, Download } from "lucide-react";
 import { format, startOfDay, endOfDay, startOfWeek, startOfMonth } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useToast } from "@/hooks/use-toast";
+
+type ReportAudience = "all" | "campers" | "staff";
+
+function classifyPurchaseBuyer(tx: any): "camper" | "staff" | "unknown" {
+  if (tx.staff_id) return "staff";
+  if (tx.child_id) return "camper";
+  return "unknown";
+}
+
+function matchesAudience(buyer: "camper" | "staff" | "unknown", audience: ReportAudience): boolean {
+  if (audience === "all") return buyer === "camper" || buyer === "staff";
+  if (audience === "campers") return buyer === "camper";
+  return buyer === "staff";
+}
+
+function toCsvCell(v: unknown): string {
+  const s = String(v ?? "");
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function downloadCsvLines(filename: string, lines: (string | number | boolean)[][]) {
+  const bom = "\uFEFF";
+  const body = lines.map((row) => row.map(toCsvCell).join(",")).join("\r\n");
+  const blob = new Blob([bom + body], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 
 const OwlPayReports = () => {
   const { currentCompany } = useCompany();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
     from: startOfDay(new Date()),
     to: endOfDay(new Date()),
   });
   const [tempDateRange, setTempDateRange] = useState<{ from?: Date; to?: Date }>({});
   const [searchTerm, setSearchTerm] = useState("");
+  const [reportAudience, setReportAudience] = useState<ReportAudience>("all");
 
   const { data, isLoading } = useQuery({
-    queryKey: ["owl-pay-reports", dateRange.from.toISOString(), dateRange.to.toISOString(), currentCompany?.id],
+    queryKey: ["owl-pay-reports", dateRange.from.toISOString(), dateRange.to.toISOString(), currentCompany?.id, reportAudience],
     enabled: !!currentCompany?.id,
     queryFn: async () => {
       const start = startOfDay(dateRange.from).toISOString();
@@ -36,7 +70,7 @@ const OwlPayReports = () => {
 
       const { data: transactions, error } = await supabase
         .from("owl_pay_transactions" as any)
-        .select("*, owl_pay_items(*), children(name), staff(name)")
+        .select("id, created_at, amount, is_free, transaction_type, child_id, staff_id, owl_pay_items(*), children(name), staff(name)")
         .eq("company_id", currentCompany!.id)
         .eq("transaction_type", "purchase")
         .gte("created_at", start)
@@ -52,6 +86,9 @@ const OwlPayReports = () => {
       let totalItems = 0;
 
       (transactions as any[])?.forEach((tx: any) => {
+        const buyer = classifyPurchaseBuyer(tx);
+        if (!matchesAudience(buyer, reportAudience)) return;
+
         const item = tx.owl_pay_items;
         const amount = Number(tx.amount);
         if (item) {
@@ -71,6 +108,7 @@ const OwlPayReports = () => {
 
           purchases.push({
             id: tx.id,
+            buyer_type: buyer === "staff" ? "staff" : "camper",
             camper_name: tx.children?.name || tx.staff?.name || "Unknown",
             item_name: item.name,
             item_category: item.category,
@@ -120,6 +158,45 @@ const OwlPayReports = () => {
     (p: any) => p.camper_name.toLowerCase().includes(searchTerm.toLowerCase()) || p.item_name.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
+  const exportReportsCsv = () => {
+    if (!data || !currentCompany?.id) {
+      toast({ title: "Nothing to export", variant: "destructive" });
+      return;
+    }
+    const fromLabel = format(dateRange.from, "yyyy-MM-dd");
+    const toLabel = format(dateRange.to, "yyyy-MM-dd");
+    const audienceLabel = reportAudience === "all" ? "all-buyers" : reportAudience;
+    const filename = `owlpay-report_${currentCompany.slug ?? "camp"}_${fromLabel}_${toLabel}_${audienceLabel}.csv`;
+
+    const summaryRows: (string | number | boolean)[][] = [
+      ["Report", "Owl Pay"],
+      ["Company", currentCompany.name ?? ""],
+      ["Date range", `${fromLabel} to ${toLabel}`],
+      ["Audience", reportAudience],
+      ["Total revenue", data.stats.totalRevenue.toFixed(2)],
+      ["Items sold", data.stats.totalItems],
+      ["Avg transaction", data.stats.avgTransaction.toFixed(2)],
+      ["Most popular item", data.stats.mostPopular],
+      [],
+      ["Sales by item — Item", "Category", "Qty sold", "Revenue"],
+      ...data.salesByItem.map((i) => [i.name, i.category, i.quantity, i.revenue.toFixed(2)]),
+      [],
+      ["Purchases — Date/time (UTC)", "Buyer type", "Name", "Item", "Category", "Amount", "Free"],
+      ...data.purchases.map((p: any) => [
+        format(new Date(p.purchased_at), "yyyy-MM-dd HH:mm:ss"),
+        p.buyer_type,
+        p.camper_name,
+        p.item_name,
+        p.item_category,
+        p.is_free ? "0.00" : p.amount.toFixed(2),
+        p.is_free ? "yes" : "no",
+      ]),
+    ];
+
+    downloadCsvLines(filename, summaryRows);
+    toast({ title: "CSV downloaded", description: filename });
+  };
+
   useEffect(() => {
     if (!currentCompany?.id) return;
     const channel = supabase
@@ -145,7 +222,7 @@ const OwlPayReports = () => {
     <div className="space-y-4">
       {/* Date Controls */}
       <Card>
-        <CardContent className="pt-4">
+        <CardContent className="pt-4 space-y-3">
           <div className="flex flex-wrap gap-2 items-center justify-between">
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setQuickRange("today")}>Today</Button>
@@ -168,7 +245,19 @@ const OwlPayReports = () => {
               </PopoverContent>
             </Popover>
           </div>
-          <Badge variant="outline" className="mt-3">{format(dateRange.from, "MMM dd, yyyy")} - {format(dateRange.to, "MMM dd, yyyy")}</Badge>
+          <div className="flex flex-wrap gap-3 items-center justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-muted-foreground">Purchasers:</span>
+              <Button variant={reportAudience === "all" ? "default" : "outline"} size="sm" onClick={() => setReportAudience("all")}>All</Button>
+              <Button variant={reportAudience === "campers" ? "default" : "outline"} size="sm" onClick={() => setReportAudience("campers")}>Campers</Button>
+              <Button variant={reportAudience === "staff" ? "default" : "outline"} size="sm" onClick={() => setReportAudience("staff")}>Staff</Button>
+            </div>
+            <Button variant="secondary" size="sm" onClick={exportReportsCsv} disabled={isLoading || !data}>
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
+            </Button>
+          </div>
+          <Badge variant="outline">{format(dateRange.from, "MMM dd, yyyy")} - {format(dateRange.to, "MMM dd, yyyy")}</Badge>
         </CardContent>
       </Card>
 
@@ -266,8 +355,10 @@ const OwlPayReports = () => {
         <TabsContent value="purchases">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Camper Purchases</CardTitle>
-              <Input placeholder="Search by camper or item..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="max-w-sm mt-2" />
+              <CardTitle className="text-base">
+                {reportAudience === "staff" ? "Staff purchases" : reportAudience === "campers" ? "Camper purchases" : "Purchases"}
+              </CardTitle>
+              <Input placeholder="Search by name or item..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="max-w-sm mt-2" />
             </CardHeader>
             <CardContent>
               {filteredPurchases.length === 0 ? (
@@ -275,11 +366,14 @@ const OwlPayReports = () => {
               ) : (
                 <ScrollArea className="h-[400px]">
                   <Table>
-                    <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Camper</TableHead><TableHead>Item</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader>
+                    <TableHeader><TableRow><TableHead>Date</TableHead>{reportAudience === "all" && <TableHead>Type</TableHead>}<TableHead>Name</TableHead><TableHead>Item</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader>
                     <TableBody>
                       {filteredPurchases.map((p: any) => (
                         <TableRow key={p.id}>
                           <TableCell>{format(new Date(p.purchased_at), "MMM dd, h:mm a")}</TableCell>
+                          {reportAudience === "all" && (
+                            <TableCell><Badge variant="outline" className="capitalize">{p.buyer_type}</Badge></TableCell>
+                          )}
                           <TableCell className="font-medium">{p.camper_name}</TableCell>
                           <TableCell>{p.item_name}</TableCell>
                           <TableCell className="text-right">{p.is_free ? <span className="text-muted-foreground">Free</span> : `$${p.amount.toFixed(2)}`}</TableCell>

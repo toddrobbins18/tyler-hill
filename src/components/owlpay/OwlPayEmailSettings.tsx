@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -126,7 +127,13 @@ const OwlPayEmailSettings = () => {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      {/* Low Balance Alerts */}
+      <Tabs defaultValue="campers">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="campers">Campers</TabsTrigger>
+          <TabsTrigger value="staff">Staff</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="campers" className="space-y-0 mt-6">
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
@@ -177,8 +184,9 @@ const OwlPayEmailSettings = () => {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
 
-      {/* Staff Purchase Reports */}
+        <TabsContent value="staff" className="space-y-0 mt-6">
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
@@ -233,6 +241,8 @@ const OwlPayEmailSettings = () => {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+      </Tabs>
 
       <div className="flex items-center gap-3">
         <Button onClick={saveConfig} disabled={saving}>

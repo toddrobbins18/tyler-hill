@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -13,36 +14,29 @@ interface CamperBalance {
   id: string;
   name: string;
   owl_pay_balance: number;
-  person_id: string;
+  person_id: string | null;
 }
+
+interface StaffSpend {
+  id: string;
+  name: string;
+  person_id: string | null;
+  total_spent: number;
+}
+
+type BalanceAudience = "campers" | "staff";
 
 const OwlPayBalanceManagement = () => {
   const [campers, setCampers] = useState<CamperBalance[]>([]);
+  const [staffRows, setStaffRows] = useState<StaffSpend[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [audience, setAudience] = useState<BalanceAudience>("campers");
   const { currentCompany } = useCompany();
   const { selectedSeason } = useSeason();
   const { toast } = useToast();
 
-  useEffect(() => { fetchCampers(); }, [currentCompany, selectedSeason]);
-
-  useEffect(() => {
-    if (!currentCompany?.id || !selectedSeason) return;
-    const channel = supabase
-      .channel(`owlpay-web-balances-${currentCompany.id}-${selectedSeason}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "children", filter: `company_id=eq.${currentCompany.id}` },
-        () => fetchCampers()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [currentCompany?.id, selectedSeason]);
-
-  const fetchCampers = async () => {
+  const fetchCampers = useCallback(async () => {
     if (!currentCompany?.id || !selectedSeason) return;
     const { data, error } = await supabase
       .from("children")
@@ -51,41 +45,198 @@ const OwlPayBalanceManagement = () => {
       .eq("season", selectedSeason)
       .neq("status", "inactive")
       .order("name");
-    if (error) { toast({ title: "Error loading campers", variant: "destructive" }); return; }
+    if (error) {
+      toast({ title: "Error loading campers", variant: "destructive" });
+      return;
+    }
     setCampers((data as any) || []);
     setLoading(false);
-  };
+  }, [currentCompany?.id, selectedSeason, toast]);
 
-  const filtered = campers.filter(c =>
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.person_id?.toLowerCase().includes(searchTerm.toLowerCase())
+  const fetchStaffSpend = useCallback(async () => {
+    if (!currentCompany?.id || !selectedSeason) return;
+    const [{ data: staffList, error: staffErr }, { data: txs, error: txErr }] = await Promise.all([
+      supabase
+        .from("staff")
+        .select("id, name, person_id")
+        .eq("company_id", currentCompany.id)
+        .eq("season", selectedSeason)
+        .neq("status", "inactive")
+        .order("name"),
+      supabase
+        .from("owl_pay_transactions" as any)
+        .select("staff_id, amount")
+        .eq("company_id", currentCompany.id)
+        .eq("transaction_type", "purchase")
+        .not("staff_id", "is", null),
+    ]);
+
+    if (staffErr) {
+      toast({ title: "Error loading staff", variant: "destructive" });
+      return;
+    }
+    if (txErr) {
+      toast({ title: "Error loading staff purchases", variant: "destructive" });
+      return;
+    }
+
+    const spentByStaff = new Map<string, number>();
+    for (const tx of txs || []) {
+      const sid = (tx as any).staff_id as string;
+      if (!sid) continue;
+      spentByStaff.set(sid, (spentByStaff.get(sid) || 0) + Number((tx as any).amount || 0));
+    }
+
+    const rows: StaffSpend[] = (staffList || []).map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      person_id: s.person_id,
+      total_spent: spentByStaff.get(s.id) || 0,
+    }));
+    setStaffRows(rows);
+    setLoading(false);
+  }, [currentCompany?.id, selectedSeason, toast]);
+
+  const refresh = useCallback(() => {
+    setLoading(true);
+    if (audience === "campers") fetchCampers();
+    else fetchStaffSpend();
+  }, [audience, fetchCampers, fetchStaffSpend]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!currentCompany?.id || !selectedSeason) return;
+    const channel = supabase
+      .channel(`owlpay-web-balances-${currentCompany.id}-${selectedSeason}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "children", filter: `company_id=eq.${currentCompany.id}` },
+        () => audience === "campers" && fetchCampers()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "staff", filter: `company_id=eq.${currentCompany.id}` },
+        () => audience === "staff" && fetchStaffSpend()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "owl_pay_transactions", filter: `company_id=eq.${currentCompany.id}` },
+        () => audience === "staff" && fetchStaffSpend()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentCompany?.id, selectedSeason, audience, fetchCampers, fetchStaffSpend]);
+
+  const filteredCampers = campers.filter(
+    (c) =>
+      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (c.person_id || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const totalBalance = campers.reduce((sum, c) => sum + Number(c.owl_pay_balance), 0);
+  const filteredStaff = staffRows.filter(
+    (s) =>
+      s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s.person_id || "").toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const totalCamperBalance = campers.reduce((sum, c) => sum + Number(c.owl_pay_balance), 0);
+  const totalStaffSpend = staffRows.reduce((sum, s) => sum + s.total_spent, 0);
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Total Campers</p><p className="text-2xl font-bold text-primary">{campers.length}</p></CardContent></Card>
-        <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Total Balance</p><p className="text-2xl font-bold text-green-600">${totalBalance.toFixed(2)}</p></CardContent></Card>
-        <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Avg Balance</p><p className="text-2xl font-bold text-primary">${campers.length > 0 ? (totalBalance / campers.length).toFixed(2) : "0.00"}</p></CardContent></Card>
+      <div className="flex flex-wrap gap-3 items-center justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted-foreground">View:</span>
+          <Button variant={audience === "campers" ? "default" : "outline"} size="sm" onClick={() => setAudience("campers")}>
+            Campers
+          </Button>
+          <Button variant={audience === "staff" ? "default" : "outline"} size="sm" onClick={() => setAudience("staff")}>
+            Staff
+          </Button>
+        </div>
       </div>
+
+      {audience === "campers" ? (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-xs text-muted-foreground">Total campers</p>
+              <p className="text-2xl font-bold text-primary">{campers.length}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-xs text-muted-foreground">Total balance</p>
+              <p className="text-2xl font-bold text-green-600">${totalCamperBalance.toFixed(2)}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-xs text-muted-foreground">Avg balance</p>
+              <p className="text-2xl font-bold text-primary">
+                ${campers.length > 0 ? (totalCamperBalance / campers.length).toFixed(2) : "0.00"}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-xs text-muted-foreground">Total staff</p>
+              <p className="text-2xl font-bold text-primary">{staffRows.length}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-xs text-muted-foreground">Total POS spend</p>
+              <p className="text-2xl font-bold text-green-600">${totalStaffSpend.toFixed(2)}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-xs text-muted-foreground">Avg spend per staff</p>
+              <p className="text-2xl font-bold text-primary">
+                ${staffRows.length > 0 ? (totalStaffSpend / staffRows.length).toFixed(2) : "0.00"}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <Card>
         <CardHeader>
-          <div className="flex justify-between items-center">
-            <CardTitle className="flex items-center gap-2"><DollarSign className="h-5 w-5" /> Camper Balances</CardTitle>
+          <div className="flex justify-between items-center flex-wrap gap-3">
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5" />
+              {audience === "campers" ? "Camper balances" : "Staff POS totals"}
+            </CardTitle>
             <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search campers..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9" />
+              <Input
+                placeholder={audience === "campers" ? "Search campers..." : "Search staff..."}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
             </div>
           </div>
-          <p className="text-sm text-muted-foreground">Balances are managed via the API and reflect data from the enrollment system.</p>
+          <p className="text-sm text-muted-foreground">
+            {audience === "campers"
+              ? "Balances sync from enrollment / CampMinder and adjust at checkout."
+              : "Staff purchases use running POS totals (sum of OwlPay purchase rows); prepaid balances apply to campers."}
+          </p>
         </CardHeader>
         <CardContent>
           {loading ? (
             <p className="text-center text-muted-foreground py-4">Loading...</p>
-          ) : (
+          ) : audience === "campers" ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -95,14 +246,47 @@ const OwlPayBalanceManagement = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((camper) => (
+                {filteredCampers.map((camper) => (
                   <TableRow key={camper.id}>
                     <TableCell className="font-medium">{camper.name}</TableCell>
-                    <TableCell><Badge variant="outline">{camper.person_id}</Badge></TableCell>
                     <TableCell>
-                      <Badge className={camper.owl_pay_balance < 5 ? "bg-destructive text-destructive-foreground" : camper.owl_pay_balance < 15 ? "bg-yellow-500 text-white" : "bg-green-500 text-white"}>
+                      <Badge variant="outline">{camper.person_id || "—"}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        className={
+                          camper.owl_pay_balance < 5
+                            ? "bg-destructive text-destructive-foreground"
+                            : camper.owl_pay_balance < 15
+                              ? "bg-yellow-500 text-white"
+                              : "bg-green-500 text-white"
+                        }
+                      >
                         ${Number(camper.owl_pay_balance).toFixed(2)}
                       </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Person ID</TableHead>
+                  <TableHead>Total POS spend</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredStaff.map((s) => (
+                  <TableRow key={s.id}>
+                    <TableCell className="font-medium">{s.name}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{s.person_id || "—"}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={s.total_spent > 0 ? "default" : "secondary"}>${s.total_spent.toFixed(2)}</Badge>
                     </TableCell>
                   </TableRow>
                 ))}
