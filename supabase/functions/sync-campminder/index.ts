@@ -621,6 +621,373 @@ async function batchUpsert(
   return { inserted, updated, errors, changes };
 }
 
+/** Per-company Owl Pay / canteen sync configuration sourced from `companies`. */
+interface OwlPayConfig {
+  enabled: boolean;
+  categoryIds: string[];
+  descriptionKeywords: string[];
+}
+
+async function syncOwlPayBalancesFromCampminder(
+  supabase: any,
+  jobId: string,
+  companyId: string,
+  token: string,
+  subscriptionKey: string,
+  clientId: string,
+  season: string,
+  config: OwlPayConfig,
+): Promise<{ financialDeposits: number; financialReversals: number; financialSkipped: number; financialUpdated: number }> {
+  let financialDeposits = 0;
+  let financialReversals = 0;
+  let financialSkipped = 0;
+  let financialUpdated = 0;
+
+  console.log('\n--- SYNCING FINANCIALS (Owl Pay Balances) ---');
+  await updateSyncJob(supabase, jobId, {
+    progress: { step: 'Syncing financial transactions for Owl Pay', season },
+  });
+
+  // Defensive: skip silently if a caller forgot to gate, or config is empty.
+  if (!config.enabled) {
+    console.log(`[Financials] owl_pay_enabled=false for company ${companyId} — skipping financials sync.`);
+    return { financialDeposits, financialReversals, financialSkipped, financialUpdated };
+  }
+  const categoryIdSet = new Set((config.categoryIds || []).map((s) => String(s).trim()).filter(Boolean));
+  const descriptionKeywords = (config.descriptionKeywords || [])
+    .map((s) => String(s).toLowerCase().trim())
+    .filter(Boolean);
+  if (categoryIdSet.size === 0 && descriptionKeywords.length === 0) {
+    console.warn(
+      `[Financials] owl_pay_enabled=true but neither category ids nor description keywords are configured for company ${companyId} — skipping to avoid syncing every transaction.`,
+    );
+    return { financialDeposits, financialReversals, financialSkipped, financialUpdated };
+  }
+
+  try {
+    // Pass categoryid as a server-side hint only when a single id is configured;
+    // when multiple ids (or none) are in play we always filter client-side anyway,
+    // because CampMinder does not consistently honour the categoryid query param.
+    const fetchParams: Record<string, string | number | boolean> = {
+      clientid: clientId,
+      season: season,
+    };
+    if (categoryIdSet.size === 1) {
+      fetchParams.categoryid = [...categoryIdSet][0];
+    }
+
+    const allFinancialTransactions = await fetchAllPaginated(
+      CM_FINANCIALS_URL,
+      token,
+      subscriptionKey,
+      fetchParams,
+    );
+
+    console.log(`[Financials] Fetched ${allFinancialTransactions.length} total financial transactions from CampMinder`);
+    console.log(
+      `[Financials] Filter config: categoryIds=${JSON.stringify([...categoryIdSet])}, descriptionKeywords=${JSON.stringify(descriptionKeywords)}`,
+    );
+
+    // Log a sample to help debug field names
+    if (allFinancialTransactions.length > 0) {
+      console.log(`[Financials DEBUG] Sample transaction keys: ${JSON.stringify(Object.keys(allFinancialTransactions[0]))}`);
+      console.log(`[Financials DEBUG] Sample transaction: ${JSON.stringify(allFinancialTransactions[0]).substring(0, 2000)}`);
+    }
+
+    // Helper to get field value with inconsistent casing from CampMinder
+    const getFieldEarly = (obj: any, ...names: string[]): any => {
+      for (const name of names) {
+        if (obj[name] !== undefined) return obj[name];
+        const lower = name.toLowerCase();
+        const upper = name.charAt(0).toUpperCase() + name.slice(1);
+        const allCaps = name.toUpperCase();
+        if (obj[lower] !== undefined) return obj[lower];
+        if (obj[upper] !== undefined) return obj[upper];
+        if (obj[allCaps] !== undefined) return obj[allCaps];
+      }
+      const lowerNames = names.map(n => n.toLowerCase());
+      for (const key of Object.keys(obj)) {
+        if (lowerNames.includes(key.toLowerCase())) return obj[key];
+      }
+      return undefined;
+    };
+
+    // Client-side filter using the per-company Owl Pay configuration.
+    const financialTransactions = allFinancialTransactions.filter((tx: any) => {
+      const catId = String(getFieldEarly(tx, 'financialCategoryId', 'FinancialCategoryId', 'FinancialCategoryID', 'categoryId', 'CategoryId', 'CategoryID') || '');
+      if (catId && categoryIdSet.has(catId)) return true;
+
+      if (descriptionKeywords.length > 0) {
+        const desc = String(getFieldEarly(tx, 'description', 'Description') || '').toLowerCase();
+        if (desc && descriptionKeywords.some((kw) => desc.includes(kw))) return true;
+      }
+      return false;
+    });
+
+    console.log(`[Financials] After Owl Pay filter: ${financialTransactions.length} of ${allFinancialTransactions.length} transactions`);
+
+    if (financialTransactions.length > 0) {
+      // Existing ledger rows (same CM transaction id can change when CM reverses/cancels)
+      const { data: existingSyncedRows } = await supabase
+        .from('campminder_transactions')
+        .select('cm_transaction_id, amount, person_id')
+        .eq('company_id', companyId);
+
+      const existingByTxId = new Map<string, { amount: number; person_id: string }>();
+      (existingSyncedRows || []).forEach((t: any) => {
+        existingByTxId.set(String(t.cm_transaction_id), {
+          amount: Number(t.amount),
+          person_id: String(t.person_id || ''),
+        });
+      });
+
+      // Build a person_id -> child_id map from our camper data
+      const { data: allCampers } = await supabase
+        .from('children')
+        .select('id, person_id, owl_pay_balance')
+        .eq('company_id', companyId)
+        .eq('season', season);
+
+      const personToChildMap = new Map<string, { id: string; balance: number }>();
+      (allCampers || []).forEach((c: any) => {
+        personToChildMap.set(String(c.person_id), { id: c.id, balance: Number(c.owl_pay_balance) });
+      });
+
+      // Process new transactions
+      const newTransactions: any[] = [];
+      const balanceAdjustments = new Map<string, number>(); // child_id -> total adjustment
+      const seasonTxById = new Map<string, { personId: string; contribution: number }>();
+
+      // Helper to get field value with inconsistent casing from CampMinder
+      const getField = (obj: any, ...names: string[]): any => {
+        for (const name of names) {
+          // Try exact match first
+          if (obj[name] !== undefined) return obj[name];
+          // Try common casing variants
+          const lower = name.toLowerCase();
+          const upper = name.charAt(0).toUpperCase() + name.slice(1);
+          const allCaps = name.toUpperCase();
+          if (obj[lower] !== undefined) return obj[lower];
+          if (obj[upper] !== undefined) return obj[upper];
+          if (obj[allCaps] !== undefined) return obj[allCaps];
+        }
+        // Last resort: case-insensitive search through all keys
+        const lowerNames = names.map(n => n.toLowerCase());
+        for (const key of Object.keys(obj)) {
+          if (lowerNames.includes(key.toLowerCase())) return obj[key];
+        }
+        return undefined;
+      };
+
+      // Log first transaction to discover field names
+      if (financialTransactions.length > 0) {
+        const sample = financialTransactions[0];
+        console.log(`[Financials DEBUG] First tx keys: ${JSON.stringify(Object.keys(sample))}`);
+        console.log(`[Financials DEBUG] First tx full: ${JSON.stringify(sample).substring(0, 2000)}`);
+        const personVal = getField(sample, 'personId', 'PersonId', 'PersonID');
+        console.log(`[Financials DEBUG] getField personId result: ${personVal}`);
+      }
+
+      const parseBool = (value: any): boolean => {
+        if (typeof value === 'boolean') return value;
+        if (typeof value === 'number') return value !== 0;
+        if (typeof value === 'string') {
+          const v = value.trim().toLowerCase();
+          return ['1', 'true', 'yes', 'y'].includes(v);
+        }
+        return false;
+      };
+
+      for (const tx of financialTransactions) {
+        const txId = String(getField(tx, 'transactionId', 'TransactionId', 'TransactionID', 'Id', 'ID') || '');
+        if (!txId) {
+          financialSkipped++;
+          continue;
+        }
+
+        const personId = String(getField(tx, 'personId', 'PersonId', 'PersonID') || '');
+        const amount = Number(getField(tx, 'amount', 'Amount') || 0);
+        const isReversed = parseBool(getField(tx, 'isReversed', 'IsReversed', 'Reversed', 'isReversal', 'IsReversal'));
+        const isDeleted = parseBool(getField(tx, 'isDeleted', 'IsDeleted', 'Deleted'));
+        const isCancelled = parseBool(getField(tx, 'isCancelled', 'IsCancelled', 'Cancelled', 'Canceled', 'isCanceled', 'IsCanceled'));
+        const isVoided = parseBool(getField(tx, 'isVoided', 'IsVoided', 'Voided'));
+        const isActiveField = getField(tx, 'isActive', 'IsActive', 'Active');
+        const isInactive = isActiveField !== undefined ? !parseBool(isActiveField) : false;
+        const markerRaw = [
+          getField(tx, 'status', 'Status', 'transactionStatus', 'TransactionStatus'),
+          getField(tx, 'description', 'Description'),
+          getField(tx, 'notes', 'Notes', 'comment', 'Comment'),
+          getField(tx, 'transactionType', 'TransactionType', 'type', 'Type'),
+        ]
+          .filter((v) => v !== undefined && v !== null)
+          .map((v) => String(v).toLowerCase())
+          .join(' | ');
+        const statusIndicatesVoid = ['void', 'voided', 'cancel', 'cancelled', 'canceled', 'reversed', 'reverse', 'deleted', 'refund', 'declined', 'failed'].some((k) =>
+          markerRaw.includes(k)
+        );
+        const reversed = isReversed || isDeleted || isCancelled || isVoided || isInactive || statusIndicatesVoid;
+
+        const child = personToChildMap.get(personId);
+        if (!child) {
+          console.log(`[Financials] Skipping tx ${txId} - person ${personId} not found as camper`);
+          financialSkipped++;
+          continue;
+        }
+
+        const absAmt = Math.abs(amount);
+        const existingRow = existingByTxId.get(txId);
+        const oldContribution = existingRow !== undefined ? Number(existingRow.amount) : null;
+
+        /** Net effect of this CM row on our ledger (one row per cm_transaction_id). */
+        let newContribution: number;
+        if (reversed) {
+          // Two CM reversal patterns:
+          // 1) Same transaction id later marked reversed/cancelled -> zero prior contribution.
+          // 2) Separate reversal transaction id -> apply a negative amount to offset deposits.
+          newContribution = oldContribution !== null ? 0 : -absAmt;
+        } else {
+          newContribution = absAmt;
+        }
+
+        // Track season snapshot from CampMinder payload itself (latest row per tx id).
+        seasonTxById.set(txId, { personId, contribution: newContribution });
+
+        if (oldContribution !== null) {
+          const delta = newContribution - oldContribution;
+          if (Math.abs(delta) < 0.0001) {
+            financialSkipped++;
+            continue;
+          }
+
+          const txType =
+            newContribution < 0 ? 'reversal' : newContribution > 0 ? 'deposit' : 'reversal';
+          const { error: updErr } = await supabase
+            .from('campminder_transactions')
+            .update({
+              amount: newContribution,
+              person_id: personId,
+              transaction_type: txType,
+              synced_at: new Date().toISOString(),
+            })
+            .eq('company_id', companyId)
+            .eq('cm_transaction_id', txId);
+
+          if (updErr) {
+            console.error(`[Financials] Error updating transaction ${txId}:`, updErr);
+            continue;
+          }
+
+          const currentAdj = balanceAdjustments.get(child.id) || 0;
+          balanceAdjustments.set(child.id, currentAdj + delta);
+          financialUpdated++;
+          if (delta < 0) financialReversals++;
+          else financialDeposits++;
+          console.log(
+            `[Financials] Updated tx ${txId}: ledger ${oldContribution} → ${newContribution} (balance delta ${delta})`
+          );
+          continue;
+        }
+
+        if (Math.abs(newContribution) < 0.0001) {
+          financialSkipped++;
+          continue;
+        }
+
+        const txType = newContribution < 0 ? 'reversal' : 'deposit';
+        if (txType === 'reversal') financialReversals++;
+        else financialDeposits++;
+
+        const currentAdj = balanceAdjustments.get(child.id) || 0;
+        balanceAdjustments.set(child.id, currentAdj + newContribution);
+
+        newTransactions.push({
+          company_id: companyId,
+          cm_transaction_id: txId,
+          person_id: personId,
+          amount: newContribution,
+          transaction_type: txType,
+        });
+      }
+
+      // Batch insert new transaction records
+      if (newTransactions.length > 0) {
+        const batchSize = 50;
+        for (let i = 0; i < newTransactions.length; i += batchSize) {
+          const batch = newTransactions.slice(i, i + batchSize);
+          const { error: insertError } = await supabase
+            .from('campminder_transactions')
+            .insert(batch);
+          if (insertError) {
+            console.error(`[Financials] Error inserting transaction batch:`, insertError);
+          }
+        }
+      }
+
+      // Apply balance adjustments atomically via RPC
+      for (const [childId, adjustment] of balanceAdjustments.entries()) {
+        if (adjustment === 0) continue;
+        const { error: rpcError } = await supabase
+          .rpc('increment_camper_balance', { _child_id: childId, _amount: adjustment });
+        if (rpcError) {
+          console.error(`[Financials] Error adjusting balance for ${childId}:`, rpcError);
+        }
+      }
+
+      // Reconciliation guard (season-scoped):
+      // Build expected balances from the *current season's CampMinder payload*,
+      // not from historical local ledger rows (which may contain prior seasons).
+      const sumByPerson = new Map<string, number>();
+      for (const { personId, contribution } of seasonTxById.values()) {
+        const prev = sumByPerson.get(personId) || 0;
+        sumByPerson.set(personId, prev + Number(contribution || 0));
+      }
+
+      const { data: seasonCampers, error: campersErr } = await supabase
+        .from('children')
+        .select('id, person_id, owl_pay_balance')
+        .eq('company_id', companyId)
+        .eq('season', season);
+
+      if (campersErr) {
+        console.error('[Financials] Error loading campers for reconciliation:', campersErr);
+      } else {
+        const updates = (seasonCampers || [])
+          .map((c: any) => {
+            const expected = Number(sumByPerson.get(String(c.person_id || '')) || 0);
+            const current = Number(c.owl_pay_balance || 0);
+            return { id: c.id, expected, current };
+          })
+          .filter((x: any) => Math.abs(x.expected - x.current) > 0.0001);
+
+        for (const u of updates) {
+          const { error: updateErr } = await supabase
+            .from('children')
+            .update({ owl_pay_balance: u.expected, updated_at: new Date().toISOString() })
+            .eq('id', u.id);
+          if (updateErr) {
+            console.error(`[Financials] Reconciliation update failed for child ${u.id}:`, updateErr);
+          }
+        }
+
+        if (updates.length > 0) {
+          console.log(
+            `[Financials] Reconciled ${updates.length} camper balances from current season CampMinder payload`,
+          );
+        }
+      }
+
+      console.log(
+        `[Financials] Processed: ${financialDeposits} deposits, ${financialReversals} reversals, ${financialUpdated} updated rows, ${financialSkipped} unchanged/skipped`
+      );
+      console.log(`[Financials] Balance adjustments applied to ${balanceAdjustments.size} campers`);
+    }
+  } catch (finError) {
+    console.error('[Financials] Error during financial sync:', finError);
+  }
+
+  return { financialDeposits, financialReversals, financialSkipped, financialUpdated };
+}
+
 async function performFullSync(
   supabase: any,
   jobId: string,
@@ -631,7 +998,8 @@ async function performFullSync(
   seasonId?: string,
   isIncremental: boolean = false,
   lastSyncAt?: string,
-  syncType: string = 'full'
+  syncType: string = 'full',
+  owlPayConfig: OwlPayConfig = { enabled: false, categoryIds: [], descriptionKeywords: [] },
 ): Promise<void> {
   const syncTypeLabel = syncType === 'full' ? 'FULL' : syncType.toUpperCase() + ' ONLY';
   
@@ -658,6 +1026,90 @@ async function performFullSync(
     await updateSyncJob(supabase, jobId, {
       progress: { step: 'Season detected', season, syncType: isIncremental ? 'incremental' : 'full' },
     });
+
+    if (syncType === 'financials') {
+      // Hard gate: a `sync_type=financials` invoke against a company with Owl Pay
+      // disabled completes immediately with `skipped_owl_pay_disabled` instead
+      // of touching the CampMinder financials API or `children.owl_pay_balance`.
+      if (!owlPayConfig.enabled) {
+        console.log(
+          `[Financials-only] owl_pay_enabled=false for company ${companyId} — skipping financials sync.`,
+        );
+        await updateSyncJob(supabase, jobId, {
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+          progress: {
+            step: 'Skipped (Owl Pay disabled for this company)',
+            syncType: 'financials_only',
+            skipped_owl_pay_disabled: true,
+            season,
+          },
+          total_counts: {
+            financial_deposits: 0,
+            financial_reversals: 0,
+            financial_skipped: 0,
+            financial_updated: 0,
+          },
+        });
+        return;
+      }
+
+      let financialDeposits = 0;
+      let financialReversals = 0;
+      let financialSkipped = 0;
+      let financialUpdated = 0;
+      try {
+        const fin = await syncOwlPayBalancesFromCampminder(
+          supabase,
+          jobId,
+          companyId,
+          token,
+          subscriptionKey,
+          clientId,
+          season,
+          owlPayConfig,
+        );
+        financialDeposits = fin.financialDeposits;
+        financialReversals = fin.financialReversals;
+        financialSkipped = fin.financialSkipped;
+        financialUpdated = fin.financialUpdated;
+      } catch (finError) {
+        console.error('[Financials-only] Error during Owl Pay sync:', finError);
+      }
+
+      const { error: lastSyncErrFin } = await supabase
+        .from('companies')
+        .update({ campminder_last_sync_at: new Date().toISOString() })
+        .eq('id', companyId);
+      if (lastSyncErrFin) {
+        console.error('[Companies] Failed to update campminder_last_sync_at:', lastSyncErrFin);
+      }
+
+      await updateSyncJob(supabase, jobId, {
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+        progress: {
+          step: 'Completed',
+          syncType: 'financials_only',
+          financial_deposits: financialDeposits,
+          financial_reversals: financialReversals,
+          financial_skipped: financialSkipped,
+          financial_updated: financialUpdated,
+          season,
+        },
+        total_counts: {
+          financial_deposits: financialDeposits,
+          financial_reversals: financialReversals,
+          financial_skipped: financialSkipped,
+          financial_updated: financialUpdated,
+        },
+      });
+
+      console.log('\n========================================');
+      console.log(`Owl Pay / financials-only sync completed for company ${companyId}`);
+      console.log('========================================\n');
+      return;
+    }
 
     // Initialize bunk mapping early - needed before bunk sync phase
     const cmBunkIdMap = new Map<number, string>();
@@ -2099,311 +2551,40 @@ async function performFullSync(
 
     // =====================================================
     // PHASE 10: Financial Sync - Owl Pay Balances from CampMinder
+    //
+    // Only runs when this company has `owl_pay_enabled = true` (configured per
+    // company on the `companies` row). The dedicated `sync_type = 'financials'`
+    // path is handled earlier and never reaches this phase, so we only need to
+    // guard the `full` / `campers` triggers here.
     // =====================================================
     let financialDeposits = 0;
     let financialReversals = 0;
     let financialSkipped = 0;
     let financialUpdated = 0;
 
-    if (syncType === 'full' || syncType === 'campers') {
-      console.log('\n--- SYNCING FINANCIALS (Owl Pay Balances) ---');
-      await updateSyncJob(supabase, jobId, {
-        progress: { step: 'Syncing financial transactions for Owl Pay', season },
-      });
-
+    if ((syncType === 'full' || syncType === 'campers') && owlPayConfig.enabled) {
       try {
-        // Canteen spending money category ID
-        const CANTEEN_CATEGORY_ID = '9076';
-
-        // Fetch all financial transactions - CampMinder may not honour the categoryid
-        // query param, so we always filter client-side as well.
-        const allFinancialTransactions = await fetchAllPaginated(
-          CM_FINANCIALS_URL,
+        const fin = await syncOwlPayBalancesFromCampminder(
+          supabase,
+          jobId,
+          companyId,
           token,
           subscriptionKey,
-          { clientid: clientId, categoryid: CANTEEN_CATEGORY_ID, season: season }
+          clientId,
+          season,
+          owlPayConfig,
         );
-
-        console.log(`[Financials] Fetched ${allFinancialTransactions.length} total financial transactions from CampMinder`);
-
-        // Log a sample to help debug field names
-        if (allFinancialTransactions.length > 0) {
-          console.log(`[Financials DEBUG] Sample transaction keys: ${JSON.stringify(Object.keys(allFinancialTransactions[0]))}`);
-          console.log(`[Financials DEBUG] Sample transaction: ${JSON.stringify(allFinancialTransactions[0]).substring(0, 2000)}`);
-        }
-
-        // Helper to get field value with inconsistent casing from CampMinder
-        const getFieldEarly = (obj: any, ...names: string[]): any => {
-          for (const name of names) {
-            if (obj[name] !== undefined) return obj[name];
-            const lower = name.toLowerCase();
-            const upper = name.charAt(0).toUpperCase() + name.slice(1);
-            const allCaps = name.toUpperCase();
-            if (obj[lower] !== undefined) return obj[lower];
-            if (obj[upper] !== undefined) return obj[upper];
-            if (obj[allCaps] !== undefined) return obj[allCaps];
-          }
-          const lowerNames = names.map(n => n.toLowerCase());
-          for (const key of Object.keys(obj)) {
-            if (lowerNames.includes(key.toLowerCase())) return obj[key];
-          }
-          return undefined;
-        };
-
-        // Client-side filter: only keep canteen/spending transactions
-        const financialTransactions = allFinancialTransactions.filter((tx: any) => {
-          const catId = String(getFieldEarly(tx, 'financialCategoryId', 'FinancialCategoryId', 'FinancialCategoryID', 'categoryId', 'CategoryId', 'CategoryID') || '');
-          const desc = String(getFieldEarly(tx, 'description', 'Description') || '').toLowerCase();
-
-          // Match by category ID or description keywords
-          if (catId === CANTEEN_CATEGORY_ID) return true;
-          if (desc.includes('canteen') || desc.includes('spending')) return true;
-          return false;
-        });
-
-        console.log(`[Financials] After canteen filter: ${financialTransactions.length} of ${allFinancialTransactions.length} transactions`);
-
-        if (financialTransactions.length > 0) {
-          // Existing ledger rows (same CM transaction id can change when CM reverses/cancels)
-          const { data: existingSyncedRows } = await supabase
-            .from('campminder_transactions')
-            .select('cm_transaction_id, amount, person_id')
-            .eq('company_id', companyId);
-
-          const existingByTxId = new Map<string, { amount: number; person_id: string }>();
-          (existingSyncedRows || []).forEach((t: any) => {
-            existingByTxId.set(String(t.cm_transaction_id), {
-              amount: Number(t.amount),
-              person_id: String(t.person_id || ''),
-            });
-          });
-
-          // Build a person_id -> child_id map from our camper data
-          const { data: allCampers } = await supabase
-            .from('children')
-            .select('id, person_id, owl_pay_balance')
-            .eq('company_id', companyId)
-            .eq('season', season);
-
-          const personToChildMap = new Map<string, { id: string; balance: number }>();
-          (allCampers || []).forEach((c: any) => {
-            personToChildMap.set(String(c.person_id), { id: c.id, balance: Number(c.owl_pay_balance) });
-          });
-
-          // Process new transactions
-          const newTransactions: any[] = [];
-          const balanceAdjustments = new Map<string, number>(); // child_id -> total adjustment
-
-          // Helper to get field value with inconsistent casing from CampMinder
-          const getField = (obj: any, ...names: string[]): any => {
-            for (const name of names) {
-              // Try exact match first
-              if (obj[name] !== undefined) return obj[name];
-              // Try common casing variants
-              const lower = name.toLowerCase();
-              const upper = name.charAt(0).toUpperCase() + name.slice(1);
-              const allCaps = name.toUpperCase();
-              if (obj[lower] !== undefined) return obj[lower];
-              if (obj[upper] !== undefined) return obj[upper];
-              if (obj[allCaps] !== undefined) return obj[allCaps];
-            }
-            // Last resort: case-insensitive search through all keys
-            const lowerNames = names.map(n => n.toLowerCase());
-            for (const key of Object.keys(obj)) {
-              if (lowerNames.includes(key.toLowerCase())) return obj[key];
-            }
-            return undefined;
-          };
-
-          // Log first transaction to discover field names
-          if (financialTransactions.length > 0) {
-            const sample = financialTransactions[0];
-            console.log(`[Financials DEBUG] First tx keys: ${JSON.stringify(Object.keys(sample))}`);
-            console.log(`[Financials DEBUG] First tx full: ${JSON.stringify(sample).substring(0, 2000)}`);
-            const personVal = getField(sample, 'personId', 'PersonId', 'PersonID');
-            console.log(`[Financials DEBUG] getField personId result: ${personVal}`);
-          }
-
-          for (const tx of financialTransactions) {
-            const txId = String(getField(tx, 'transactionId', 'TransactionId', 'TransactionID', 'Id', 'ID') || '');
-            if (!txId) {
-              financialSkipped++;
-              continue;
-            }
-
-            const personId = String(getField(tx, 'personId', 'PersonId', 'PersonID') || '');
-            const amount = Number(getField(tx, 'amount', 'Amount') || 0);
-            const isReversed = !!(getField(tx, 'isReversed', 'IsReversed', 'Reversed') || false);
-            const isDeleted = !!(getField(tx, 'isDeleted', 'IsDeleted', 'Deleted') || false);
-            const statusRaw = String(
-              getField(tx, 'status', 'Status', 'transactionStatus', 'TransactionStatus') || ''
-            ).toLowerCase();
-            const statusIndicatesVoid = ['void', 'voided', 'cancel', 'cancelled', 'canceled', 'reversed'].some((k) =>
-              statusRaw.includes(k)
-            );
-            const reversed = isReversed || isDeleted || statusIndicatesVoid;
-
-            const child = personToChildMap.get(personId);
-            if (!child) {
-              console.log(`[Financials] Skipping tx ${txId} - person ${personId} not found as camper`);
-              financialSkipped++;
-              continue;
-            }
-
-            const absAmt = Math.abs(amount);
-            const existingRow = existingByTxId.get(txId);
-            const oldContribution = existingRow !== undefined ? Number(existingRow.amount) : null;
-
-            /** Net effect of this CM row on our ledger (one row per cm_transaction_id). */
-            let newContribution: number;
-            if (reversed) {
-              // Row we already imported as a deposit → cancelling zeros it; brand-new reversal-only line stays negative.
-              newContribution = oldContribution !== null ? 0 : -absAmt;
-            } else {
-              newContribution = absAmt;
-            }
-
-            if (oldContribution !== null) {
-              const delta = newContribution - oldContribution;
-              if (Math.abs(delta) < 0.0001) {
-                financialSkipped++;
-                continue;
-              }
-
-              const txType =
-                newContribution < 0 ? 'reversal' : newContribution > 0 ? 'deposit' : 'reversal';
-              const { error: updErr } = await supabase
-                .from('campminder_transactions')
-                .update({
-                  amount: newContribution,
-                  person_id: personId,
-                  transaction_type: txType,
-                  synced_at: new Date().toISOString(),
-                })
-                .eq('company_id', companyId)
-                .eq('cm_transaction_id', txId);
-
-              if (updErr) {
-                console.error(`[Financials] Error updating transaction ${txId}:`, updErr);
-                continue;
-              }
-
-              const currentAdj = balanceAdjustments.get(child.id) || 0;
-              balanceAdjustments.set(child.id, currentAdj + delta);
-              financialUpdated++;
-              if (delta < 0) financialReversals++;
-              else financialDeposits++;
-              console.log(
-                `[Financials] Updated tx ${txId}: ledger ${oldContribution} → ${newContribution} (balance delta ${delta})`
-              );
-              continue;
-            }
-
-            if (Math.abs(newContribution) < 0.0001) {
-              financialSkipped++;
-              continue;
-            }
-
-            const txType = newContribution < 0 ? 'reversal' : 'deposit';
-            if (txType === 'reversal') financialReversals++;
-            else financialDeposits++;
-
-            const currentAdj = balanceAdjustments.get(child.id) || 0;
-            balanceAdjustments.set(child.id, currentAdj + newContribution);
-
-            newTransactions.push({
-              company_id: companyId,
-              cm_transaction_id: txId,
-              person_id: personId,
-              amount: newContribution,
-              transaction_type: txType,
-            });
-          }
-
-          // Batch insert new transaction records
-          if (newTransactions.length > 0) {
-            const batchSize = 50;
-            for (let i = 0; i < newTransactions.length; i += batchSize) {
-              const batch = newTransactions.slice(i, i + batchSize);
-              const { error: insertError } = await supabase
-                .from('campminder_transactions')
-                .insert(batch);
-              if (insertError) {
-                console.error(`[Financials] Error inserting transaction batch:`, insertError);
-              }
-            }
-          }
-
-          // Apply balance adjustments atomically via RPC
-          for (const [childId, adjustment] of balanceAdjustments.entries()) {
-            if (adjustment === 0) continue;
-            const { error: rpcError } = await supabase
-              .rpc('increment_camper_balance', { _child_id: childId, _amount: adjustment });
-            if (rpcError) {
-              console.error(`[Financials] Error adjusting balance for ${childId}:`, rpcError);
-            }
-          }
-
-          // Reconciliation guard:
-          // If historical transactions were inserted earlier without balance application,
-          // rebuild balances from the transaction ledger so UI never stays stale at $0.
-          const { data: ledgerSums, error: ledgerErr } = await supabase
-            .from('campminder_transactions')
-            .select('person_id, amount')
-            .eq('company_id', companyId);
-
-          if (ledgerErr) {
-            console.error('[Financials] Error loading ledger sums for reconciliation:', ledgerErr);
-          } else {
-            const sumByPerson = new Map<string, number>();
-            (ledgerSums || []).forEach((row: any) => {
-              const pid = String(row.person_id || '');
-              if (!pid) return;
-              const prev = sumByPerson.get(pid) || 0;
-              sumByPerson.set(pid, prev + Number(row.amount || 0));
-            });
-
-            const { data: seasonCampers, error: campersErr } = await supabase
-              .from('children')
-              .select('id, person_id, owl_pay_balance')
-              .eq('company_id', companyId)
-              .eq('season', season);
-
-            if (campersErr) {
-              console.error('[Financials] Error loading campers for reconciliation:', campersErr);
-            } else {
-              const updates = (seasonCampers || [])
-                .map((c: any) => {
-                  const expected = Number(sumByPerson.get(String(c.person_id || '')) || 0);
-                  const current = Number(c.owl_pay_balance || 0);
-                  return { id: c.id, expected, current };
-                })
-                .filter((x: any) => Math.abs(x.expected - x.current) > 0.0001);
-
-              for (const u of updates) {
-                const { error: updateErr } = await supabase
-                  .from('children')
-                  .update({ owl_pay_balance: u.expected, updated_at: new Date().toISOString() })
-                  .eq('id', u.id);
-                if (updateErr) {
-                  console.error(`[Financials] Reconciliation update failed for child ${u.id}:`, updateErr);
-                }
-              }
-
-              if (updates.length > 0) {
-                console.log(`[Financials] Reconciled ${updates.length} camper balances from ledger net totals`);
-              }
-            }
-          }
-
-          console.log(
-            `[Financials] Processed: ${financialDeposits} deposits, ${financialReversals} reversals, ${financialUpdated} updated rows, ${financialSkipped} unchanged/skipped`
-          );
-          console.log(`[Financials] Balance adjustments applied to ${balanceAdjustments.size} campers`);
-        }
+        financialDeposits = fin.financialDeposits;
+        financialReversals = fin.financialReversals;
+        financialSkipped = fin.financialSkipped;
+        financialUpdated = fin.financialUpdated;
       } catch (finError) {
         console.error('[Financials] Error during financial sync:', finError);
       }
+    } else if ((syncType === 'full' || syncType === 'campers') && !owlPayConfig.enabled) {
+      console.log(
+        `[Financials] Skipped Phase 10 — owl_pay_enabled=false for company ${companyId}.`,
+      );
     }
 
     // Last successful CampMinder sync (only reached if performFullSync completes without throwing)
@@ -2505,8 +2686,8 @@ serve(async (req) => {
   try {
   const { company_id, season_id, incremental, sync_type } = await req.json().catch(() => ({}));
     
-    // sync_type can be: 'campers', 'staff', or 'full' (default)
-    // This allows splitting syncs: campers at :00, staff at :30
+    // sync_type can be: 'campers', 'staff', 'financials', or 'full' (default).
+    // This allows splitting syncs: campers at :00, staff at :30, financials on its own cadence.
     const effectiveSyncType = sync_type || 'full';
     
     console.log('Sync request received:', { company_id, season_id, incremental, sync_type: effectiveSyncType });
@@ -2551,6 +2732,7 @@ serve(async (req) => {
       lastSyncAt?: string;
       syncType: string;
       staleClosed: number;
+      owlPayConfig: OwlPayConfig;
     }> = [];
 
     for (const company of companies) {
@@ -2607,6 +2789,20 @@ serve(async (req) => {
 
         console.log(`Created sync job: ${job.id} (${isIncremental ? 'incremental' : 'full'})`);
 
+        // Per-company Owl Pay configuration. Columns are added by migration
+        // 20260502000000_companies_owl_pay_config.sql; coalesce to safe defaults
+        // so an Edge function deploy that runs before the migration just acts
+        // like Owl Pay is disabled rather than crashing.
+        const owlPayConfig: OwlPayConfig = {
+          enabled: company.owl_pay_enabled === true,
+          categoryIds: Array.isArray(company.campminder_owl_pay_category_ids)
+            ? company.campminder_owl_pay_category_ids.map((s: unknown) => String(s))
+            : [],
+          descriptionKeywords: Array.isArray(company.campminder_owl_pay_description_keywords)
+            ? company.campminder_owl_pay_description_keywords.map((s: unknown) => String(s))
+            : [],
+        };
+
         queuedSyncs.push({
           jobId: job.id,
           companyId: company.id,
@@ -2619,6 +2815,7 @@ serve(async (req) => {
           lastSyncAt,
           syncType: effectiveSyncType,
           staleClosed,
+          owlPayConfig,
         });
 
         results.push({
@@ -2629,6 +2826,7 @@ serve(async (req) => {
           sync_type: effectiveSyncType,
           incremental_flag: isIncremental,
           stale_jobs_closed: staleClosed,
+          owl_pay_enabled: owlPayConfig.enabled,
           message:
             `${effectiveSyncType} sync queued (${isIncremental ? 'incremental' : 'full'} mode). Companies run sequentially in background — check sync_jobs for progress.`,
         });
@@ -2663,6 +2861,7 @@ serve(async (req) => {
                 q.isIncremental,
                 q.lastSyncAt,
                 q.syncType,
+                q.owlPayConfig,
               );
             } catch (bgErr) {
               console.error(`[CampMinder BG] performFullSync failed for ${q.companyName}:`, bgErr);
