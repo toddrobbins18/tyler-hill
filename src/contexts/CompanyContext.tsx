@@ -134,7 +134,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       if (targetCompany) {
         setCurrentCompany(targetCompany);
         if (targetCompany.theme_color) {
-          applyThemeColor(targetCompany.theme_color);
+          applyThemeColor(targetCompany.theme_color, { companySlug: targetCompany.slug });
         }
       }
 
@@ -178,7 +178,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       
       // Apply theme color immediately
       if (company.theme_color) {
-        applyThemeColor(company.theme_color);
+        applyThemeColor(company.theme_color, { companySlug: company.slug });
       }
       
       toast({
