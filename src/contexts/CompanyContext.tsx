@@ -11,6 +11,8 @@ interface Company {
   logo_url: string | null;
   theme_color: string;
   zip_code?: string | null;
+  /** When false, Owl Pay is not offered for this camp (see migration `companies.owl_pay_enabled`). */
+  owl_pay_enabled?: boolean | null;
 }
 
 interface CompanyContextType {
@@ -89,14 +91,14 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       // Fetch profile + company data in parallel with companies list for super admins
       const profilePromise = supabase
         .from('profiles')
-        .select('company_id, companies(id, name, slug, logo_url, theme_color, zip_code)')
+        .select('company_id, companies(id, name, slug, logo_url, theme_color, zip_code, owl_pay_enabled)')
         .eq('id', user.id)
         .single();
 
       const companiesPromise = authIsSuperAdmin 
         ? supabase
             .from('companies')
-            .select('id, name, slug, logo_url, theme_color, zip_code')
+            .select('id, name, slug, logo_url, theme_color, zip_code, owl_pay_enabled')
             .eq('is_active', true)
             .order('name')
         : Promise.resolve({ data: null, error: null });

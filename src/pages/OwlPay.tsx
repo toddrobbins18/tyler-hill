@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,6 +15,7 @@ import OwlPayReports from "@/components/owlpay/OwlPayReports";
 import OwlPayBalanceManagement from "@/components/owlpay/OwlPayBalanceManagement";
 import OwlPayEmailSettings from "@/components/owlpay/OwlPayEmailSettings";
 import { useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
 
 interface StaffMember {
   id: string;
@@ -22,7 +24,7 @@ interface StaffMember {
   photo_url: string | null;
 }
 
-export default function OwlPay() {
+function OwlPayPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCamper, setSelectedCamper] = useState<OwlPayCamper | null>(null);
   const [campers, setCampers] = useState<OwlPayCamper[]>([]);
@@ -342,4 +344,40 @@ export default function OwlPay() {
       </Tabs>
     </div>
   );
+}
+
+/** Owl Pay is only available for companies with `owl_pay_enabled` (Tyler Hill in production). */
+export default function OwlPay() {
+  const { currentCompany, loading } = useCompany();
+  const navigate = useNavigate();
+
+  const owlPayEnabled =
+    currentCompany?.owl_pay_enabled === true ||
+    (currentCompany?.owl_pay_enabled == null && currentCompany?.slug === "tyler-hill-camp");
+
+  if (loading || !currentCompany) {
+    return (
+      <div className="flex items-center justify-center min-h-[40vh] text-muted-foreground">
+        Loading…
+      </div>
+    );
+  }
+
+  if (!owlPayEnabled) {
+    return (
+      <div className="max-w-lg mx-auto space-y-6 p-6 text-center">
+        <h1 className="text-2xl font-bold">Owl Pay isn’t available here</h1>
+        <p className="text-muted-foreground">
+          Owl Pay is only enabled for Tyler Hill Camp. You’re viewing{" "}
+          <span className="font-medium text-foreground">{currentCompany.name}</span>. Open the dashboard
+          for this camp instead.
+        </p>
+        <Button className="w-full sm:w-auto" onClick={() => navigate("/")}>
+          Go to dashboard
+        </Button>
+      </div>
+    );
+  }
+
+  return <OwlPayPage />;
 }
