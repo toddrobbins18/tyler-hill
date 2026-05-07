@@ -12,7 +12,6 @@ import { SeasonProvider } from "@/contexts/SeasonContext";
 import { CompanyProvider } from "@/contexts/CompanyContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useSessionInitialization } from "@/hooks/useSessionInitialization";
-import { AIChatWidget } from "@/components/AIChatWidget";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import Dashboard from "./pages/Dashboard";
@@ -170,7 +169,6 @@ function AppContent() {
                           </div>
                         </div>
                       </SidebarProvider>
-                      <AIChatWidget />
                     </ProtectedRoute>
                   }
                 />
