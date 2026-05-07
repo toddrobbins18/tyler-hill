@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Send, Users, Reply } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
+import { fetchMessageProfileLabels } from "@/lib/messageProfiles";
 
 interface ThreadMessage {
   id: string;
@@ -25,10 +26,12 @@ interface ThreadMessage {
 interface InlineThreadProps {
   message: ThreadMessage;
   viewMode: 'inbox' | 'sent';
+  /** Current camp — used with RPC so reply thread resolves sender names under RLS. */
+  campCompanyId?: string;
   onNavigateToGroup?: (groupId: string) => void;
 }
 
-export default function InlineThread({ message, viewMode, onNavigateToGroup }: InlineThreadProps) {
+export default function InlineThread({ message, viewMode, campCompanyId, onNavigateToGroup }: InlineThreadProps) {
   const [replies, setReplies] = useState<ThreadMessage[]>([]);
   const [newReply, setNewReply] = useState("");
   const [sending, setSending] = useState(false);
@@ -64,18 +67,14 @@ export default function InlineThread({ message, viewMode, onNavigateToGroup }: I
     const unknownIds = ids.filter(id => id && !profileCache[id]);
     if (unknownIds.length === 0) return profileCache;
 
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, full_name, email")
-      .in("id", unknownIds);
-
+    const labelMap = await fetchMessageProfileLabels(unknownIds, campCompanyId);
     const newCache = { ...profileCache };
-    profiles?.forEach(p => {
-      newCache[p.id] = p.full_name?.trim() || p.email?.split("@")[0] || "Unknown";
+    labelMap.forEach((label, id) => {
+      newCache[id] = label;
     });
     setProfileCache(newCache);
     return newCache;
-  }, [profileCache]);
+  }, [profileCache, campCompanyId]);
 
   const fetchReplies = async () => {
     const { data, error } = await supabase
@@ -91,7 +90,7 @@ export default function InlineThread({ message, viewMode, onNavigateToGroup }: I
 
     setReplies(data.map(m => ({
       ...m,
-      sender_name: m.sender_id ? (cache[m.sender_id] || "Unknown") : "System",
+      sender_name: m.sender_id ? (cache[m.sender_id] || "Unknown sender") : "Automated notification",
     })));
   };
 
@@ -138,7 +137,7 @@ export default function InlineThread({ message, viewMode, onNavigateToGroup }: I
         <CardTitle className="flex items-center gap-2">
           {message.subject}
           {message.sender_id === null && (
-            <Badge variant="secondary">System</Badge>
+            <Badge variant="secondary">Automated</Badge>
           )}
         </CardTitle>
         <CardDescription className="space-y-1">
@@ -147,7 +146,9 @@ export default function InlineThread({ message, viewMode, onNavigateToGroup }: I
           </span>
           {viewMode === 'inbox' && (
             <span className="block font-medium text-foreground">
-              From: {message.sender_name || "System Notification"}
+              From:{" "}
+              {message.sender_name ||
+                (message.sender_id ? "Unknown sender" : "Automated notification")}
             </span>
           )}
           {viewMode === 'sent' && (

@@ -795,7 +795,7 @@ export default function SportsCalendar() {
 
                     return {
                       id: event.id,
-                      title: `${event.emoji ? event.emoji + ' ' : ''}${getDisplaySport(event)}: ${event.title}`,
+                      title: `${event.emoji ? event.emoji + ' ' : ''}${event.title || ''}`,
                       start,
                       end,
                       allDay: !normalizedTime,
@@ -874,7 +874,8 @@ export default function SportsCalendar() {
                     </CardHeader>
                     <CardContent className="space-y-2">
                       <div className="flex gap-2 flex-wrap">
-                        <Badge>{getDisplaySport(event)}</Badge>
+                        <Badge className="bg-blue-500/20 text-blue-700 border-blue-500/30">Sports</Badge>
+                        <Badge variant="outline">{getDisplaySport(event)}</Badge>
                         {event.event_type && (
                           <Badge variant="outline">{event.event_type}</Badge>
                         )}

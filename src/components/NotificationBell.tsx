@@ -12,6 +12,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatDistanceToNow } from "date-fns";
 import { notificationsDebug } from "@/lib/notificationDebug";
+import { useCompany } from "@/contexts/CompanyContext";
+import { fetchMessageProfileLabels } from "@/lib/messageProfiles";
 
 interface InboxMessage {
   id: string;
@@ -54,6 +56,7 @@ function getNotificationLabel(type: string | null, subject: string): string | nu
 
 export function NotificationBell() {
   const { user } = useAuth();
+  const { currentCompany } = useCompany();
   const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState(0);
   const [recentMessages, setRecentMessages] = useState<InboxMessage[]>([]);
@@ -89,26 +92,18 @@ export function NotificationBell() {
       .limit(8);
 
     if (data) {
-      const senderIds = [...new Set(data.map((m) => m.sender_id).filter(Boolean))];
+      const senderIds = [...new Set(data.map((m) => m.sender_id).filter(Boolean))] as string[];
       let profileMap = new Map<string, string>();
 
       if (senderIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from("profiles")
-          .select("id, full_name, email")
-          .in("id", senderIds);
-
-        profileMap = new Map(
-          (profiles || []).map((p) => [
-            p.id,
-            p.full_name || p.email?.split("@")[0] || "System",
-          ])
-        );
+        profileMap = await fetchMessageProfileLabels(senderIds, currentCompany?.id);
       }
 
       const rows = data.map((m) => ({
         ...m,
-        sender_name: m.sender_id ? profileMap.get(m.sender_id) || "System" : "System",
+        sender_name: m.sender_id
+          ? profileMap.get(m.sender_id) || "Unknown sender"
+          : "Automated notification",
       }));
       notificationsDebug("Bell: recent list loaded", {
         userId: user.id,
@@ -119,7 +114,7 @@ export function NotificationBell() {
       });
       setRecentMessages(rows);
     }
-  }, [user]);
+  }, [user, currentCompany?.id]);
 
   useEffect(() => {
     if (!user) return;

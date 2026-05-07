@@ -15,6 +15,7 @@ import { format } from "date-fns";
 import GroupList from "@/components/messages/GroupList";
 import InlineThread from "@/components/messages/InlineThread";
 import { notificationsDebug } from "@/lib/notificationDebug";
+import { fetchMessageProfileLabels } from "@/lib/messageProfiles";
 
 interface TagGroup {
   tag: string;
@@ -129,18 +130,14 @@ export default function Messages() {
 
     if (unknownIds.size === 0) return profileCache;
 
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, full_name, email")
-      .in("id", Array.from(unknownIds));
-
+    const labelMap = await fetchMessageProfileLabels(Array.from(unknownIds), currentCompany?.id);
     const newCache = { ...profileCache };
-    profiles?.forEach(p => {
-      newCache[p.id] = p.full_name?.trim() || p.email?.split("@")[0] || "Unknown";
+    labelMap.forEach((label, id) => {
+      newCache[id] = label;
     });
     setProfileCache(newCache);
     return newCache;
-  }, [profileCache]);
+  }, [profileCache, currentCompany?.id]);
 
   useEffect(() => {
     if (!currentCompany?.id) return;
@@ -216,7 +213,7 @@ export default function Messages() {
 
         return {
           ...m,
-          sender_name: m.sender_id ? (cache[m.sender_id] || "Unknown") : undefined,
+          sender_name: m.sender_id ? (cache[m.sender_id] || "Unknown sender") : undefined,
           reply_count: count || 0,
           latest_reply_content: latestReply?.content,
           latest_reply_sender: latestReplyName,
@@ -331,20 +328,21 @@ export default function Messages() {
   };
 
   const fetchAllUsers = async () => {
-    const { data: profiles, error: profilesError } = await supabase
-      .from("profiles")
-      .select("id, email, full_name")
-      .eq("company_id", currentCompany!.id)
-      .order("full_name");
+    const { data: profiles, error: profilesError } = await supabase.rpc('list_message_recipient_profiles', {
+      target_company_id: currentCompany!.id,
+    });
 
-    if (profilesError || !profiles) return;
+    if (profilesError || !profiles) {
+      console.error("Error fetching profiles for messages:", profilesError);
+      return;
+    }
 
     const { data: userTags } = await supabase
       .from("user_tags")
       .select("user_id, tag")
       .eq("company_id", currentCompany!.id);
 
-    const users: UserOption[] = profiles.map((profile) => {
+    const users: UserOption[] = profiles.map((profile: { id: string; email: string | null; full_name: string | null }) => {
       const displayName = profile.full_name?.trim() 
         || profile.email?.split("@")[0] 
         || "Unknown";
@@ -453,6 +451,7 @@ export default function Messages() {
       setSelectedTags([]);
       setSelectedUserIds([]);
       setDeliveryMethods({ inApp: true, email: false });
+      void fetchSentMessages();
     } catch (error: any) {
       toast.error(error.message || "Failed to send notification");
       notificationsDebug("Compose: send-bulk-email failed", { message: error?.message, error });
@@ -484,7 +483,7 @@ export default function Messages() {
           </Button>
           <Button
             variant={viewMode === 'sent' ? 'default' : 'outline'}
-            onClick={() => { setViewMode('sent'); setSelectedMessage(null); }}
+            onClick={() => { setViewMode('sent'); setSelectedMessage(null); void fetchSentMessages(); }}
           >
             <SendHorizonal className="h-4 w-4 mr-2" />
             Sent
@@ -555,7 +554,9 @@ export default function Messages() {
                             </div>
                             {viewMode === 'inbox' && (
                               <p className="text-xs font-medium text-primary mb-1">
-                                From: {msg.sender_name || "System Notification"}
+                                From:{" "}
+                                {msg.sender_name ||
+                                  (msg.sender_id ? "Unknown sender" : "Automated notification")}
                               </p>
                             )}
                             {viewMode === 'sent' && (
@@ -593,6 +594,7 @@ export default function Messages() {
             <InlineThread
               message={selectedMessage}
               viewMode={viewMode as 'inbox' | 'sent'}
+              campCompanyId={currentCompany?.id}
               onNavigateToGroup={(groupId) => {
                 setActiveGroupId(groupId);
                 setViewMode('groups');

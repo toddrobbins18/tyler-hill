@@ -89,7 +89,7 @@ export default function ReplyThread({ originalMessage, onBack }: ReplyThreadProp
 
     const enriched = data.map(m => ({
       ...m,
-      sender_name: m.sender_id ? (cache[m.sender_id] || "Unknown") : "System",
+      sender_name: m.sender_id ? (cache[m.sender_id] || "Unknown sender") : "Automated notification",
     }));
     setReplies(enriched);
   };
@@ -143,7 +143,10 @@ export default function ReplyThread({ originalMessage, onBack }: ReplyThreadProp
           <div className="flex-1">
             <CardTitle className="text-base">{originalMessage.subject}</CardTitle>
             <p className="text-xs text-muted-foreground">
-              From: {originalMessage.sender_name || "System"} · {format(new Date(originalMessage.created_at), 'MMM d, yyyy h:mm a')}
+              From:{" "}
+              {originalMessage.sender_name ||
+                (originalMessage.sender_id ? "Unknown sender" : "Automated notification")}
+              · {format(new Date(originalMessage.created_at), "MMM d, yyyy h:mm a")}
             </p>
           </div>
         </div>

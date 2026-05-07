@@ -7,6 +7,13 @@ import { Info } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
+
+function normalizeStaffEmail(value: string | null | undefined): string | null {
+  if (!value || typeof value !== "string") return null;
+  const t = value.trim().toLowerCase();
+  return t || null;
+}
 
 const AVAILABLE_SPORTS = [
   "Baseball",
@@ -26,6 +33,7 @@ const AVAILABLE_SPORTS = [
 
 export default function SpecialistSportAssignments() {
   const { currentCompany, isSuperAdmin } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const [specialists, setSpecialists] = useState<any[]>([]);
   const [assignments, setAssignments] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
@@ -34,14 +42,14 @@ export default function SpecialistSportAssignments() {
     if (currentCompany?.id) {
       fetchData();
     }
-  }, [currentCompany?.id]);
+  }, [currentCompany?.id, currentSeason]);
 
   const fetchData = async () => {
     if (!currentCompany?.id) return;
     
     setLoading(true);
     try {
-      // Get all users with 'specialist' role in this company
+      // 1) Users with app role `specialist`
       const { data: specialistRoles, error: rolesError } = await supabase
         .from('user_roles')
         .select(`
@@ -60,6 +68,61 @@ export default function SpecialistSportAssignments() {
         toast.error("Failed to load specialists");
         return;
       }
+
+      // 2) Staff directory: staff_type specialist / both (same season as roster) — matched to logins by email
+      const { data: staffSpecialists, error: staffSpecError } = await supabase
+        .from('staff')
+        .select('email')
+        .eq('company_id', currentCompany.id)
+        .eq('status', 'active')
+        .eq('season', currentSeason)
+        .in('staff_type', ['specialist', 'both']);
+
+      if (staffSpecError) {
+        console.error('Error fetching specialist staff:', staffSpecError);
+      }
+
+      const staffEmails = new Set<string>();
+      (staffSpecialists || []).forEach((row: { email?: string | null }) => {
+        const n = normalizeStaffEmail(row.email);
+        if (n) staffEmails.add(n);
+      });
+
+      let emailToProfile = new Map<string, { id: string; full_name: string | null; email: string | null }>();
+      if (staffEmails.size > 0) {
+        const { data: companyProfiles, error: profErr } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .eq('company_id', currentCompany.id);
+        if (profErr) console.error('Error fetching profiles for specialist staff:', profErr);
+        (companyProfiles || []).forEach((p: any) => {
+          const key = normalizeStaffEmail(p.email);
+          if (key && staffEmails.has(key)) {
+            emailToProfile.set(key, p);
+          }
+        });
+      }
+
+      const byUserId = new Map<string, { user_id: string; profiles: { id: string; full_name: string | null; email: string | null } }>();
+      for (const row of specialistRoles || []) {
+        if (row?.user_id && row?.profiles) {
+          byUserId.set(row.user_id, { user_id: row.user_id, profiles: row.profiles });
+        }
+      }
+      for (const email of staffEmails) {
+        const p = emailToProfile.get(email);
+        if (p?.id && !byUserId.has(p.id)) {
+          byUserId.set(p.id, { user_id: p.id, profiles: p });
+        }
+      }
+
+      const mergedSpecialists = Array.from(byUserId.values()).sort((a, b) =>
+        (a.profiles.full_name || a.profiles.email || '').localeCompare(
+          b.profiles.full_name || b.profiles.email || '',
+          undefined,
+          { sensitivity: 'base' }
+        )
+      );
 
       // Get all sport assignments for this company
       const { data: assignmentsData, error: assignmentsError } = await supabase
@@ -82,7 +145,7 @@ export default function SpecialistSportAssignments() {
         assignmentsMap[a.user_id].push(a.sport);
       });
 
-      setSpecialists(specialistRoles || []);
+      setSpecialists(mergedSpecialists);
       setAssignments(assignmentsMap);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -145,6 +208,7 @@ export default function SpecialistSportAssignments() {
         <h1 className="text-3xl font-bold mb-2">Specialist Sport Assignments</h1>
         <p className="text-muted-foreground">
           Assign which sports each specialist is responsible for. Specialists will receive email notifications only for their assigned sports.
+          Staff marked as Specialist (Staff Type on their profile) appear here once their roster email matches their login profile for this camp and season.
         </p>
       </div>
 
@@ -161,7 +225,7 @@ export default function SpecialistSportAssignments() {
         <Card>
           <CardContent className="pt-6">
             <p className="text-center text-muted-foreground">
-              No specialists found in this company. Users need to have the 'specialist' role to appear here.
+              No specialists found for this camp and season. Add people with Staff Type &quot;specialist&quot; or &quot;both&quot; (with their login email matching their staff profile), or assign the Specialist app role under user management—then they appear here so you can assign sports.
             </p>
           </CardContent>
         </Card>
