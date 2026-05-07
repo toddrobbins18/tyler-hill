@@ -1,4 +1,4 @@
-import { Users, Truck, FileText, Award, Utensils, Calendar as CalendarIcon, CalendarDays, MapPin, Cake, Trophy, Activity, Quote, Phone, Shirt, User, Camera, Globe, CalendarOff } from "lucide-react";
+import { Users, Truck, FileText, Award, Utensils, Calendar as CalendarIcon, CalendarDays, MapPin, Cake, Trophy, Activity, Quote, Phone, Shirt, User, Camera, Globe, CalendarOff, Palmtree } from "lucide-react";
 import { useTigerTimesColors } from "@/hooks/useTigerTimesColors";
 import { StatCard } from "@/components/StatCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,6 +43,8 @@ export default function Dashboard() {
     weekAwards: 0,
   });
   const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
+  /** Timber Lake Camp: today's rows from `activities_field_trips` */
+  const [activitiesToday, setActivitiesToday] = useState<any[]>([]);
   const [specialEvents, setSpecialEvents] = useState<any[]>([]);
   const [sportsEvents, setSportsEvents] = useState<any[]>([]);
   const [threeDayOutlook, setThreeDayOutlook] = useState<any[]>([]);
@@ -87,6 +89,11 @@ export default function Dashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'trips' }, fetchDashboardData)
       .subscribe();
 
+    const activitiesFieldTripsChannel = supabase
+      .channel('dashboard-activities-field-trips')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'activities_field_trips' }, fetchDashboardData)
+      .subscribe();
+
     const menuChannel = supabase
       .channel('dashboard-menu')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, fetchDashboardData)
@@ -126,6 +133,7 @@ export default function Dashboard() {
       supabase.removeChannel(notesChannel);
       supabase.removeChannel(awardsChannel);
       supabase.removeChannel(tripsChannel);
+      supabase.removeChannel(activitiesFieldTripsChannel);
       supabase.removeChannel(menuChannel);
       supabase.removeChannel(specialEventsChannel);
       supabase.removeChannel(sportsChannel);
@@ -133,7 +141,7 @@ export default function Dashboard() {
       supabase.removeChannel(staffChannel);
       supabase.removeChannel(dailyWolfChannel);
     };
-  }, [currentCompany?.id, currentCompany?.slug]);
+  }, [currentCompany?.id, currentCompany?.slug, currentSeason]);
 
   const fetchDailyWolfContent = async () => {
     if (!currentCompany) return;
@@ -190,12 +198,16 @@ export default function Dashboard() {
     const { count: childrenCount } = await childrenQuery;
 
     // Fetch active trips count
-    const { count: tripsCount } = await supabase
+    let tripsCountQuery = supabase
       .from('trips')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'active')
       .eq('company_id', currentCompany.id)
       .gte('date', today);
+    if (currentCompany.slug === 'timber-lake-camp') {
+      tripsCountQuery = tripsCountQuery.eq('season', currentSeason);
+    }
+    const { count: tripsCount } = await tripsCountQuery;
 
     // Fetch today's notes count - need to join with children for division filtering
     let notesQuery = supabase
@@ -242,14 +254,35 @@ export default function Dashboard() {
     
     const { count: awardsCount } = await awardsQuery;
 
-    // Fetch upcoming trips and events
-    const { data: trips } = await supabase
+    let upcomingTripsQuery = supabase
       .from('trips')
       .select('*')
       .eq('company_id', currentCompany.id)
       .gte('date', today)
       .order('date')
       .limit(5);
+    if (currentCompany.slug === 'timber-lake-camp') {
+      upcomingTripsQuery = upcomingTripsQuery.eq('season', currentSeason);
+    }
+    const { data: trips } = await upcomingTripsQuery;
+
+    let activitiesTodayData: any[] = [];
+    if (currentCompany.slug === 'timber-lake-camp') {
+      const { data: acts } = await supabase
+        .from('activities_field_trips')
+        .select('*')
+        .eq('company_id', currentCompany.id)
+        .eq('event_date', today)
+        .eq('season', currentSeason);
+      let list = acts || [];
+      if (!hasFullAccess && divisionFilter && divisionFilter.length > 0) {
+        list = list.filter(
+          (a: any) => !a.division_id || divisionFilter.includes(a.division_id),
+        );
+      }
+      activitiesTodayData = list;
+    }
+    setActivitiesToday(activitiesTodayData);
 
     // Fetch today's menu
     const menuResult = await supabase
@@ -600,6 +633,90 @@ export default function Dashboard() {
             </Button>
           </CardContent>
         </Card>
+
+        {/* Timber Lake Camp: today's activities & upcoming trips */}
+        {isTimberLakeCamp && (
+          <>
+            <Card className={`shadow-card h-full flex flex-col ${glassCardClass}`}>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-emerald-500/10">
+                    <Palmtree className="h-5 w-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <CardTitle>Activities &amp; Field Trips</CardTitle>
+                    <CardDescription>Scheduled for today</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2 flex-1 flex flex-col">
+                {activitiesToday.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">No activities or field trips today</p>
+                ) : (
+                  <div className="space-y-2 flex-1">
+                    {activitiesToday.map((act) => (
+                      <div
+                        key={act.id}
+                        className="flex items-start gap-2 p-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                        onClick={() => navigate('/activities')}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm">{act.title}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {(act.time || 'Time TBD') + (act.location ? ` · ${act.location}` : '')}
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="text-xs shrink-0">{act.activity_type || 'Activity'}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <Button variant="outline" className={`w-full mt-auto ${glassButtonClass}`} onClick={() => navigate('/activities')}>
+                  View Activities &amp; Field Trips
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className={`shadow-card h-full flex flex-col ${glassCardClass}`}>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-sky-500/10">
+                    <Truck className="h-5 w-5 text-sky-600" />
+                  </div>
+                  <div>
+                    <CardTitle>Upcoming Trips</CardTitle>
+                    <CardDescription>Transportation &amp; trip schedule</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2 flex-1 flex flex-col">
+                {upcomingEvents.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">No upcoming trips</p>
+                ) : (
+                  <div className="space-y-2 flex-1">
+                    {upcomingEvents.map((ev) => (
+                      <div
+                        key={ev.id}
+                        className="flex items-start gap-2 p-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                        onClick={() => navigate('/transportation')}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm">{ev.title}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {ev.date} {ev.type ? `· ${ev.type}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <Button variant="outline" className={`w-full mt-auto ${glassButtonClass}`} onClick={() => navigate('/transportation')}>
+                  View Transportation
+                </Button>
+              </CardContent>
+            </Card>
+          </>
+        )}
 
         {/* Athletics Schedule Card */}
         <Card className={`shadow-card h-full flex flex-col ${glassCardClass}`}>

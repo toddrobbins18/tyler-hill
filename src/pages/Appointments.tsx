@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
@@ -85,7 +85,10 @@ export default function Appointments() {
   
   const [showDialog, setShowDialog] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
-  
+
+  const appointmentSaveInFlight = useRef(false);
+  const [appointmentSaveBusy, setAppointmentSaveBusy] = useState(false);
+
   // Form state
   const [personType, setPersonType] = useState<"child" | "staff">("child");
   const [selectedChildId, setSelectedChildId] = useState<string>("");
@@ -194,6 +197,7 @@ export default function Appointments() {
   };
 
   const handleSaveAppointment = async () => {
+    if (appointmentSaveInFlight.current) return;
     if (!currentCompany?.id || !appointmentType || !appointmentDate) {
       toast({ title: "Please fill in required fields", variant: "destructive" });
       return;
@@ -209,6 +213,8 @@ export default function Appointments() {
       return;
     }
 
+    appointmentSaveInFlight.current = true;
+    setAppointmentSaveBusy(true);
     try {
       const appointmentData = {
         company_id: currentCompany.id,
@@ -266,6 +272,9 @@ export default function Appointments() {
     } catch (error) {
       console.error("Error saving appointment:", error);
       toast({ title: "Error saving appointment", variant: "destructive" });
+    } finally {
+      appointmentSaveInFlight.current = false;
+      setAppointmentSaveBusy(false);
     }
   };
 
@@ -723,8 +732,16 @@ export default function Appointments() {
             <Button variant="outline" onClick={() => setShowDialog(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSaveAppointment}>
-              {editingAppointment ? "Save Changes" : "Create Appointment"}
+            <Button
+              type="button"
+              disabled={appointmentSaveBusy}
+              onClick={handleSaveAppointment}
+            >
+              {appointmentSaveBusy
+                ? "Saving…"
+                : editingAppointment
+                  ? "Save Changes"
+                  : "Create Appointment"}
             </Button>
           </DialogFooter>
         </DialogContent>
