@@ -14,6 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { format } from "date-fns";
 import GroupList from "@/components/messages/GroupList";
 import InlineThread from "@/components/messages/InlineThread";
+import { notificationsDebug } from "@/lib/notificationDebug";
 
 interface TagGroup {
   tag: string;
@@ -154,12 +155,23 @@ export default function Messages() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'messages' },
-        () => {
+        (payload) => {
+          notificationsDebug('Messages page: Realtime messages table change', {
+            eventType: payload.eventType,
+            newRow: payload.new,
+            oldRow: payload.old,
+          });
           fetchMessages();
           fetchSentMessages();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          notificationsDebug('Messages page: Realtime subscribed', { channel: 'messages-changes' });
+        } else if (status === 'CHANNEL_ERROR') {
+          console.warn('[Nest:Notifications] Messages page: Realtime CHANNEL_ERROR — inbox may not live-update');
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -178,7 +190,12 @@ export default function Messages() {
       .is("parent_message_id", null)
       .order("created_at", { ascending: false });
 
-    if (!error && data) {
+    if (error) {
+      notificationsDebug("Inbox fetch error", { message: error.message, code: error.code });
+      return;
+    }
+
+    if (data) {
       const cache = await resolveProfileNames(data);
 
       // Get reply counts and latest reply for each message
@@ -208,8 +225,17 @@ export default function Messages() {
       });
 
       const enriched = await Promise.all(enrichedPromises);
+      const unread = enriched.filter((m) => !m.read).length;
+      notificationsDebug("Inbox refetched", {
+        userId: user.id,
+        total: enriched.length,
+        unread,
+        newest: enriched[0]
+          ? { id: enriched[0].id, subject: enriched[0].subject, read: enriched[0].read }
+          : null,
+      });
       setReceivedMessages(enriched);
-      setUnreadCount(enriched.filter(m => !m.read).length);
+      setUnreadCount(unread);
     }
   };
 
@@ -224,12 +250,18 @@ export default function Messages() {
       .is("parent_message_id", null)
       .order("created_at", { ascending: false });
 
-    if (!error && data) {
+    if (error) {
+      notificationsDebug("Sent list fetch error", { message: error.message, code: error.code });
+      return;
+    }
+
+    if (data) {
       const cache = await resolveProfileNames(data);
       const enriched = data.map(m => ({
         ...m,
         recipient_name: m.recipient_id ? (cache[m.recipient_id] || "Unknown") : undefined,
       }));
+      notificationsDebug("Sent list refetched", { userId: user.id, count: enriched.length });
       setSentMessages(enriched);
     }
   };
@@ -381,6 +413,15 @@ export default function Messages() {
     setSending(true);
 
     try {
+      notificationsDebug("Compose: invoking send-bulk-email", {
+        recipientCount: uniqueRecipients.length,
+        recipientIds: uniqueRecipients.map((r) => r.id),
+        tagCount: selectedTags.length,
+        directRecipientIdCount: selectedUserIds.length,
+        deliveryMethods: { ...deliveryMethods },
+        subjectPreview: subject.slice(0, 120),
+      });
+
       const { data, error } = await supabase.functions.invoke("send-bulk-email", {
         body: {
           subject,
@@ -396,6 +437,11 @@ export default function Messages() {
 
       if (error) throw error;
 
+      notificationsDebug("Compose: send-bulk-email succeeded", {
+        rawResponse: data ?? null,
+        recipientCount: uniqueRecipients.length,
+      });
+
       const methodsUsed = [];
       if (deliveryMethods.inApp) methodsUsed.push("in-app notification");
       if (deliveryMethods.email) methodsUsed.push("email");
@@ -409,6 +455,7 @@ export default function Messages() {
       setDeliveryMethods({ inApp: true, email: false });
     } catch (error: any) {
       toast.error(error.message || "Failed to send notification");
+      notificationsDebug("Compose: send-bulk-email failed", { message: error?.message, error });
       console.error(error);
     } finally {
       setSending(false);

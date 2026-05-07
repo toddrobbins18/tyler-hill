@@ -189,6 +189,33 @@ export default function MasterCalendar() {
       // Normalize all events to unified format
       const unifiedEvents: UnifiedEvent[] = [];
 
+      const firstSportsTimeField = (...vals: unknown[]): string | undefined => {
+        for (const v of vals) {
+          if (v == null) continue;
+          const s = String(v).trim();
+          if (s) return s;
+        }
+        return undefined;
+      };
+
+      const sportsUnifiedTime = (row: any): string | undefined => {
+        const isHome = String(row?.home_away ?? "").toLowerCase() === "home";
+        if (isHome) {
+          return firstSportsTimeField(
+            row.time,
+            row.start_time_field,
+            row.start_time,
+            row.depart_time
+          );
+        }
+        return firstSportsTimeField(
+          row.time,
+          row.start_time_field,
+          row.depart_time,
+          row.start_time
+        );
+      };
+
       // Sports Calendar events
       if (sportsFiltered) {
         sportsFiltered.forEach((event: any) => {
@@ -197,7 +224,7 @@ export default function MasterCalendar() {
             id: `sports_${event.id}`,
             title: event.title,
             event_date: event.event_date,
-            time: event.time,
+            time: sportsUnifiedTime(event),
             location: event.location,
             description: event.description,
             source: 'sports_calendar',
@@ -354,7 +381,11 @@ export default function MasterCalendar() {
   };
 
   const getNormalizedEventTime = (event: UnifiedEvent): string | null => {
-    const rawTime = event.originalData?.start_time_field || event.originalData?.start_time || event.time || event.originalData?.depart_time;
+    const rawTime =
+      event.originalData?.start_time_field ||
+      event.originalData?.start_time ||
+      event.time ||
+      event.originalData?.depart_time;
     if (!rawTime || typeof rawTime !== "string") return null;
 
     const trimmedTime = rawTime.trim();
@@ -930,8 +961,10 @@ export default function MasterCalendar() {
                 </div>
               )}
 
-              {/* Depart Time for away events */}
-              {selectedEvent.source === 'sports_calendar' && selectedEvent.originalData?.depart_time && (
+              {/* Depart Time (away only — home games show game time in Clock row above) */}
+              {selectedEvent.source === 'sports_calendar' &&
+                String(selectedEvent.originalData?.home_away ?? '').toLowerCase() === 'away' &&
+                selectedEvent.originalData?.depart_time && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Plane className="h-4 w-4" />
                   <span>Depart: {formatTime12Hour(selectedEvent.originalData.depart_time)}</span>

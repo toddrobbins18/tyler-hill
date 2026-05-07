@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatDistanceToNow } from "date-fns";
+import { notificationsDebug } from "@/lib/notificationDebug";
 
 interface InboxMessage {
   id: string;
@@ -61,13 +62,20 @@ export function NotificationBell() {
   const fetchUnread = useCallback(async () => {
     if (!user) return;
 
-    const { count } = await supabase
+    const { count, error } = await supabase
       .from("messages")
       .select("*", { count: "exact", head: true })
       .eq("recipient_id", user.id)
       .eq("read", false);
 
-    setUnreadCount(count || 0);
+    if (error) {
+      console.error("[NotificationBell] fetchUnread:", error.message);
+      return;
+    }
+
+    const next = count ?? 0;
+    notificationsDebug("Bell: unread count refetched", { userId: user.id, unreadCount: next });
+    setUnreadCount(next);
   }, [user]);
 
   const fetchRecent = useCallback(async () => {
@@ -98,12 +106,18 @@ export function NotificationBell() {
         );
       }
 
-      setRecentMessages(
-        data.map((m) => ({
-          ...m,
-          sender_name: m.sender_id ? profileMap.get(m.sender_id) || "System" : "System",
-        }))
-      );
+      const rows = data.map((m) => ({
+        ...m,
+        sender_name: m.sender_id ? profileMap.get(m.sender_id) || "System" : "System",
+      }));
+      notificationsDebug("Bell: recent list loaded", {
+        userId: user.id,
+        count: rows.length,
+        latest: rows[0]
+          ? { id: rows[0].id, subject: rows[0].subject, read: rows[0].read }
+          : null,
+      });
+      setRecentMessages(rows);
     }
   }, [user]);
 
@@ -122,12 +136,24 @@ export function NotificationBell() {
           table: "messages",
           filter: `recipient_id=eq.${user.id}`,
         },
-        () => {
+        (payload) => {
+          notificationsDebug("Bell: Realtime event on messages (this user is recipient)", {
+            eventType: payload.eventType,
+            table: payload.table,
+            newRow: payload.new,
+            oldRow: payload.old,
+          });
           fetchUnread();
           if (open) fetchRecent();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          notificationsDebug("Bell: Realtime channel subscribed", { channel: "notification-bell" });
+        } else if (status === "CHANNEL_ERROR") {
+          console.warn("[Nest:Notifications] Bell: Realtime channel error — check messages table in supabase_realtime publication");
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -137,6 +163,26 @@ export function NotificationBell() {
   useEffect(() => {
     if (open) fetchRecent();
   }, [open, fetchRecent]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchUnread();
+        if (open) fetchRecent();
+      }
+    };
+    window.addEventListener("visibilitychange", onVisibility);
+    return () => window.removeEventListener("visibilitychange", onVisibility);
+  }, [fetchUnread, fetchRecent, open]);
+
+  useEffect(() => {
+    if (!user) return;
+    const id = window.setInterval(() => {
+      fetchUnread();
+      if (open) fetchRecent();
+    }, 35_000);
+    return () => window.clearInterval(id);
+  }, [user, open, fetchUnread, fetchRecent]);
 
   const handleGoToMessages = (msg?: InboxMessage) => {
     setOpen(false);
