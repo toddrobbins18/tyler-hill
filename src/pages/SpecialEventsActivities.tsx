@@ -23,13 +23,22 @@ import { toast as sonnerToast } from "sonner";
 import { StaffMultiSelect } from "@/components/StaffMultiSelect";
 import { notifyStaffAssignment } from "@/lib/notifyStaffAssignment";
 
+/** Calendar date in local timezone (avoid `toISOString()` shifting the day in US evenings). */
+function formatLocalDateYmd(d: Date = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export default function SpecialEventsActivities() {
   const { currentCompany } = useCompany();
   const { getDivisionFilter } = usePermissions();
   const [events, setEvents] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
   const [selectedDivision, setSelectedDivision] = useState<string>("all");
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  /** Empty string = show all dates for this camp (season + permissions). */
+  const [selectedDate, setSelectedDate] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [showEventDetailDialog, setShowEventDetailDialog] = useState(false);
@@ -39,7 +48,7 @@ export default function SpecialEventsActivities() {
   const [uploadingFile, setUploadingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
-    event_date: new Date().toISOString().split('T')[0],
+    event_date: formatLocalDateYmd(),
     title: "",
     description: "",
     event_type: "",
@@ -107,19 +116,38 @@ export default function SpecialEventsActivities() {
     };
   }, [selectedDate, selectedSeason]);
 
+  /** Prefill new-event date from the list filter (left column), including after picking a future day there. */
+  useEffect(() => {
+    if (!showDialog || editingEvent || !selectedDate) return;
+    setFormData((prev) => ({ ...prev, event_date: selectedDate }));
+  }, [showDialog, editingEvent, selectedDate]);
+
   const fetchEvents = async () => {
+    if (!currentCompany?.id) {
+      setEvents([]);
+      setLoading(false);
+      return;
+    }
     // Fetch events and division associations in parallel
-    const [eventsResult, divisionsResult] = await Promise.all([
-      supabase
+    let eventsQuery = supabase
         .from("special_events_activities")
         .select(`
           *,
           division:divisions(id, name, gender, sort_order)
         `)
-        .eq("event_date", selectedDate)
-        .eq('company_id', currentCompany.id)
-        .order("event_date", { ascending: true })
-        .order("time_slot", { ascending: true }),
+        .eq('company_id', currentCompany.id);
+
+    if (selectedDate) {
+      eventsQuery = eventsQuery.eq("event_date", selectedDate);
+    }
+
+    eventsQuery = eventsQuery
+      .order("event_date", { ascending: true })
+      .order("time_slot", { ascending: true })
+      .limit(8000);
+
+    const [eventsResult, divisionsResult] = await Promise.all([
+      eventsQuery,
       supabase
         .from("special_events_divisions")
         .select("event_id, division_id, divisions(id, name, gender, sort_order)")
@@ -307,12 +335,14 @@ export default function SpecialEventsActivities() {
       });
     }
 
+    // Move the page filter to the date we actually saved so the new/edited row appears immediately
+    setSelectedDate(submitData.event_date);
     resetForm();
   };
 
   const resetForm = () => {
     setFormData({
-      event_date: new Date().toISOString().split('T')[0],
+      event_date: formatLocalDateYmd(),
       title: "",
       description: "",
       event_type: "",
@@ -455,6 +485,14 @@ export default function SpecialEventsActivities() {
     return <Sun className="h-4 w-4" />;
   };
 
+  const resetFilters = () => {
+    setSelectedDate("");
+    setSelectedDivision("all");
+  };
+
+  const divisionSelectClass =
+    "flex h-10 w-56 min-w-[12rem] shrink-0 items-center rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center">
@@ -472,29 +510,52 @@ export default function SpecialEventsActivities() {
             onColorsChange={setEventTypeColors}
           />
           <CSVUploader tableName="special_events_activities" onUploadComplete={fetchEvents} />
-          <Button onClick={() => setShowDialog(true)}>
+          <Button
+            onClick={() => {
+              setEditingEvent(null);
+              setShowDialog(true);
+            }}
+          >
             <Plus className="h-4 w-4 mr-2" />
             Add Event
           </Button>
         </div>
       </div>
 
-      <div className="flex gap-4">
-        <div>
-          <Label>Date</Label>
-          <Input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="w-48"
-          />
-        </div>
-        <div>
-          <Label>Division Filter</Label>
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="special-events-date-filter" className="text-sm font-medium">
+              Date {selectedDate ? "" : "(all dates)"}
+            </Label>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                id="special-events-date-filter"
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="h-10 w-48"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-10 px-3 text-muted-foreground"
+                onClick={() => setSelectedDate("")}
+              >
+                All dates
+              </Button>
+            </div>
+          </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="special-events-division-filter" className="text-sm font-medium">
+            Division filter
+          </Label>
           <select
+            id="special-events-division-filter"
             value={selectedDivision}
             onChange={(e) => setSelectedDivision(e.target.value)}
-            className="px-4 py-2 border rounded-md bg-background"
+            className={divisionSelectClass}
           >
             <option value="all">All Divisions</option>
             {divisions && divisions.map((div) => (
@@ -504,6 +565,20 @@ export default function SpecialEventsActivities() {
             ))}
           </select>
         </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-10 shrink-0"
+          onClick={resetFilters}
+        >
+          Reset filters
+        </Button>
+      </div>
+        <p className="text-xs text-muted-foreground">
+          {selectedDate
+            ? "Showing events on the selected day. Pick a day or choose All dates to see the full schedule."
+            : "Showing every special event for this camp in the header season. Use Date or Division to narrow the list."}
+        </p>
       </div>
 
       {loading ? (
@@ -511,19 +586,32 @@ export default function SpecialEventsActivities() {
       ) : Object.keys(groupedByDate).length === 0 ? (
         <Card>
           <CardContent className="p-6">
-            <p className="text-muted-foreground text-center">No events scheduled for this period</p>
+            <p className="text-muted-foreground text-center">
+              {selectedDate
+                ? "No events scheduled for this day."
+                : "No special events for this camp in the selected season (or none match your division access)."}
+            </p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-6">
-          {Object.entries(groupedByDate).map(([date, dateEvents]: [string, any[]]) => (
+          {Object.entries(groupedByDate).map(([date, dateEvents]: [string, any[]]) => {
+            const n = dateEvents.length;
+            // Avoid a single card sitting in the first of three columns (~33% width with empty space).
+            const mdGridCols =
+              n >= 3
+                ? "md:[grid-template-columns:repeat(3,1fr)]"
+                : n === 2
+                  ? "md:[grid-template-columns:repeat(2,1fr)]"
+                  : "md:[grid-template-columns:repeat(1,1fr)]";
+            return (
             <div key={date}>
               <h2 className="text-xl font-semibold mb-3">
                 {new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
               </h2>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className={`grid w-full gap-4 [grid-template-columns:repeat(1,1fr)] ${mdGridCols}`}>
                     {dateEvents.map((event) => (
-                      <Card key={event.id} className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => handleViewEvent(event)}>
+                      <Card key={event.id} className="min-w-0 h-full hover:shadow-lg transition-shadow cursor-pointer" onClick={() => handleViewEvent(event)}>
                         <CardHeader>
                           <div className="flex justify-between items-start">
                             <div className="flex-1">
@@ -582,7 +670,8 @@ export default function SpecialEventsActivities() {
                     ))}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
