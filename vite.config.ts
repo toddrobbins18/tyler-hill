@@ -15,4 +15,12 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  /**
+   * date-fns + locale subpaths can produce split pre-bundle chunks; if those chunk files
+   * go missing (stale .vite cache, interrupted dev server), the app 404s and shows a blank page.
+   * Serving date-fns without pre-bundling avoids broken chunk URLs in dev.
+   */
+  optimizeDeps: {
+    exclude: ["date-fns"],
+  },
 }));

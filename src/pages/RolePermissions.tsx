@@ -22,17 +22,23 @@ const getCompanyMenuItems = (companySlug?: string) => {
     { id: "calendar", label: "Master Calendar", icon: "📅" },
     { id: "menu", label: "Menu", icon: "🍽️" },
     { id: "rainy-day", label: "Rainy Day Schedule", icon: "🌧️" },
-    { id: "special-events", label: "Special Events & Evening Activities", icon: "🎉" },
+    { id: "special-events", label: companySlug === "timber-lake-west" ? "Special Events" : "Special Events & Evening Activities", icon: "🎉" },
     { id: "transportation", label: "Transportation", icon: "🚌" },
-    { id: "tutoring-therapy", label: "Tutoring & Therapy", icon: "📖" },
+    ...(companySlug !== "timber-lake-west"
+      ? ([{ id: "tutoring-therapy", label: "Tutoring & Therapy", icon: "📖" }] as const)
+      : []),
     { id: "od-management", label: "OD Management", icon: "✅" },
     { id: "appointments", label: "Appointments", icon: "🩺" },
     { id: "reports", label: "Reports", icon: "📈" },
     { id: "nurse", label: "Nurse", icon: "💊" },
     { id: "awards", label: "Awards", icon: "🏆" },
     { id: "incidents", label: "Incident Reports", icon: "⚠️" },
-    { id: "sports-academy", label: "Sports Academy", icon: "⚽" },
-    { id: "roster-templates", label: "Roster Templates", icon: "🗂️" },
+    ...(companySlug !== "timber-lake-west"
+      ? ([
+          { id: "sports-academy", label: "Sports Academy", icon: "⚽" },
+          { id: "roster-templates", label: "Roster Templates", icon: "🗂️" },
+        ] as const)
+      : []),
     { id: "sports-calendar", label: companySlug === 'timber-lake-west' ? "Athletics" : "Sports Calendar", icon: "🏅" },
   ];
 

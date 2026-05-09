@@ -31,9 +31,19 @@ const getMenuItems = (companySlug?: string) => {
     { title: "Master Calendar", url: "/calendar", icon: Calendar, menuId: "calendar" },
     { title: "Menu", url: "/menu", icon: Utensils, menuId: "menu" },
     { title: "Rainy Day Schedule", url: "/rainy-day", icon: CloudRain, menuId: "rainy-day" },
-    { title: "Special Events & Evening Activities", url: "/special-events", icon: Calendar, menuId: "special-events" },
+    {
+      title:
+        companySlug === "timber-lake-west"
+          ? "Special Events"
+          : "Special Events & Evening Activities",
+      url: "/special-events",
+      icon: Calendar,
+      menuId: "special-events",
+    },
     { title: "Staff", url: "/staff", icon: UserCog, menuId: "staff" },
-    { title: "Tutoring & Therapy", url: "/tutoring-therapy", icon: BookOpen, menuId: "tutoring-therapy" },
+    ...(companySlug !== "timber-lake-west"
+      ? [{ title: "Tutoring & Therapy", url: "/tutoring-therapy", icon: BookOpen, menuId: "tutoring-therapy" } as const]
+      : []),
   ];
 
   // Add common items for all companies
@@ -117,20 +127,29 @@ const getMenuItems = (companySlug?: string) => {
   // Add Nurse for Timber Lake West (limited features) and all other companies
   baseItems.push({ title: "Nurse", url: "/nurse", icon: Pill, menuId: "nurse" });
 
-  // Add these items for all companies
+  // Add these items for all companies (Timber Lake West omits Sports Academy — matches mobile)
   baseItems.push(
     { title: "Awards", url: "/awards", icon: Award, menuId: "awards" },
     { title: "Incident Reports", url: "/incidents", icon: AlertTriangle, menuId: "incidents" },
-    { title: "Sports Academy", url: "/sports-academy", icon: Trophy, menuId: "sports-academy" }
   );
+  if (companySlug !== "timber-lake-west") {
+    baseItems.push({
+      title: "Sports Academy",
+      url: "/sports-academy",
+      icon: Trophy,
+      menuId: "sports-academy",
+    });
+  }
 
-  // Add Roster Templates for all camps
-  baseItems.push({
-    title: "Roster Templates",
-    url: "/roster-templates",
-    icon: ListChecks,
-    menuId: "roster-templates"
-  });
+  // Roster Templates: Tyler Hill + Timber Lake Camp (page is TH-only; hide from TLW sidebar)
+  if (companySlug !== "timber-lake-west") {
+    baseItems.push({
+      title: "Roster Templates",
+      url: "/roster-templates",
+      icon: ListChecks,
+      menuId: "roster-templates",
+    });
+  }
 
   return baseItems.sort((a, b) => a.title.localeCompare(b.title));
 };
