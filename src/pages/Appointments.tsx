@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
@@ -20,7 +20,8 @@ import { CalendarIcon, Plus, Search, Edit2, Trash2, Clock, User, MapPin, Stethos
 import { cn } from "@/lib/utils";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
 
-const APPOINTMENT_TYPES = [
+/** Base list shared by all camps with appointments enabled. */
+const BASE_APPOINTMENT_TYPES = [
   "Orthodontist",
   "Physical Therapy",
   "Dentist",
@@ -31,6 +32,13 @@ const APPOINTMENT_TYPES = [
   "Tooth Fairy",
   "Other"
 ];
+
+function appointmentTypesForCamp(companySlug?: string | null): string[] {
+  if (companySlug === "timber-lake-west") {
+    return [...BASE_APPOINTMENT_TYPES, "Tennis lesson", "Tutoring"];
+  }
+  return [...BASE_APPOINTMENT_TYPES];
+}
 
 const APPOINTMENT_STATUS = [
   { value: "scheduled", label: "Scheduled", variant: "default" as const },
@@ -73,6 +81,11 @@ export default function Appointments() {
   const { currentCompany } = useCompany();
   const { selectedSeason: currentSeason } = useSeason();
   const { toast } = useToast();
+
+  const appointmentTypes = useMemo(
+    () => appointmentTypesForCamp(currentCompany?.slug),
+    [currentCompany?.slug]
+  );
 
   const [loading, setLoading] = useState(true);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -386,7 +399,7 @@ export default function Appointments() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Types</SelectItem>
-                      {APPOINTMENT_TYPES.map(type => (
+                      {appointmentTypes.map(type => (
                         <SelectItem key={type} value={type}>{type}</SelectItem>
                       ))}
                     </SelectContent>
@@ -583,7 +596,7 @@ export default function Appointments() {
                     <SelectValue placeholder="Select type..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {APPOINTMENT_TYPES.map(type => (
+                    {appointmentTypes.map(type => (
                       <SelectItem key={type} value={type}>{type}</SelectItem>
                     ))}
                   </SelectContent>

@@ -19,6 +19,7 @@ interface ThreadMessage {
   recipient_id: string | null;
   parent_message_id?: string | null;
   group_id?: string | null;
+  sender_display_name?: string | null;
   sender_name?: string;
   recipient_name?: string;
 }
@@ -148,7 +149,7 @@ export default function InlineThread({ message, viewMode, campCompanyId, onNavig
             <span className="block font-medium text-foreground">
               From:{" "}
               {message.sender_name ||
-                (message.sender_id ? "Unknown sender" : "Automated notification")}
+                (message.sender_id ? "Unknown sender" : (message.sender_display_name?.trim() || "Automated notification"))}
             </span>
           )}
           {viewMode === 'sent' && (

@@ -112,13 +112,18 @@ const handler = async (req: Request): Promise<Response> => {
     // Get sender's company
     const { data: senderProfile, error: profileError } = await supabase
       .from('profiles')
-      .select('company_id, companies!inner(name)')
+      .select('company_id, full_name, email, companies!inner(name)')
       .eq('id', user.id)
       .single();
 
     if (profileError || !senderProfile?.company_id) {
       throw new Error("User has no company associated");
     }
+
+    const senderDisplayName =
+      (senderProfile.full_name as string | null | undefined)?.trim() ||
+      (typeof user.email === "string" ? user.email.split("@")[0] : "") ||
+      "Staff";
 
     const companyName = (senderProfile.companies as any)?.name || 'Unknown';
     console.log(`📧 Sending from company: ${companyName}`);
@@ -203,17 +208,42 @@ const handler = async (req: Request): Promise<Response> => {
     console.log(`Email addresses: ${emails.join(", ")}`);
 
     const deliveryMethodsUsed: string[] = [];
+    const batchAt = new Date().toISOString();
+    const recipientIdsForLog = recipients.map((r) => r.id);
+
+    // Log first so email_logs always exists before in-app rows (mobile RPC can repair null sender_id).
+    const { data: logRow, error: preLogError } = await supabase
+      .from("email_logs")
+      .insert({
+        sent_by: user.id,
+        subject,
+        recipient_count: recipients.length,
+        recipient_tags: recipientTags,
+        recipient_ids: recipientIdsForLog,
+        delivery_methods: [],
+        status: "sent",
+        sent_at: batchAt,
+        error_details: null,
+      })
+      .select("id")
+      .maybeSingle();
+
+    if (preLogError) {
+      console.error("Error pre-inserting email_logs (bulk sender repair may miss this batch):", preLogError);
+    }
+    const bulkLogId = logRow?.id ?? null;
 
     // Send in-app notifications if selected
     if (deliveryMethods.inApp) {
       const messages = recipients.map(recipient => ({
         recipient_id: recipient.id,
         sender_id: user.id,
+        sender_display_name: senderDisplayName,
         subject: subject,
         content: message,
         read: false,
         notification_type: 'notification',
-        created_at: new Date().toISOString()
+        created_at: batchAt
       }));
 
       const { error: messagesError } = await supabase
@@ -337,21 +367,29 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // Log notification attempt to database
-    const { error: logError } = await supabase.from("email_logs").insert({
-      sent_by: user.id,
-      subject,
-      recipient_count: recipients.length,
-      recipient_tags: recipientTags,
-      recipient_ids: Array.from(allRecipients.keys()),
-      delivery_methods: deliveryMethodsUsed,
-      status: "sent",
-      sent_at: new Date().toISOString(),
-      error_details: null,
-    });
-
-    if (logError) {
-      console.error("Error logging notification:", logError);
+    if (bulkLogId) {
+      const { error: logUpdateError } = await supabase
+        .from("email_logs")
+        .update({ delivery_methods: deliveryMethodsUsed })
+        .eq("id", bulkLogId);
+      if (logUpdateError) {
+        console.error("Error updating email_logs:", logUpdateError);
+      }
+    } else {
+      const { error: logError } = await supabase.from("email_logs").insert({
+        sent_by: user.id,
+        subject,
+        recipient_count: recipients.length,
+        recipient_tags: recipientTags,
+        recipient_ids: recipientIdsForLog,
+        delivery_methods: deliveryMethodsUsed,
+        status: "sent",
+        sent_at: batchAt,
+        error_details: null,
+      });
+      if (logError) {
+        console.error("Error logging notification:", logError);
+      }
     }
 
     const methodsDescription = deliveryMethodsUsed.map(m => 

@@ -278,6 +278,10 @@ export async function sendEmailNotifications(
       content: content,
       read: false,
     };
+
+    if (!senderId) {
+      message.sender_display_name = 'Camp notification';
+    }
     
     // Add company_id if provided
     if (companyId) {

@@ -41,6 +41,7 @@ interface Message {
   recipient_id: string | null;
   parent_message_id?: string | null;
   group_id?: string | null;
+  sender_display_name?: string | null;
   sender_name?: string;
   recipient_name?: string;
   reply_count?: number;
@@ -179,6 +180,14 @@ export default function Messages() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    const { error: fixErr } = await supabase.rpc("apply_message_senders_from_email_logs_for_inbox");
+    const missingFixRpc =
+      fixErr?.code === "PGRST202" ||
+      (typeof fixErr?.message === "string" && fixErr.message.includes("could not find the function"));
+    if (fixErr && !missingFixRpc) {
+      notificationsDebug("apply_message_senders_from_email_logs_for_inbox error", { message: fixErr.message });
+    }
+
     // Only fetch top-level messages (not replies)
     const { data, error } = await supabase
       .from("messages")
@@ -213,7 +222,7 @@ export default function Messages() {
 
         return {
           ...m,
-          sender_name: m.sender_id ? (cache[m.sender_id] || "Unknown sender") : undefined,
+          sender_name: (m.sender_id && cache[m.sender_id]) || m.sender_display_name?.trim() || undefined,
           reply_count: count || 0,
           latest_reply_content: latestReply?.content,
           latest_reply_sender: latestReplyName,
@@ -556,7 +565,7 @@ export default function Messages() {
                               <p className="text-xs font-medium text-primary mb-1">
                                 From:{" "}
                                 {msg.sender_name ||
-                                  (msg.sender_id ? "Unknown sender" : "Automated notification")}
+                                  (msg.sender_id ? "Unknown sender" : (msg.sender_display_name?.trim() || "Automated notification"))}
                               </p>
                             )}
                             {viewMode === 'sent' && (

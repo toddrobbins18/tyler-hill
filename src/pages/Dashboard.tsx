@@ -14,6 +14,7 @@ import { WeatherWidget } from "@/components/WeatherWidget";
 import NotesBoard from "@/components/dashboard/NotesBoard";
 import timberLakeWestBg from "@/assets/timber-lake-west-bg.jpeg";
 import tylerHillDashboardBg from "@/assets/image001.jpg";
+import timberLakeCampHero from "@/assets/tember-camp.jpeg";
 import { format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -494,13 +495,16 @@ export default function Dashboard() {
   const isTimberLakeCamp = currentCompany?.slug === 'timber-lake-camp';
   const isTimberLakeWest = currentCompany?.slug === 'timber-lake-west';
   const isTylerHillCamp = currentCompany?.slug === 'tyler-hill-camp';
-  const hasDashboardAerialBg = isTimberLakeWest || isTylerHillCamp;
-  const dashboardAerialBgSrc = isTylerHillCamp ? tylerHillDashboardBg : timberLakeWestBg;
+  const hasDashboardAerialBg = isTimberLakeWest || isTylerHillCamp || isTimberLakeCamp;
+  const dashboardAerialBgSrc = isTylerHillCamp
+    ? tylerHillDashboardBg
+    : isTimberLakeCamp
+      ? timberLakeCampHero
+      : timberLakeWestBg;
   const dashboardTitle = isTimberLakeCamp ? "Tiger Times" : isTimberLakeWest ? "The Daily Wolf" : "Dashboard";
   
-  // Glass card styles for Timber Lake West and Tyler Hill - increased transparency
-  const glassCardClass = (isTimberLakeWest || isTylerHillCamp) ? 'bg-card/50 backdrop-blur-md border-white/30' : '';
-  const glassButtonClass = (isTimberLakeWest || isTylerHillCamp) ? 'bg-card/50 backdrop-blur-md border-white/40 hover:bg-card/70' : '';
+  const glassCardClass = hasDashboardAerialBg ? 'bg-card/50 backdrop-blur-md border-white/30' : '';
+  const glassButtonClass = hasDashboardAerialBg ? 'bg-card/50 backdrop-blur-md border-white/40 hover:bg-card/70' : '';
   
   const today = new Date();
   const formattedDate = today.toLocaleDateString('en-US', { 
@@ -537,15 +541,12 @@ export default function Dashboard() {
     >
       <div className={hasDashboardAerialBg ? 'text-white' : ''}>
         <h1 className={`text-3xl font-bold mb-2 ${hasDashboardAerialBg ? 'text-white drop-shadow-lg' : 'text-foreground'}`}>{dashboardTitle}</h1>
-        {isTimberLakeCamp ? (
-          <p className="text-muted-foreground">{formattedDate}</p>
-        ) : hasDashboardAerialBg ? (
+        {hasDashboardAerialBg ? (
           <p className="text-white/80 drop-shadow">{formattedDate}</p>
         ) : (
           <p className="text-muted-foreground">Welcome back! Here's what's happening today.</p>
         )}
       </div>
-
 
       {!isTimberLakeCamp && !isTylerHillCamp && !isTimberLakeWest && (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
