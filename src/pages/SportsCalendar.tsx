@@ -211,6 +211,14 @@ export default function SportsCalendar() {
     setIsSubmitting(true);
 
     try {
+      const isTimberLakeCampSlug = currentCompany?.slug === "timber-lake-camp";
+      let resolvedHomeAway = formData.home_away || null;
+      if (isTimberLakeCampSlug && formData.event_type === "Home") {
+        resolvedHomeAway = "home";
+      } else if (isTimberLakeCampSlug && formData.event_type === "Away") {
+        resolvedHomeAway = "away";
+      }
+
       const submitData = {
         event_date: formData.event_date,
         title: formData.title,
@@ -224,7 +232,7 @@ export default function SportsCalendar() {
         location: formData.location,
         team: formData.team,
         opponent: formData.opponent,
-        home_away: formData.home_away || null,
+        home_away: resolvedHomeAway,
         division_id: formData.division_ids.length === 1 ? formData.division_ids[0] : null,
         division_provides_coach: formData.division_provides_coach,
         division_provides_ref: formData.division_provides_ref,
@@ -1038,7 +1046,7 @@ export default function SportsCalendar() {
                 <SelectContent>
                   <SelectItem value="Away">Away</SelectItem>
                   <SelectItem value="Home">Home</SelectItem>
-                  {currentCompany?.id === '1d296ccf-31e1-4176-af57-50a4a4820f82' && (
+                  {currentCompany?.slug === 'timber-lake-camp' && (
                     <>
                       <SelectItem value="Gordon">Gordon</SelectItem>
                       <SelectItem value="Jacobs">Jacobs</SelectItem>
@@ -1136,7 +1144,7 @@ export default function SportsCalendar() {
               </div>
             </div>
 
-            {currentCompany?.id !== '1d296ccf-31e1-4176-af57-50a4a4820f82' && (
+            {currentCompany?.slug !== 'timber-lake-camp' && (
               <div className="space-y-2">
                 <Label>Home or Away</Label>
                 <Select value={formData.home_away} onValueChange={(value) => setFormData({ ...formData, home_away: value })}>
@@ -1152,7 +1160,8 @@ export default function SportsCalendar() {
               </div>
             )}
 
-            {formData.home_away === 'away' && (
+            {(formData.home_away === 'away' ||
+              (currentCompany?.slug === 'timber-lake-camp' && formData.event_type === 'Away')) && (
               <div className="space-y-2">
                 <Label>Depart from Camp</Label>
                 <Input
@@ -1164,7 +1173,8 @@ export default function SportsCalendar() {
               </div>
             )}
 
-            {formData.home_away === 'home' && (
+            {(formData.home_away === 'home' ||
+              (currentCompany?.slug === 'timber-lake-camp' && formData.event_type === 'Home')) && (
               <div className="space-y-2">
                 <Label>Start Time (on field)</Label>
                 <Input

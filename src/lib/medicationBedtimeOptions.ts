@@ -161,3 +161,28 @@ export function findBedtimeOptionFromStoredMealLabel(label: string | null | unde
 
   return undefined;
 }
+
+/**
+ * Bedtime rows store `meal_time = ['Bedtime']` (DB check). Use division name to show
+ * labels like “Cadets 9:15PM” in dashboards.
+ */
+export function formatMedicationMealTimeForDisplay(
+  mealTime: string[] | string | null | undefined,
+  divisionName?: string | null,
+): string {
+  if (!mealTime) return "";
+  const arr = Array.isArray(mealTime) ? mealTime : [mealTime];
+  const first = arr[0];
+  if (!first) return "";
+
+  if (first === "Bedtime") {
+    const resolved = resolveBedtimeOptionFromDivisionName(divisionName);
+    return resolved?.mealTimeLabel ?? "Bedtime";
+  }
+
+  const bedtimeMatch = findBedtimeOptionFromStoredMealLabel(first);
+  if (bedtimeMatch) return bedtimeMatch.mealTimeLabel;
+
+  if (arr.length === 1) return first;
+  return arr.filter(Boolean).join(", ");
+}

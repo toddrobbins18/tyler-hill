@@ -128,7 +128,7 @@ export function EditMedicationDialog({
     let scheduled_time: string;
 
     if (hasBedtime && bedtimeOpt) {
-      meal_time = [bedtimeOpt.mealTimeLabel];
+      meal_time = ["Bedtime"];
       scheduled_time = bedtimeOpt.scheduledTimeHHmm;
     } else {
       const m = standardSelected[0];

@@ -18,6 +18,7 @@ import ConflictIndicator from "@/components/ConflictIndicator";
 import { usePermissions } from "@/hooks/usePermissions";
 import { HealthCenterTab } from "@/components/HealthCenterTab";
 import ProfilePhotoUpload from "@/components/ProfilePhotoUpload";
+import { AwardCategoryDisplay } from "@/components/AwardCategoryDisplay";
 
 export default function ChildProfile() {
   const { id } = useParams();
@@ -660,9 +661,7 @@ export default function ChildProfile() {
                         {award.description && (
                           <p className="text-sm text-muted-foreground mb-2">{award.description}</p>
                         )}
-                        {award.category && (
-                          <Badge variant="secondary" className="mb-2">{award.category}</Badge>
-                        )}
+                        <AwardCategoryDisplay category={award.category} />
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <Calendar className="h-3 w-3" />
                           <span>{new Date(award.date + 'T00:00:00').toLocaleDateString('en-US')}</span>

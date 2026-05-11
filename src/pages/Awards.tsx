@@ -1,6 +1,5 @@
 import { Award, Trophy, Star, Calendar, User, Pencil, Trash2, Upload, Plus } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
@@ -22,6 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { AwardCategoryDisplay } from "@/components/AwardCategoryDisplay";
 
 export default function Awards() {
   const navigate = useNavigate();
@@ -197,15 +197,10 @@ export default function Awards() {
                     <div className="flex-1 min-w-0">
                       <h4 className="font-semibold mb-1">{achievement.title}</h4>
                       <p className="text-sm text-muted-foreground mb-2">{achievement.description}</p>
+                      <AwardCategoryDisplay category={achievement.category} />
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Calendar className="h-3 w-3" />
                         <span>{new Date(achievement.date + 'T00:00:00').toLocaleDateString('en-US')}</span>
-                        {achievement.category && (
-                          <>
-                            <span>•</span>
-                            <span>{achievement.category}</span>
-                          </>
-                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-1">

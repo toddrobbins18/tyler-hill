@@ -24,6 +24,7 @@ import {
   STANDARD_MEAL_LABEL_ORDER,
   resolveBedtimeOptionFromDivisionName,
   findBedtimeOptionFromStoredMealLabel,
+  formatMedicationMealTimeForDisplay,
 } from "@/lib/medicationBedtimeOptions";
 
 // Helper to check if we should show limited features for Timber Lake
@@ -336,7 +337,7 @@ export default function Nurse() {
               date: today,
               medication_name: formData.medication_name,
               dosage: formData.dosage,
-              meal_time: [bedtimeOpt.mealTimeLabel],
+              meal_time: ["Bedtime"],
               scheduled_time: bedtimeOpt.scheduledTimeHHmm,
               notes: formData.notes,
               is_recurring: formData.is_recurring,
@@ -354,7 +355,11 @@ export default function Nurse() {
 
     if (error) {
       console.error("Medication insert error:", error);
-      toast({ title: "Error adding medication", variant: "destructive" });
+      toast({
+        title: "Error adding medication",
+        description: error.message,
+        variant: "destructive",
+      });
       setIsSubmitting(false);
       return;
     }
@@ -1000,7 +1005,8 @@ export default function Nurse() {
                                       )}
                                     </div>
                                     <p className="text-sm text-muted-foreground">
-                                      {med.dosage} - {med.meal_time}
+                                      {med.dosage} -{' '}
+                                      {formatMedicationMealTimeForDisplay(med.meal_time, child.division?.name)}
                                     </p>
                                     {med.notes && (
                                       <p className="text-sm text-muted-foreground mt-1">{med.notes}</p>
@@ -1104,7 +1110,8 @@ export default function Nurse() {
                                     )}
                                   </div>
                                   <p className="text-sm text-muted-foreground">
-                                    {med.dosage} - {Array.isArray(med.meal_time) ? med.meal_time.join(", ") : med.meal_time}
+                                    {med.dosage} -{' '}
+                                    {formatMedicationMealTimeForDisplay(med.meal_time, child.division?.name)}
                                   </p>
                                   {/* Show start/end date info */}
                                   {(med.date || med.end_date) && (
@@ -1272,7 +1279,10 @@ export default function Nurse() {
                             {med.medication_name} - {med.dosage}
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            {Array.isArray(med.meal_time) ? med.meal_time.join(", ") : med.meal_time}
+                            {formatMedicationMealTimeForDisplay(
+                              med.meal_time,
+                              med.children?.division?.name,
+                            )}
                           </p>
                           {/* Show start/end date info */}
                           {(med.date || med.end_date) && (
