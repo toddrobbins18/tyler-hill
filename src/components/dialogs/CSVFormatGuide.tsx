@@ -12,7 +12,10 @@ interface CSVFormatGuideProps {
 
 interface FormatDef {
   title: string;
+  /** Names that must appear as column headers — required data for every row varies by schema; see notes. */
   columns: string;
+  /** Extra header columns users may append (shown on a separate line when set). */
+  optionalColumns?: string;
   example: string;
   notes: string;
   /** If set, only show for these company slugs */
@@ -36,9 +39,11 @@ const ALL_FORMATS: Record<string, FormatDef> = {
   },
   medication_logs: {
     title: "Medication Logs",
-    columns: "person_id, medication_name, dosage, scheduled_time, date, notes, is_recurring, frequency, days_of_week, end_date",
+    columns: "person_id, medication_name, dosage",
+    optionalColumns: "scheduled_time, date, notes, is_recurring, frequency, days_of_week, end_date",
     example: "P12345, Tylenol, 5ml, 08:00, 2024-01-15, Take with food, false, daily, , ",
-    notes: "REQUIRED: medication_name. person_id, date, and scheduled_time are recommended. All other fields are optional."
+    notes:
+      "REQUIRED for every row: values for person_id, medication_name, and dosage only. OPTIONAL: scheduled_time, date, notes, recurrence fields (is_recurring, frequency, days_of_week, end_date). Your CSV header row may list required columns alone, or required plus any optional columns you need — keep this order.",
   },
   trips: {
     title: "Transportation/Trips",
@@ -192,11 +197,27 @@ export default function CSVFormatGuide({ open, onOpenChange }: CSVFormatGuidePro
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <h4 className="font-semibold mb-2">Required Columns (first row):</h4>
+                    <h4 className="font-semibold mb-2">
+                      {format.optionalColumns
+                        ? "Required column headers (first row)"
+                        : "Required columns (first row)"}
+                    </h4>
                     <code className="block p-3 bg-muted rounded text-xs overflow-x-auto whitespace-nowrap">
                       {format.columns}
                     </code>
                   </div>
+
+                  {format.optionalColumns && (
+                    <div>
+                      <h4 className="font-semibold mb-2">Optional column headers — include only what you need</h4>
+                      <code className="block p-3 bg-muted rounded text-xs overflow-x-auto whitespace-nowrap">
+                        {format.optionalColumns}
+                      </code>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Use a single header row: required columns first (left to right), then any optional columns.
+                      </p>
+                    </div>
+                  )}
                   
                   <div>
                     <h4 className="font-semibold mb-2">Example Data Row:</h4>
@@ -214,7 +235,8 @@ export default function CSVFormatGuide({ open, onOpenChange }: CSVFormatGuidePro
                   <div className="bg-muted/40 border border-border p-3 rounded">
                     <p className="text-sm"><strong>General Tips:</strong></p>
                     <ul className="text-xs mt-2 space-y-1 list-disc list-inside">
-                      <li><strong>Person ID is required</strong> for all records that reference people (children, staff)</li>
+                      <li>Required vs optional columns <strong>differ by tab</strong> — use <strong>Important Notes</strong> above.</li>
+                      <li>Templates that tie a row to a camper or staff member need a roster-matching identifier when that format requires it.</li>
                       <li>First row must contain column names exactly as shown</li>
                       <li>Use commas to separate values</li>
                       <li>Use semicolons within text fields to separate multiple items</li>

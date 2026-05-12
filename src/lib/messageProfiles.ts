@@ -77,3 +77,25 @@ export async function fetchMessageProfileLabels(
 
   return map;
 }
+
+/**
+ * Inbox "From" line. Prefer sender_name, then sender_display_name.
+ * Never use subject — it is the thread title, not the sender (matches web enrichment).
+ */
+export function inboxFromDisplayName(msg: {
+  sender_name?: string | null;
+  sender_id?: string | null;
+  sender_display_name?: string | null;
+  notification_type?: string | null;
+  subject?: string | null;
+  group_id?: string | null;
+}): string {
+  const resolved = msg.sender_name?.trim();
+  if (resolved && resolved !== "Unknown" && resolved !== "Unknown sender") return resolved;
+  const snap = msg.sender_display_name?.trim();
+  if (snap) return snap;
+  if (msg.sender_id) return "Unknown sender";
+  const t = (msg.notification_type || "").toLowerCase();
+  if (t === "system" || t === "automated") return "Automated notification";
+  return "Unknown sender";
+}

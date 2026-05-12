@@ -122,10 +122,10 @@ export const incidentReportSchema = z.object({
 
 // Medication validation schema
 export const medicationSchema = z.object({
-  person_id: z.string().trim().optional().default(""),
+  person_id: z.string().trim().min(1, "Person ID is required"),
   date: z.string().optional().default(""),
   medication_name: z.string().min(1, "Medication name is required"),
-  dosage: z.string().optional(),
+  dosage: z.string().trim().min(1, "Dosage is required"),
   scheduled_time: z.string().optional().default(""),
   notes: z.string().optional(),
   is_recurring: z.boolean().optional(),

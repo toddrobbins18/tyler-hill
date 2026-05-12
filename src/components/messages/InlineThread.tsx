@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Send, Users, Reply } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
-import { fetchMessageProfileLabels } from "@/lib/messageProfiles";
+import { fetchMessageProfileLabels, inboxFromDisplayName } from "@/lib/messageProfiles";
 
 interface ThreadMessage {
   id: string;
@@ -22,6 +22,7 @@ interface ThreadMessage {
   sender_display_name?: string | null;
   sender_name?: string;
   recipient_name?: string;
+  notification_type?: string | null;
 }
 
 interface InlineThreadProps {
@@ -65,13 +66,13 @@ export default function InlineThread({ message, viewMode, campCompanyId, onNavig
   }, [message.id]);
 
   const resolveNames = useCallback(async (ids: string[]) => {
-    const unknownIds = ids.filter(id => id && !profileCache[id]);
+    const unknownIds = ids.filter(id => id && !profileCache[id.toLowerCase()]);
     if (unknownIds.length === 0) return profileCache;
 
     const labelMap = await fetchMessageProfileLabels(unknownIds, campCompanyId);
     const newCache = { ...profileCache };
     labelMap.forEach((label, id) => {
-      newCache[id] = label;
+      newCache[id.toLowerCase()] = label;
     });
     setProfileCache(newCache);
     return newCache;
@@ -91,7 +92,16 @@ export default function InlineThread({ message, viewMode, campCompanyId, onNavig
 
     setReplies(data.map(m => ({
       ...m,
-      sender_name: m.sender_id ? (cache[m.sender_id] || "Unknown sender") : "Automated notification",
+      sender_name: m.sender_id
+        ? (cache[m.sender_id.toLowerCase()] || m.sender_display_name?.trim() || "Unknown sender")
+        : inboxFromDisplayName({
+            sender_name: m.sender_display_name ?? undefined,
+            sender_id: m.sender_id,
+            sender_display_name: m.sender_display_name,
+            notification_type: (m as { notification_type?: string }).notification_type,
+            subject: (m as { subject?: string }).subject,
+            group_id: (m as { group_id?: string | null }).group_id,
+          }),
     })));
   };
 
@@ -104,6 +114,14 @@ export default function InlineThread({ message, viewMode, campCompanyId, onNavig
         ? message.recipient_id
         : message.sender_id;
 
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", currentUserId)
+        .maybeSingle();
+      const senderDisplayName =
+        prof?.full_name?.trim() || prof?.email?.split("@")[0] || null;
+
       const { error } = await supabase
         .from("messages")
         .insert({
@@ -114,6 +132,7 @@ export default function InlineThread({ message, viewMode, campCompanyId, onNavig
           parent_message_id: message.id,
           notification_type: 'message',
           read: false,
+          sender_display_name: senderDisplayName,
         });
 
       if (error) throw error;
@@ -148,8 +167,14 @@ export default function InlineThread({ message, viewMode, campCompanyId, onNavig
           {viewMode === 'inbox' && (
             <span className="block font-medium text-foreground">
               From:{" "}
-              {message.sender_name ||
-                (message.sender_id ? "Unknown sender" : (message.sender_display_name?.trim() || "Automated notification"))}
+              {inboxFromDisplayName({
+                sender_name: message.sender_name,
+                sender_id: message.sender_id,
+                sender_display_name: message.sender_display_name,
+                notification_type: message.notification_type,
+                subject: message.subject,
+                group_id: message.group_id,
+              })}
             </span>
           )}
           {viewMode === 'sent' && (

@@ -15,7 +15,7 @@ import { format } from "date-fns";
 import GroupList from "@/components/messages/GroupList";
 import InlineThread from "@/components/messages/InlineThread";
 import { notificationsDebug } from "@/lib/notificationDebug";
-import { fetchMessageProfileLabels } from "@/lib/messageProfiles";
+import { fetchMessageProfileLabels, inboxFromDisplayName } from "@/lib/messageProfiles";
 
 interface TagGroup {
   tag: string;
@@ -48,6 +48,7 @@ interface Message {
   latest_reply_content?: string;
   latest_reply_sender?: string;
   latest_reply_at?: string;
+  notification_type?: string | null;
 }
 
 const TAG_LABELS: Record<string, string> = {
@@ -71,6 +72,13 @@ const TAG_COLORS: Record<string, string> = {
   general_staff: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200",
   admin_staff: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
 };
+
+/** Profile label map keys are lowercase (see fetchMessageProfileLabels); normalize lookups. */
+function labelFromCache(cache: Record<string, string>, id: string | null | undefined): string | undefined {
+  if (!id) return undefined;
+  const k = id.toLowerCase();
+  return cache[k] ?? cache[id];
+}
 
 export default function Messages() {
   const [tagGroups, setTagGroups] = useState<TagGroup[]>([]);
@@ -125,8 +133,8 @@ export default function Messages() {
   const resolveProfileNames = useCallback(async (messages: any[]) => {
     const unknownIds = new Set<string>();
     messages.forEach(m => {
-      if (m.sender_id && !profileCache[m.sender_id]) unknownIds.add(m.sender_id);
-      if (m.recipient_id && !profileCache[m.recipient_id]) unknownIds.add(m.recipient_id);
+      if (m.sender_id && !labelFromCache(profileCache, m.sender_id)) unknownIds.add(m.sender_id);
+      if (m.recipient_id && !labelFromCache(profileCache, m.recipient_id)) unknownIds.add(m.recipient_id);
     });
 
     if (unknownIds.size === 0) return profileCache;
@@ -134,7 +142,7 @@ export default function Messages() {
     const labelMap = await fetchMessageProfileLabels(Array.from(unknownIds), currentCompany?.id);
     const newCache = { ...profileCache };
     labelMap.forEach((label, id) => {
-      newCache[id] = label;
+      newCache[id.toLowerCase()] = label;
     });
     setProfileCache(newCache);
     return newCache;
@@ -217,12 +225,16 @@ export default function Messages() {
         let latestReplyName: string | undefined;
         if (latestReply?.sender_id) {
           const replyCache = await resolveProfileNames([latestReply]);
-          latestReplyName = replyCache[latestReply.sender_id] || "Unknown";
+          latestReplyName =
+            labelFromCache(replyCache, latestReply.sender_id) ||
+            latestReply.sender_display_name?.trim() ||
+            "Unknown";
         }
 
         return {
           ...m,
-          sender_name: (m.sender_id && cache[m.sender_id]) || m.sender_display_name?.trim() || undefined,
+          sender_name:
+            (m.sender_id && labelFromCache(cache, m.sender_id)) || m.sender_display_name?.trim() || undefined,
           reply_count: count || 0,
           latest_reply_content: latestReply?.content,
           latest_reply_sender: latestReplyName,
@@ -265,7 +277,7 @@ export default function Messages() {
       const cache = await resolveProfileNames(data);
       const enriched = data.map(m => ({
         ...m,
-        recipient_name: m.recipient_id ? (cache[m.recipient_id] || "Unknown") : undefined,
+        recipient_name: m.recipient_id ? (labelFromCache(cache, m.recipient_id) || "Unknown") : undefined,
       }));
       notificationsDebug("Sent list refetched", { userId: user.id, count: enriched.length });
       setSentMessages(enriched);
@@ -564,8 +576,14 @@ export default function Messages() {
                             {viewMode === 'inbox' && (
                               <p className="text-xs font-medium text-primary mb-1">
                                 From:{" "}
-                                {msg.sender_name ||
-                                  (msg.sender_id ? "Unknown sender" : (msg.sender_display_name?.trim() || "Automated notification"))}
+                                {inboxFromDisplayName({
+                                  sender_name: msg.sender_name,
+                                  sender_id: msg.sender_id,
+                                  sender_display_name: msg.sender_display_name,
+                                  notification_type: msg.notification_type,
+                                  subject: msg.subject,
+                                  group_id: msg.group_id,
+                                })}
                               </p>
                             )}
                             {viewMode === 'sent' && (

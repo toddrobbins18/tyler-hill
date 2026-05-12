@@ -94,23 +94,24 @@ date,child_id,activities,meals,nap,mood,notes
 **Table:** `medication_logs`
 
 **Required Columns:**
-- `date` - Medication date (YYYY-MM-DD)
-- `child_id` - UUID of the child
+- `person_id` - Camper person ID (matches roster / CampMinder)
 - `medication_name` - Name of medication
-- `meal_time` - One of: "Before Breakfast", "After Breakfast", "Before Lunch", "After Lunch", "Before Dinner", "After Dinner", "Bedtime"
+- `dosage` - Dosage amount (e.g., "5ml", "1 tablet")
 
 **Optional Columns:**
-- `dosage` - Dosage amount (e.g., "5ml", "1 tablet")
+- `date` - Medication date (YYYY-MM-DD)
+- `scheduled_time` - Time (e.g., `08:00`)
 - `notes` - Additional notes
 - `is_recurring` - true/false (default: false)
 - `frequency` - "daily", "weekly", or "custom"
+- `days_of_week` - Comma-separated days when recurring
 - `end_date` - End date for recurring medications (YYYY-MM-DD)
 
 **Example CSV:**
 ```csv
-date,child_id,medication_name,meal_time,dosage,notes
-2024-06-15,abc123-uuid,Ibuprofen,After Lunch,5ml,For headache
-2024-06-15,xyz789-uuid,Allergy Medicine,Before Breakfast,1 tablet,Daily medication
+person_id,medication_name,dosage,scheduled_time,date,notes
+P12345,Ibuprofen,5ml,08:00,2024-06-15,For headache
+P67890,Allergy Medicine,1 tablet,08:00,2024-06-15,Daily medication
 ```
 
 ---
