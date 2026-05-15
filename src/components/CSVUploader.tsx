@@ -14,6 +14,7 @@ import {
   parseIncidentReportRow, parseMedicationRow, parseCalendarEventRow, parseSportsCalendarRow, parseDailyWolfContentRow
 } from "@/lib/validationSchemas";
 import { z } from "zod";
+import { parseCsvDocument } from "@/lib/csvLine";
 
 interface CSVUploaderProps {
   tableName: string;
@@ -31,19 +32,26 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
   const { currentCompany } = useCompany();
   const { selectedSeason } = useSeason();
 
-  // Resolve person_id to child UUID
-  const resolveChildPersonIds = async (personIds: string[]): Promise<Map<string, string>> => {
+  /** Match roster row for selected season (unique per company+person_id+season). */
+  const resolveChildPersonIds = async (
+    personIds: string[],
+    season: string,
+  ): Promise<Map<string, string>> => {
     if (!currentCompany?.id || personIds.length === 0) return new Map();
-    
+
     const { data } = await supabase
-      .from('children')
-      .select('id, person_id')
-      .eq('company_id', currentCompany.id)
-      .in('person_id', personIds);
-    
+      .from("children")
+      .select("id, person_id")
+      .eq("company_id", currentCompany.id)
+      .eq("season", season)
+      .neq("status", "inactive")
+      .in("person_id", personIds);
+
     const mapping = new Map<string, string>();
-    (data || []).forEach(child => {
-      if (child.person_id) mapping.set(child.person_id, child.id);
+    (data || []).forEach((child) => {
+      if (child.person_id != null && child.person_id !== "") {
+        mapping.set(String(child.person_id).trim(), child.id);
+      }
     });
     return mapping;
   };
@@ -78,27 +86,27 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
 
     try {
       const text = await file.text();
-      const lines = text.split('\n').filter(line => line.trim());
-      
-      if (lines.length === 0) {
+      const records = parseCsvDocument(text);
+
+      if (records.length === 0) {
         toast.error("CSV file is empty");
         setUploading(false);
         return;
       }
 
-      // Limit CSV to 1000 rows to prevent DoS
-      if (lines.length > 1001) {
-        toast.error("CSV file too large. Maximum 1000 rows allowed.");
+      // Limit logical rows (header + data) to prevent DoS
+      if (records.length > 1001) {
+        toast.error("CSV file too large. Maximum 1000 data rows allowed.");
         setUploading(false);
         return;
       }
 
-      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-      const rawRows = lines.slice(1).map(line => {
-        const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+      const headers = records[0].map((h) => h.replace(/^"|"$/g, "").trim());
+      const rawRows = records.slice(1).map((values) => {
         const obj: Record<string, any> = {};
         headers.forEach((header, index) => {
-          obj[header] = values[index] || null;
+          const v = values[index];
+          obj[header] = v != null && String(v).length > 0 ? String(v).trim() : null;
         });
         return obj;
       });
@@ -153,6 +161,12 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
       for (let i = 0; i < rawRows.length; i++) {
         try {
           const parsed = parser(rawRows[i]);
+          if (tableName === "medication_logs") {
+            const pid = String(parsed.person_id ?? "").trim();
+            const med = String(parsed.medication_name ?? "").trim();
+            const dose = String(parsed.dosage ?? "").trim();
+            if (!pid && !med && !dose) continue;
+          }
           const validated = schema.parse(parsed);
           validatedRows.push(validated);
         } catch (error) {
@@ -167,6 +181,13 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
       if (errors.length > 0) {
         toast.error(`Validation failed:\n${errors.slice(0, 5).join("\n")}${errors.length > 5 ? `\n...and ${errors.length - 5} more errors` : ""}`);
         setUploading(false);
+        return;
+      }
+
+      if (validatedRows.length === 0) {
+        toast.error("No data rows to import. Add rows with the required columns (for medications: person_id, medication_name, dosage).");
+        setUploading(false);
+        event.target.value = "";
         return;
       }
 
@@ -263,29 +284,42 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
       if (CHILD_PERSON_ID_TABLES.includes(tableName)) {
         // Extract all person_ids from validated rows
         const personIds = new Set<string>();
-        validatedRows.forEach(row => {
-          if (row.person_id) personIds.add(row.person_id);
-          if (row.person_ids) row.person_ids.forEach((id: string) => personIds.add(id));
+        validatedRows.forEach((row) => {
+          if (row.person_id) personIds.add(String(row.person_id).trim());
+          if (row.person_ids)
+            row.person_ids.forEach((id: string) => personIds.add(String(id).trim()));
         });
-        childPersonIdMap = await resolveChildPersonIds(Array.from(personIds));
-        
+        childPersonIdMap = await resolveChildPersonIds(
+          Array.from(personIds).filter(Boolean),
+          selectedSeason,
+        );
+
         // Validate all person_ids were found
         const missingIds: string[] = [];
         validatedRows.forEach((row, i) => {
-          if (row.person_id && !childPersonIdMap.has(row.person_id)) {
-            missingIds.push(`Row ${i + 2}: Person ID "${row.person_id}" not found`);
+          const pid =
+            typeof row.person_id === "string" ? row.person_id.trim() : String(row.person_id ?? "").trim();
+          if (pid && !childPersonIdMap.has(pid)) {
+            missingIds.push(`Row ${i + 2}: Person ID "${pid}" not found`);
           }
           if (row.person_ids) {
             row.person_ids.forEach((id: string) => {
-              if (!childPersonIdMap.has(id)) {
-                missingIds.push(`Row ${i + 2}: Person ID "${id}" not found`);
+              const pid = String(id).trim();
+              if (pid && !childPersonIdMap.has(pid)) {
+                missingIds.push(`Row ${i + 2}: Person ID "${pid}" not found`);
               }
             });
           }
         });
         
         if (missingIds.length > 0) {
-          toast.error(`Person ID errors:\n${missingIds.slice(0, 5).join("\n")}${missingIds.length > 5 ? `\n...and ${missingIds.length - 5} more` : ""}`);
+          const hint =
+            "\n\nEach Person ID must match an active camper in your roster for the selected season " +
+            `(${selectedSeason}) in Settings. Sync/import the roster first, fix any wrong IDs in the spreadsheet, ` +
+            "or pick the season those campers belong to.";
+          toast.error(
+            `Person ID errors:\n${missingIds.slice(0, 5).join("\n")}${missingIds.length > 5 ? `\n...and ${missingIds.length - 5} more` : ""}${hint}`,
+          );
           setUploading(false);
           return;
         }
@@ -302,11 +336,14 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
         // Resolve person_id to child_id for child-related tables
         if (CHILD_PERSON_ID_TABLES.includes(tableName)) {
           if (row.person_id) {
-            baseRow.child_id = childPersonIdMap.get(row.person_id);
+            const pid = String(row.person_id).trim();
+            baseRow.child_id = childPersonIdMap.get(pid);
             delete baseRow.person_id;
           }
           if (row.person_ids) {
-            baseRow.child_ids = row.person_ids.map((id: string) => childPersonIdMap.get(id)).filter(Boolean);
+            baseRow.child_ids = row.person_ids
+              .map((id: string) => childPersonIdMap.get(String(id).trim()))
+              .filter(Boolean);
             delete baseRow.person_ids;
           }
           if (row.reporter_person_id && staffPersonIdMap.has(row.reporter_person_id)) {

@@ -17,6 +17,7 @@ import tylerHillDashboardBg from "@/assets/image001.jpg";
 import timberLakeCampHero from "@/assets/tember-camp.jpeg";
 import { format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
+import { isBirthdayTodayCalendar, parseBirthdayCalendarParts } from "@/lib/birthdayCalendar";
 
 interface DailyWolfContent {
   officer_of_day: string;
@@ -408,6 +409,10 @@ export default function Dashboard() {
       .eq('status', 'active')
       .eq('company_id', currentCompany.id)
       .not('date_of_birth', 'is', null);
+
+    if (currentSeason) {
+      birthdayQuery = birthdayQuery.eq('season', currentSeason);
+    }
     
     if (!hasFullAccess && divisionFilter && divisionFilter.length > 0) {
       birthdayQuery = birthdayQuery.in('division_id', divisionFilter);
@@ -415,30 +420,30 @@ export default function Dashboard() {
     
     const { data: childrenData } = await birthdayQuery;
 
-    const { data: staffBirthdayData } = await supabase
+    let staffBirthdayQuery = supabase
       .from('staff')
       .select('id, name, date_of_birth')
       .eq('status', 'active')
       .eq('company_id', currentCompany.id)
       .not('date_of_birth', 'is', null);
 
+    if (currentSeason) {
+      staffBirthdayQuery = staffBirthdayQuery.eq('season', currentSeason);
+    }
+
+    const { data: staffBirthdayData } = await staffBirthdayQuery;
+
     const todayDate = new Date();
     const todayMonth = todayDate.getMonth() + 1;
     const todayDay = todayDate.getDate();
 
-    const birthdaysToday = (childrenData || []).filter((child: any) => {
-      if (!child.date_of_birth) return false;
-      // Parse date string directly to avoid timezone issues
-      const [year, month, day] = child.date_of_birth.split('-').map(Number);
-      return month === todayMonth && day === todayDay;
-    });
+    const birthdaysToday = (childrenData || []).filter((child: any) =>
+      isBirthdayTodayCalendar(child.date_of_birth, todayMonth, todayDay),
+    );
 
-    const staffBirthdaysToday = (staffBirthdayData || []).filter((staff: any) => {
-      if (!staff.date_of_birth) return false;
-      // Parse date string directly to avoid timezone issues
-      const [year, month, day] = staff.date_of_birth.split('-').map(Number);
-      return month === todayMonth && day === todayDay;
-    });
+    const staffBirthdaysToday = (staffBirthdayData || []).filter((staff: any) =>
+      isBirthdayTodayCalendar(staff.date_of_birth, todayMonth, todayDay),
+    );
 
     // Fetch health center admissions (not yet checked out) with division filtering
     let healthCenterQuery = supabase
@@ -516,12 +521,12 @@ export default function Dashboard() {
 
   const calculateAge = (dateOfBirth: string): number => {
     const today = new Date();
-    // Parse date string directly to avoid timezone issues
-    const [year, month, day] = dateOfBirth.split('-').map(Number);
-    let age = today.getFullYear() - year;
+    const parts = parseBirthdayCalendarParts(dateOfBirth);
+    if (!parts) return 0;
+    let age = today.getFullYear() - parts.year;
     const todayMonth = today.getMonth() + 1;
     const todayDay = today.getDate();
-    if (todayMonth < month || (todayMonth === month && todayDay < day)) {
+    if (todayMonth < parts.month || (todayMonth === parts.month && todayDay < parts.day)) {
       age--;
     }
     return age;

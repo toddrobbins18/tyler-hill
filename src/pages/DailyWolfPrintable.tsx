@@ -6,8 +6,9 @@ import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { usePermissions } from '@/hooks/usePermissions';
+import { isBirthdayTodayCalendar } from '@/lib/birthdayCalendar';
 
-interface BirthdayChild {
+interface BirthdayRow {
   id: string;
   name: string;
   date_of_birth: string;
@@ -55,7 +56,8 @@ interface DailyContent {
 }
 
 export default function DailyWolfPrintable() {
-  const [birthdayChildren, setBirthdayChildren] = useState<BirthdayChild[]>([]);
+  const [birthdayChildren, setBirthdayChildren] = useState<BirthdayRow[]>([]);
+  const [birthdayStaff, setBirthdayStaff] = useState<BirthdayRow[]>([]);
   const [meals, setMeals] = useState<MealData[]>([]);
   const [divisionGames, setDivisionGames] = useState<DivisionGame[]>([]);
   const [sportsEvents, setSportsEvents] = useState<SportsEvent[]>([]);
@@ -85,7 +87,10 @@ export default function DailyWolfPrintable() {
         .subscribe(),
       supabase.channel('content-changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_wolf_content' }, fetchAllData)
-        .subscribe()
+        .subscribe(),
+      supabase.channel('daily-wolf-staff-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'staff' }, fetchAllData)
+        .subscribe(),
     ];
 
     return () => {
@@ -118,12 +123,23 @@ export default function DailyWolfPrintable() {
 
       const { data: childrenData } = await childrenQuery;
 
-      const todaysBirthdays = childrenData?.filter(child => {
-        const birthday = new Date(child.date_of_birth);
-        return birthday.getMonth() === todayDate.getMonth() && 
-               birthday.getDate() === todayDate.getDate();
-      }) || [];
+      const m = todayDate.getMonth() + 1;
+      const d = todayDate.getDate();
+      const todaysBirthdays =
+        childrenData?.filter((child) => isBirthdayTodayCalendar(child.date_of_birth, m, d)) || [];
       setBirthdayChildren(todaysBirthdays);
+
+      const { data: staffData } = await supabase
+        .from('staff')
+        .select('id, name, date_of_birth')
+        .eq('company_id', currentCompany.id)
+        .eq('season', currentSeason)
+        .eq('status', 'active')
+        .not('date_of_birth', 'is', null);
+
+      const staffToday =
+        staffData?.filter((staff) => isBirthdayTodayCalendar(staff.date_of_birth, m, d)) || [];
+      setBirthdayStaff(staffToday);
 
       // Fetch meals
       const { data: mealsData } = await supabase
@@ -387,9 +403,9 @@ export default function DailyWolfPrintable() {
             {/* Birthday Wishes */}
             <div className="birthday-section">
               <div className="section-title">Birthday Wishes</div>
-              {birthdayChildren.length > 0 ? (
+              {birthdayChildren.length + birthdayStaff.length > 0 ? (
                 <div className="birthday-list">
-                  {birthdayChildren.map(child => child.name).join(', ')}
+                  {[...birthdayChildren, ...birthdayStaff].map((p) => p.name).join(', ')}
                 </div>
               ) : (
                 <div>No birthdays today</div>

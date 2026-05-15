@@ -299,17 +299,26 @@ export function parseIncidentReportRow(row: Record<string, any>) {
 
 // Medication CSV parser
 export function parseMedicationRow(row: Record<string, any>) {
+  const recurringRaw =
+    row.is_recurring ??
+    row['Is Recurring'] ??
+    row['Recurring (if daily or not)'] ??
+    '';
+  const isRecurring = ['true', 'yes', '1', 'y'].includes(String(recurringRaw).toLowerCase().trim());
+
   return {
     person_id: String(row.person_id || row['Person ID'] || row.PersonID || row.personid || '').trim(),
     date: String(row.date || row.Date || ''),
-    medication_name: String(row.medication_name || row['Medication Name'] || ''),
-    dosage: String(row.dosage || row.Dosage || ''),
-    scheduled_time: String(row.scheduled_time || row['Scheduled Time'] || ''),
+    medication_name: String(row.medication_name || row['Medication Name'] || '').trim(),
+    dosage: String(row.dosage || row.Dosage || '').trim(),
+    scheduled_time: String(
+      row.scheduled_time || row['Scheduled Time'] || row['Meal Time'] || row.meal_time || ''
+    ),
     notes: String(row.notes || row.Notes || ''),
-    is_recurring: Boolean(row.is_recurring || row['Is Recurring'] || false),
+    is_recurring: isRecurring,
     frequency: String(row.frequency || row.Frequency || 'daily'),
     days_of_week: row.days_of_week ? String(row.days_of_week).split(',') : [],
-    end_date: String(row.end_date || row['End Date'] || '') || null,
+    end_date: String(row.end_date || row['End Date'] || row['END DATE'] || '') || null,
   };
 }
 

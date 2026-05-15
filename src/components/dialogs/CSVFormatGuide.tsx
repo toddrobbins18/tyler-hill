@@ -1,5 +1,11 @@
 import { useMemo } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText } from "lucide-react";
@@ -39,11 +45,13 @@ const ALL_FORMATS: Record<string, FormatDef> = {
   },
   medication_logs: {
     title: "Medication Logs",
-    columns: "person_id, medication_name, dosage",
-    optionalColumns: "scheduled_time, date, notes, is_recurring, frequency, days_of_week, end_date",
-    example: "P12345, Tylenol, 5ml, 08:00, 2024-01-15, Take with food, false, daily, , ",
+    columns:
+      'person_id, medication_name, dosage (synonyms OK: Person ID · Medication Name · Dosage — same three columns)',
+    optionalColumns:
+      "scheduled_time, date, notes, is_recurring, frequency, days_of_week, end_date (Excel/Campminder export also accepts: Meal Time → time; END DATE → end date; \"Recurring (if daily or not)\" YES/NO → recurring)",
+    example: '14251496, Cosentyx, N/A, AFTER LUNCH, "WILL GIVE DATES", NO, MONTHLY,',
     notes:
-      "REQUIRED for every row: values for person_id, medication_name, and dosage only. OPTIONAL: scheduled_time, date, notes, recurrence fields (is_recurring, frequency, days_of_week, end_date). Your CSV header row may list required columns alone, or required plus any optional columns you need — keep this order.",
+      "REQUIRED each row: Person ID matching an active camper in your roster for the selected season, plus medication name and dosage. OPTIONAL: Meal Time or Scheduled Time, date, Notes (multi-line OK if the whole cell is in double-quotes — Excel saves this automatically), recurrence fields. Wrong/missing campers in Nest for that season produce a Person ID error — sync/import Children roster first or switch season.",
   },
   trips: {
     title: "Transportation/Trips",
@@ -175,6 +183,9 @@ export default function CSVFormatGuide({ open, onOpenChange }: CSVFormatGuidePro
             <FileText className="h-5 w-5" />
             CSV Upload Format Guide
           </DialogTitle>
+          <DialogDescription>
+            Column aliases and roster rules vary by sheet — choose a tab below.
+          </DialogDescription>
         </DialogHeader>
         
         <Tabs defaultValue={defaultTab} className="w-full">
@@ -237,7 +248,11 @@ export default function CSVFormatGuide({ open, onOpenChange }: CSVFormatGuidePro
                     <ul className="text-xs mt-2 space-y-1 list-disc list-inside">
                       <li>Required vs optional columns <strong>differ by tab</strong> — use <strong>Important Notes</strong> above.</li>
                       <li>Templates that tie a row to a camper or staff member need a roster-matching identifier when that format requires it.</li>
-                      <li>First row must contain column names exactly as shown</li>
+                      <li>
+                        First row = headers. For Medications, spreadsheet titles like{" "}
+                        <code className="text-xs">Person ID</code>, <code className="text-xs">Medication Name</code>,{" "}
+                        <code className="text-xs">Dosage</code> work the same as the snake_case names.
+                      </li>
                       <li>Use commas to separate values</li>
                       <li>Use semicolons within text fields to separate multiple items</li>
                       <li>Leave fields empty for optional columns</li>
