@@ -15,6 +15,122 @@ import {
 } from "@/lib/validationSchemas";
 import { z } from "zod";
 import { parseCsvDocument } from "@/lib/csvLine";
+import { STANDARD_MEAL_SCHEDULE_HHMM } from "@/lib/medicationBedtimeOptions";
+
+/** Map CSV Meal Time uppercase labels → DB constraint values (`valid_meal_times`). */
+const CSV_MEAL_SLOT_TO_LABEL: Record<string, string> = {
+  "BEFORE BREAKFAST": "Before Breakfast",
+  "AFTER BREAKFAST": "After Breakfast",
+  "BEFORE LUNCH": "Before Lunch",
+  "AFTER LUNCH": "After Lunch",
+  "BEFORE DINNER": "Before Dinner",
+  "AFTER DINNER": "After Dinner",
+  BEDTIME: "Bedtime",
+  BED: "Bedtime",
+};
+
+const WEEKDAY_ALIASES: Record<string, string> = {
+  SUNDAY: "Sunday",
+  MONDAY: "Monday",
+  TUESDAY: "Tuesday",
+  WEDNESDAY: "Wednesday",
+  THURSDAY: "Thursday",
+  FRIDAY: "Friday",
+  SATURDAY: "Saturday",
+};
+
+function localDateYmd(d: Date = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Postgres DATE/TIME reject `""`. CSV meds rows often omit `date` → Zod defaulted to "".
+ * `scheduled_time` is parsed from Meal Time ("BEFORE BREAKFAST") but the DB expects TIME HH:mm + `meal_time` text[].
+ */
+function normalizeDateStringOrNull(value: unknown): string | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+
+  // Accept ISO/calendar forms we use in DB inserts.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  // Accept common spreadsheet date style: MM/DD/YYYY.
+  const us = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (us) {
+    const mm = us[1].padStart(2, "0");
+    const dd = us[2].padStart(2, "0");
+    return `${us[3]}-${mm}-${dd}`;
+  }
+
+  // Anything else (e.g. "image.png") is invalid for DATE.
+  return null;
+}
+
+function normalizeMedicationFrequencyValue(raw: unknown): string | null {
+  const v = String(raw ?? "").trim().toUpperCase().replace(/\s+/g, " ");
+  if (!v) return null;
+  if (["DAILY", "EVERY DAY", "EVERYDAY", "QD"].includes(v)) return "daily";
+  if (["WEEKLY", "EVERY WEEK"].includes(v)) return "weekly";
+  if (["CUSTOM", "MONTHLY", "EVERY MONTH"].includes(v)) return "custom";
+  if (["AS NEEDED", "PRN"].includes(v)) return null;
+  if (WEEKDAY_ALIASES[v]) return "weekly";
+  return null;
+}
+
+function normalizeMedicationDaysOfWeek(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out = raw
+    .map((d) => WEEKDAY_ALIASES[String(d ?? "").trim().toUpperCase()] ?? null)
+    .filter((d): d is string => Boolean(d));
+  return Array.from(new Set(out));
+}
+
+function sanitizeMedicationLogRowForInsert(row: Record<string, unknown>): void {
+  const normalizedDate = normalizeDateStringOrNull(row.date);
+  row.date = normalizedDate || localDateYmd();
+
+  row.end_date = normalizeDateStringOrNull(row.end_date);
+
+  const normalizedFrequency = normalizeMedicationFrequencyValue(row.frequency);
+  row.frequency = normalizedFrequency;
+  row.days_of_week = normalizeMedicationDaysOfWeek(row.days_of_week);
+  if (!row.is_recurring && !normalizedFrequency) {
+    row.days_of_week = [];
+  }
+
+  const rawSlot = String(row.scheduled_time ?? "")
+    .trim()
+    .replace(/\s+/g, " ");
+  const upper = rawSlot.toUpperCase();
+  const isAsNeeded =
+    !upper ||
+    upper.includes("AS NEEDED") ||
+    upper === "PRN";
+
+  if (isAsNeeded) {
+    row.scheduled_time = null;
+    row.meal_time = null;
+    return;
+  }
+
+  const label = CSV_MEAL_SLOT_TO_LABEL[upper];
+  if (!label) {
+    row.scheduled_time = null;
+    row.meal_time = null;
+    return;
+  }
+
+  row.meal_time = [label];
+  if (label === "Bedtime") {
+    row.scheduled_time = "21:00";
+  } else {
+    row.scheduled_time =
+      STANDARD_MEAL_SCHEDULE_HHMM[label as keyof typeof STANDARD_MEAL_SCHEDULE_HHMM] ?? "12:00";
+  }
+}
 
 interface CSVUploaderProps {
   tableName: string;
@@ -355,7 +471,16 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
         return baseRow;
       });
 
-      const { error } = await supabase.from(tableName as any).insert(rowsWithCompany as any);
+      const rowsToInsert =
+        tableName === "medication_logs"
+          ? rowsWithCompany.map((row) => {
+              const copy = { ...row } as Record<string, unknown>;
+              sanitizeMedicationLogRowForInsert(copy);
+              return copy;
+            })
+          : rowsWithCompany;
+
+      const { error } = await supabase.from(tableName as any).insert(rowsToInsert as any);
 
       if (error) throw error;
 
@@ -363,7 +488,16 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
       onUploadComplete?.();
     } catch (error) {
       console.error('Upload error:', error);
-      toast.error("Failed to upload CSV. Please check the format and try again.");
+      const msg =
+        error &&
+        typeof error === "object" &&
+        "message" in error &&
+        typeof (error as { message?: string }).message === "string"
+          ? (error as { message: string }).message
+          : "";
+      toast.error(
+        msg ? `Upload failed: ${msg}` : "Failed to upload CSV. Please check the format and try again.",
+      );
     } finally {
       setUploading(false);
       event.target.value = '';

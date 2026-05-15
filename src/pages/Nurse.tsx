@@ -33,6 +33,13 @@ const useTimberLakeMode = () => {
   return currentCompany?.slug === 'timber-lake-camp';
 };
 
+const localDateYmd = (d: Date = new Date()): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
 export default function Nurse() {
   const isTimberLake = useTimberLakeMode();
   const { currentSeason } = useSeasonContext();
@@ -254,7 +261,7 @@ export default function Nurse() {
   };
 
   const fetchMedications = async (date?: Date) => {
-    const dateStr = date ? format(date, 'yyyy-MM-dd') : new Date().toISOString().split('T')[0];
+    const dateStr = date ? format(date, 'yyyy-MM-dd') : localDateYmd();
     const { data, error } = await supabase
       .from("medication_logs")
       .select("*, children(name, division:divisions(name)), staff(name)")
@@ -312,7 +319,7 @@ export default function Nurse() {
       return;
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDateYmd();
 
     const inserts = [
       ...standardMeals.map((mealTime) => ({
