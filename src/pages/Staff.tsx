@@ -40,13 +40,15 @@ export default function Staff() {
   const [deletingStaff, setDeletingStaff] = useState<string | null>(null);
   const [evaluatingStaff, setEvaluatingStaff] = useState<string | null>(null);
   const [myStaffId, setMyStaffId] = useState<string | null>(null);
+  const [myAssignedSports, setMyAssignedSports] = useState<Set<string>>(new Set());
   const { currentSeason } = useSeasonContext();
   const { currentCompany } = useCompany();
-  const { userRole, isSuperAdmin } = usePermissions();
+  const { userRole, userRoles, isSuperAdmin } = usePermissions();
   const { user } = useAuth();
   const navigate = useNavigate();
   
-  const isLeaderRole = userRole === 'division_leader' || userRole === 'specialist';
+  const isSpecialistRole = userRole === 'specialist' || userRoles.includes('specialist');
+  const isLeaderRole = userRole === 'division_leader' || isSpecialistRole;
   
   // RFID Scanner state
   const [rfidInput, setRfidInput] = useState("");
@@ -149,8 +151,21 @@ export default function Staff() {
       if (!user?.email || !currentCompany?.id || !isLeaderRole) {
         setMyStaffId(null);
         setMyAssignedStaffIds(new Set());
+        setMyAssignedSports(new Set());
         return;
       }
+
+      if (isSpecialistRole && user?.id) {
+        const { data: sportAssignmentData } = await supabase
+          .from("specialist_sport_assignments")
+          .select("sport")
+          .eq("user_id", user.id)
+          .eq("company_id", currentCompany.id);
+        setMyAssignedSports(new Set((sportAssignmentData || []).map(a => a.sport)));
+      } else {
+        setMyAssignedSports(new Set());
+      }
+
       const { data } = await supabase
         .from("staff")
         .select("id")
@@ -175,7 +190,7 @@ export default function Staff() {
       }
     };
     findMyStaffRecord();
-  }, [user?.email, currentCompany?.id, currentSeason, isLeaderRole]);
+  }, [user?.email, user?.id, currentCompany?.id, currentSeason, isLeaderRole, isSpecialistRole]);
 
   useEffect(() => {
     if (currentCompany?.id) {
@@ -184,9 +199,14 @@ export default function Staff() {
   }, [currentCompany?.id, currentSeason]);
 
   const filteredStaff = staff.filter((member) => {
-    // Leader-based filtering: division_leader/specialist only see their assigned staff (many-to-many)
-    if (isLeaderRole && myStaffId) {
-      if (member.id !== myStaffId && !myAssignedStaffIds.has(member.id)) {
+    // Leader-based filtering: division leaders use manual assignments; specialists can also see staff assigned to their sports.
+    if (isLeaderRole && (myStaffId || isSpecialistRole)) {
+      const isSelf = myStaffId === member.id;
+      const isManuallyAssigned = myStaffId ? myAssignedStaffIds.has(member.id) : false;
+      const memberSports = Array.isArray(member.specialty_sports) ? member.specialty_sports : [];
+      const isSportAssigned = isSpecialistRole && memberSports.some((sport: string) => myAssignedSports.has(sport));
+
+      if (!isSelf && !isManuallyAssigned && !isSportAssigned) {
         return false;
       }
     }
@@ -408,9 +428,9 @@ export default function Staff() {
               Couldn’t load staff: {staffError}
             </div>
           )}
-          {isLeaderRole && myStaffId && (
+          {isLeaderRole && (myStaffId || isSpecialistRole) && (
             <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-sm">
-              <strong>My Team:</strong> Showing staff assigned to you. Contact an admin to update assignments.
+              <strong>My Team:</strong> Showing staff assigned to you. Specialist leaders also see staff assigned to their sports. Contact an admin to update assignments.
             </div>
           )}
           <div className="text-sm text-muted-foreground">

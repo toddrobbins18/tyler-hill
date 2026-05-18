@@ -35,6 +35,7 @@ export default function SpecialistSportAssignments() {
   const { currentCompany, isSuperAdmin } = useCompany();
   const { currentSeason } = useSeasonContext();
   const [specialists, setSpecialists] = useState<any[]>([]);
+  const [staffSpecialists, setStaffSpecialists] = useState<any[]>([]);
   const [assignments, setAssignments] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
 
@@ -52,44 +53,43 @@ export default function SpecialistSportAssignments() {
       // 1) Users with app role `specialist`
       const { data: specialistRoles, error: rolesError } = await supabase
         .from('user_roles')
-        .select(`
-          user_id,
-          profiles:user_id (
-            id,
-            full_name,
-            email
-          )
-        `)
+        .select('user_id')
         .eq('role', 'specialist')
         .eq('company_id', currentCompany.id);
 
       if (rolesError) {
         console.error('Error fetching specialists:', rolesError);
         toast.error("Failed to load specialists");
-        return;
       }
 
-      // 2) Staff directory: staff_type specialist / both (same season as roster) — matched to logins by email
-      const { data: staffSpecialists, error: staffSpecError } = await supabase
+      // 2) Staff directory: staff_type specialist / both (same season as roster)
+      const { data: staffSpecialistRows, error: staffSpecError } = await supabase
         .from('staff')
-        .select('email')
+        .select('id, name, email, role, staff_type, specialty_sports')
         .eq('company_id', currentCompany.id)
-        .eq('status', 'active')
         .eq('season', currentSeason)
+        .neq('name', 'Unknown')
+        .not('name', 'is', null)
         .in('staff_type', ['specialist', 'both']);
 
       if (staffSpecError) {
         console.error('Error fetching specialist staff:', staffSpecError);
       }
 
+      const roleUserIds = new Set<string>();
+      (specialistRoles || []).forEach((row: { user_id?: string | null }) => {
+        if (row.user_id) roleUserIds.add(row.user_id);
+      });
+
       const staffEmails = new Set<string>();
-      (staffSpecialists || []).forEach((row: { email?: string | null }) => {
+      (staffSpecialistRows || []).forEach((row: { email?: string | null }) => {
         const n = normalizeStaffEmail(row.email);
         if (n) staffEmails.add(n);
       });
 
-      let emailToProfile = new Map<string, { id: string; full_name: string | null; email: string | null }>();
-      if (staffEmails.size > 0) {
+      const emailToProfile = new Map<string, { id: string; full_name: string | null; email: string | null }>();
+      const profileById = new Map<string, { id: string; full_name: string | null; email: string | null }>();
+      if (staffEmails.size > 0 || roleUserIds.size > 0) {
         const { data: companyProfiles, error: profErr } = await supabase
           .from('profiles')
           .select('id, full_name, email')
@@ -100,13 +100,17 @@ export default function SpecialistSportAssignments() {
           if (key && staffEmails.has(key)) {
             emailToProfile.set(key, p);
           }
+          if (roleUserIds.has(p.id)) {
+            profileById.set(p.id, p);
+          }
         });
       }
 
       const byUserId = new Map<string, { user_id: string; profiles: { id: string; full_name: string | null; email: string | null } }>();
-      for (const row of specialistRoles || []) {
-        if (row?.user_id && row?.profiles) {
-          byUserId.set(row.user_id, { user_id: row.user_id, profiles: row.profiles });
+      for (const userId of roleUserIds) {
+        const p = profileById.get(userId);
+        if (p) {
+          byUserId.set(userId, { user_id: userId, profiles: p });
         }
       }
       for (const email of staffEmails) {
@@ -146,6 +150,11 @@ export default function SpecialistSportAssignments() {
       });
 
       setSpecialists(mergedSpecialists);
+      setStaffSpecialists(
+        (staffSpecialistRows || []).sort((a: any, b: any) =>
+          (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
+        )
+      );
       setAssignments(assignmentsMap);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -191,6 +200,33 @@ export default function SpecialistSportAssignments() {
     }
   };
 
+  const toggleStaffSportAssignment = async (staffMember: any, sport: string, isAssigned: boolean) => {
+    if (!currentCompany?.id) return;
+
+    const currentSports = Array.isArray(staffMember.specialty_sports)
+      ? staffMember.specialty_sports
+      : [];
+    const nextSports = isAssigned
+      ? currentSports.filter((s: string) => s !== sport)
+      : Array.from(new Set([...currentSports, sport]));
+
+    const { error } = await supabase
+      .from('staff')
+      .update({ specialty_sports: nextSports })
+      .eq('id', staffMember.id)
+      .eq('company_id', currentCompany.id)
+      .eq('season', currentSeason);
+
+    if (error) {
+      console.error('Error updating staff sports:', error);
+      toast.error(error.message || "Failed to update staff sport assignments");
+      return;
+    }
+
+    toast.success(`${isAssigned ? 'Removed' : 'Added'} ${sport} for ${staffMember.name}`);
+    fetchData();
+  };
+
   if (loading) {
     return (
       <div className="space-y-8">
@@ -207,8 +243,8 @@ export default function SpecialistSportAssignments() {
       <div>
         <h1 className="text-3xl font-bold mb-2">Specialist Sport Assignments</h1>
         <p className="text-muted-foreground">
-          Assign which sports each specialist is responsible for. Specialists will receive email notifications only for their assigned sports.
-          Staff marked as Specialist (Staff Type on their profile) appear here once their roster email matches their login profile for this camp and season.
+          Assign sports to specialist leaders with logins, then assign staff to the sports/departments where they should be evaluated.
+          Staff do not need logins to appear in the staff assignment section.
         </p>
       </div>
 
@@ -221,11 +257,19 @@ export default function SpecialistSportAssignments() {
         </Alert>
       )}
 
+      <div className="space-y-3">
+        <div>
+          <h2 className="text-xl font-semibold">Specialist Leaders</h2>
+          <p className="text-sm text-muted-foreground">
+            These people have a login or Specialist app role. Their assigned sports determine which staff they can evaluate.
+          </p>
+        </div>
+
       {specialists.length === 0 ? (
         <Card>
           <CardContent className="pt-6">
             <p className="text-center text-muted-foreground">
-              No specialists found for this camp and season. Add people with Staff Type &quot;specialist&quot; or &quot;both&quot; (with their login email matching their staff profile), or assign the Specialist app role under user management—then they appear here so you can assign sports.
+              No specialist leaders found for this camp and season. Add a login with the Specialist app role, or match a Specialist/Both staff profile to a login email.
             </p>
           </CardContent>
         </Card>
@@ -298,6 +342,69 @@ export default function SpecialistSportAssignments() {
           })}
         </div>
       )}
+      </div>
+
+      <div className="space-y-3">
+        <div>
+          <h2 className="text-xl font-semibold">Staff Sport / Department Assignments</h2>
+          <p className="text-sm text-muted-foreground">
+            Staff marked Specialist or Both appear here even without a login. Assign Tennis, Baseball, etc. so the matching specialist leader can evaluate them.
+          </p>
+        </div>
+
+        {staffSpecialists.length === 0 ? (
+          <Card>
+            <CardContent className="pt-6">
+              <p className="text-center text-muted-foreground">
+                No Specialist or Both staff found for this camp and season.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-6">
+            {staffSpecialists.map((staffMember: any) => {
+              const selectedSports = Array.isArray(staffMember.specialty_sports)
+                ? staffMember.specialty_sports
+                : [];
+
+              return (
+                <Card key={staffMember.id}>
+                  <CardHeader>
+                    <div>
+                      <CardTitle>{staffMember.name}</CardTitle>
+                      <CardDescription>
+                        {staffMember.role || "No role"}{staffMember.email ? ` • ${staffMember.email}` : " • No login required"}
+                      </CardDescription>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
+                      {AVAILABLE_SPORTS.map(sport => {
+                        const isAssigned = selectedSports.includes(sport);
+                        return (
+                          <div
+                            key={sport}
+                            className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                          >
+                            <Label htmlFor={`${staffMember.id}-${sport}`} className="cursor-pointer flex-1">
+                              {sport}
+                            </Label>
+                            <Switch
+                              id={`${staffMember.id}-${sport}`}
+                              checked={isAssigned}
+                              onCheckedChange={() => toggleStaffSportAssignment(staffMember, sport, isAssigned)}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
