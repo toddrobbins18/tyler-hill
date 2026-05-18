@@ -53,7 +53,9 @@ export default function ChildProfile() {
         .from("children")
         .select(`
           *,
-          bunk:bunk_id(id, bunk_number, bunk_name)
+          bunk:bunk_id(id, bunk_number, bunk_name),
+          leader:leader_id(id, name, role),
+          division:division_id(id, name)
         `)
         .eq("id", id)
         .single();
@@ -282,9 +284,12 @@ export default function ChildProfile() {
         <div className="flex-1">
           <h1 className="text-3xl font-bold text-foreground mb-1">{child.name}</h1>
           <p className="text-muted-foreground">
-            {child.grade && `${child.grade} • `}
-            {child.category && `${child.category} • `}
-            {child.group_name && `Group ${child.group_name}`}
+            {[
+              child.grade,
+              child.division?.name || child.category,
+              child.group_name ? `Team ${child.group_name}` : null,
+              child.leader?.name ? `Leader: ${child.leader.name}` : null,
+            ].filter(Boolean).join(" • ")}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -360,10 +365,25 @@ export default function ChildProfile() {
                       <p className="font-medium capitalize">{child.gender}</p>
                     </div>
                   )}
-                  {child.category && (
+                  {(child.division?.name || child.category) && (
                     <div>
                       <p className="text-sm text-muted-foreground">Division</p>
-                      <p className="font-medium">{child.category}</p>
+                      <p className="font-medium">{child.division?.name || child.category}</p>
+                    </div>
+                  )}
+                  {child.group_name && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Team</p>
+                      <p className="font-medium">{child.group_name}</p>
+                    </div>
+                  )}
+                  {child.leader && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Assigned Leader</p>
+                      <p className="font-medium">
+                        {child.leader.name}
+                        {child.leader.role ? ` (${child.leader.role})` : ""}
+                      </p>
                     </div>
                   )}
                   {child.bunk && (

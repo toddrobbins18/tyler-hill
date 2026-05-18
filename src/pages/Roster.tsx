@@ -86,8 +86,9 @@ export default function Roster() {
     let query = supabase
       .from("children")
       .select(`
-        id, name, grade, status, session, season, division_id, person_id,
-        division:divisions(id, name, gender, sort_order)
+        id, name, grade, status, session, season, division_id, person_id, group_name,
+        division:division_id(id, name, gender, sort_order),
+        leader:leader_id(id, name)
       `)
       .eq('company_id', currentCompany.id)
       .eq('season', currentSeason);
@@ -457,17 +458,25 @@ export default function Roster() {
                     </Button>
                   </div>
                 </div>
-                <div 
-                  className="flex items-center justify-between text-sm cursor-pointer"
+                <div
+                  className="flex items-start justify-between gap-3 text-sm cursor-pointer"
                   onClick={() => navigate(`/child/${child.id}`)}
                 >
-                  <span className="text-muted-foreground">Division: {child.division?.name || "N/A"}</span>
-                  <Badge 
-                    variant="outline" 
+                  <div className="space-y-1 min-w-0">
+                    <p className="text-muted-foreground">Division: {child.division?.name || "N/A"}</p>
+                    {child.group_name && (
+                      <p className="text-muted-foreground">Team: {child.group_name}</p>
+                    )}
+                    {child.leader?.name && (
+                      <p className="text-muted-foreground">Leader: {child.leader.name}</p>
+                    )}
+                  </div>
+                  <Badge
+                    variant="outline"
                     className={
                       child.status === "active"
-                        ? "bg-success/10 text-success border-success/20"
-                        : "bg-muted text-muted-foreground"
+                        ? "bg-success/10 text-success border-success/20 shrink-0"
+                        : "bg-muted text-muted-foreground shrink-0"
                     }
                   >
                     {child.status || "Active"}

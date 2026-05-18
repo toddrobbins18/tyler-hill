@@ -27,6 +27,7 @@ export default function StaffProfile() {
   const [staffNotes, setStaffNotes] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [assignedBunks, setAssignedBunks] = useState<any[]>([]);
+  const [assignedLeaders, setAssignedLeaders] = useState<any[]>([]);
   const [newNote, setNewNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -45,7 +46,11 @@ export default function StaffProfile() {
     // Fetch staff member
     const { data: staffData, error: staffError } = await supabase
       .from("staff")
-      .select("*")
+      .select(`
+        *,
+        division:division_id(id, name),
+        supervisor:leader_id(id, name, role)
+      `)
       .eq("id", id)
       .single();
 
@@ -110,6 +115,18 @@ export default function StaffProfile() {
       .eq("season", currentSeason);
 
     setAssignedBunks(bunkStaffData || []);
+
+    const { data: leaderAssignmentData } = await supabase
+      .from("staff_leader_assignments")
+      .select(`
+        id,
+        leader:leader_id(id, name, role)
+      `)
+      .eq("staff_id", id)
+      .eq("company_id", currentCompany?.id || "")
+      .eq("season", currentSeason);
+
+    setAssignedLeaders(leaderAssignmentData || []);
 
     if (!evalsError && evalsData) {
       const averageRating = evalsData.length
@@ -284,6 +301,46 @@ export default function StaffProfile() {
                   <div>
                     <p className="text-sm text-muted-foreground">T-Shirt Size</p>
                     <p className="font-medium">{staff.tshirt_size}</p>
+                  </div>
+                )}
+                {staff.division?.name && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Division</p>
+                    <p className="font-medium">{staff.division.name}</p>
+                  </div>
+                )}
+                {staff.supervisor && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Reports To</p>
+                    <p className="font-medium">
+                      {staff.supervisor.name}
+                      {staff.supervisor.role ? ` (${staff.supervisor.role})` : ""}
+                    </p>
+                  </div>
+                )}
+                {assignedLeaders.length > 0 && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Assigned Leaders</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {assignedLeaders.map((assignment: any) => (
+                        <Badge key={assignment.id} variant="outline" className="bg-secondary/10 text-secondary border-secondary/20">
+                          {assignment.leader?.name || "Unknown"}
+                          {assignment.leader?.role ? ` (${assignment.leader.role})` : ""}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {Array.isArray(staff.specialty_sports) && staff.specialty_sports.length > 0 && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Sport Assignments</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {staff.specialty_sports.map((sport: string) => (
+                        <Badge key={sport} variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                          {sport}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
                 )}
                 {assignedBunks.length > 0 && (
