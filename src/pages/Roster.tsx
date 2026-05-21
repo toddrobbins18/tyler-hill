@@ -71,6 +71,8 @@ export default function Roster() {
 
   const { getDivisionFilter, loading: permissionsLoading, userDivisions } = usePermissions();
 
+  const CAMPERS_PAGE_SIZE = 1000;
+
   const fetchChildren = async () => {
     setLoading(true);
     
@@ -81,27 +83,47 @@ export default function Roster() {
     }
     
     const divisionFilter = getDivisionFilter();
-    
-    // Build query - Supabase default limit is 1000, use single optimized query
-    let query = supabase
-      .from("children")
-      .select(`
-        id, name, grade, status, session, season, division_id, person_id, group_name,
-        division:division_id(id, name, gender, sort_order),
-        leader:leader_id(id, name)
-      `)
-      .eq('company_id', currentCompany.id)
-      .eq('season', currentSeason);
-    
-    // Apply division filter if user has limited access
-    if (divisionFilter !== null && divisionFilter.length > 0) {
-      query = query.in('division_id', divisionFilter);
-    }
-    
-    const { data, error } = await query.neq('status', 'inactive').order("name");
-    
-    if (!error && data) {
-      setChildren(data);
+    const rows: any[] = [];
+    let from = 0;
+
+    try {
+      for (;;) {
+        const to = from + CAMPERS_PAGE_SIZE - 1;
+        let query = supabase
+          .from("children")
+          .select(`
+            id, name, grade, status, session, season, division_id, person_id, group_name,
+            division:division_id(id, name, gender, sort_order),
+            leader:leader_id(id, name)
+          `)
+          .eq('company_id', currentCompany.id)
+          .eq('season', currentSeason);
+
+        if (divisionFilter !== null && divisionFilter.length > 0) {
+          query = query.in('division_id', divisionFilter);
+        }
+
+        const { data, error } = await query
+          .neq('status', 'inactive')
+          .order("name")
+          .range(from, to);
+
+        if (error) {
+          console.error('Roster fetch error:', error);
+          toast.error('Failed to load campers');
+          break;
+        }
+
+        const batch = data || [];
+        rows.push(...batch);
+        if (batch.length < CAMPERS_PAGE_SIZE) break;
+        from += CAMPERS_PAGE_SIZE;
+      }
+
+      setChildren(rows);
+    } catch (err) {
+      console.error('Roster fetch error:', err);
+      toast.error('Failed to load campers');
     }
     
     setLoading(false);

@@ -94,7 +94,7 @@ export default function CampDataImporter() {
       }
 
       const syncLabel = syncType === 'full' ? 'full' : `${syncType}-only`;
-      toast.info(`Starting ${syncLabel} CampMinder sync for ${companyName}...`);
+      toast.info(`${syncLabel} CampMinder sync queued for ${companyName}. Check sync_jobs in Supabase for progress.`);
 
       const response = await supabase.functions.invoke('sync-campminder', {
         body: {
@@ -128,7 +128,7 @@ export default function CampDataImporter() {
 
       // Refresh companies to get updated last_sync timestamp
       await fetchCompanies();
-      toast.success(`${syncLabel} CampMinder sync completed for ${companyName}!`);
+      toast.success(`${syncLabel} CampMinder sync job started for ${companyName}.`);
     } catch (error: any) {
       console.error("Sync error:", error);
       toast.error(`Sync failed for ${companyName}: ${error.message}`);
@@ -317,6 +317,22 @@ export default function CampDataImporter() {
                           Not Configured
                         </Badge>
                       )}
+                      <Button
+                        onClick={() => handleCampMinderSync(company.id, company.name, 'campers')}
+                        disabled={!company.campminder_sync_enabled || syncingCompanyId !== null}
+                        size="sm"
+                        variant="outline"
+                        title="Sync only enrolled campers (use for large rosters like Tyler Hill)"
+                      >
+                        {syncingCompanyId === company.id ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                            Syncing...
+                          </>
+                        ) : (
+                          "Campers Only"
+                        )}
+                      </Button>
                       <Button
                         onClick={() => handleCampMinderSync(company.id, company.name, 'staff')}
                         disabled={!company.campminder_sync_enabled || syncingCompanyId !== null}

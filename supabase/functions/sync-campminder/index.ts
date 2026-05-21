@@ -14,7 +14,25 @@ const CM_FINANCIALS_URL = 'https://api.campminder.com/financials/transactionrepo
 // Rate limiting: 300ms between calls (~3.3 calls/sec = ~200/min)
 // CampMinder enforces strict rate limits - 429 errors occur at higher rates
 const RATE_LIMIT_DELAY_MS = 300;
+/** Parallel in-flight person fetches — keeps total runtime under Edge Function limits for ~600 campers. */
+const PERSON_FETCH_CONCURRENCY = 6;
 let lastApiCallTime = 0;
+let rateLimitTail: Promise<void> = Promise.resolve();
+
+/** Serialize API call starts while allowing multiple in-flight responses. */
+async function acquireRateLimitSlot(): Promise<void> {
+  const prev = rateLimitTail;
+  let release!: () => void;
+  rateLimitTail = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await prev;
+  const now = Date.now();
+  const waitTime = Math.max(0, RATE_LIMIT_DELAY_MS - (now - lastApiCallTime));
+  if (waitTime > 0) await delay(waitTime);
+  lastApiCallTime = Date.now();
+  release();
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -334,10 +352,10 @@ async function fetchPersonById(
   subscriptionKey: string,
   clientId: string
 ): Promise<any | null> {
+  await acquireRateLimitSlot();
   try {
     const url = `${CM_PERSONS_URL}/${personId}?clientid=${clientId}&includecamperdetails=true&includecontactdetails=true&includerelatives=true&includestaffdetails=true`;
-    console.log(`[Fetch Person] Using clientId=${clientId} for person ${personId}`);
-    const response = await rateLimitedFetch(url, {
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -372,6 +390,64 @@ async function fetchPersonById(
   }
 }
 
+/** Fetch many person records with limited concurrency (respects acquireRateLimitSlot). */
+async function fetchPersonsInParallel(
+  personIds: string[],
+  personMap: Map<string, any>,
+  token: string,
+  subscriptionKey: string,
+  clientId: string,
+  options?: {
+    label?: string;
+    requireName?: boolean;
+    onProgress?: (done: number, total: number, ok: number, fail: number) => Promise<void>;
+  },
+): Promise<{ fetched: number; failed: number }> {
+  if (personIds.length === 0) return { fetched: 0, failed: 0 };
+
+  const label = options?.label ?? 'Person';
+  const requireName = options?.requireName ?? false;
+  let nextIndex = 0;
+  let done = 0;
+  let fetched = 0;
+  let failed = 0;
+
+  console.log(`\n[${label}] Fetching ${personIds.length} persons (${PERSON_FETCH_CONCURRENCY} concurrent)...`);
+
+  async function worker() {
+    while (true) {
+      const i = nextIndex++;
+      if (i >= personIds.length) break;
+
+      const personId = personIds[i];
+      const person = await fetchPersonById(personId, token, subscriptionKey, clientId);
+      const ok = !!person && (!requireName || !!person.Name);
+
+      if (ok) {
+        personMap.set(personId, person);
+        fetched++;
+        if (fetched <= 5) {
+          const name = `${person.Name?.First || ''} ${person.Name?.Last || ''}`.trim();
+          console.log(`[${label}] Fetched ${personId}: ${name || personId}`);
+        }
+      } else {
+        failed++;
+      }
+
+      done++;
+      if (options?.onProgress && (done % 25 === 0 || done === personIds.length)) {
+        await options.onProgress(done, personIds.length, fetched, failed);
+      }
+    }
+  }
+
+  const workers = Math.min(PERSON_FETCH_CONCURRENCY, personIds.length);
+  await Promise.all(Array.from({ length: workers }, () => worker()));
+
+  console.log(`[${label}] Completed: ${fetched} fetched, ${failed} failed out of ${personIds.length}`);
+  return { fetched, failed };
+}
+
 // Fetch missing persons in batches (for staff/campers not in main persons API response)
 async function fetchMissingPersons(
   missingIds: string[],
@@ -381,35 +457,13 @@ async function fetchMissingPersons(
   clientId: string,
   entityType: string
 ): Promise<{ fetched: number; failed: number }> {
-  let fetched = 0;
-  let failed = 0;
-  
-  console.log(`\n[${entityType}] Fetching ${missingIds.length} missing persons individually...`);
-  
-  for (let i = 0; i < missingIds.length; i++) {
-    const personId = missingIds[i];
-    const person = await fetchPersonById(personId, token, subscriptionKey, clientId);
-    
-    if (person && person.Name) {
-      personMap.set(personId, person);
-      fetched++;
-      
-      if (fetched <= 5) {
-        const name = `${person.Name?.First || ''} ${person.Name?.Last || ''}`.trim();
-        console.log(`[${entityType}] Fetched missing person ${personId}: ${name}`);
-      }
-    } else {
-      failed++;
-    }
-    
-    // Progress update every 25 persons
-    if ((i + 1) % 25 === 0) {
-      console.log(`[${entityType}] Fetch progress: ${i + 1}/${missingIds.length} (${fetched} success, ${failed} failed)`);
-    }
-  }
-  
-  console.log(`[${entityType}] Completed fetching missing persons: ${fetched} fetched, ${failed} failed`);
-  return { fetched, failed };
+  return fetchPersonsInParallel(missingIds, personMap, token, subscriptionKey, clientId, {
+    label: entityType,
+    requireName: true,
+    onProgress: async (done, total, ok, fail) => {
+      console.log(`[${entityType}] Fetch progress: ${done}/${total} (${ok} success, ${fail} failed)`);
+    },
+  });
 }
 
 async function updateSyncJob(
@@ -1492,51 +1546,55 @@ async function performFullSync(
 
       let fetchedCount = 0;
       let failedCount = 0;
-      
-      console.log(`\n[Camper Fetch] Starting to fetch ${enrolledPersonIdArray.length} campers individually...`);
-      
-      for (let i = 0; i < enrolledPersonIdArray.length; i++) {
-        const personId = enrolledPersonIdArray[i];
-        const person = await fetchPersonById(personId, token, subscriptionKey, clientId);
-        
-        if (person) {
-          personMap.set(personId, person);
-          fetchedCount++;
-          
-          if (fetchedCount === 1 && person.Relatives && person.Relatives.length > 0) {
-            console.log('[DEBUG] Sample camper with Relatives:', JSON.stringify({
-              ID: person.ID,
-              Name: person.Name,
-              Relatives: person.Relatives,
-              ContactDetails: person.ContactDetails
-            }, null, 2));
-          }
-        } else {
-          failedCount++;
-        }
-        
-        if ((i + 1) % 100 === 0 || i === enrolledPersonIdArray.length - 1) {
-          console.log(`[Camper Fetch] Progress: ${i + 1}/${enrolledPersonIdArray.length} (${fetchedCount} success, ${failedCount} failed)`);
-        }
 
-        // Heartbeat so stale-job cleanup uses updated_at (sync can exceed 2h on large rosters).
-        if ((i + 1) % 50 === 0 || i === enrolledPersonIdArray.length - 1) {
-          await updateSyncJob(supabase, jobId, {
-            progress: {
-              step: 'Fetching camper person data',
-              camper_fetch_index: i + 1,
-              camper_fetch_total: enrolledPersonIdArray.length,
-              camper_fetch_ok: fetchedCount,
-              camper_fetch_failed: failedCount,
-              divisions: divisions.length,
-              season,
-              syncType,
-            },
-          });
-        }
+      const camperFetch = await fetchPersonsInParallel(
+        enrolledPersonIdArray,
+        personMap,
+        token,
+        subscriptionKey,
+        clientId,
+        {
+          label: 'Camper Fetch',
+          requireName: false,
+          onProgress: async (done, total, ok, fail) => {
+            fetchedCount = ok;
+            failedCount = fail;
+            if (done % 100 === 0 || done === total) {
+              console.log(`[Camper Fetch] Progress: ${done}/${total} (${ok} success, ${fail} failed)`);
+            }
+            if (done % 50 === 0 || done === total) {
+              await updateSyncJob(supabase, jobId, {
+                progress: {
+                  step: 'Fetching camper person data',
+                  camper_fetch_index: done,
+                  camper_fetch_total: total,
+                  camper_fetch_ok: ok,
+                  camper_fetch_failed: fail,
+                  enrolledCampers: total,
+                  divisions: divisions.length,
+                  season,
+                  syncType,
+                },
+              });
+            }
+          },
+        },
+      );
+      fetchedCount = camperFetch.fetched;
+      failedCount = camperFetch.failed;
+
+      const firstWithRelatives = enrolledPersonIdArray
+        .map((id) => personMap.get(id))
+        .find((p) => p?.Relatives?.length);
+      if (firstWithRelatives) {
+        console.log('[DEBUG] Sample camper with Relatives:', JSON.stringify({
+          ID: firstWithRelatives.ID,
+          Name: firstWithRelatives.Name,
+          Relatives: firstWithRelatives.Relatives,
+          ContactDetails: firstWithRelatives.ContactDetails,
+        }, null, 2));
       }
-      
-      console.log(`\n[Camper Fetch] Completed: ${fetchedCount} fetched, ${failedCount} failed out of ${enrolledPersonIdArray.length}`);
+
       console.log(`Built person map with ${personMap.size} camper entries`);
 
       // Identify missing campers
@@ -2106,35 +2164,18 @@ async function performFullSync(
         progress: { step: `Fetching ${toFetch.length} missing staff details`, staff: staffPersonIds.size, season },
       });
 
-      let fetchedCount = 0;
-      let failedCount = 0;
-      
-      for (let i = 0; i < toFetch.length; i++) {
-        const personId = toFetch[i];
-        const person = await fetchPersonById(personId, token, subscriptionKey, clientId);
-        
-        if (person && person.Name) {
-          personMap.set(personId, person);
-          fetchedCount++;
-          
-          if (fetchedCount <= 5) {
-            const name = `${person.Name?.First || ''} ${person.Name?.Last || ''}`.trim();
-            console.log(`[Staff Fetch] Got ${personId}: ${name}`);
+      await fetchPersonsInParallel(toFetch, personMap, token, subscriptionKey, clientId, {
+        label: 'Staff Fetch',
+        requireName: true,
+        onProgress: async (done, total, ok, fail) => {
+          if (done % 25 === 0 || done === total) {
+            console.log(`[Staff Fetch] Progress: ${done}/${total} (${ok} success, ${fail} failed)`);
+            await updateSyncJob(supabase, jobId, {
+              progress: { step: `Fetching staff details: ${done}/${total}`, staff: staffPersonIds.size, season },
+            });
           }
-        } else {
-          failedCount++;
-        }
-        
-        // Progress update every 25 persons
-        if ((i + 1) % 25 === 0) {
-          console.log(`[Staff Fetch] Progress: ${i + 1}/${toFetch.length} (${fetchedCount} success, ${failedCount} failed)`);
-          await updateSyncJob(supabase, jobId, {
-            progress: { step: `Fetching staff details: ${i + 1}/${toFetch.length}`, staff: staffPersonIds.size, season },
-          });
-        }
-      }
-      
-      console.log(`[Staff Fetch] Completed: ${fetchedCount} fetched, ${failedCount} failed`);
+        },
+      });
     } else {
       console.log(`[Staff] All ${staffPersonIds.size} staff have name data available - no individual fetches needed`);
     }
