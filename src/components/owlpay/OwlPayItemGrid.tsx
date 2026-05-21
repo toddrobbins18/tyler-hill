@@ -18,6 +18,9 @@ interface OwlPayItemGridProps {
   items: OwlPayItem[];
   cart: OwlPayCartItem[];
   onAddToCart: (item: OwlPayItem) => void;
+  /** When false, item buttons are disabled until a camper/staff is selected. */
+  canAdd?: boolean;
+  isLoading?: boolean;
 }
 
 const getCategoryIcon = (category: string) => {
@@ -38,7 +41,13 @@ const getCategoryGradient = (category: string) => {
   }
 };
 
-const OwlPayItemGrid = ({ items, cart, onAddToCart }: OwlPayItemGridProps) => {
+const OwlPayItemGrid = ({
+  items,
+  cart,
+  onAddToCart,
+  canAdd = true,
+  isLoading = false,
+}: OwlPayItemGridProps) => {
   const getItemQuantity = (itemId: string) => {
     return cart.find((i) => i.id === itemId)?.quantity || 0;
   };
@@ -46,6 +55,16 @@ const OwlPayItemGrid = ({ items, cart, onAddToCart }: OwlPayItemGridProps) => {
   return (
     <div className="space-y-4">
       <h2 className="text-2xl font-bold">🍦 Select Items</h2>
+      {!canAdd && (
+        <p className="text-sm text-muted-foreground">Select a camper or staff member to add items to the cart.</p>
+      )}
+      {isLoading ? (
+        <p className="text-muted-foreground text-center py-8">Loading items…</p>
+      ) : items.length === 0 ? (
+        <p className="text-muted-foreground text-center py-8">
+          No active canteen items yet. Add items on the Items tab.
+        </p>
+      ) : (
       <div className="grid grid-cols-2 gap-4">
         {items.map((item) => {
           const quantity = getItemQuantity(item.id);
@@ -59,6 +78,7 @@ const OwlPayItemGrid = ({ items, cart, onAddToCart }: OwlPayItemGridProps) => {
               <Button
                 variant="ghost"
                 className="w-full h-full p-5 flex flex-col items-center gap-3 hover:bg-transparent"
+                disabled={!canAdd}
                 onClick={() => onAddToCart(item)}
               >
                 <div className={`${gradientClass} w-full h-20 rounded-lg flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform duration-300`}>
@@ -66,7 +86,7 @@ const OwlPayItemGrid = ({ items, cart, onAddToCart }: OwlPayItemGridProps) => {
                 </div>
                 <div className="text-sm font-semibold text-center">{item.name}</div>
                 <div className="text-xl font-bold text-primary">
-                  ${item.price.toFixed(2)}
+                  ${Number(item.price).toFixed(2)}
                 </div>
                 {quantity > 0 && (
                   <Badge className="absolute top-2 right-2 bg-primary text-primary-foreground shadow-lg px-3 py-1 text-sm font-bold">
@@ -78,6 +98,7 @@ const OwlPayItemGrid = ({ items, cart, onAddToCart }: OwlPayItemGridProps) => {
           );
         })}
       </div>
+      )}
     </div>
   );
 };

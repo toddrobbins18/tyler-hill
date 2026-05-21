@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,52 +12,21 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Package } from "lucide-react";
-
-interface Item {
-  id: string;
-  name: string;
-  price: number;
-  category: string;
-  active: boolean;
-}
+import { useQueryClient } from "@tanstack/react-query";
+import { useOwlPayItems, type OwlPayItemRow } from "@/hooks/useOwlPayItems";
 
 const OwlPayItemManagement = () => {
-  const [items, setItems] = useState<Item[]>([]);
-  const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<Item | null>(null);
+  const [editingItem, setEditingItem] = useState<OwlPayItemRow | null>(null);
   const [formData, setFormData] = useState({ name: "", price: "", category: "snacks" });
   const { currentCompany } = useCompany();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: items = [], isLoading: loading } = useOwlPayItems(currentCompany?.id, false);
 
-  useEffect(() => { fetchItems(); }, [currentCompany]);
-
-  useEffect(() => {
+  const invalidateItems = () => {
     if (!currentCompany?.id) return;
-    const channel = supabase
-      .channel(`owlpay-web-items-${currentCompany.id}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "owl_pay_items", filter: `company_id=eq.${currentCompany.id}` },
-        () => fetchItems()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [currentCompany?.id]);
-
-  const fetchItems = async () => {
-    if (!currentCompany?.id) return;
-    const { data, error } = await supabase
-      .from("owl_pay_items" as any)
-      .select("*")
-      .eq("company_id", currentCompany.id)
-      .order("name");
-    if (error) { toast({ title: "Error loading items", variant: "destructive" }); return; }
-    setItems((data as any) || []);
-    setLoading(false);
+    queryClient.invalidateQueries({ queryKey: ["owlpay-items", currentCompany.id] });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -72,11 +41,11 @@ const OwlPayItemManagement = () => {
     };
 
     if (editingItem) {
-      const { error } = await supabase.from("owl_pay_items" as any).update(payload).eq("id", editingItem.id);
+      const { error } = await supabase.from("owl_pay_items").update(payload).eq("id", editingItem.id);
       if (error) { toast({ title: "Error updating item", variant: "destructive" }); return; }
       toast({ title: "Item updated" });
     } else {
-      const { error } = await supabase.from("owl_pay_items" as any).insert(payload);
+      const { error } = await supabase.from("owl_pay_items").insert(payload);
       if (error) { toast({ title: "Error adding item", variant: "destructive" }); return; }
       toast({ title: "Item added" });
     }
@@ -84,23 +53,23 @@ const OwlPayItemManagement = () => {
     setFormData({ name: "", price: "", category: "snacks" });
     setEditingItem(null);
     setDialogOpen(false);
-    fetchItems();
+    invalidateItems();
   };
 
-  const toggleActive = async (item: Item) => {
-    const { error } = await supabase.from("owl_pay_items" as any).update({ active: !item.active }).eq("id", item.id);
+  const toggleActive = async (item: OwlPayItemRow) => {
+    const { error } = await supabase.from("owl_pay_items").update({ active: !item.active }).eq("id", item.id);
     if (error) { toast({ title: "Error", variant: "destructive" }); return; }
-    fetchItems();
+    invalidateItems();
   };
 
   const handleDelete = async (id: string) => {
-    const { error } = await supabase.from("owl_pay_items" as any).delete().eq("id", id);
+    const { error } = await supabase.from("owl_pay_items").delete().eq("id", id);
     if (error) { toast({ title: "Error deleting item", variant: "destructive" }); return; }
     toast({ title: "Item deleted" });
-    fetchItems();
+    invalidateItems();
   };
 
-  const handleEdit = (item: Item) => {
+  const handleEdit = (item: OwlPayItemRow) => {
     setEditingItem(item);
     setFormData({ name: item.name, price: item.price.toString(), category: item.category });
     setDialogOpen(true);
@@ -172,7 +141,7 @@ const OwlPayItemManagement = () => {
                 <TableRow key={item.id}>
                   <TableCell className="font-medium">{item.name}</TableCell>
                   <TableCell><Badge variant="outline" className="capitalize">{item.category}</Badge></TableCell>
-                  <TableCell className="font-bold text-primary">${item.price.toFixed(2)}</TableCell>
+                  <TableCell className="font-bold text-primary">${Number(item.price).toFixed(2)}</TableCell>
                   <TableCell>
                     <Switch checked={item.active} onCheckedChange={() => toggleActive(item)} />
                   </TableCell>

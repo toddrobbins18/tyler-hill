@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
-import { Search, ShoppingCart, Package, BarChart3, DollarSign, Scan, CheckCircle, XCircle, Users, Settings } from "lucide-react";
+import { Search, ShoppingCart, Package, BarChart3, DollarSign, Scan, CheckCircle, XCircle, Settings, Briefcase } from "lucide-react";
 import OwlPayCamperCard, { type OwlPayCamper } from "@/components/owlpay/OwlPayCamperCard";
 import OwlPayItemGrid, { type OwlPayItem, type OwlPayCartItem } from "@/components/owlpay/OwlPayItemGrid";
 import OwlPayTransactionSummary from "@/components/owlpay/OwlPayTransactionSummary";
@@ -16,6 +16,7 @@ import OwlPayBalanceManagement from "@/components/owlpay/OwlPayBalanceManagement
 import OwlPayEmailSettings from "@/components/owlpay/OwlPayEmailSettings";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { useOwlPayItems } from "@/hooks/useOwlPayItems";
 
 interface StaffMember {
   id: string;
@@ -29,7 +30,6 @@ function OwlPayPage() {
   const [selectedCamper, setSelectedCamper] = useState<OwlPayCamper | null>(null);
   const [campers, setCampers] = useState<OwlPayCamper[]>([]);
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
-  const [items, setItems] = useState<OwlPayItem[]>([]);
   const [cart, setCart] = useState<OwlPayCartItem[]>([]);
   const [isFirstScanToday, setIsFirstScanToday] = useState(false);
   const [isStaffSelected, setIsStaffSelected] = useState(false);
@@ -43,11 +43,11 @@ function OwlPayPage() {
   const { currentCompany } = useCompany();
   const { selectedSeason } = useSeason();
   const queryClient = useQueryClient();
+  const { data: posItems = [], isLoading: itemsLoading } = useOwlPayItems(currentCompany?.id, true);
 
   useEffect(() => {
     loadCampers();
     loadStaff();
-    loadItems();
   }, [currentCompany, selectedSeason]);
 
   useEffect(() => {
@@ -74,7 +74,7 @@ function OwlPayPage() {
         "postgres_changes",
         { event: "*", schema: "public", table: "owl_pay_items", filter: `company_id=eq.${currentCompany.id}` },
         () => {
-          loadItems();
+          queryClient.invalidateQueries({ queryKey: ["owlpay-items", currentCompany.id] });
           queryClient.invalidateQueries({ queryKey: ["owl-pay-reports"] });
         }
       )
@@ -119,16 +119,19 @@ function OwlPayPage() {
     setStaffMembers((data as any) || []);
   };
 
-  const loadItems = async () => {
-    if (!currentCompany?.id) return;
-    const { data, error } = await supabase
-      .from("owl_pay_items" as any)
-      .select("*")
-      .eq("company_id", currentCompany.id)
-      .eq("active", true)
-      .order("name");
-    if (error) { console.error(error); return; }
-    setItems((data as any) || []);
+  const handleStaffSelect = (staff: StaffMember) => {
+    const staffAsCamper: OwlPayCamper = {
+      id: staff.id,
+      name: staff.name,
+      rfid: staff.rfid,
+      photo_url: staff.photo_url,
+      owl_pay_balance: 0,
+      person_id: staff.id,
+    };
+    setSelectedCamper(staffAsCamper);
+    setCart([]);
+    setIsFirstScanToday(false);
+    setIsStaffSelected(true);
   };
 
   const checkFirstScanToday = async (camperId: string) => {
@@ -235,6 +238,11 @@ function OwlPayPage() {
     (c.rfid && c.rfid.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
+  const filteredStaff = staffMembers.filter(s =>
+    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (s.rfid && s.rfid.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
   const addToCart = (item: OwlPayItem) => {
     const existing = cart.find(i => i.id === item.id);
     if (existing) {
@@ -280,30 +288,55 @@ function OwlPayPage() {
                   {scanStatus === "error" && <XCircle className="h-4 w-4 text-destructive" />}
                 </div>
               </div>
-              <div className="space-y-2 max-h-[calc(100vh-20rem)] overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-[calc(100vh-28rem)] overflow-y-auto pr-1">
                 {filteredCampers.map((camper) => (
                   <OwlPayCamperCard
                     key={camper.id}
                     camper={camper}
-                    isSelected={selectedCamper?.id === camper.id}
+                    isSelected={selectedCamper?.id === camper.id && !isStaffSelected}
                     onSelect={handleCamperSelect}
                   />
                 ))}
               </div>
+
+              <div className="flex items-center gap-2 pt-2 text-sm font-semibold text-muted-foreground">
+                <Briefcase className="h-4 w-4" />
+                Staff (Running Tab)
+              </div>
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {filteredStaff.map((staff) => (
+                  <button
+                    key={staff.id}
+                    type="button"
+                    onClick={() => handleStaffSelect(staff)}
+                    className={`w-full flex items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
+                      selectedCamper?.id === staff.id && isStaffSelected
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:bg-muted/50"
+                    }`}
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                      <Briefcase className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium truncate">{staff.name}</div>
+                      <div className="text-xs text-muted-foreground">{staff.rfid || "No RFID"}</div>
+                    </div>
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">Tab</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Middle: Items */}
+            {/* Middle: Items — always visible so canteen staff can see the menu */}
             <div>
-              {selectedCamper ? (
-                <OwlPayItemGrid items={items} cart={cart} onAddToCart={addToCart} />
-              ) : (
-                <div className="flex items-center justify-center h-full text-center p-8">
-                  <div className="text-muted-foreground">
-                    <Search className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p>Select a camper to begin</p>
-                  </div>
-                </div>
-              )}
+              <OwlPayItemGrid
+                items={posItems}
+                cart={cart}
+                onAddToCart={addToCart}
+                canAdd={!!selectedCamper}
+                isLoading={itemsLoading}
+              />
             </div>
 
             {/* Right: Transaction */}
