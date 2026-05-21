@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
-import { Printer } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Printer, Cake, UtensilsCrossed, Trophy, Sparkles, Quote } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useSeasonContext } from '@/contexts/SeasonContext';
 import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -18,6 +19,7 @@ interface MealData {
   id: string;
   meal_type: string;
   items: string;
+  description?: string;
   allergens?: string;
 }
 
@@ -40,11 +42,12 @@ interface SportsEvent {
   description?: string;
 }
 
-interface EveningActivity {
+interface SpecialEvent {
   id: string;
   title: string;
   time_slot: string;
   location?: string;
+  description?: string;
 }
 
 interface DailyContent {
@@ -55,13 +58,43 @@ interface DailyContent {
   phone_calls_info?: string;
 }
 
+const MEAL_ORDER = ['breakfast', 'lunch', 'snack', 'dinner'] as const;
+
+function SectionCard({
+  title,
+  icon,
+  children,
+  className = '',
+}: {
+  title: string;
+  icon?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <Card className={`overflow-hidden shadow-sm print:shadow-none ${className}`}>
+      <CardHeader className="pb-2 pt-4 px-4">
+        <CardTitle className="font-serif text-sm uppercase tracking-wider flex items-center gap-2 border-b border-border pb-2">
+          {icon}
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="px-4 pb-4 text-sm leading-relaxed">{children}</CardContent>
+    </Card>
+  );
+}
+
+function EmptyLine({ children }: { children: ReactNode }) {
+  return <p className="text-muted-foreground italic">{children}</p>;
+}
+
 export default function DailyWolfPrintable() {
   const [birthdayChildren, setBirthdayChildren] = useState<BirthdayRow[]>([]);
   const [birthdayStaff, setBirthdayStaff] = useState<BirthdayRow[]>([]);
   const [meals, setMeals] = useState<MealData[]>([]);
   const [divisionGames, setDivisionGames] = useState<DivisionGame[]>([]);
   const [sportsEvents, setSportsEvents] = useState<SportsEvent[]>([]);
-  const [eveningActivities, setEveningActivities] = useState<EveningActivity[]>([]);
+  const [specialEvents, setSpecialEvents] = useState<SpecialEvent[]>([]);
   const [dailyContent, setDailyContent] = useState<DailyContent>({});
   const [loading, setLoading] = useState(true);
   const { currentCompany } = useCompany();
@@ -77,7 +110,7 @@ export default function DailyWolfPrintable() {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'children' }, fetchAllData)
         .subscribe(),
       supabase.channel('meals-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'special_meals' }, fetchAllData)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, fetchAllData)
         .subscribe(),
       supabase.channel('sports-changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'sports_calendar' }, fetchAllData)
@@ -103,7 +136,7 @@ export default function DailyWolfPrintable() {
   const fetchAllData = async () => {
     try {
       setLoading(true);
-      const today = new Date().toISOString().split('T')[0];
+      const today = format(new Date(), 'yyyy-MM-dd');
       const todayDate = new Date();
       const divisionFilter = getDivisionFilter();
 
@@ -141,14 +174,17 @@ export default function DailyWolfPrintable() {
         staffData?.filter((staff) => isBirthdayTodayCalendar(staff.date_of_birth, m, d)) || [];
       setBirthdayStaff(staffToday);
 
-      // Fetch meals
-      const { data: mealsData } = await supabase
-        .from('special_meals')
+      // Menu: match Menu page — include rows for this season or season=null (legacy inserts omit season)
+      let menuQuery = supabase
+        .from('menu_items')
         .select('*')
         .eq('company_id', currentCompany.id)
         .eq('date', today)
-        .eq('season', currentSeason)
         .order('meal_type');
+      if (currentSeason) {
+        menuQuery = menuQuery.or(`season.eq.${currentSeason},season.is.null`);
+      }
+      const { data: mealsData } = await menuQuery;
       setMeals(mealsData || []);
 
       // Fetch division games with division info
@@ -183,16 +219,22 @@ export default function DailyWolfPrintable() {
         .order('time');
       setSportsEvents(allSportsData || []);
 
-      // Fetch evening activities
+      // Special events: by date + company (Dashboard pattern); prefer current season, fall back to all for today
       const { data: activitiesData } = await supabase
         .from('special_events_activities')
-        .select('id, title, time_slot, location')
+        .select('id, title, time_slot, location, description, season')
         .eq('company_id', currentCompany.id)
         .eq('event_date', today)
-        .eq('season', currentSeason)
-        .in('time_slot', ['Evening (5-9 PM)', 'Night (9 PM+)'])
         .order('time_slot');
-      setEveningActivities(activitiesData || []);
+      const allTodayEvents = activitiesData || [];
+      if (currentSeason) {
+        const seasonMatched = allTodayEvents.filter(
+          (e) => !e.season || e.season === currentSeason,
+        );
+        setSpecialEvents(seasonMatched.length > 0 ? seasonMatched : allTodayEvents);
+      } else {
+        setSpecialEvents(allTodayEvents);
+      }
 
       // Fetch daily wolf content
       const { data: contentData } = await supabase
@@ -216,171 +258,31 @@ export default function DailyWolfPrintable() {
   };
 
   const today = format(new Date(), 'EEEE, MMMM d, yyyy');
+  const birthdayNames = [...birthdayChildren, ...birthdayStaff].map((p) => p.name);
+  const hasBirthdays = birthdayNames.length > 0;
+
+  const mealByType = (type: string) =>
+    meals.find((m) => (m.meal_type || '').toLowerCase() === type);
 
   return (
-    <div className="container mx-auto p-4">
+    <div className="container mx-auto p-4 max-w-5xl">
       <style>{`
         @media print {
-          body * {
-            visibility: hidden;
-          }
-          .print-content, .print-content * {
-            visibility: visible;
-          }
+          body * { visibility: hidden; }
+          .print-content, .print-content * { visibility: visible; }
           .print-content {
             position: absolute;
             left: 0;
             top: 0;
             width: 100%;
             padding: 12px;
+            box-shadow: none !important;
           }
-          .no-print {
-            display: none !important;
-          }
-          .newspaper-header {
-            border-bottom: 3px double #000;
-            padding-bottom: 8px;
-            margin-bottom: 10px;
-          }
-          .newspaper-title {
-            font-family: Georgia, serif;
-            font-size: 36px;
-            font-weight: bold;
-            text-align: center;
-            letter-spacing: 2px;
-            margin-bottom: 4px;
-          }
-          .newspaper-date {
-            text-align: center;
-            font-size: 11px;
-            font-weight: bold;
-            margin-top: 4px;
-          }
-          .section-title {
-            font-family: Georgia, serif;
-            font-size: 14px;
-            font-weight: bold;
-            text-transform: uppercase;
-            border-bottom: 1px solid #000;
-            margin-bottom: 6px;
-            margin-top: 8px;
-            padding-bottom: 2px;
-          }
-          .birthday-section {
-            margin-bottom: 8px;
-            font-size: 10px;
-          }
-          .birthday-list {
-            font-weight: bold;
-            font-size: 11px;
-            margin-top: 4px;
-          }
-          .division-games-section {
-            margin-bottom: 8px;
-          }
-          .game-item {
-            display: flex;
-            padding: 4px 0;
-            border-bottom: 1px solid #ddd;
-            font-size: 10px;
-          }
-          .division-name {
-            font-weight: bold;
-            min-width: 120px;
-          }
-          .game-details {
-            flex: 1;
-          }
-          .menu-section {
-            page-break-inside: avoid;
-            margin-bottom: 8px;
-          }
-          .meal-item {
-            margin-bottom: 8px;
-            font-size: 10px;
-          }
-          .meal-item strong {
-            font-size: 12px;
-            display: block;
-            margin-bottom: 2px;
-          }
-          .allergen-info {
-            font-style: italic;
-            color: #666;
-            margin-top: 2px;
-            font-size: 9px;
-          }
-          .athletics-section {
-            margin-bottom: 8px;
-          }
-          .sport-event {
-            display: flex;
-            gap: 6px;
-            padding: 4px 0;
-            border-bottom: 1px dotted #ccc;
-            font-size: 10px;
-          }
-          .event-time {
-            font-weight: bold;
-            min-width: 70px;
-          }
-          .quote-section {
-            font-style: italic;
-            text-align: center;
-            padding: 12px;
-            margin: 8px 0;
-            border: 1px solid #000;
-            page-break-inside: avoid;
-          }
-          .quote-text {
-            font-size: 11px;
-            line-height: 1.3;
-          }
-          .evening-section {
-            margin-bottom: 8px;
-          }
-          .evening-item {
-            padding: 4px 0;
-            font-size: 10px;
-          }
-          .notes-section {
-            border: 1px solid #000;
-            padding: 8px;
-            margin-top: 8px;
-            page-break-inside: avoid;
-          }
-          .notes-content {
-            font-size: 10px;
-            line-height: 1.3;
-          }
-          .boxed-section {
-            border: 1px solid #000;
-            padding: 8px;
-            margin-bottom: 8px;
-            background: white;
-          }
-          .od-section, .laundry-section, .phone-calls-section {
-            margin-bottom: 8px;
-            font-size: 10px;
-          }
-          .od-content, .laundry-content, .phone-calls-content {
-            padding: 6px;
-            background: #f9f9f9;
-            border-left: 2px solid #000;
-          }
-          .admin-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-            margin-bottom: 8px;
-          }
-          @page {
-            margin: 0.3in;
-            size: letter;
-          }
+          .no-print { display: none !important; }
+          @page { margin: 0.35in; size: letter; }
         }
       `}</style>
-      
+
       <div className="flex justify-between items-center mb-6 no-print">
         <h1 className="text-3xl font-bold">Daily Wolf Printable</h1>
         <Button onClick={handlePrint} variant="outline">
@@ -389,106 +291,173 @@ export default function DailyWolfPrintable() {
         </Button>
       </div>
 
-      <div className="print-content">
-        {/* Newspaper Header */}
-        <div className="newspaper-header">
-          <div className="newspaper-title">THE DAILY WOLF</div>
-          <div className="newspaper-date">{today}</div>
-        </div>
+      <div className="print-content rounded-xl border border-border bg-card shadow-lg overflow-hidden print:shadow-none print:rounded-none">
+        {/* Masthead */}
+        <header className="text-center border-b-4 border-double border-foreground/80 bg-muted/40 px-6 py-8">
+          <p className="font-serif text-4xl md:text-5xl font-bold tracking-[0.2em] text-foreground">
+            THE DAILY WOLF
+          </p>
+          <p className="mt-2 text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+            Timber Lake West
+          </p>
+          <p className="mt-3 text-base font-medium text-foreground">{today}</p>
+        </header>
 
         {loading ? (
-          <div className="text-center py-8">Loading...</div>
+          <div className="text-center py-16 text-muted-foreground">Loading today&apos;s bulletin…</div>
         ) : (
-          <>
-            {/* Birthday Wishes */}
-            <div className="birthday-section">
-              <div className="section-title">Birthday Wishes</div>
-              {birthdayChildren.length + birthdayStaff.length > 0 ? (
-                <div className="birthday-list">
-                  {[...birthdayChildren, ...birthdayStaff].map((p) => p.name).join(', ')}
-                </div>
+          <div className="p-4 md:p-6 space-y-5">
+            {/* Birthdays */}
+            <div
+              className={`rounded-lg border px-4 py-3 ${
+                hasBirthdays
+                  ? 'border-amber-300/60 bg-amber-50 dark:bg-amber-950/25'
+                  : 'border-border bg-muted/20'
+              }`}
+            >
+              <div className="flex items-center gap-2 font-serif text-sm font-bold uppercase tracking-wide text-foreground mb-1">
+                <Cake className="h-4 w-4 shrink-0" />
+                Birthday Wishes
+              </div>
+              {hasBirthdays ? (
+                <p className="text-base font-semibold text-foreground">
+                  🎉 {birthdayNames.join(', ')}
+                </p>
               ) : (
-                <div>No birthdays today</div>
+                <EmptyLine>No birthdays today</EmptyLine>
               )}
             </div>
 
-            {/* Administrative Info - 3 Column Layout */}
-            <div className="admin-grid">
-              {/* OD */}
-              <div className="od-section">
-                <div className="section-title">OD</div>
-                <div className="od-content">
-                  <p>{dailyContent.officer_of_day || 'TBD'}</p>
-                </div>
-              </div>
-
-              {/* Laundry Schedule */}
-              <div className="laundry-section">
-                <div className="section-title">Laundry</div>
-                <div className="laundry-content">
-                  <p style={{ whiteSpace: 'pre-wrap' }}>{dailyContent.laundry_info || 'TBD'}</p>
-                </div>
-              </div>
-
-              {/* Phone Calls */}
-              <div className="phone-calls-section">
-                <div className="section-title">Phone Calls</div>
-                <div className="phone-calls-content">
-                  <p style={{ whiteSpace: 'pre-wrap' }}>{dailyContent.phone_calls_info || 'TBD'}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Athletics */}
-            <div className="athletics-section">
-              <div className="section-title">Athletics</div>
-              {sportsEvents.length > 0 ? (
-                sportsEvents.map(event => (
-                  <div key={event.id} className="sport-event">
-                    <div className="event-time">{event.time || 'TBD'}</div>
-                    <div className="flex-1">
-                      {event.title}
-                      {event.opponent && ` vs ${event.opponent}`}
-                      {event.location && ` - ${event.location}`}
+            {/* Menu */}
+            <SectionCard title="Menu" icon={<UtensilsCrossed className="h-4 w-4 text-primary" />}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {MEAL_ORDER.map((mealType) => {
+                  const meal = mealByType(mealType);
+                  const label = mealType.charAt(0).toUpperCase() + mealType.slice(1);
+                  return (
+                    <div
+                      key={mealType}
+                      className="rounded-md border border-border bg-background/80 p-3 min-h-[4.5rem]"
+                    >
+                      <p className="text-xs font-bold uppercase tracking-wide text-primary mb-1">
+                        {label}
+                      </p>
+                      <p className="text-sm text-foreground whitespace-pre-wrap">
+                        {(meal?.items || meal?.description)?.trim() || 'TBD'}
+                      </p>
+                      {meal?.allergens && (
+                        <p className="mt-1 text-xs italic text-muted-foreground">
+                          Allergens: {meal.allergens}
+                        </p>
+                      )}
                     </div>
-                  </div>
-                ))
-              ) : (
-                <div>No athletic events scheduled</div>
-              )}
-            </div>
-
-            {/* Quote of the Day */}
-            <div className="quote-section boxed-section">
-              <div className="section-title">Quote of the Day</div>
-              <div className="quote-text">
-                {dailyContent.quote_of_the_day || '"Make today amazing!"'}
+                  );
+                })}
               </div>
+            </SectionCard>
+
+            {/* Super OD / Laundry / Phone */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <SectionCard title="Super OD">
+                <p className="font-medium text-foreground">
+                  {dailyContent.officer_of_day?.trim() || 'TBD'}
+                </p>
+              </SectionCard>
+              <SectionCard title="Laundry">
+                <p className="whitespace-pre-wrap font-medium text-foreground">
+                  {dailyContent.laundry_info?.trim() || 'TBD'}
+                </p>
+              </SectionCard>
+              <SectionCard title="Phone Calls">
+                <p className="whitespace-pre-wrap font-medium text-foreground">
+                  {dailyContent.phone_calls_info?.trim() || 'TBD'}
+                </p>
+              </SectionCard>
             </div>
 
-            {/* Evening Activities */}
-            <div className="evening-section">
-              <div className="section-title">Evening Activities</div>
-              {eveningActivities.length > 0 ? (
-                eveningActivities.map(activity => (
-                  <div key={activity.id} className="evening-item">
-                    {activity.time_slot === 'Evening (5-9 PM)' ? '7:00 PM' : '9:00 PM'} - {activity.title}
-                    {activity.location && ` @ ${activity.location}`}
-                  </div>
-                ))
-              ) : (
-                <div>No evening activities scheduled</div>
-              )}
+            {/* Athletics + Special Events */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <SectionCard
+                title="Athletics"
+                icon={<Trophy className="h-4 w-4 text-primary" />}
+              >
+                {sportsEvents.length > 0 ? (
+                  <ul className="divide-y divide-border">
+                    {sportsEvents.map((event) => (
+                      <li key={event.id} className="flex gap-3 py-2 first:pt-0 last:pb-0">
+                        <span className="shrink-0 w-16 text-xs font-bold text-primary">
+                          {event.time || 'TBD'}
+                        </span>
+                        <span className="text-foreground">
+                          {event.title}
+                          {event.opponent && (
+                            <span className="text-muted-foreground"> vs {event.opponent}</span>
+                          )}
+                          {event.location && (
+                            <span className="block text-xs text-muted-foreground mt-0.5">
+                              {event.location}
+                            </span>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <EmptyLine>No athletic events scheduled</EmptyLine>
+                )}
+              </SectionCard>
+
+              <SectionCard
+                title="Special Events"
+                icon={<Sparkles className="h-4 w-4 text-primary" />}
+              >
+                {specialEvents.length > 0 ? (
+                  <ul className="divide-y divide-border">
+                    {specialEvents.map((event) => (
+                      <li key={event.id} className="py-2 first:pt-0 last:pb-0">
+                        <p className="font-medium text-foreground">
+                          <span className="text-primary text-xs font-bold uppercase mr-2">
+                            {event.time_slot || 'TBD'}
+                          </span>
+                          {event.title}
+                          {event.location && (
+                            <span className="text-muted-foreground"> @ {event.location}</span>
+                          )}
+                        </p>
+                        {event.description && (
+                          <p className="text-xs text-muted-foreground mt-1 italic">
+                            {event.description}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <EmptyLine>No special events scheduled</EmptyLine>
+                )}
+              </SectionCard>
+            </div>
+
+            {/* Quote */}
+            <div className="rounded-lg border-2 border-foreground/20 bg-muted/30 px-6 py-5 text-center">
+              <div className="flex items-center justify-center gap-2 font-serif text-sm font-bold uppercase tracking-wide text-foreground mb-2">
+                <Quote className="h-4 w-4" />
+                Quote of the Day
+              </div>
+              <p className="font-serif text-lg italic text-foreground leading-snug">
+                {dailyContent.quote_of_the_day?.trim()
+                  ? `"${dailyContent.quote_of_the_day.trim()}"`
+                  : '"Make today amazing!"'}
+              </p>
             </div>
 
             {/* Notes */}
-            <div className="notes-section">
-              <div className="section-title">Notes</div>
-              <div className="notes-content">
-                {dailyContent.notes || 'Have a great day at Timber Lake West!'}
-              </div>
-            </div>
-          </>
+            <SectionCard title="Notes">
+              <p className="whitespace-pre-wrap text-foreground">
+                {dailyContent.notes?.trim() || 'Have a great day at Timber Lake West!'}
+              </p>
+            </SectionCard>
+          </div>
         )}
       </div>
     </div>
