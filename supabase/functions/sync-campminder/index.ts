@@ -45,6 +45,25 @@ function normalizeDivisionName(name: string): string {
   return normalized;
 }
 
+/** Normalize CampMinder / form DOB values to YYYY-MM-DD for Postgres `date`. */
+function normalizeDateOfBirthForDb(value: unknown): string | null {
+  if (value == null) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) {
+    return `${iso[1]}-${iso[2].padStart(2, '0')}-${iso[3].padStart(2, '0')}`;
+  }
+
+  const us = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (us) {
+    return `${us[3]}-${us[1].padStart(2, '0')}-${us[2].padStart(2, '0')}`;
+  }
+
+  return null;
+}
+
 // Robust name extraction from any CampMinder record format
 function extractName(record: any): { firstName: string; lastName: string } {
   let firstName = '';
@@ -2216,13 +2235,15 @@ async function performFullSync(
                     positionMap.get(assignment.PositionID) || 
                     'Staff';
 
+        const dobIso = normalizeDateOfBirthForDb(dateOfBirth);
+
         staffData.push({
           person_id: personId,
           name,
           role,
           email: email || null,
           phone: phone || null,
-          date_of_birth: dateOfBirth,
+          date_of_birth: dobIso,
           company_id: companyId,
           season: season,
           status: 'active',

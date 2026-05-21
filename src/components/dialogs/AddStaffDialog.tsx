@@ -95,6 +95,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
         email: formData.get("email") as string || null,
         phone: formData.get("phone") as string || null,
         hire_date: formData.get("hire_date") as string || null,
+        date_of_birth: formData.get("date_of_birth") as string || null,
         season: formData.get("season") as string || null,
         session: session || null,
         leader_id: leaderId || null,
@@ -109,6 +110,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
         ...validatedData,
         company_id: currentCompany?.id,
         season: currentSeason,
+        status: 'active',
       } as any;
 
       const { data: insertedStaff, error } = await supabase
@@ -241,6 +243,10 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
           <div>
             <Label htmlFor="hire_date">Hire Date</Label>
             <Input id="hire_date" name="hire_date" type="date" />
+          </div>
+          <div>
+            <Label htmlFor="date_of_birth">Date of Birth</Label>
+            <Input id="date_of_birth" name="date_of_birth" type="date" />
           </div>
           <div>
             <Label htmlFor="season">Season (Year)</Label>

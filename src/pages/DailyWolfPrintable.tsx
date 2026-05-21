@@ -7,7 +7,7 @@ import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { usePermissions } from '@/hooks/usePermissions';
-import { isBirthdayTodayCalendar } from '@/lib/birthdayCalendar';
+import { isActiveRosterStatus, isBirthdayTodayCalendar } from '@/lib/birthdayCalendar';
 
 interface BirthdayRow {
   id: string;
@@ -143,10 +143,9 @@ export default function DailyWolfPrintable() {
       // Fetch birthday children with division filtering
       let childrenQuery = supabase
         .from('children')
-        .select('id, name, date_of_birth, division_id')
+        .select('id, name, date_of_birth, division_id, status')
         .eq('company_id', currentCompany.id)
         .eq('season', currentSeason)
-        .eq('status', 'active')
         .not('date_of_birth', 'is', null);
       
       // Apply division filter if user has limited access
@@ -154,24 +153,27 @@ export default function DailyWolfPrintable() {
         childrenQuery = childrenQuery.in('division_id', divisionFilter);
       }
 
-      const { data: childrenData } = await childrenQuery;
+      const { data: childrenRaw } = await childrenQuery;
 
       const m = todayDate.getMonth() + 1;
       const d = todayDate.getDate();
       const todaysBirthdays =
-        childrenData?.filter((child) => isBirthdayTodayCalendar(child.date_of_birth, m, d)) || [];
+        (childrenRaw || [])
+          .filter((child) => isActiveRosterStatus(child.status))
+          .filter((child) => isBirthdayTodayCalendar(child.date_of_birth, m, d)) || [];
       setBirthdayChildren(todaysBirthdays);
 
-      const { data: staffData } = await supabase
+      const { data: staffRaw } = await supabase
         .from('staff')
-        .select('id, name, date_of_birth')
+        .select('id, name, date_of_birth, status')
         .eq('company_id', currentCompany.id)
         .eq('season', currentSeason)
-        .eq('status', 'active')
         .not('date_of_birth', 'is', null);
 
       const staffToday =
-        staffData?.filter((staff) => isBirthdayTodayCalendar(staff.date_of_birth, m, d)) || [];
+        (staffRaw || [])
+          .filter((staff) => isActiveRosterStatus(staff.status))
+          .filter((staff) => isBirthdayTodayCalendar(staff.date_of_birth, m, d)) || [];
       setBirthdayStaff(staffToday);
 
       // Menu: match Menu page — include rows for this season or season=null (legacy inserts omit season)
@@ -343,7 +345,7 @@ export default function DailyWolfPrintable() {
                         {label}
                       </p>
                       <p className="text-sm text-foreground whitespace-pre-wrap">
-                        {(meal?.items || meal?.description)?.trim() || 'TBD'}
+                        {(meal?.items || meal?.description)?.trim() || ''}
                       </p>
                       {meal?.allergens && (
                         <p className="mt-1 text-xs italic text-muted-foreground">

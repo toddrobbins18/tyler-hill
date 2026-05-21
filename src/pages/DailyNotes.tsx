@@ -7,7 +7,7 @@ import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { usePermissions } from '@/hooks/usePermissions';
-import { isBirthdayTodayCalendar } from '@/lib/birthdayCalendar';
+import { isActiveRosterStatus, isBirthdayTodayCalendar } from '@/lib/birthdayCalendar';
 
 interface BirthdayRow {
   id: string;
@@ -91,10 +91,9 @@ export default function DailyNotes() {
       // Fetch birthday children with division filtering
       let childrenQuery = supabase
         .from('children')
-        .select('id, name, date_of_birth, division_id')
+        .select('id, name, date_of_birth, division_id, status')
         .eq('company_id', currentCompany.id)
         .eq('season', currentSeason)
-        .eq('status', 'active')
         .not('date_of_birth', 'is', null);
       
       // Apply division filter if user has limited access
@@ -102,27 +101,29 @@ export default function DailyNotes() {
         childrenQuery = childrenQuery.in('division_id', divisionFilter);
       }
 
-      const { data: childrenData } = await childrenQuery;
+      const { data: childrenRaw } = await childrenQuery;
 
-      const todaysBirthdays = childrenData?.filter((child) =>
-        isBirthdayTodayCalendar(child.date_of_birth, todayDate.getMonth() + 1, todayDate.getDate()),
-      ) || [];
+      const todaysBirthdays = (childrenRaw || [])
+        .filter((child) => isActiveRosterStatus(child.status))
+        .filter((child) =>
+          isBirthdayTodayCalendar(child.date_of_birth, todayDate.getMonth() + 1, todayDate.getDate()),
+        );
       setBirthdayChildren(todaysBirthdays);
 
       let staffQuery = supabase
         .from('staff')
-        .select('id, name, date_of_birth')
+        .select('id, name, date_of_birth, status')
         .eq('company_id', currentCompany.id)
         .eq('season', currentSeason)
-        .eq('status', 'active')
         .not('date_of_birth', 'is', null);
 
-      const { data: staffData } = await staffQuery;
+      const { data: staffRaw } = await staffQuery;
 
-      const staffToday =
-        staffData?.filter((staff) =>
+      const staffToday = (staffRaw || [])
+        .filter((staff) => isActiveRosterStatus(staff.status))
+        .filter((staff) =>
           isBirthdayTodayCalendar(staff.date_of_birth, todayDate.getMonth() + 1, todayDate.getDate()),
-        ) || [];
+        );
       setBirthdayStaff(staffToday);
 
       // Fetch menu items

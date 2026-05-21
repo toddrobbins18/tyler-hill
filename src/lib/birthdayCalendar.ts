@@ -34,3 +34,20 @@ export function isBirthdayTodayCalendar(dateValue: unknown, todayMonth: number, 
   const p = parseBirthdayCalendarParts(dateValue);
   return p != null && p.month === todayMonth && p.day === todayDay;
 }
+
+/** Match Staff list / roster: exclude only explicit inactive (null or empty counts as active). */
+export function isActiveRosterStatus(status: unknown): boolean {
+  if (status == null) return true;
+  const s = String(status).trim().toLowerCase();
+  if (!s) return true;
+  return s !== 'inactive';
+}
+
+/** Normalize CampMinder / form values to Postgres `date` (YYYY-MM-DD). */
+export function toBirthdayIsoDate(value: unknown): string | null {
+  const p = parseBirthdayCalendarParts(value);
+  if (!p) return null;
+  const m = String(p.month).padStart(2, '0');
+  const d = String(p.day).padStart(2, '0');
+  return `${p.year}-${m}-${d}`;
+}

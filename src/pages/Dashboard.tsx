@@ -17,7 +17,7 @@ import tylerHillDashboardBg from "@/assets/image001.jpg";
 import timberLakeCampHero from "@/assets/tember-camp.jpeg";
 import { format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
-import { isBirthdayTodayCalendar, parseBirthdayCalendarParts } from "@/lib/birthdayCalendar";
+import { isActiveRosterStatus, isBirthdayTodayCalendar, parseBirthdayCalendarParts } from "@/lib/birthdayCalendar";
 
 interface DailyWolfContent {
   officer_of_day: string;
@@ -405,8 +405,7 @@ export default function Dashboard() {
     // Fetch birthdays for today (matching month and day) with division filtering
     let birthdayQuery = supabase
       .from('children')
-      .select('id, name, date_of_birth, division_id')
-      .eq('status', 'active')
+      .select('id, name, date_of_birth, division_id, status')
       .eq('company_id', currentCompany.id)
       .not('date_of_birth', 'is', null);
 
@@ -418,12 +417,14 @@ export default function Dashboard() {
       birthdayQuery = birthdayQuery.in('division_id', divisionFilter);
     }
     
-    const { data: childrenData } = await birthdayQuery;
+    const { data: childrenRaw } = await birthdayQuery;
+    const childrenData = (childrenRaw || []).filter((child: { status?: string | null }) =>
+      isActiveRosterStatus(child.status),
+    );
 
     let staffBirthdayQuery = supabase
       .from('staff')
-      .select('id, name, date_of_birth')
-      .eq('status', 'active')
+      .select('id, name, date_of_birth, status')
       .eq('company_id', currentCompany.id)
       .not('date_of_birth', 'is', null);
 
@@ -431,7 +432,10 @@ export default function Dashboard() {
       staffBirthdayQuery = staffBirthdayQuery.eq('season', currentSeason);
     }
 
-    const { data: staffBirthdayData } = await staffBirthdayQuery;
+    const { data: staffBirthdayRaw } = await staffBirthdayQuery;
+    const staffBirthdayData = (staffBirthdayRaw || []).filter((staff: { status?: string | null }) =>
+      isActiveRosterStatus(staff.status),
+    );
 
     const todayDate = new Date();
     const todayMonth = todayDate.getMonth() + 1;
