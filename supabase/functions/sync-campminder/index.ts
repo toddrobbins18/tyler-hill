@@ -15,7 +15,7 @@ const CM_FINANCIALS_URL = 'https://api.campminder.com/financials/transactionrepo
 // CampMinder enforces strict rate limits - 429 errors occur at higher rates
 const RATE_LIMIT_DELAY_MS = 300;
 /** Parallel in-flight person fetches — keeps total runtime under Edge Function limits for ~600 campers. */
-const PERSON_FETCH_CONCURRENCY = 6;
+const PERSON_FETCH_CONCURRENCY = 8;
 let lastApiCallTime = 0;
 let rateLimitTail: Promise<void> = Promise.resolve();
 
@@ -2046,51 +2046,62 @@ async function performFullSync(
 
       // =====================================================
       // PHASE 6b: Mark dropped campers as inactive
-      // Campers in DB but NOT in enrolled attendees list
+      // Only inactivate when CampMinder enrolled list no longer includes them.
+      // MUST use enrolledPersonIdArray (CampMinder truth), NOT camperData (sync subset).
+      // Using camperData caused daily count swings when person fetches failed/timeouts occurred.
       // =====================================================
       console.log('\n--- CLEANING UP DROPPED CAMPERS ---');
-      
-      const enrolledPersonIdSet = new Set(camperData.map(c => c.person_id));
-      
-      // Fetch all existing active campers for this company + season
-      const { data: existingCampers, error: fetchCampersError } = await supabase
-        .from('children')
-        .select('id, person_id, name, status')
-        .eq('company_id', companyId)
-        .eq('season', season)
-        .neq('status', 'inactive');
-      
-      if (fetchCampersError) {
-        console.error('[Camper Cleanup] Error fetching existing campers:', fetchCampersError);
+
+      if (enrolledPersonIdArray.length === 0) {
+        console.warn('[Camper Cleanup] Skipping inactivation — zero enrolled attendees from CampMinder (likely API error)');
       } else {
-        const droppedCampers = (existingCampers || []).filter(
-          (c: any) => c.person_id && !enrolledPersonIdSet.has(c.person_id)
-        );
-        
-        console.log(`[Camper Cleanup] Found ${droppedCampers.length} campers to mark inactive (${existingCampers?.length || 0} total in DB, ${enrolledPersonIdSet.size} enrolled)`);
-        
-        if (droppedCampers.length > 0) {
-          // Log first 10 for debugging
-          droppedCampers.slice(0, 10).forEach((c: any) => {
-            console.log(`  - Marking inactive: ${c.name} (person_id: ${c.person_id})`);
-          });
-          
-          const droppedIds = droppedCampers.map((c: any) => c.id);
-          
-          // Update in batches of 100
-          for (let i = 0; i < droppedIds.length; i += 100) {
-            const batch = droppedIds.slice(i, i + 100);
-            const { error: updateError } = await supabase
-              .from('children')
-              .update({ status: 'inactive', updated_at: new Date().toISOString() })
-              .in('id', batch);
-            
-            if (updateError) {
-              console.error(`[Camper Cleanup] Error marking batch inactive:`, updateError);
+        const enrolledPersonIdSet = new Set(enrolledPersonIdArray.map(String));
+
+        if (camperData.length > 0 && camperData.length < enrolledPersonIdArray.length * 0.85) {
+          console.warn(
+            `[Camper Cleanup] Sync built ${camperData.length} camper rows but CampMinder reports ${enrolledPersonIdArray.length} enrolled — inactivating only against enrolled list, not sync subset`,
+          );
+        }
+
+        const { data: existingCampers, error: fetchCampersError } = await supabase
+          .from('children')
+          .select('id, person_id, name, status')
+          .eq('company_id', companyId)
+          .eq('season', season)
+          .neq('status', 'inactive');
+
+        if (fetchCampersError) {
+          console.error('[Camper Cleanup] Error fetching existing campers:', fetchCampersError);
+        } else {
+          const droppedCampers = (existingCampers || []).filter(
+            (c: any) => c.person_id && !enrolledPersonIdSet.has(String(c.person_id)),
+          );
+
+          console.log(
+            `[Camper Cleanup] Found ${droppedCampers.length} campers to mark inactive (${existingCampers?.length || 0} active in DB, ${enrolledPersonIdSet.size} enrolled in CampMinder)`,
+          );
+
+          if (droppedCampers.length > 0) {
+            droppedCampers.slice(0, 10).forEach((c: any) => {
+              console.log(`  - Marking inactive: ${c.name} (person_id: ${c.person_id})`);
+            });
+
+            const droppedIds = droppedCampers.map((c: any) => c.id);
+
+            for (let i = 0; i < droppedIds.length; i += 100) {
+              const batch = droppedIds.slice(i, i + 100);
+              const { error: updateError } = await supabase
+                .from('children')
+                .update({ status: 'inactive', updated_at: new Date().toISOString() })
+                .in('id', batch);
+
+              if (updateError) {
+                console.error(`[Camper Cleanup] Error marking batch inactive:`, updateError);
+              }
             }
+
+            console.log(`[Camper Cleanup] Successfully marked ${droppedCampers.length} dropped campers as inactive`);
           }
-          
-          console.log(`[Camper Cleanup] Successfully marked ${droppedCampers.length} dropped campers as inactive`);
         }
       }
     }
@@ -2508,15 +2519,13 @@ async function performFullSync(
     let staffInactivated = 0;
 
     try {
-      // Get all person_ids that were synced from CampMinder
-      const syncedCamperPersonIds = camperData.map(c => c.person_id);
-      const syncedStaffPersonIds = staffData.map(s => s.person_id);
+      const enrolledCmPersonIds = enrolledPersonIdArray.map(String);
+      const staffCmPersonIds = Array.from(staffPersonIds);
 
-      // Inactivate campers that are no longer in CampMinder (only for full or campers sync)
-      if ((syncType === 'full' || syncType === 'campers') && syncedCamperPersonIds.length > 0) {
-        console.log(`[Cleanup] Checking for campers not in CampMinder sync (${syncedCamperPersonIds.length} valid campers)...`);
-        
-        // Get active campers that exist in DB but were NOT in this sync
+      // Inactivate campers no longer enrolled in CampMinder (use enrolled list, not camperData)
+      if ((syncType === 'full' || syncType === 'campers') && enrolledCmPersonIds.length > 0) {
+        console.log(`[Cleanup] Checking for campers not in CampMinder enrolled list (${enrolledCmPersonIds.length} enrolled)...`);
+
         const { data: existingCampers, error: fetchError } = await supabase
           .from('children')
           .select('id, person_id, first_name, last_name')
@@ -2527,9 +2536,12 @@ async function performFullSync(
         if (fetchError) {
           console.error('[Cleanup] Error fetching existing campers:', fetchError);
         } else if (existingCampers) {
-          const camperPersonIdSet = new Set(syncedCamperPersonIds);
-          const campersToInactivate = existingCampers.filter((c: { id: string; person_id: string; first_name: string; last_name: string }) => !camperPersonIdSet.has(c.person_id));
-          
+          const camperPersonIdSet = new Set(enrolledCmPersonIds);
+          const campersToInactivate = existingCampers.filter(
+            (c: { id: string; person_id: string; first_name: string; last_name: string }) =>
+              c.person_id && !camperPersonIdSet.has(String(c.person_id)),
+          );
+
           if (campersToInactivate.length > 0) {
             console.log(`[Cleanup] Found ${campersToInactivate.length} campers to inactivate (not enrolled in CampMinder):`);
             campersToInactivate.slice(0, 10).forEach((c: { id: string; person_id: string; first_name: string; last_name: string }) => {
@@ -2554,16 +2566,17 @@ async function performFullSync(
             campersInactivated = campersToInactivate.length;
             console.log(`[Cleanup] Successfully inactivated ${campersInactivated} campers`);
           } else {
-            console.log('[Cleanup] No campers to inactivate - all match CampMinder data');
+            console.log('[Cleanup] No campers to inactivate - all match CampMinder enrolled list');
           }
         }
+      } else if (syncType === 'full' || syncType === 'campers') {
+        console.warn('[Cleanup] Skipping camper inactivation — no enrolled attendees from CampMinder');
       }
 
-      // Inactivate staff that are no longer in CampMinder (only for full or staff sync)
-      if ((syncType === 'full' || syncType === 'staff') && syncedStaffPersonIds.length > 0) {
-        console.log(`[Cleanup] Checking for staff not in CampMinder sync (${syncedStaffPersonIds.length} valid staff)...`);
-        
-        // Get active staff that exist in DB but were NOT in this sync
+      // Inactivate staff no longer active in CampMinder (use staffPersonIds from API, not staffData)
+      if ((syncType === 'full' || syncType === 'staff') && staffCmPersonIds.length > 0) {
+        console.log(`[Cleanup] Checking for staff not in CampMinder active list (${staffCmPersonIds.length} active staff)...`);
+
         const { data: existingStaff, error: fetchError } = await supabase
           .from('staff')
           .select('id, person_id, name')
@@ -2574,11 +2587,14 @@ async function performFullSync(
         if (fetchError) {
           console.error('[Cleanup] Error fetching existing staff:', fetchError);
         } else if (existingStaff) {
-          const staffPersonIdSet = new Set(syncedStaffPersonIds);
-          const staffToInactivate = existingStaff.filter((s: { id: string; person_id: string; name: string }) => !staffPersonIdSet.has(s.person_id));
-          
+          const staffPersonIdSet = new Set(staffCmPersonIds);
+          const staffToInactivate = existingStaff.filter(
+            (s: { id: string; person_id: string; name: string }) =>
+              s.person_id && !staffPersonIdSet.has(String(s.person_id)),
+          );
+
           if (staffToInactivate.length > 0) {
-            console.log(`[Cleanup] Found ${staffToInactivate.length} staff to inactivate (not hired/active in CampMinder):`);
+            console.log(`[Cleanup] Found ${staffToInactivate.length} staff to inactivate (not active in CampMinder):`);
             staffToInactivate.slice(0, 10).forEach((s: { id: string; person_id: string; name: string }) => {
               console.log(`  - ${s.name} (person_id: ${s.person_id})`);
             });
@@ -2604,6 +2620,8 @@ async function performFullSync(
             console.log('[Cleanup] No staff to inactivate - all match CampMinder data');
           }
         }
+      } else if (syncType === 'full' || syncType === 'staff') {
+        console.warn('[Cleanup] Skipping staff inactivation — no active staff returned from CampMinder');
       }
 
       console.log(`[Cleanup Summary] Inactivated ${campersInactivated} campers, inactivated ${staffInactivated} staff`);
@@ -2828,6 +2846,38 @@ serve(async (req) => {
 
         const staleClosed = await failStaleCampminderSyncJobs(supabase, company.id, 120);
 
+        const { data: inFlightJobs, error: inFlightErr } = await supabase
+          .from('sync_jobs')
+          .select('id, status, created_at, progress')
+          .eq('company_id', company.id)
+          .eq('entity_type', 'campminder')
+          .in('status', ['running', 'pending'])
+          .order('created_at', { ascending: false });
+
+        if (inFlightErr) {
+          console.error('Failed to check in-flight sync jobs:', inFlightErr);
+        } else {
+          const sameTypeInFlight = (inFlightJobs || []).filter((j: { progress?: { syncType?: string } }) => {
+            const runningType = j.progress?.syncType;
+            return runningType === effectiveSyncType || (!runningType && effectiveSyncType === 'full');
+          });
+
+          if (sameTypeInFlight.length > 0) {
+            const blocked = sameTypeInFlight[0];
+            console.warn(
+              `[Sync] Skipping ${company.name} ${effectiveSyncType} — job ${blocked.id} already ${blocked.status}`,
+            );
+            results.push({
+              company: company.name,
+              company_id: company.id,
+              status: 'skipped',
+              message: `${effectiveSyncType} sync already ${blocked.status} (job ${blocked.id})`,
+              stale_closed: staleClosed,
+            });
+            continue;
+          }
+        }
+
         // Determine if this should be an incremental sync
         const isIncremental = incremental === true && company.campminder_last_sync_at;
         const lastSyncAt = company.campminder_last_sync_at;
@@ -2838,7 +2888,11 @@ serve(async (req) => {
             company_id: company.id,
             entity_type: 'campminder',
             status: 'pending',
-            progress: { step: 'Initializing', syncType: isIncremental ? 'incremental' : 'full' },
+            progress: {
+              step: 'Initializing',
+              syncType: effectiveSyncType,
+              isIncremental,
+            },
             total_counts: {},
           })
           .select()
@@ -2940,7 +2994,7 @@ serve(async (req) => {
         message: 'Sync jobs started in background (companies run one after another)',
         results,
         note:
-          'Large rosters fetch campers sequentially with ~300ms spacing between CampMinder calls; progress updates every 50 campers. Multiple camps no longer sync in parallel.',
+          'Companies run sequentially in background. Scheduled sync: 6 AM & 6 PM Eastern (campers), then 7 AM & 7 PM (staff). Manual full sync may timeout on large camps — use Campers Only then Staff Only.',
       }),
       { 
         status: 200, 

@@ -1,0 +1,76 @@
+-- Split hourly CampMinder sync into campers (:00) and staff (:30).
+-- Full sync for 591+ campers + 350+ staff exceeds Edge Function time limits and caused
+-- daily roster count swings when cleanup ran against partial sync data.
+
+CREATE OR REPLACE FUNCTION public.trigger_campminder_sync(p_sync_type text DEFAULT 'campers')
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  supabase_url text;
+  service_role_key text;
+  request_id bigint;
+  sync_type text := COALESCE(NULLIF(trim(p_sync_type), ''), 'campers');
+BEGIN
+  IF sync_type NOT IN ('campers', 'staff', 'full', 'financials') THEN
+    RAISE EXCEPTION 'trigger_campminder_sync: invalid sync_type % (use campers, staff, full, financials)', sync_type;
+  END IF;
+
+  SELECT decrypted_secret INTO supabase_url
+  FROM vault.decrypted_secrets
+  WHERE name = 'SUPABASE_URL';
+
+  SELECT decrypted_secret INTO service_role_key
+  FROM vault.decrypted_secrets
+  WHERE name = 'SUPABASE_SERVICE_ROLE_KEY';
+
+  IF supabase_url IS NULL OR trim(supabase_url) = '' THEN
+    RAISE EXCEPTION
+      'CampMinder cron: Vault secret SUPABASE_URL is missing.';
+  END IF;
+
+  IF service_role_key IS NULL OR trim(service_role_key) = '' THEN
+    RAISE EXCEPTION
+      'CampMinder cron: Vault secret SUPABASE_SERVICE_ROLE_KEY is missing.';
+  END IF;
+
+  SELECT net.http_post(
+    url := trim(trailing '/' from supabase_url) || '/functions/v1/sync-campminder',
+    body := jsonb_build_object('sync_type', sync_type),
+    params := '{}'::jsonb,
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || service_role_key
+    ),
+    timeout_milliseconds := 120000
+  ) INTO request_id;
+
+  RAISE NOTICE 'CampMinder sync_type=% queued via pg_net, request_id=% at %', sync_type, request_id, clock_timestamp();
+END;
+$$;
+
+-- Replace legacy single full-sync cron (if present)
+DO $$
+BEGIN
+  PERFORM cron.unschedule(jobid)
+  FROM cron.job
+  WHERE jobname = 'campminder-hourly-sync';
+EXCEPTION
+  WHEN OTHERS THEN
+    NULL;
+END;
+$$;
+
+SELECT cron.schedule(
+  'campminder-campers-sync',
+  '0 * * * *',
+  $$SELECT public.trigger_campminder_sync('campers')$$
+);
+
+SELECT cron.schedule(
+  'campminder-staff-sync',
+  '30 * * * *',
+  $$SELECT public.trigger_campminder_sync('staff')$$
+);

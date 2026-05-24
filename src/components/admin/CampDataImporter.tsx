@@ -273,6 +273,7 @@ export default function CampDataImporter() {
           </CardTitle>
           <CardDescription>
             Sync campers, staff, divisions, and sessions from CampMinder API for the 2026 season.
+            Automatic sync runs at <strong>6 AM and 6 PM Eastern</strong> (campers), then staff at 7 AM / 7 PM.
             Auto-sync runs every hour for all configured camps.
           </CardDescription>
         </CardHeader>
