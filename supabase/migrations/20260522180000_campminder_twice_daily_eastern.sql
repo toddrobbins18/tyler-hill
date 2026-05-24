@@ -1,10 +1,11 @@
--- CampMinder sync: twice daily at 6 AM and 6 PM America/New_York (Eastern Time, DST-aware).
+-- CampMinder sync: twice daily at 6 AM and 6 PM America/New_York (Eastern, DST-aware).
 --
--- Full sync is split into two phases so large camps (591+ campers, 350+ staff) finish without
--- Edge Function timeouts:
---   6:00 AM / 6:00 PM ET — campers (all enabled companies, sequential in edge worker)
---   7:00 AM / 7:00 PM ET — staff   (completes the full sync window)
---   5:55 AM / 5:55 PM ET — clear stale stuck jobs before each window
+-- Supabase pg_cron only supports cron.schedule(name, schedule, command) — no timezone arg.
+-- We run hourly UTC checks and gate on America/New_York local time.
+--
+--   5:55 AM / 5:55 PM ET — clear stale stuck jobs
+--   6:00 AM / 6:00 PM ET — campers sync
+--   7:00 AM / 7:00 PM ET — staff sync (completes full sync window)
 
 CREATE OR REPLACE FUNCTION public.trigger_campminder_sync(p_sync_type text DEFAULT 'campers')
 RETURNS void
@@ -58,7 +59,49 @@ BEGIN
 END;
 $$;
 
--- Remove all legacy / hourly schedules
+-- Runs at minute :00 each hour (UTC cron); fires only at 6/7/18/19 Eastern.
+CREATE OR REPLACE FUNCTION public.run_campminder_eastern_sync_window()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  et_hour int;
+BEGIN
+  et_hour := EXTRACT(HOUR FROM (timezone('America/New_York', now())))::int;
+
+  IF et_hour = 6 THEN
+    PERFORM public.trigger_campminder_sync('campers');
+  ELSIF et_hour = 7 THEN
+    PERFORM public.trigger_campminder_sync('staff');
+  ELSIF et_hour = 18 THEN
+    PERFORM public.trigger_campminder_sync('campers');
+  ELSIF et_hour = 19 THEN
+    PERFORM public.trigger_campminder_sync('staff');
+  END IF;
+END;
+$$;
+
+-- Runs at minute :55 each hour (UTC cron); fires only at 5:55 AM/PM Eastern.
+CREATE OR REPLACE FUNCTION public.run_campminder_eastern_pre_sync_cleanup()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  et_hour int;
+BEGIN
+  et_hour := EXTRACT(HOUR FROM (timezone('America/New_York', now())))::int;
+
+  IF et_hour IN (5, 17) THEN
+    PERFORM public.cleanup_stale_campminder_sync_jobs(150);
+  END IF;
+END;
+$$;
+
+-- Remove all legacy schedules
 DO $$
 DECLARE
   job record;
@@ -74,7 +117,9 @@ BEGIN
       'campminder-pm-campers',
       'campminder-pm-staff',
       'campminder-pre-sync-cleanup-am',
-      'campminder-pre-sync-cleanup-pm'
+      'campminder-pre-sync-cleanup-pm',
+      'campminder-eastern-sync',
+      'campminder-eastern-cleanup'
     )
   LOOP
     PERFORM cron.unschedule(job.jobid);
@@ -85,47 +130,15 @@ EXCEPTION
 END;
 $$;
 
--- Pre-sync: fail jobs stuck from prior window (150 min threshold)
+-- 3-arg cron.schedule only (Supabase-compatible)
 SELECT cron.schedule(
-  'campminder-pre-sync-cleanup-am',
-  '55 5 * * *',
-  $$SELECT public.cleanup_stale_campminder_sync_jobs(150)$$,
-  'America/New_York'
+  'campminder-eastern-sync',
+  '0 * * * *',
+  $$SELECT public.run_campminder_eastern_sync_window()$$
 );
 
 SELECT cron.schedule(
-  'campminder-pre-sync-cleanup-pm',
-  '55 17 * * *',
-  $$SELECT public.cleanup_stale_campminder_sync_jobs(150)$$,
-  'America/New_York'
-);
-
--- Morning full-sync window (campers then staff)
-SELECT cron.schedule(
-  'campminder-am-campers',
-  '0 6 * * *',
-  $$SELECT public.trigger_campminder_sync('campers')$$,
-  'America/New_York'
-);
-
-SELECT cron.schedule(
-  'campminder-am-staff',
-  '0 7 * * *',
-  $$SELECT public.trigger_campminder_sync('staff')$$,
-  'America/New_York'
-);
-
--- Evening full-sync window (campers then staff)
-SELECT cron.schedule(
-  'campminder-pm-campers',
-  '0 18 * * *',
-  $$SELECT public.trigger_campminder_sync('campers')$$,
-  'America/New_York'
-);
-
-SELECT cron.schedule(
-  'campminder-pm-staff',
-  '0 19 * * *',
-  $$SELECT public.trigger_campminder_sync('staff')$$,
-  'America/New_York'
+  'campminder-eastern-cleanup',
+  '55 * * * *',
+  $$SELECT public.run_campminder_eastern_pre_sync_cleanup()$$
 );
