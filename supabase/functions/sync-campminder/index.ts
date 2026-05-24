@@ -1604,16 +1604,19 @@ async function performFullSync(
         }
       }
 
-      // Filter to only enrolled campers with CamperDetails
+      // Include all fetched enrolled persons — CamperDetails may be missing on some valid campers;
+      // division/grade fall back to session attendee data in Phase 6.
+      let campersWithoutCamperDetails = 0;
       for (const personId of enrolledPersonIdArray) {
         const person = personMap.get(personId);
-        if (person && person.CamperDetails) {
+        if (person) {
+          if (!person.CamperDetails) campersWithoutCamperDetails++;
           campers.push(person);
         }
       }
-      
-      console.log(`✓ Total campers with CamperDetails: ${campers.length}`);
-      console.log(`  Missing camper IDs: ${missingCamperIds.length}`);
+
+      console.log(`✓ Total enrolled campers in personMap: ${campers.length} (${campersWithoutCamperDetails} without CamperDetails)`);
+      console.log(`  Missing camper IDs (person fetch failed): ${missingCamperIds.length}`);
     } else {
       console.log(`\n--- SKIPPING CAMPER FETCH (syncType=${syncType}) ---`);
     }
@@ -1869,12 +1872,11 @@ async function performFullSync(
       console.log('\n--- SYNCING CAMPERS ---');
       
       // Identify campers that we still don't have in personMap after fetching missing
-      const stillMissingCamperIds = missingCamperIds.filter(id => !personMap.has(id));
-      console.log(`[Camper Fallback] ${stillMissingCamperIds.length} campers still missing from personMap, will use attendee data`);
-      
+      console.log(`[Camper Sync] ${enrolledPersonIdArray.length} enrolled in CampMinder, ${campers.length} in personMap, ${missingCamperIds.length} person fetches failed`);
+
       await updateSyncJob(supabase, jobId, {
-        progress: { step: 'Syncing campers', total: campers.length + stillMissingCamperIds.length, divisions: divisions.length, parentEmails: parentEmailMap.size, season },
-        total_counts: { divisions: divisions.length, campers: campers.length + stillMissingCamperIds.length },
+        progress: { step: 'Syncing campers', total: enrolledPersonIdArray.length, divisions: divisions.length, parentEmails: parentEmailMap.size, season },
+        total_counts: { divisions: divisions.length, campers: enrolledPersonIdArray.length },
       });
 
       const gradeMap: Record<number, string> = {
@@ -1903,8 +1905,9 @@ async function performFullSync(
       if (person.GenderID === 0) gender = 'Female';
       else if (person.GenderID === 1) gender = 'Male';
       
-      const grade = gradeMap[person.CamperDetails?.CampGradeID] || null;
-      
+      const attendeeRow = attendeeDataMap.get(String(person.ID));
+      const grade = gradeMap[person.CamperDetails?.CampGradeID] ?? null;
+
       // Get parent contact info
       const parentPersonId = camperToParentMap.get(String(person.ID));
       let guardianEmail = parentPersonId ? parentEmailMap.get(parentPersonId) || '' : '';
@@ -1918,17 +1921,15 @@ async function performFullSync(
         guardianPhone = person.ContactDetails.PhoneNumbers[0].Number;
       }
 
-      // Get division directly from CamperDetails.DivisionID (the correct source!)
-      const cmDivisionId = person.CamperDetails?.DivisionID;
+      // Prefer CamperDetails.DivisionID; fall back to session attendee when CamperDetails is absent.
+      const cmDivisionId = person.CamperDetails?.DivisionID ?? attendeeRow?.DivisionID;
       const divisionId = cmDivisionId ? cmDivisionIdMap.get(cmDivisionId) : null;
-      
+
       if (!divisionId && cmDivisionId) {
-        console.log(`[Division Warning] Camper ${name} has CamperDetails.DivisionID=${cmDivisionId} but no matching division in our DB`);
+        console.log(`[Division Warning] Camper ${name} has DivisionID=${cmDivisionId} but no matching division in our DB`);
       }
 
-      // Get bunk from attendee data (BunkID is in attendee, not person)
-      const attendeeData = attendeeDataMap.get(String(person.ID));
-      const cmBunkId = attendeeData?.BunkID;
+      const cmBunkId = attendeeRow?.BunkID;
       const bunkId = cmBunkId ? cmBunkIdMap.get(cmBunkId) : null;
       
       if (cmBunkId && !bunkId) {
@@ -1956,59 +1957,68 @@ async function performFullSync(
     
     console.log(`[Campers] Skipped ${skippedCampersNoName} campers missing first or last name`);
 
-    // Add fallback records for campers not in persons API but in attendees
-    // Only create records if we have a valid name from the fallback data
-    for (const personId of stillMissingCamperIds) {
-      const fallbackData = attendeeDataMap.get(personId);
-      
-      // Only proceed if we have BOTH first AND last name from fallback data
-      const firstName = (fallbackData?.FirstName || '').trim();
-      const lastName = (fallbackData?.LastName || '').trim();
-      
+    // Gap-fill: any enrolled camper not yet in camperData (person fetch failed OR missing CamperDetails/name in main loop)
+    const camperDataPersonIds = new Set(camperData.map((c) => String(c.person_id)));
+    let skippedEnrolledNoName = 0;
+
+    for (const personId of enrolledPersonIdArray) {
+      const personIdStr = String(personId);
+      if (camperDataPersonIds.has(personIdStr)) continue;
+
+      const fallbackData = attendeeDataMap.get(personIdStr);
+      const person = personMap.get(personIdStr);
+      const firstName = (person?.Name?.First || fallbackData?.FirstName || '').trim();
+      const lastName = (person?.Name?.Last || fallbackData?.LastName || '').trim();
+
       if (!firstName || !lastName) {
-        console.log(`[Camper Skip] Missing first or last name for PersonID ${personId} (first="${firstName}", last="${lastName}") - skipping`);
+        skippedEnrolledNoName++;
+        if (skippedEnrolledNoName <= 5) {
+          console.log(`[Camper Skip] Enrolled PersonID ${personIdStr} missing first or last name — skipping`);
+        }
         continue;
       }
-      
+
       const name = `${firstName} ${lastName}`;
-      
+      const genderSource = person ?? fallbackData;
       let gender = null;
-      if (fallbackData.GenderID === 0) gender = 'Female';
-      else if (fallbackData.GenderID === 1) gender = 'Male';
-      
-      // Get division from attendee data if available
-      const cmDivisionId = fallbackData.DivisionID;
+      if (genderSource?.GenderID === 0) gender = 'Female';
+      else if (genderSource?.GenderID === 1) gender = 'Male';
+
+      const cmDivisionId = person?.CamperDetails?.DivisionID ?? fallbackData?.DivisionID;
       const divisionId = cmDivisionId ? cmDivisionIdMap.get(cmDivisionId) : null;
-      
-      // Get bunk from attendee/fallback data
-      const cmBunkId = fallbackData.BunkID;
+      const cmBunkId = fallbackData?.BunkID;
       const bunkId = cmBunkId ? cmBunkIdMap.get(cmBunkId) : null;
-      
+
       camperData.push({
-        person_id: personId,
+        person_id: personIdStr,
         name,
         gender,
-        date_of_birth: fallbackData.DateOfBirth || null,
-        grade: null,
+        date_of_birth: person?.DateOfBirth || fallbackData?.DateOfBirth || null,
+        grade: gradeMap[person?.CamperDetails?.CampGradeID] ?? null,
         guardian_name: null,
         guardian_email: null,
         guardian_phone: null,
-        allergies: null,
-        medical_notes: null,
+        allergies: person?.MedicalInfo?.Allergies || null,
+        medical_notes: person?.MedicalInfo?.Notes || null,
         company_id: companyId,
         season: season,
         status: 'active',
         division_id: divisionId,
         bunk_id: bunkId,
       });
-      
+
+      camperDataPersonIds.add(personIdStr);
       usedCamperFallbackData++;
       if (usedCamperFallbackData <= 5) {
-        console.log(`[Camper Fallback] Created record for ${name} (${personId})`);
+        console.log(`[Camper Fallback] Created record for ${name} (${personIdStr})`);
       }
     }
 
-    console.log(`Built ${camperData.length} camper records (${usedCamperFallbackData} from fallback data)`);
+    if (skippedEnrolledNoName > 0) {
+      console.warn(`[Campers] ${skippedEnrolledNoName} enrolled campers could not be synced (no name in person or attendee data)`);
+    }
+
+    console.log(`Built ${camperData.length} camper records (${usedCamperFallbackData} from fallback/gap-fill)`);
     
     if (camperData.length > 0) {
       // Log sample camper data
@@ -2043,6 +2053,31 @@ async function performFullSync(
       camperInsertedCount = camperResult.inserted;
       camperUpdatedCount = camperResult.updated;
       console.log(`Synced ${camperResult.inserted + camperResult.updated} campers (${usedCamperFallbackData} from fallback)`);
+
+      // =====================================================
+      // PHASE 6a: Reactivate campers still enrolled in CampMinder but marked inactive
+      // (e.g. wrongly inactivated by prior partial syncs before cleanup fix)
+      // =====================================================
+      console.log('\n--- REACTIVATING ENROLLED CAMPERS ---');
+      let reactivatedCount = 0;
+      for (let i = 0; i < enrolledPersonIdArray.length; i += 100) {
+        const batch = enrolledPersonIdArray.slice(i, i + 100).map(String);
+        const { data: reactivatedRows, error: reactivateErr } = await supabase
+          .from('children')
+          .update({ status: 'active', updated_at: new Date().toISOString() })
+          .eq('company_id', companyId)
+          .eq('season', season)
+          .eq('status', 'inactive')
+          .in('person_id', batch)
+          .select('id');
+
+        if (reactivateErr) {
+          console.error('[Reactivate] Error:', reactivateErr.message);
+        } else {
+          reactivatedCount += reactivatedRows?.length || 0;
+        }
+      }
+      console.log(`[Reactivate] Set ${reactivatedCount} inactive campers back to active (still enrolled in CampMinder)`);
 
       // =====================================================
       // PHASE 6b: Mark dropped campers as inactive
