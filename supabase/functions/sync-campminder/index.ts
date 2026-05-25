@@ -345,6 +345,112 @@ async function fetchAllPaginated(
   return allItems;
 }
 
+/** SessionProgramStatus StatusID 2 = enrolled on that session/program in CampMinder. */
+function attendeeHasEnrolledSessionProgram(attendee: any): boolean {
+  const programs = attendee?.SessionProgramStatus;
+  if (!Array.isArray(programs) || programs.length === 0) return false;
+  return programs.some((s: any) => Number(s?.StatusID) === 2);
+}
+
+function mergeSessionAttendee(existing: any | undefined, attendee: any): any {
+  const pick = (a: unknown, b: unknown) =>
+    a != null && String(a).trim() !== '' ? a : b;
+
+  if (!existing) {
+    return {
+      PersonID: String(attendee.PersonID),
+      FirstName: attendee.FirstName || attendee.Name?.First || '',
+      LastName: attendee.LastName || attendee.Name?.Last || '',
+      GenderID: attendee.GenderID,
+      DateOfBirth: attendee.DateOfBirth,
+      DivisionID: attendee.DivisionID,
+      SessionProgramStatus: attendee.SessionProgramStatus,
+      BunkID: attendee.BunkID || null,
+      BunkPlanID: attendee.BunkPlanID || null,
+    };
+  }
+
+  return {
+    ...existing,
+    FirstName: pick(existing.FirstName, attendee.FirstName || attendee.Name?.First),
+    LastName: pick(existing.LastName, attendee.LastName || attendee.Name?.Last),
+    GenderID: existing.GenderID ?? attendee.GenderID,
+    DateOfBirth: existing.DateOfBirth || attendee.DateOfBirth,
+    DivisionID: existing.DivisionID ?? attendee.DivisionID,
+    SessionProgramStatus: existing.SessionProgramStatus?.length
+      ? existing.SessionProgramStatus
+      : attendee.SessionProgramStatus,
+    BunkID: existing.BunkID ?? attendee.BunkID ?? null,
+    BunkPlanID: existing.BunkPlanID ?? attendee.BunkPlanID ?? null,
+  };
+}
+
+/**
+ * Build the enrolled camper list for a season.
+ * The status=2 filter alone can under-count (e.g. Timber Lake Camp ~351 vs ~462 in CampMinder UI)
+ * when enrollment is recorded on SessionProgramStatus but not the top-level attendee status filter.
+ */
+async function fetchEnrolledSessionAttendees(
+  token: string,
+  subscriptionKey: string,
+  clientId: string,
+  season: string,
+): Promise<{
+  attendees: any[];
+  stats: { status2Rows: number; allRows: number; uniqueEnrolled: number; addedFromAllRows: number };
+}> {
+  const status2Rows = await fetchAllPaginated(
+    `${CM_SESSIONS_URL}/attendees`,
+    token,
+    subscriptionKey,
+    { clientid: clientId, seasonid: season, status: 2 },
+  );
+
+  const allRows = await fetchAllPaginated(
+    `${CM_SESSIONS_URL}/attendees`,
+    token,
+    subscriptionKey,
+    { clientid: clientId, seasonid: season },
+  );
+
+  const enrolledByPerson = new Map<string, any>();
+
+  for (const attendee of status2Rows) {
+    if (!attendee?.PersonID) continue;
+    const pid = String(attendee.PersonID);
+    enrolledByPerson.set(pid, mergeSessionAttendee(enrolledByPerson.get(pid), attendee));
+  }
+
+  let addedFromAllRows = 0;
+  for (const attendee of allRows) {
+    if (!attendee?.PersonID) continue;
+    const pid = String(attendee.PersonID);
+    if (enrolledByPerson.has(pid)) {
+      enrolledByPerson.set(pid, mergeSessionAttendee(enrolledByPerson.get(pid), attendee));
+      continue;
+    }
+    if (attendeeHasEnrolledSessionProgram(attendee)) {
+      enrolledByPerson.set(pid, mergeSessionAttendee(undefined, attendee));
+      addedFromAllRows++;
+    }
+  }
+
+  const attendees = Array.from(enrolledByPerson.values());
+  const stats = {
+    status2Rows: status2Rows.length,
+    allRows: allRows.length,
+    uniqueEnrolled: attendees.length,
+    addedFromAllRows,
+  };
+
+  console.log(
+    `[Enrolled Attendees] status=2 rows: ${stats.status2Rows}, all rows: ${stats.allRows}, ` +
+      `unique enrolled: ${stats.uniqueEnrolled} (+${stats.addedFromAllRows} from SessionProgramStatus on unfiltered fetch)`,
+  );
+
+  return { attendees, stats };
+}
+
 // Fetch a single person by ID with full details
 async function fetchPersonById(
   personId: string,
@@ -1453,32 +1559,38 @@ async function performFullSync(
         progress: { step: 'Fetching enrolled attendees', divisions: divisions.length, season, syncType },
       });
 
-      enrolledAttendees = await fetchAllPaginated(
-        `${CM_SESSIONS_URL}/attendees`,
+      const enrolledFetch = await fetchEnrolledSessionAttendees(
         token,
         subscriptionKey,
-        { clientid: clientId, seasonid: season, status: 2 }
+        clientId,
+        season,
       );
-      console.log(`Found ${enrolledAttendees.length} enrolled attendees`);
+      enrolledAttendees = enrolledFetch.attendees;
+      console.log(`Found ${enrolledAttendees.length} unique enrolled campers`);
 
       if (enrolledAttendees.length > 0) {
         console.log('[DEBUG] Sample session attendee record:', JSON.stringify(enrolledAttendees[0], null, 2));
       }
 
-      // Build a map of attendee data for fallback
+      await updateSyncJob(supabase, jobId, {
+        progress: {
+          step: 'Enrolled attendees loaded',
+          enrolledStatus2Rows: enrolledFetch.stats.status2Rows,
+          allAttendeeRows: enrolledFetch.stats.allRows,
+          enrolledCampers: enrolledFetch.stats.uniqueEnrolled,
+          enrolledAddedFromAllRows: enrolledFetch.stats.addedFromAllRows,
+          season,
+          syncType,
+        },
+      });
+
+      // Build a map of attendee data for fallback (merge duplicates across sessions)
       for (const attendee of enrolledAttendees) {
         const personId = String(attendee.PersonID);
-        attendeeDataMap.set(personId, {
-          PersonID: personId,
-          FirstName: attendee.FirstName || attendee.Name?.First || '',
-          LastName: attendee.LastName || attendee.Name?.Last || '',
-          GenderID: attendee.GenderID,
-          DateOfBirth: attendee.DateOfBirth,
-          DivisionID: attendee.DivisionID,
-          SessionProgramStatus: attendee.SessionProgramStatus,
-          BunkID: attendee.BunkID || null,
-          BunkPlanID: attendee.BunkPlanID || null,
-        });
+        attendeeDataMap.set(
+          personId,
+          mergeSessionAttendee(attendeeDataMap.get(personId), attendee),
+        );
       }
       console.log(`Built attendee fallback map with ${attendeeDataMap.size} entries`);
 
@@ -2079,6 +2191,17 @@ async function performFullSync(
       }
       console.log(`[Reactivate] Set ${reactivatedCount} inactive campers back to active (still enrolled in CampMinder)`);
 
+      await updateSyncJob(supabase, jobId, {
+        progress: {
+          step: 'Campers synced',
+          enrolledCampers: enrolledPersonIdArray.length,
+          campersSynced: camperData.length,
+          campersReactivated: reactivatedCount,
+          season,
+          syncType,
+        },
+      });
+
       // =====================================================
       // PHASE 6b: Mark dropped campers as inactive
       // Only inactivate when CampMinder enrolled list no longer includes them.
@@ -2563,7 +2686,7 @@ async function performFullSync(
 
         const { data: existingCampers, error: fetchError } = await supabase
           .from('children')
-          .select('id, person_id, first_name, last_name')
+          .select('id, person_id, name')
           .eq('company_id', companyId)
           .eq('season', season)
           .neq('status', 'inactive');
@@ -2573,14 +2696,14 @@ async function performFullSync(
         } else if (existingCampers) {
           const camperPersonIdSet = new Set(enrolledCmPersonIds);
           const campersToInactivate = existingCampers.filter(
-            (c: { id: string; person_id: string; first_name: string; last_name: string }) =>
+            (c: { id: string; person_id: string; name: string }) =>
               c.person_id && !camperPersonIdSet.has(String(c.person_id)),
           );
 
           if (campersToInactivate.length > 0) {
             console.log(`[Cleanup] Found ${campersToInactivate.length} campers to inactivate (not enrolled in CampMinder):`);
-            campersToInactivate.slice(0, 10).forEach((c: { id: string; person_id: string; first_name: string; last_name: string }) => {
-              console.log(`  - ${c.first_name} ${c.last_name} (person_id: ${c.person_id})`);
+            campersToInactivate.slice(0, 10).forEach((c: { id: string; person_id: string; name: string }) => {
+              console.log(`  - ${c.name} (person_id: ${c.person_id})`);
             });
             if (campersToInactivate.length > 10) {
               console.log(`  ... and ${campersToInactivate.length - 10} more`);
