@@ -273,7 +273,7 @@ export default function CampDataImporter() {
           </CardTitle>
           <CardDescription>
             Sync campers, staff, divisions, and sessions from CampMinder API for the 2026 season.
-            Automatic sync runs twice daily at <strong>6 AM and 6 PM Eastern</strong> (campers at 6, staff at 7).
+            Automatic sync runs twice daily Eastern: campers at <strong>6 AM / 6 PM</strong>, staff at <strong>7 AM / 7 PM</strong>, Owl Pay financials at <strong>8 AM / 8 PM</strong>.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -595,7 +595,7 @@ export default function CampDataImporter() {
         <AlertDescription>
           <p className="font-medium mb-2">Important Notes:</p>
           <ul className="text-sm list-disc list-inside space-y-1">
-            <li>CampMinder sync runs automatically twice daily at 6 AM and 6 PM Eastern for all configured camps (staff syncs at 7 AM and 7 PM)</li>
+            <li>CampMinder sync runs automatically twice daily Eastern: campers at 6 AM/PM, staff at 7 AM/PM, Owl Pay financials at 8 AM/PM</li>
             <li>The import process uses person_id to link historical data across seasons</li>
             <li>When a camper returns in future seasons with the same person_id, all their historical awards will be visible</li>
             <li>Duplicate person_ids within the same season will be skipped</li>

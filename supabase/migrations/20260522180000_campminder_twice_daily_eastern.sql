@@ -3,9 +3,10 @@
 -- Supabase pg_cron only supports cron.schedule(name, schedule, command) — no timezone arg.
 -- We run hourly UTC checks and gate on America/New_York local time.
 --
---   5:55 AM / 5:55 PM ET — clear stale stuck jobs
+--   5:55 AM / 5:55 PM ET — clear stale stuck jobs (before campers)
 --   6:00 AM / 6:00 PM ET — campers sync
---   7:00 AM / 7:00 PM ET — staff sync (completes full sync window)
+--   7:00 AM / 7:00 PM ET — staff sync
+--   (Financials at 8 AM/PM added in 20260523120000_campminder_financials_twice_daily_eastern.sql)
 
 CREATE OR REPLACE FUNCTION public.trigger_campminder_sync(p_sync_type text DEFAULT 'campers')
 RETURNS void

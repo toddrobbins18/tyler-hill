@@ -2787,41 +2787,16 @@ async function performFullSync(
       console.error('[Cleanup] Error during cleanup phase:', error);
     }
 
-    // =====================================================
-    // PHASE 10: Financial Sync - Owl Pay Balances from CampMinder
-    //
-    // Only runs when this company has `owl_pay_enabled = true` (configured per
-    // company on the `companies` row). The dedicated `sync_type = 'financials'`
-    // path is handled earlier and never reaches this phase, so we only need to
-    // guard the `full` / `campers` triggers here.
-    // =====================================================
-    let financialDeposits = 0;
-    let financialReversals = 0;
-    let financialSkipped = 0;
-    let financialUpdated = 0;
+    // Financials run on their own cron window (8 AM / 8 PM Eastern) via sync_type=financials
+    // so camper/staff jobs are not slowed down or timed out by transaction pagination.
+    const financialDeposits = 0;
+    const financialReversals = 0;
+    const financialSkipped = 0;
+    const financialUpdated = 0;
 
-    if ((syncType === 'full' || syncType === 'campers') && owlPayConfig.enabled) {
-      try {
-        const fin = await syncOwlPayBalancesFromCampminder(
-          supabase,
-          jobId,
-          companyId,
-          token,
-          subscriptionKey,
-          clientId,
-          season,
-          owlPayConfig,
-        );
-        financialDeposits = fin.financialDeposits;
-        financialReversals = fin.financialReversals;
-        financialSkipped = fin.financialSkipped;
-        financialUpdated = fin.financialUpdated;
-      } catch (finError) {
-        console.error('[Financials] Error during financial sync:', finError);
-      }
-    } else if ((syncType === 'full' || syncType === 'campers') && !owlPayConfig.enabled) {
+    if (owlPayConfig.enabled && (syncType === 'full' || syncType === 'campers' || syncType === 'staff')) {
       console.log(
-        `[Financials] Skipped Phase 10 — owl_pay_enabled=false for company ${companyId}.`,
+        `[Financials] Skipped — runs separately at 8 AM / 8 PM Eastern (sync_type=financials) for company ${companyId}.`,
       );
     }
 
@@ -2925,7 +2900,7 @@ serve(async (req) => {
   const { company_id, season_id, incremental, sync_type } = await req.json().catch(() => ({}));
     
     // sync_type can be: 'campers', 'staff', 'financials', or 'full' (default).
-    // This allows splitting syncs: campers at :00, staff at :30, financials on its own cadence.
+    // Cron schedule (Eastern): campers 6/18, staff 7/19, financials 8/20.
     const effectiveSyncType = sync_type || 'full';
     
     console.log('Sync request received:', { company_id, season_id, incremental, sync_type: effectiveSyncType });
