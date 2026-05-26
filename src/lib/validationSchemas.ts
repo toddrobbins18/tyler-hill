@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeCsvPersonId } from "./csvPersonIdResolve";
 
 // Child validation schema - Only name and person_id are required
 export const childSchema = z.object({
@@ -314,7 +315,9 @@ export function parseMedicationRow(row: Record<string, any>) {
   const isRecurring = ['true', 'yes', '1', 'y'].includes(String(recurringRaw).toLowerCase().trim());
 
   return {
-    person_id: String(row.person_id || row['Person ID'] || row.PersonID || row.personid || '').trim(),
+    person_id: normalizeCsvPersonId(
+      row.person_id || row['Person ID'] || row.PersonID || row.personid || row['Camper ID'] || row.CamperID,
+    ),
     date: String(row.date || row.Date || ''),
     medication_name: String(row.medication_name || row['Medication Name'] || '').trim(),
     dosage: String(row.dosage || row.Dosage || '').trim(),

@@ -22,6 +22,12 @@ import {
   syncChildrenFromCsv,
   syncStaffFromCsv,
 } from "@/lib/csvRosterSync";
+import {
+  describeMissingChildPersonIds,
+  normalizeCsvPersonId,
+  personIdResolutionHint,
+  resolveChildPersonIdsBatched,
+} from "@/lib/csvPersonIdResolve";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
@@ -187,24 +193,12 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
   const resolveChildPersonIds = async (
     personIds: string[],
     season: string,
+    includeInactive = false,
   ): Promise<Map<string, string>> => {
-    if (!currentCompany?.id || personIds.length === 0) return new Map();
-
-    const { data } = await supabase
-      .from("children")
-      .select("id, person_id")
-      .eq("company_id", currentCompany.id)
-      .eq("season", season)
-      .neq("status", "inactive")
-      .in("person_id", personIds);
-
-    const mapping = new Map<string, string>();
-    (data || []).forEach((child) => {
-      if (child.person_id != null && child.person_id !== "") {
-        mapping.set(String(child.person_id).trim(), child.id);
-      }
+    if (!currentCompany?.id) return new Map();
+    return resolveChildPersonIdsBatched(supabase, currentCompany.id, season, personIds, {
+      includeInactive,
     });
-    return mapping;
   };
 
   // Resolve person_id to staff UUID (for staff table, this is for updating existing records)
@@ -266,40 +260,50 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
         // Extract all person_ids from validated rows
         const personIds = new Set<string>();
         validatedRows.forEach((row) => {
-          if (row.person_id) personIds.add(String(row.person_id).trim());
+          if (row.person_id) personIds.add(normalizeCsvPersonId(row.person_id));
           if (row.person_ids)
-            row.person_ids.forEach((id: string) => personIds.add(String(id).trim()));
+            row.person_ids.forEach((id: string) => personIds.add(normalizeCsvPersonId(id)));
         });
+        const includeInactive =
+          tableName === "medication_logs" ||
+          tableName === "daily_notes" ||
+          tableName === "awards" ||
+          tableName === "incident_reports";
         childPersonIdMap = await resolveChildPersonIds(
           Array.from(personIds).filter(Boolean),
           selectedSeason,
+          includeInactive,
         );
 
         // Validate all person_ids were found
         const missingIds: string[] = [];
         validatedRows.forEach((row, i) => {
-          const pid =
-            typeof row.person_id === "string" ? row.person_id.trim() : String(row.person_id ?? "").trim();
+          const pid = normalizeCsvPersonId(row.person_id);
           if (pid && !childPersonIdMap.has(pid)) {
-            missingIds.push(`Row ${i + 2}: Person ID "${pid}" not found`);
+            missingIds.push(pid);
           }
           if (row.person_ids) {
             row.person_ids.forEach((id: string) => {
-              const pid = String(id).trim();
-              if (pid && !childPersonIdMap.has(pid)) {
-                missingIds.push(`Row ${i + 2}: Person ID "${pid}" not found`);
+              const personId = normalizeCsvPersonId(id);
+              if (personId && !childPersonIdMap.has(personId)) {
+                missingIds.push(personId);
               }
             });
           }
         });
         
         if (missingIds.length > 0) {
-          const hint =
-            "\n\nEach Person ID must match an active camper in your roster for the selected season " +
-            `(${selectedSeason}) in Settings. Sync/import the roster first, fix any wrong IDs in the spreadsheet, ` +
-            "or pick the season those campers belong to.";
+          const uniqueMissing = Array.from(new Set(missingIds));
+          const details = currentCompany?.id
+            ? await describeMissingChildPersonIds(
+                supabase,
+                currentCompany.id,
+                selectedSeason,
+                uniqueMissing,
+              )
+            : uniqueMissing.map((pid) => `Person ID "${pid}" not found`);
           toast.error(
-            `Person ID errors:\n${missingIds.slice(0, 5).join("\n")}${missingIds.length > 5 ? `\n...and ${missingIds.length - 5} more` : ""}${hint}`,
+            `Person ID errors:\n${details.slice(0, 5).join("\n")}${details.length > 5 ? `\n...and ${details.length - 5} more` : ""}${personIdResolutionHint(selectedSeason)}`,
           );
           return;
         }
@@ -316,13 +320,13 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
         // Resolve person_id to child_id for child-related tables
         if (CHILD_PERSON_ID_TABLES.includes(tableName)) {
           if (row.person_id) {
-            const pid = String(row.person_id).trim();
+            const pid = normalizeCsvPersonId(row.person_id);
             baseRow.child_id = childPersonIdMap.get(pid);
             delete baseRow.person_id;
           }
           if (row.person_ids) {
             baseRow.child_ids = row.person_ids
-              .map((id: string) => childPersonIdMap.get(String(id).trim()))
+              .map((id: string) => childPersonIdMap.get(normalizeCsvPersonId(id)))
               .filter(Boolean);
             delete baseRow.person_ids;
           }
