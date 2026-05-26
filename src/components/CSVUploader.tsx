@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Upload, HelpCircle } from "lucide-react";
@@ -16,6 +16,21 @@ import {
 import { z } from "zod";
 import { parseCsvDocument } from "@/lib/csvLine";
 import { STANDARD_MEAL_SCHEDULE_HHMM } from "@/lib/medicationBedtimeOptions";
+import {
+  CSV_REPLACE_CLEAR_TABLES,
+  type CsvImportMode,
+  syncChildrenFromCsv,
+  syncStaffFromCsv,
+} from "@/lib/csvRosterSync";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 /** Map CSV Meal Time uppercase labels → DB constraint values (`valid_meal_times`). */
 const CSV_MEAL_SLOT_TO_LABEL: Record<string, string> = {
@@ -142,11 +157,31 @@ const CHILD_PERSON_ID_TABLES = ['awards', 'daily_notes', 'incident_reports', 'me
 // Tables that require person_id resolution to staff UUIDs
 const STAFF_PERSON_ID_TABLES = ['staff'];
 
+const ROSTER_TABLES = new Set(["children", "staff"]);
+
 export default function CSVUploader({ tableName, onUploadComplete }: CSVUploaderProps) {
   const [uploading, setUploading] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [importMode, setImportMode] = useState<CsvImportMode>("merge");
+  const [showModeDialog, setShowModeDialog] = useState(false);
+  const [pendingRows, setPendingRows] = useState<any[] | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { currentCompany } = useCompany();
   const { selectedSeason } = useSeason();
+
+  const showImportMode = ROSTER_TABLES.has(tableName) || CSV_REPLACE_CLEAR_TABLES.has(tableName);
+  const isRosterTable = ROSTER_TABLES.has(tableName);
+
+  const resetFileInput = () => {
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const cancelPendingImport = () => {
+    setShowModeDialog(false);
+    setPendingRows(null);
+    setImportMode("merge");
+    resetFileInput();
+  };
 
   /** Match roster row for selected season (unique per company+person_id+season). */
   const resolveChildPersonIds = async (
@@ -187,6 +222,169 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
       if (staff.person_id) mapping.set(staff.person_id, staff.id);
     });
     return mapping;
+  };
+
+  const executeImport = async (validatedRows: any[], mode: CsvImportMode) => {
+      // --- CHILDREN / STAFF: merge or replace roster ---
+      if (tableName === "children") {
+        if (!currentCompany?.id) {
+          toast.error("No company selected");
+          return;
+        }
+        const result = await syncChildrenFromCsv(supabase, validatedRows, {
+          companyId: currentCompany.id,
+          season: selectedSeason,
+          mode,
+        });
+        if ("error" in result) throw new Error(result.error);
+        toast.success(result.message);
+        onUploadComplete?.();
+        return;
+      }
+
+      if (tableName === "staff") {
+        if (!currentCompany?.id) {
+          toast.error("No company selected");
+          return;
+        }
+        const result = await syncStaffFromCsv(supabase, validatedRows, {
+          companyId: currentCompany.id,
+          season: selectedSeason,
+          mode,
+        });
+        if ("error" in result) throw new Error(result.error);
+        toast.success(result.message);
+        onUploadComplete?.();
+        return;
+      }
+
+      // Resolve person_ids to UUIDs for tables that need it
+      let childPersonIdMap = new Map<string, string>();
+      let staffPersonIdMap = new Map<string, string>();
+
+      if (CHILD_PERSON_ID_TABLES.includes(tableName)) {
+        // Extract all person_ids from validated rows
+        const personIds = new Set<string>();
+        validatedRows.forEach((row) => {
+          if (row.person_id) personIds.add(String(row.person_id).trim());
+          if (row.person_ids)
+            row.person_ids.forEach((id: string) => personIds.add(String(id).trim()));
+        });
+        childPersonIdMap = await resolveChildPersonIds(
+          Array.from(personIds).filter(Boolean),
+          selectedSeason,
+        );
+
+        // Validate all person_ids were found
+        const missingIds: string[] = [];
+        validatedRows.forEach((row, i) => {
+          const pid =
+            typeof row.person_id === "string" ? row.person_id.trim() : String(row.person_id ?? "").trim();
+          if (pid && !childPersonIdMap.has(pid)) {
+            missingIds.push(`Row ${i + 2}: Person ID "${pid}" not found`);
+          }
+          if (row.person_ids) {
+            row.person_ids.forEach((id: string) => {
+              const pid = String(id).trim();
+              if (pid && !childPersonIdMap.has(pid)) {
+                missingIds.push(`Row ${i + 2}: Person ID "${pid}" not found`);
+              }
+            });
+          }
+        });
+        
+        if (missingIds.length > 0) {
+          const hint =
+            "\n\nEach Person ID must match an active camper in your roster for the selected season " +
+            `(${selectedSeason}) in Settings. Sync/import the roster first, fix any wrong IDs in the spreadsheet, ` +
+            "or pick the season those campers belong to.";
+          toast.error(
+            `Person ID errors:\n${missingIds.slice(0, 5).join("\n")}${missingIds.length > 5 ? `\n...and ${missingIds.length - 5} more` : ""}${hint}`,
+          );
+          return;
+        }
+      }
+
+      // Add company_id and resolve person_ids to UUIDs
+      const rowsWithCompany = validatedRows.map(row => {
+        const baseRow: any = {
+          ...row,
+          company_id: currentCompany?.id,
+          season: selectedSeason,
+        };
+
+        // Resolve person_id to child_id for child-related tables
+        if (CHILD_PERSON_ID_TABLES.includes(tableName)) {
+          if (row.person_id) {
+            const pid = String(row.person_id).trim();
+            baseRow.child_id = childPersonIdMap.get(pid);
+            delete baseRow.person_id;
+          }
+          if (row.person_ids) {
+            baseRow.child_ids = row.person_ids
+              .map((id: string) => childPersonIdMap.get(String(id).trim()))
+              .filter(Boolean);
+            delete baseRow.person_ids;
+          }
+          if (row.reporter_person_id && staffPersonIdMap.has(row.reporter_person_id)) {
+            baseRow.reporter_id = staffPersonIdMap.get(row.reporter_person_id);
+            delete baseRow.reporter_person_id;
+          }
+        }
+        
+        return baseRow;
+      });
+
+      const rowsToInsert =
+        tableName === "medication_logs"
+          ? rowsWithCompany.map((row) => {
+              const copy = { ...row } as Record<string, unknown>;
+              sanitizeMedicationLogRowForInsert(copy);
+              return copy;
+            })
+          : rowsWithCompany;
+
+      if (mode === "replace" && CSV_REPLACE_CLEAR_TABLES.has(tableName) && currentCompany?.id) {
+        const { error: clearError } = await supabase
+          .from(tableName as any)
+          .delete()
+          .eq("company_id", currentCompany.id)
+          .eq("season", selectedSeason);
+        if (clearError) throw clearError;
+      }
+
+      const { error } = await supabase.from(tableName as any).insert(rowsToInsert as any);
+
+      if (error) throw error;
+
+      toast.success(`Successfully uploaded ${validatedRows.length} records`);
+      onUploadComplete?.();
+  };
+
+  const handleConfirmImport = async () => {
+    if (!pendingRows) return;
+    setShowModeDialog(false);
+    setUploading(true);
+    try {
+      await executeImport(pendingRows, importMode);
+    } catch (error) {
+      console.error('Upload error:', error);
+      const msg =
+        error &&
+        typeof error === "object" &&
+        "message" in error &&
+        typeof (error as { message?: string }).message === "string"
+          ? (error as { message: string }).message
+          : "";
+      toast.error(
+        msg ? `Upload failed: ${msg}` : "Failed to upload CSV. Please check the format and try again.",
+      );
+    } finally {
+      setUploading(false);
+      setPendingRows(null);
+      setImportMode("merge");
+      resetFileInput();
+    }
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -303,189 +501,19 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
       if (validatedRows.length === 0) {
         toast.error("No data rows to import. Add rows with the required columns (for medications: person_id, medication_name, dosage).");
         setUploading(false);
-        event.target.value = "";
+        resetFileInput();
         return;
       }
 
-      // --- CHILDREN: Upsert by person_id + detect dropped campers ---
-      if (tableName === 'children') {
-        const csvPersonIds = new Set(validatedRows.map(r => r.person_id).filter(Boolean));
-
-        // Fetch all existing active children for this company + season
-        const { data: existingChildren } = await supabase
-          .from('children')
-          .select('id, name, person_id, status')
-          .eq('company_id', currentCompany?.id)
-          .eq('season', selectedSeason)
-          .neq('status', 'inactive');
-
-        const existingMap = new Map<string, { id: string; name: string; person_id: string }>();
-        (existingChildren || []).forEach(child => {
-          if (child.person_id) existingMap.set(child.person_id, child);
-        });
-
-        // Split into updates and inserts
-        const toUpdate: any[] = [];
-        const toInsert: any[] = [];
-
-        for (const row of validatedRows) {
-          const rowData: any = {
-            ...row,
-            company_id: currentCompany?.id,
-            season: selectedSeason,
-            status: 'active',
-          };
-
-          if (row.person_id && existingMap.has(row.person_id)) {
-            // Update existing
-            toUpdate.push({ existingId: existingMap.get(row.person_id)!.id, data: rowData });
-          } else {
-            // New camper
-            toInsert.push(rowData);
-          }
-        }
-
-        // Perform inserts
-        if (toInsert.length > 0) {
-          const { error: insertError } = await supabase.from('children').insert(toInsert as any);
-          if (insertError) throw insertError;
-        }
-
-        // Perform updates
-        let updateErrors = 0;
-        for (const item of toUpdate) {
-          const { existingId, data } = item;
-          delete data.person_id; // Don't overwrite person_id
-          const { error: updateError } = await supabase
-            .from('children')
-            .update(data as any)
-            .eq('id', existingId);
-          if (updateError) updateErrors++;
-        }
-
-        // Auto-mark dropped campers as inactive (like staff sync)
-        const dropped = (existingChildren || []).filter(
-          child => child.person_id && !csvPersonIds.has(child.person_id) && child.status !== 'inactive'
-        );
-
-        if (dropped.length > 0) {
-          const droppedIds = dropped.map(c => c.id);
-          const { error: dropError } = await supabase
-            .from('children')
-            .update({ status: 'inactive' } as any)
-            .in('id', droppedIds);
-          
-          if (dropError) {
-            console.error('Error marking dropped campers:', dropError);
-          }
-        }
-
-        const summary = [];
-        if (toInsert.length > 0) summary.push(`${toInsert.length} added`);
-        if (toUpdate.length > 0) summary.push(`${toUpdate.length} updated`);
-        if (dropped.length > 0) summary.push(`${dropped.length} dropped`);
-        if (updateErrors > 0) summary.push(`${updateErrors} update errors`);
-        toast.success(`Camper sync complete: ${summary.join(', ')}`);
-
-        onUploadComplete?.();
+      if (showImportMode) {
+        setPendingRows(validatedRows);
+        setImportMode("merge");
+        setShowModeDialog(true);
         setUploading(false);
-        event.target.value = '';
         return;
       }
 
-      // Resolve person_ids to UUIDs for tables that need it
-      let childPersonIdMap = new Map<string, string>();
-      let staffPersonIdMap = new Map<string, string>();
-
-      if (CHILD_PERSON_ID_TABLES.includes(tableName)) {
-        // Extract all person_ids from validated rows
-        const personIds = new Set<string>();
-        validatedRows.forEach((row) => {
-          if (row.person_id) personIds.add(String(row.person_id).trim());
-          if (row.person_ids)
-            row.person_ids.forEach((id: string) => personIds.add(String(id).trim()));
-        });
-        childPersonIdMap = await resolveChildPersonIds(
-          Array.from(personIds).filter(Boolean),
-          selectedSeason,
-        );
-
-        // Validate all person_ids were found
-        const missingIds: string[] = [];
-        validatedRows.forEach((row, i) => {
-          const pid =
-            typeof row.person_id === "string" ? row.person_id.trim() : String(row.person_id ?? "").trim();
-          if (pid && !childPersonIdMap.has(pid)) {
-            missingIds.push(`Row ${i + 2}: Person ID "${pid}" not found`);
-          }
-          if (row.person_ids) {
-            row.person_ids.forEach((id: string) => {
-              const pid = String(id).trim();
-              if (pid && !childPersonIdMap.has(pid)) {
-                missingIds.push(`Row ${i + 2}: Person ID "${pid}" not found`);
-              }
-            });
-          }
-        });
-        
-        if (missingIds.length > 0) {
-          const hint =
-            "\n\nEach Person ID must match an active camper in your roster for the selected season " +
-            `(${selectedSeason}) in Settings. Sync/import the roster first, fix any wrong IDs in the spreadsheet, ` +
-            "or pick the season those campers belong to.";
-          toast.error(
-            `Person ID errors:\n${missingIds.slice(0, 5).join("\n")}${missingIds.length > 5 ? `\n...and ${missingIds.length - 5} more` : ""}${hint}`,
-          );
-          setUploading(false);
-          return;
-        }
-      }
-
-      // Add company_id and resolve person_ids to UUIDs
-      const rowsWithCompany = validatedRows.map(row => {
-        const baseRow: any = {
-          ...row,
-          company_id: currentCompany?.id,
-          season: selectedSeason,
-        };
-
-        // Resolve person_id to child_id for child-related tables
-        if (CHILD_PERSON_ID_TABLES.includes(tableName)) {
-          if (row.person_id) {
-            const pid = String(row.person_id).trim();
-            baseRow.child_id = childPersonIdMap.get(pid);
-            delete baseRow.person_id;
-          }
-          if (row.person_ids) {
-            baseRow.child_ids = row.person_ids
-              .map((id: string) => childPersonIdMap.get(String(id).trim()))
-              .filter(Boolean);
-            delete baseRow.person_ids;
-          }
-          if (row.reporter_person_id && staffPersonIdMap.has(row.reporter_person_id)) {
-            baseRow.reporter_id = staffPersonIdMap.get(row.reporter_person_id);
-            delete baseRow.reporter_person_id;
-          }
-        }
-        
-        return baseRow;
-      });
-
-      const rowsToInsert =
-        tableName === "medication_logs"
-          ? rowsWithCompany.map((row) => {
-              const copy = { ...row } as Record<string, unknown>;
-              sanitizeMedicationLogRowForInsert(copy);
-              return copy;
-            })
-          : rowsWithCompany;
-
-      const { error } = await supabase.from(tableName as any).insert(rowsToInsert as any);
-
-      if (error) throw error;
-
-      toast.success(`Successfully uploaded ${validatedRows.length} records`);
-      onUploadComplete?.();
+      await executeImport(validatedRows, "merge");
     } catch (error) {
       console.error('Upload error:', error);
       const msg =
@@ -500,7 +528,7 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
       );
     } finally {
       setUploading(false);
-      event.target.value = '';
+      resetFileInput();
     }
   };
 
@@ -508,6 +536,7 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
     <>
       <div className="flex items-center gap-2">
         <Input
+          ref={fileInputRef}
           type="file"
           accept=".csv"
           onChange={handleFileUpload}
@@ -525,15 +554,60 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
         </Button>
         <Button
           variant="outline"
-          onClick={() => document.getElementById(`csv-upload-${tableName}`)?.click()}
+          onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
         >
           <Upload className="h-4 w-4 mr-2" />
           {uploading ? "Uploading..." : "Upload CSV"}
         </Button>
       </div>
-      <CSVFormatGuide open={showGuide} onOpenChange={setShowGuide} />
 
+      <Dialog
+        open={showModeDialog}
+        onOpenChange={(open) => {
+          if (!open) cancelPendingImport();
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>How should this file be imported?</DialogTitle>
+          </DialogHeader>
+          <RadioGroup
+            value={importMode}
+            onValueChange={(value) => setImportMode(value as CsvImportMode)}
+            className="gap-3 text-sm"
+          >
+            <div className="flex items-start gap-2 rounded-md border p-3">
+              <RadioGroupItem value="merge" id={`${tableName}-csv-merge`} className="mt-0.5" />
+              <Label htmlFor={`${tableName}-csv-merge`} className="font-normal leading-snug cursor-pointer">
+                <span className="font-medium">Add / update</span>
+                {isRosterTable
+                  ? " — keep existing records; add new rows and update matches"
+                  : " — append new rows (existing records stay)"}
+              </Label>
+            </div>
+            <div className="flex items-start gap-2 rounded-md border p-3">
+              <RadioGroupItem value="replace" id={`${tableName}-csv-replace`} className="mt-0.5" />
+              <Label htmlFor={`${tableName}-csv-replace`} className="font-normal leading-snug cursor-pointer">
+                <span className="font-medium">Replace all</span>
+                {isRosterTable
+                  ? " — CSV becomes the full roster; anyone not in the file is marked inactive"
+                  : " — clear this season’s existing records for this camp, then import the file"}
+              </Label>
+            </div>
+          </RadioGroup>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={cancelPendingImport}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleConfirmImport()} disabled={uploading}>
+              {uploading ? "Uploading..." : "Import CSV"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <CSVFormatGuide open={showGuide} onOpenChange={setShowGuide} />
     </>
   );
 }

@@ -90,6 +90,7 @@ export default function ElectiveSignUp() {
       supabase.from("children").select("id, name, division_id")
         .eq("company_id", companyId)
         .eq("season", currentSeason)
+        .neq("status", "inactive")
         .order("name"),
     ]);
 
@@ -107,6 +108,7 @@ export default function ElectiveSignUp() {
       .eq("company_id", currentCompany!.id)
       .eq("division_id", divisionId)
       .eq("season", currentSeason)
+      .neq("status", "inactive")
       .order("name");
     setChildren(data || []);
   };

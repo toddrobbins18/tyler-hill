@@ -68,6 +68,7 @@ export default function SpecialistSportAssignments() {
         .select('id, name, email, role, staff_type, specialty_sports')
         .eq('company_id', currentCompany.id)
         .eq('season', currentSeason)
+        .neq('status', 'inactive')
         .neq('name', 'Unknown')
         .not('name', 'is', null)
         .in('staff_type', ['specialist', 'both']);

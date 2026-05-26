@@ -75,7 +75,7 @@ export default function RosterTemplates() {
           .select(`id, name, division_id, division:divisions(name, gender)`)
           .eq("company_id", currentCompany?.id)
           .eq("season", currentSeason)
-          .eq("status", "active")
+          .neq("status", "inactive")
           .order("name"),
         supabase
           .from("divisions")

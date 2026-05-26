@@ -69,6 +69,7 @@ export function BulkLeaderAssignmentDialog({ onSuccess }: BulkLeaderAssignmentDi
         .select("id, name, role, staff_type, division_id, email")
         .eq("company_id", currentCompany.id)
         .eq("season", currentSeason)
+        .neq("status", "inactive")
         .neq("name", "Unknown")
         .not("name", "is", null)
         .order("name"),

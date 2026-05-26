@@ -72,7 +72,7 @@ export default function ManageSportsRosterDialog({
       const { data: childrenData } = await supabase
         .from("children")
         .select("*")
-        .eq("status", "active")
+        .neq("status", "inactive")
         .eq("company_id", currentCompany.id)
         .eq("season", currentSeason)
         .order("name");
@@ -81,7 +81,7 @@ export default function ManageSportsRosterDialog({
       const { data: staffData } = await supabase
         .from("staff")
         .select("*")
-        .eq("status", "active")
+        .neq("status", "inactive")
         .eq("company_id", currentCompany.id)
         .eq("season", currentSeason)
         .order("name");

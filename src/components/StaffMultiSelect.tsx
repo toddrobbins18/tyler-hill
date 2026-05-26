@@ -65,6 +65,7 @@ export function StaffMultiSelect({
       .select("id, name, role")
       .eq("company_id", currentCompany.id)
       .eq("season", currentSeason)
+      .neq("status", "inactive")
       .neq("name", "Unknown")
       .not("name", "is", null)
       .order("name");

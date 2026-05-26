@@ -153,6 +153,7 @@ export default function ODManagement() {
           .select("id, name, department, role, rfid, gender")
           .eq("company_id", currentCompany.id)
           .eq("season", currentSeason)
+          .neq("status", "inactive")
           .order("name"),
         supabase
           .from("bunks")

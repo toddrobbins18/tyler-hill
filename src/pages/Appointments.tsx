@@ -149,12 +149,14 @@ export default function Appointments() {
           .select("id, name, division_id")
           .eq("company_id", currentCompany.id)
           .eq("season", currentSeason)
+          .neq("status", "inactive")
           .order("name"),
         supabase
           .from("staff")
           .select("id, name, department")
           .eq("company_id", currentCompany.id)
           .eq("season", currentSeason)
+          .neq("status", "inactive")
           .order("name")
       ]);
 
