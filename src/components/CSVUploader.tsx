@@ -16,6 +16,7 @@ import {
 import { z } from "zod";
 import { parseCsvDocument } from "@/lib/csvLine";
 import { STANDARD_MEAL_SCHEDULE_HHMM } from "@/lib/medicationBedtimeOptions";
+import { defaultMedicationStartDate } from "@/lib/medicationStartDate";
 import {
   CSV_REPLACE_CLEAR_TABLES,
   type CsvImportMode,
@@ -109,9 +110,9 @@ function normalizeMedicationDaysOfWeek(raw: unknown): string[] {
   return Array.from(new Set(out));
 }
 
-function sanitizeMedicationLogRowForInsert(row: Record<string, unknown>): void {
+function sanitizeMedicationLogRowForInsert(row: Record<string, unknown>, season: string): void {
   const normalizedDate = normalizeDateStringOrNull(row.date);
-  row.date = normalizedDate || localDateYmd();
+  row.date = normalizedDate || defaultMedicationStartDate(season);
 
   row.end_date = normalizeDateStringOrNull(row.end_date);
 
@@ -343,7 +344,7 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
         tableName === "medication_logs"
           ? rowsWithCompany.map((row) => {
               const copy = { ...row } as Record<string, unknown>;
-              sanitizeMedicationLogRowForInsert(copy);
+              sanitizeMedicationLogRowForInsert(copy, selectedSeason);
               return copy;
             })
           : rowsWithCompany;

@@ -26,6 +26,7 @@ import {
   findBedtimeOptionFromStoredMealLabel,
   formatMedicationMealTimeForDisplay,
 } from "@/lib/medicationBedtimeOptions";
+import { defaultMedicationStartDate } from "@/lib/medicationStartDate";
 
 // Helper to check if we should show limited features for Timber Lake
 const useTimberLakeMode = () => {
@@ -319,12 +320,12 @@ export default function Nurse() {
       return;
     }
 
-    const today = localDateYmd();
+    const medStartDate = defaultMedicationStartDate(currentSeason);
 
     const inserts = [
       ...standardMeals.map((mealTime) => ({
         child_id: selectedChild,
-        date: today,
+        date: medStartDate,
         medication_name: formData.medication_name,
         dosage: formData.dosage,
         meal_time: [mealTime],
@@ -341,7 +342,7 @@ export default function Nurse() {
         ? [
             {
               child_id: selectedChild,
-              date: today,
+              date: medStartDate,
               medication_name: formData.medication_name,
               dosage: formData.dosage,
               meal_time: ["Bedtime"],
