@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import CSVUploader from '@/components/CSVUploader';
 import { validateAndRefreshSession } from '@/lib/sessionUtils';
 import { getAuthenticatedSupabaseClient } from '@/lib/authenticatedSupabaseClient';
+import { isTimberLakeWestCompany, shouldShowTigerTimes } from '@/lib/camps';
 
 interface DailyWolfContent {
   id?: string;
@@ -48,12 +49,14 @@ export default function DailyWolfManagement() {
   const [saving, setSaving] = useState(false);
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
-  const isTimberLakeWest = currentCompany?.slug === 'timber-lake-west';
-  const isTimberLakeCamp = currentCompany?.slug === 'timber-lake-camp';
+  const isTimberLakeWest = isTimberLakeWestCompany(currentCompany);
+  const showTigerTimes = shouldShowTigerTimes(currentCompany);
   const odLabel = isTimberLakeWest ? 'Super OD' : 'OD';
   const odDescription = isTimberLakeWest ? 'Super OD information' : 'Officer of the Day information';
-  const pageTitle = isTimberLakeCamp ? 'Tiger Times' : 'Daily Wolf Management';
-  const pageDescription = isTimberLakeCamp ? 'Manage daily content for Tiger Times' : 'Manage daily content for The Daily Wolf';
+  const pageTitle = showTigerTimes ? 'Tiger Times' : 'Daily Wolf Management';
+  const pageDescription = showTigerTimes
+    ? 'Manage daily content for Tiger Times'
+    : 'Manage daily content for The Daily Wolf';
 
   const tigerTimesDefaultColors: Record<string, string> = {
     "Laundry": "#3b82f6",
@@ -318,7 +321,7 @@ export default function DailyWolfManagement() {
           </Popover>
         </div>
         <div className="flex gap-2">
-          {isTimberLakeCamp && (
+          {showTigerTimes && (
             <CalendarColorSettings
               calendarId="tiger-times"
               defaultColors={tigerTimesDefaultColors}
@@ -343,7 +346,7 @@ export default function DailyWolfManagement() {
             </Button>
           </CardContent>
         </Card>
-      ) : isTimberLakeCamp ? (
+      ) : showTigerTimes ? (
         <div className="grid gap-6 md:grid-cols-2">
           <Card style={{ borderTopWidth: '3px', borderTopColor: tigerTimesColors["Laundry"] }}>
             <CardHeader>

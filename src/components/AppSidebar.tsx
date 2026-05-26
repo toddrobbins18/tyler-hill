@@ -21,29 +21,32 @@ import {
 } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { isTimberLakeWestCompany, isTylerHillCamp, shouldShowTigerTimes } from "@/lib/camps";
+
+type MenuCompany = { slug?: string; name?: string } | null | undefined;
 
 // Items that need conditional rendering will be handled in the component
-const getMenuItems = (companySlug?: string) => {
+const getMenuItems = (company?: MenuCompany) => {
+  const companySlug = company?.slug;
+  const isWest = isTimberLakeWestCompany(company);
+  const isCamp = shouldShowTigerTimes(company);
   const baseItems: Array<{ title: string; url: string; icon: any; menuId: string; external?: boolean }> = [
-    { title: companySlug === 'timber-lake-west' ? "Athletics" : "Sports Calendar", url: "/athletics", icon: Trophy, menuId: "sports-calendar" },
+    { title: isWest ? "Athletics" : "Sports Calendar", url: "/athletics", icon: Trophy, menuId: "sports-calendar" },
     { title: "Camper", url: "/roster", icon: Users, menuId: "roster" },
     { title: "Dashboard", url: "/", icon: Home, menuId: "dashboard" },
     { title: "Master Calendar", url: "/calendar", icon: Calendar, menuId: "calendar" },
     { title: "Menu", url: "/menu", icon: Utensils, menuId: "menu" },
     { title: "Rainy Day Schedule", url: "/rainy-day", icon: CloudRain, menuId: "rainy-day" },
     {
-      title:
-        companySlug === "timber-lake-west"
-          ? "Special Events"
-          : "Special Events & Evening Activities",
+      title: isWest ? "Special Events" : "Special Events & Evening Activities",
       url: "/special-events",
       icon: Calendar,
       menuId: "special-events",
     },
     { title: "Staff", url: "/staff", icon: UserCog, menuId: "staff" },
-    ...(companySlug !== "timber-lake-west"
-      ? [{ title: "Tutoring & Therapy", url: "/tutoring-therapy", icon: BookOpen, menuId: "tutoring-therapy" } as const]
-      : []),
+    ...(isWest
+      ? []
+      : [{ title: "Tutoring & Therapy", url: "/tutoring-therapy", icon: BookOpen, menuId: "tutoring-therapy" } as const]),
   ];
 
   // Add common items for all companies
@@ -57,14 +60,14 @@ const getMenuItems = (companySlug?: string) => {
   );
 
   // Daily Schedule for Timber Lake Camp only
-  if (companySlug === 'timber-lake-camp') {
+  if (isCamp) {
     baseItems.push(
       { title: "Daily Schedule", url: "/daily-schedule", icon: Calendar, menuId: "daily-schedule" }
     );
   }
 
   // Special Meals only for Tyler Hill Camp
-  if (companySlug === 'tyler-hill-camp') {
+  if (isTylerHillCamp(companySlug)) {
     baseItems.push(
       { title: "Special Meals", url: "/special-meals", icon: Utensils, menuId: "special-meals" },
       { title: "Owl Pay", url: "/owl-pay", icon: CreditCard, menuId: "owl-pay" }
@@ -72,9 +75,9 @@ const getMenuItems = (companySlug?: string) => {
   }
 
   // Add Daily Notes/News for all camps EXCEPT Timber Lake Camp
-  if (companySlug !== 'timber-lake-camp') {
+  if (!shouldShowTigerTimes(company)) {
     baseItems.push({
-      title: companySlug === 'tyler-hill-camp' ? "Daily News" : "Daily Notes",
+      title: isTylerHillCamp(companySlug) ? "Daily News" : "Daily Notes",
       url: "/notes",
       icon: FileText,
       menuId: "notes"
@@ -82,7 +85,7 @@ const getMenuItems = (companySlug?: string) => {
   }
 
   // Add Daily Wolf items for Timber Lake West
-  if (companySlug === 'timber-lake-west') {
+  if (isWest) {
     baseItems.push(
       {
         title: "Daily Wolf Printable",
@@ -100,7 +103,7 @@ const getMenuItems = (companySlug?: string) => {
   }
 
   // Add Tiger Times and Elective Sign-Up for Timber Lake Camp
-  if (companySlug === 'timber-lake-camp') {
+  if (isCamp) {
     baseItems.push(
       {
         title: "Tiger Times",
@@ -132,7 +135,7 @@ const getMenuItems = (companySlug?: string) => {
     { title: "Awards", url: "/awards", icon: Award, menuId: "awards" },
     { title: "Incident Reports", url: "/incidents", icon: AlertTriangle, menuId: "incidents" },
   );
-  if (companySlug !== "timber-lake-west") {
+  if (!isWest) {
     baseItems.push({
       title: "Sports Academy",
       url: "/sports-academy",
@@ -142,7 +145,7 @@ const getMenuItems = (companySlug?: string) => {
   }
 
   // Roster Templates: Tyler Hill + Timber Lake Camp (page is TH-only; hide from TLW sidebar)
-  if (companySlug !== "timber-lake-west") {
+  if (!isWest) {
     baseItems.push({
       title: "Roster Templates",
       url: "/roster-templates",
@@ -167,7 +170,7 @@ export function AppSidebar() {
     loading: companyLoading,
   } = useCompany();
 
-  const items = useMemo(() => getMenuItems(currentCompany?.slug), [currentCompany?.slug]);
+  const items = useMemo(() => getMenuItems(currentCompany), [currentCompany?.slug, currentCompany?.name]);
 
   const isAdmin = useMemo(
     () => userRoles.includes("admin") || userRoles.includes("super_admin"),

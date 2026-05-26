@@ -18,6 +18,7 @@ import timberLakeCampHero from "@/assets/tember-camp.jpeg";
 import { format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { isActiveRosterStatus, isBirthdayTodayCalendar, parseBirthdayCalendarParts } from "@/lib/birthdayCalendar";
+import { isTimberLakeWestCompany, isTylerHillCamp, shouldShowTigerTimes } from "@/lib/camps";
 
 interface DailyWolfContent {
   officer_of_day: string;
@@ -65,7 +66,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (currentCompany?.id) {
       fetchDashboardData();
-      if (currentCompany.slug === 'timber-lake-west' || currentCompany.slug === 'timber-lake-camp') {
+      if (isTimberLakeWestCompany(currentCompany) || shouldShowTigerTimes(currentCompany)) {
         fetchDailyWolfContent();
       }
     }
@@ -124,7 +125,7 @@ export default function Dashboard() {
     const dailyWolfChannel = supabase
       .channel('dashboard-daily-wolf')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_wolf_content' }, () => {
-        if (currentCompany?.slug === 'timber-lake-west' || currentCompany?.slug === 'timber-lake-camp') {
+        if (isTimberLakeWestCompany(currentCompany) || shouldShowTigerTimes(currentCompany)) {
           fetchDailyWolfContent();
         }
       })
@@ -501,16 +502,16 @@ export default function Dashboard() {
     }
   };
 
-  const isTimberLakeCamp = currentCompany?.slug === 'timber-lake-camp';
-  const isTimberLakeWest = currentCompany?.slug === 'timber-lake-west';
-  const isTylerHillCamp = currentCompany?.slug === 'tyler-hill-camp';
-  const hasDashboardAerialBg = isTimberLakeWest || isTylerHillCamp || isTimberLakeCamp;
-  const dashboardAerialBgSrc = isTylerHillCamp
+  const showTigerTimes = shouldShowTigerTimes(currentCompany);
+  const isTimberLakeWest = isTimberLakeWestCompany(currentCompany);
+  const isTylerHill = isTylerHillCamp(currentCompany?.slug);
+  const hasDashboardAerialBg = isTimberLakeWest || isTylerHill || showTigerTimes;
+  const dashboardAerialBgSrc = isTylerHill
     ? tylerHillDashboardBg
-    : isTimberLakeCamp
+    : showTigerTimes
       ? timberLakeCampHero
       : timberLakeWestBg;
-  const dashboardTitle = isTimberLakeCamp ? "Tiger Times" : isTimberLakeWest ? "The Daily Wolf" : "Dashboard";
+  const dashboardTitle = showTigerTimes ? "Tiger Times" : isTimberLakeWest ? "The Daily Wolf" : "Dashboard";
   
   const glassCardClass = hasDashboardAerialBg ? 'bg-card/50 backdrop-blur-md border-white/30' : '';
   const glassButtonClass = hasDashboardAerialBg ? 'bg-card/50 backdrop-blur-md border-white/40 hover:bg-card/70' : '';
@@ -557,7 +558,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      {!isTimberLakeCamp && !isTylerHillCamp && !isTimberLakeWest && (
+      {!showTigerTimes && !isTylerHill && !isTimberLakeWest && (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title="Total Children"
@@ -645,7 +646,7 @@ export default function Dashboard() {
         </Card>
 
         {/* Timber Lake Camp: today's activities & upcoming trips */}
-        {isTimberLakeCamp && (
+        {showTigerTimes && (
           <>
             <Card className={`shadow-card h-full flex flex-col ${glassCardClass}`}>
               <CardHeader>
@@ -737,7 +738,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <CardTitle>Athletics Schedule</CardTitle>
-                <CardDescription>{isTylerHillCamp ? "Today & upcoming events" : "Today's sports events"}</CardDescription>
+                <CardDescription>{isTylerHill ? "Today & upcoming events" : "Today's sports events"}</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -748,7 +749,7 @@ export default function Dashboard() {
                 <p className="text-muted-foreground text-sm">No sports events today</p>
               ) : (
                 <>
-                  {isTylerHillCamp && (
+                  {isTylerHill && (
                     <div className="flex items-center gap-2 mb-1">
                       <CalendarIcon className="h-4 w-4 text-info" />
                       <p className="text-sm font-semibold text-info uppercase tracking-wide">Today</p>
@@ -768,7 +769,7 @@ export default function Dashboard() {
             </div>
 
             {/* Three Day Outlook - Tyler Hill Camp only */}
-            {isTylerHillCamp && threeDayOutlook.length > 0 && (
+            {isTylerHill && threeDayOutlook.length > 0 && (
               <div className="space-y-1 p-2 rounded-lg bg-warning/5 dark:bg-warning/10 border-l-4 border-warning">
                 <div className="flex items-center gap-2 mb-1">
                   <CalendarDays className="h-4 w-4 text-warning" />
@@ -903,12 +904,12 @@ export default function Dashboard() {
         </Card>
 
         {/* Notes Board for Tyler Hill - next to Special Events */}
-        {isTylerHillCamp && (
+        {isTylerHill && (
           <NotesBoard className={glassCardClass} />
         )}
 
         {/* Health Center Card - Timber Lake only */}
-        {isTimberLakeCamp && healthCenterAdmissions.length > 0 && (
+        {showTigerTimes && healthCenterAdmissions.length > 0 && (
           <Card className={`shadow-card h-full flex flex-col ${glassCardClass}`}>
             <CardHeader>
               <div className="flex items-center gap-2">
@@ -1041,7 +1042,7 @@ export default function Dashboard() {
       )}
 
       {/* Tiger Times Content for Timber Lake Camp */}
-      {isTimberLakeCamp && (
+      {showTigerTimes && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20" style={{ borderTopWidth: '3px', borderTopColor: ttColors["Laundry"] }}>
             <CardHeader className="pb-2">

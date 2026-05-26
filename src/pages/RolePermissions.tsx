@@ -8,8 +8,14 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { Shield, Users, Eye, UserCog, Trophy, Building2, Heart } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { isTimberLakeWestCompany, isTylerHillCamp, shouldShowTigerTimes } from "@/lib/camps";
 
-const getCompanyMenuItems = (companySlug?: string) => {
+type MenuCompany = { slug?: string; name?: string } | null | undefined;
+
+const getCompanyMenuItems = (company?: MenuCompany) => {
+  const companySlug = company?.slug;
+  const isWest = isTimberLakeWestCompany(company);
+  const isCamp = shouldShowTigerTimes(company);
   // NOTE: These IDs MUST match the permission keys used by AppSidebar + ProtectedRoute.
   // If they drift, toggling permissions here won't affect what users can actually access.
   // This mirrors AppSidebar.tsx getMenuItems() exactly.
@@ -22,37 +28,35 @@ const getCompanyMenuItems = (companySlug?: string) => {
     { id: "calendar", label: "Master Calendar", icon: "📅" },
     { id: "menu", label: "Menu", icon: "🍽️" },
     { id: "rainy-day", label: "Rainy Day Schedule", icon: "🌧️" },
-    { id: "special-events", label: companySlug === "timber-lake-west" ? "Special Events" : "Special Events & Evening Activities", icon: "🎉" },
+    { id: "special-events", label: isWest ? "Special Events" : "Special Events & Evening Activities", icon: "🎉" },
     { id: "transportation", label: "Transportation", icon: "🚌" },
-    ...(companySlug !== "timber-lake-west"
-      ? ([{ id: "tutoring-therapy", label: "Tutoring & Therapy", icon: "📖" }] as const)
-      : []),
+    ...(isWest ? [] : ([{ id: "tutoring-therapy", label: "Tutoring & Therapy", icon: "📖" }] as const)),
     { id: "od-management", label: "OD Management", icon: "✅" },
     { id: "appointments", label: "Appointments", icon: "🩺" },
     { id: "reports", label: "Reports", icon: "📈" },
     { id: "nurse", label: "Nurse", icon: "💊" },
     { id: "awards", label: "Awards", icon: "🏆" },
     { id: "incidents", label: "Incident Reports", icon: "⚠️" },
-    ...(companySlug !== "timber-lake-west"
-      ? ([
+    ...(isWest
+      ? []
+      : ([
           { id: "sports-academy", label: "Sports Academy", icon: "⚽" },
           { id: "roster-templates", label: "Roster Templates", icon: "🗂️" },
-        ] as const)
-      : []),
-    { id: "sports-calendar", label: companySlug === 'timber-lake-west' ? "Athletics" : "Sports Calendar", icon: "🏅" },
+        ] as const)),
+    { id: "sports-calendar", label: isWest ? "Athletics" : "Sports Calendar", icon: "🏅" },
   ];
 
   // Daily Notes/News - all camps EXCEPT timber-lake-camp (matches AppSidebar)
-  if (companySlug !== 'timber-lake-camp') {
+  if (!isCamp) {
     baseItems.push({
       id: "notes",
-      label: companySlug === 'tyler-hill-camp' ? "Daily News" : "Daily Notes",
+      label: isTylerHillCamp(companySlug) ? "Daily News" : "Daily Notes",
       icon: "📝"
     });
   }
 
   // Daily Wolf - ONLY for timber-lake-west (matches AppSidebar)
-  if (companySlug === 'timber-lake-west') {
+  if (isWest) {
     baseItems.push(
       { id: "daily-wolf-printable", label: "Daily Wolf Printable", icon: "📰" },
       { id: "daily-wolf-management", label: "Daily Wolf Management", icon: "✏️" }
@@ -60,14 +64,14 @@ const getCompanyMenuItems = (companySlug?: string) => {
   }
 
   // Tiger Times - ONLY for timber-lake-camp (matches AppSidebar)
-  if (companySlug === 'timber-lake-camp') {
+  if (isCamp) {
     baseItems.push(
       { id: "daily-wolf-management", label: "Tiger Times", icon: "🐯" }
     );
   }
 
   // Daily Schedule - ONLY for timber-lake-camp (matches AppSidebar)
-  if (companySlug === 'timber-lake-camp') {
+  if (isCamp) {
     baseItems.push(
       { id: "daily-schedule", label: "Daily Schedule", icon: "📅" },
       { id: "elective-signup", label: "Elective Sign-Up", icon: "🔗" }
@@ -75,7 +79,7 @@ const getCompanyMenuItems = (companySlug?: string) => {
   }
 
   // Special Meals - ONLY for tyler-hill-camp (matches AppSidebar)
-  if (companySlug === 'tyler-hill-camp') {
+  if (isTylerHillCamp(companySlug)) {
     baseItems.push(
       { id: "special-meals", label: "Special Meals", icon: "🍽️" },
       { id: "owl-pay", label: "Owl Pay", icon: "🦉" }
@@ -114,7 +118,7 @@ export default function RolePermissions() {
 
   useEffect(() => {
     if (currentCompany) {
-      setMenuItems(getCompanyMenuItems(currentCompany.slug));
+      setMenuItems(getCompanyMenuItems(currentCompany));
       fetchPermissions();
     }
 

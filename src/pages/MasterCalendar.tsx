@@ -25,11 +25,17 @@ import { Slider } from "@/components/ui/slider";
 import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
+import { shouldShowTigerTimes, isTimberLakeWestCompany } from "@/lib/camps";
+import {
+  DAILY_WOLF_WEST_CALENDAR_FIELDS,
+  TIGER_TIMES_CALENDAR_FIELDS,
+  dailyContentFieldValue,
+} from "@/lib/dailyWolfCalendarFields";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
 
-type EventSource = 'sports_calendar' | 'activities_field_trips' | 'special_events_activities' | 'tiger_times';
+type EventSource = 'sports_calendar' | 'activities_field_trips' | 'special_events_activities' | 'tiger_times' | 'daily_wolf';
 
 interface UnifiedEvent {
   id: string;
@@ -97,6 +103,12 @@ export default function MasterCalendar() {
       "TT: Outside Events": "#eab308",
       "TT: Staff Days Off": "#93c5fd",
       "TT: OD Notes": "#ec4899",
+      "Daily Wolf (Default)": "#0ea5e9",
+      "DW: Super OD": "#6366f1",
+      "DW: Quote": "#d97706",
+      "DW: Laundry": "#3b82f6",
+      "DW: Phone Calls": "#ef4444",
+      "DW: Notes": "#a855f7",
     };
     const merged = { ...defaultColors };
     const sources = ["sports-calendar", "activities-field-trips", "special-events", "tiger-times"];
@@ -272,28 +284,37 @@ export default function MasterCalendar() {
         });
       }
 
-      // Tiger Times events - each field becomes a separate event on that date
-      if (tigerTimesRes.data) {
-        const ttFields: { field: string; label: string; colorKey: string }[] = [
-          { field: 'laundry_info', label: 'Laundry', colorKey: 'TT: Laundry' },
-          { field: 'phone_calls_info', label: 'Phone Calls', colorKey: 'TT: Phone Calls' },
-          { field: 'outside_event', label: 'Outside Events', colorKey: 'TT: Outside Events' },
-          { field: 'staff_days_off', label: 'Staff Days Off', colorKey: 'TT: Staff Days Off' },
-          { field: 'od_notes', label: 'OD Notes', colorKey: 'TT: OD Notes' },
-        ];
+      // Timber Lake West — Daily Wolf content on the master calendar
+      if (isTimberLakeWestCompany(currentCompany) && tigerTimesRes.data) {
         tigerTimesRes.data.forEach((entry: any) => {
-          ttFields.forEach(({ field, label, colorKey }) => {
-            if (entry[field] && entry[field].trim()) {
-              unifiedEvents.push({
-                id: `tt_${entry.id}_${field}`,
-                title: `🐯 ${label}: ${entry[field]}`,
-                event_date: entry.date,
-                description: entry[field],
-                source: 'tiger_times',
-                type: colorKey,
-                originalData: { ...entry, tiger_times_category: colorKey },
-              });
-            }
+          DAILY_WOLF_WEST_CALENDAR_FIELDS.forEach(({ field, label, colorKey }) => {
+            const value = dailyContentFieldValue(entry, field);
+            if (!value) return;
+            unifiedEvents.push({
+              id: `dw_${entry.id}_${field}`,
+              title: `${label}: ${value}`,
+              event_date: entry.date,
+              description: value,
+              source: 'daily_wolf',
+              type: colorKey,
+              originalData: { ...entry, daily_wolf_category: colorKey },
+            });
+          });
+        });
+      } else if (shouldShowTigerTimes(currentCompany) && tigerTimesRes.data) {
+        tigerTimesRes.data.forEach((entry: any) => {
+          TIGER_TIMES_CALENDAR_FIELDS.forEach(({ field, label, colorKey }) => {
+            const value = dailyContentFieldValue(entry, field);
+            if (!value) return;
+            unifiedEvents.push({
+              id: `tt_${entry.id}_${field}`,
+              title: `🐯 ${label}: ${value}`,
+              event_date: entry.date,
+              description: value,
+              source: 'tiger_times',
+              type: colorKey,
+              originalData: { ...entry, tiger_times_category: colorKey },
+            });
           });
         });
       }
@@ -308,8 +329,8 @@ export default function MasterCalendar() {
           const eventDivisions = event.originalData?.divisions?.map((d: any) => d.id) || 
                                  event.originalData?.sports_calendar_divisions?.map((d: any) => d.division_id) || [];
           if (eventDivisionId) eventDivisions.push(eventDivisionId);
-          // Tiger Times events have no division, always show them
-          if (event.source === 'tiger_times') return true;
+          // Daily Wolf / Tiger Times have no division — always show
+          if (event.source === 'tiger_times' || event.source === 'daily_wolf') return true;
           return eventDivisions.some((divId: string) => divisionFilter.includes(divId)) || eventDivisions.length === 0;
         });
       }
@@ -517,6 +538,7 @@ export default function MasterCalendar() {
       case 'activities_field_trips': return <Users className="h-4 w-4" />;
       case 'special_events_activities': return <Sparkles className="h-4 w-4" />;
       case 'tiger_times': return <Star className="h-4 w-4" />;
+      case 'daily_wolf': return <FileText className="h-4 w-4" />;
     }
   };
 
@@ -526,6 +548,7 @@ export default function MasterCalendar() {
       case 'activities_field_trips': return "bg-green-500/20 text-green-700 border-green-500/30";
       case 'special_events_activities': return "bg-purple-500/20 text-purple-700 border-purple-500/30";
       case 'tiger_times': return "bg-amber-500/20 text-amber-700 border-amber-500/30";
+      case 'daily_wolf': return "bg-sky-500/20 text-sky-700 border-sky-500/30";
     }
   };
 
@@ -542,6 +565,7 @@ export default function MasterCalendar() {
       case 'activities_field_trips': return "Field Trip";
       case 'special_events_activities': return "Special Event";
       case 'tiger_times': return "Tiger Times";
+      case 'daily_wolf': return "Daily Wolf";
     }
   };
 
@@ -566,12 +590,17 @@ export default function MasterCalendar() {
       const ttCategory = event.resource.originalData?.tiger_times_category;
       if (ttCategory && cc[ttCategory]) bgColor = cc[ttCategory];
     }
+    if (source === 'daily_wolf') {
+      const dwCategory = event.resource.originalData?.daily_wolf_category;
+      if (dwCategory && cc[dwCategory]) bgColor = cc[dwCategory];
+    }
 
     const sourceColors: Record<EventSource, string> = {
       'sports_calendar': cc["Sports (Default)"] || '#3b82f6',
       'activities_field_trips': cc["Field Trip (Default)"] || '#22c55e',
       'special_events_activities': cc["Special Event (Default)"] || '#a855f7',
       'tiger_times': cc["Tiger Times (Default)"] || '#f59e0b',
+      'daily_wolf': cc["Daily Wolf (Default)"] || '#0ea5e9',
     };
     
     const finalBg = bgColor || sourceColors[source];
