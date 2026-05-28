@@ -11,6 +11,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList, Hospital, Clock, UserCheck, Search, ArrowUpDown, Users, Loader2, Scan, Pencil, CalendarDays } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { CSVUploader } from "@/components/CSVUploader";
 import { Calendar } from "@/components/ui/calendar";
 import { format, isBefore, startOfDay, isToday } from "date-fns";
@@ -27,6 +37,12 @@ import {
   formatMedicationMealTimeForDisplay,
 } from "@/lib/medicationBedtimeOptions";
 import { defaultMedicationStartDate } from "@/lib/medicationStartDate";
+import {
+  campProgramEndDate,
+  childMatchesGenderFilter,
+  mergeMedicationsForDate,
+  type MedicationLogRow,
+} from "@/lib/medicationSchedule";
 
 // Helper to check if we should show limited features for Timber Lake
 const useTimberLakeMode = () => {
@@ -63,8 +79,10 @@ export default function Nurse() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDivision, setSelectedDivision] = useState("all");
+  const [selectedGender, setSelectedGender] = useState<"all" | "boys" | "girls">("all");
   const [sortBy, setSortBy] = useState<'name' | 'division'>('name');
-  const [medSortBy, setMedSortBy] = useState<'meal_time' | 'name' | 'status'>('meal_time');
+  const [medSortBy, setMedSortBy] = useState<'meal_time' | 'name' | 'status' | 'division' | 'gender'>('meal_time');
+  const [unadministerTarget, setUnadministerTarget] = useState<any | null>(null);
   const [rfidInput, setRfidInput] = useState("");
   const [scannedChild, setScannedChild] = useState<any>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -255,6 +273,22 @@ export default function Nurse() {
         return sortMedicationsByName(meds);
       case 'status':
         return sortMedicationsByStatus(meds);
+      case 'division': {
+        return [...meds].sort((a, b) => {
+          const divA = a.children?.division?.name || '';
+          const divB = b.children?.division?.name || '';
+          if (divA !== divB) return divA.localeCompare(divB);
+          return (a.children?.name || '').localeCompare(b.children?.name || '');
+        });
+      }
+      case 'gender': {
+        return [...meds].sort((a, b) => {
+          const gA = String(a.children?.gender ?? a.children?.division?.gender ?? '');
+          const gB = String(b.children?.gender ?? b.children?.division?.gender ?? '');
+          if (gA !== gB) return gA.localeCompare(gB);
+          return (a.children?.name || '').localeCompare(b.children?.name || '');
+        });
+      }
       case 'meal_time':
       default:
         return sortMedicationsByMealTime(meds);
@@ -262,20 +296,45 @@ export default function Nurse() {
   };
 
   const fetchMedications = async (date?: Date) => {
-    const dateStr = date ? format(date, 'yyyy-MM-dd') : localDateYmd();
-    const { data, error } = await supabase
-      .from("medication_logs")
-      .select("*, children(name, division:divisions(name)), staff(name)")
-      .eq("date", dateStr)
-      .eq("season", currentSeason)
-      .eq("company_id", currentCompany?.id || '');
+    if (!currentCompany?.id) {
+      setMedications([]);
+      return;
+    }
 
-    if (error) {
+    const dateStr = date ? format(date, "yyyy-MM-dd") : localDateYmd();
+    const baseSelect =
+      "*, children(name, gender, division_id, division:divisions(name, gender)), staff(name)";
+
+    const [dateResult, recurringResult] = await Promise.all([
+      supabase
+        .from("medication_logs")
+        .select(baseSelect)
+        .eq("date", dateStr)
+        .eq("season", currentSeason)
+        .eq("company_id", currentCompany.id),
+      supabase
+        .from("medication_logs")
+        .select(baseSelect)
+        .eq("is_recurring", true)
+        .eq("season", currentSeason)
+        .eq("company_id", currentCompany.id)
+        .lte("date", dateStr)
+        .or(`end_date.is.null,end_date.gte.${dateStr}`),
+    ]);
+
+    if (dateResult.error || recurringResult.error) {
       toast({ title: "Error fetching medications", variant: "destructive" });
       return;
     }
-    // Sort medications by meal time using custom order
-    setMedications(sortMedicationsByMealTime(data || []));
+
+    const merged = mergeMedicationsForDate(
+      (dateResult.data || []) as MedicationLogRow[],
+      (recurringResult.data || []) as MedicationLogRow[],
+      dateStr,
+      currentSeason,
+    );
+
+    setMedications(sortMedicationsByMealTime(merged));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -334,7 +393,9 @@ export default function Nurse() {
         is_recurring: formData.is_recurring,
         frequency: formData.frequency,
         days_of_week: formData.days_of_week,
-        end_date: formData.end_date || null,
+        end_date: formData.is_recurring
+          ? formData.end_date || campProgramEndDate(currentSeason)
+          : formData.end_date || null,
         company_id: currentCompany?.id,
         season: currentSeason,
       })),
@@ -351,7 +412,9 @@ export default function Nurse() {
               is_recurring: formData.is_recurring,
               frequency: formData.frequency,
               days_of_week: formData.days_of_week,
-              end_date: formData.end_date || null,
+              end_date: formData.is_recurring
+          ? formData.end_date || campProgramEndDate(currentSeason)
+          : formData.end_date || null,
               company_id: currentCompany?.id,
               season: currentSeason,
             },
@@ -406,30 +469,92 @@ export default function Nurse() {
     fetchMedications(selectedDate);
   };
 
-  const handleAdminister = async (medId: string) => {
+  const handleAdminister = async (med: any) => {
     const { data: { user } } = await supabase.auth.getUser();
     const { data: staffData } = await supabase
       .from("staff")
       .select("id")
       .eq("email", user?.email)
-      .single();
+      .maybeSingle();
+
+    const dateStr = format(selectedDate, "yyyy-MM-dd");
+
+    if (med._fromRecurringTemplate) {
+      const { error } = await supabase.from("medication_logs").insert({
+        child_id: med.child_id,
+        date: dateStr,
+        medication_name: med.medication_name,
+        dosage: med.dosage,
+        meal_time: med.meal_time,
+        scheduled_time: med.scheduled_time,
+        notes: med.notes,
+        is_recurring: false,
+        frequency: med.frequency,
+        days_of_week: med.days_of_week,
+        end_date: med.end_date,
+        company_id: currentCompany?.id,
+        season: currentSeason,
+        administered: true,
+        administered_by: staffData?.id ?? null,
+        administered_at: new Date().toISOString(),
+      });
+
+      if (error) {
+        toast({ title: "Error updating medication", variant: "destructive" });
+        return;
+      }
+    } else {
+      const { error } = await supabase
+        .from("medication_logs")
+        .update({
+          administered: true,
+          administered_by: staffData?.id ?? null,
+          administered_at: new Date().toISOString(),
+        })
+        .eq("id", med.id);
+
+      if (error) {
+        toast({ title: "Error updating medication", variant: "destructive" });
+        return;
+      }
+    }
+
+    toast({ title: "Medication marked as administered" });
+    fetchMedications(selectedDate);
+  };
+
+  const handleUnadminister = async (med: any) => {
+    if (med._fromRecurringTemplate) {
+      setUnadministerTarget(null);
+      return;
+    }
 
     const { error } = await supabase
       .from("medication_logs")
       .update({
-        administered: true,
-        administered_by: staffData?.id,
-        administered_at: new Date().toISOString(),
+        administered: false,
+        administered_by: null,
+        administered_at: null,
       })
-      .eq("id", medId);
+      .eq("id", med.id);
+
+    setUnadministerTarget(null);
 
     if (error) {
       toast({ title: "Error updating medication", variant: "destructive" });
       return;
     }
 
-    toast({ title: "Medication marked as administered" });
+    toast({ title: "Medication marked as not administered" });
     fetchMedications(selectedDate);
+  };
+
+  const handleMedicationCheckChange = (med: any, checked: boolean) => {
+    if (checked) {
+      if (!med.administered) void handleAdminister(med);
+      return;
+    }
+    if (med.administered) setUnadministerTarget(med);
   };
 
   const handleRfidScan = async () => {
@@ -473,7 +598,7 @@ export default function Nurse() {
         .single();
 
       // Find all unadministered medications for this child today
-      const todayMeds = medications.filter(
+      const todayMeds = visibleMedications.filter(
         med => med.child_id === child.id && !med.administered
       );
 
@@ -496,44 +621,16 @@ export default function Nurse() {
       });
 
       const nextMed = sortedMeds[0];
-
-      // Administer only the FIRST/NEXT medication
-      const { error: updateError } = await supabase
-        .from("medication_logs")
-        .update({
-          administered: true,
-          administered_by: staffData?.id,
-          administered_at: new Date().toISOString(),
-        })
-        .eq("id", nextMed.id);
-
-      if (updateError) {
-        console.error('Error administering medication:', updateError);
-        toast({
-          title: "Error",
-          description: "Failed to mark medication as administered",
-          variant: "destructive"
-        });
-        setRfidInput("");
-        setIsScanning(false);
-        return;
-      }
-
-      // Success feedback with medication details
       const remainingCount = todayMeds.length - 1;
+      await handleAdminister(nextMed);
+
       toast({
         title: "✓ Medication Administered",
         description: `${nextMed.medication_name} marked as given for ${child.name}${remainingCount > 0 ? ` (${remainingCount} more pending)` : ''}`,
       });
 
-      // Update UI
       setScannedChild(child);
-      fetchMedications(selectedDate); // Refresh the list
-      
-      // Clear input for next scan
       setRfidInput("");
-      
-      // Auto-clear after 3 seconds
       setTimeout(() => setScannedChild(null), 3000);
 
     } catch (error) {
@@ -866,9 +963,10 @@ export default function Nurse() {
   }, {});
 
   const filteredChildren = children
-    .filter(child => 
+    .filter(child =>
       child.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      (selectedDivision === "all" || child.division_id === selectedDivision)
+      (selectedDivision === "all" || child.division_id === selectedDivision) &&
+      childMatchesGenderFilter(child, selectedGender)
     )
     .sort((a, b) => {
       if (sortBy === "division") {
@@ -878,6 +976,9 @@ export default function Nurse() {
       }
       return a.name.localeCompare(b.name);
     });
+
+  const visibleChildIds = new Set(filteredChildren.map((child) => child.id));
+  const visibleMedications = medications.filter((med) => visibleChildIds.has(med.child_id));
 
   return (
     <div className="space-y-8">
@@ -934,6 +1035,16 @@ export default function Nurse() {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={selectedGender} onValueChange={(v: "all" | "boys" | "girls") => setSelectedGender(v)}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="All Genders" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Genders</SelectItem>
+                <SelectItem value="boys">Boys</SelectItem>
+                <SelectItem value="girls">Girls</SelectItem>
+              </SelectContent>
+            </Select>
             <Button 
               variant="outline"
               onClick={() => setSortBy(sortBy === "name" ? "division" : "name")}
@@ -972,14 +1083,14 @@ export default function Nurse() {
             <CardContent>
               {loading ? (
                 <p className="text-muted-foreground">Loading...</p>
-              ) : medications.length === 0 ? (
+              ) : visibleMedications.length === 0 ? (
                 <p className="text-muted-foreground">No medications scheduled for this date</p>
               ) : (
                 <div className="space-y-4">
                   {filteredChildren
-                    .filter(child => medications.some(med => med.child_id === child.id))
+                    .filter(child => visibleMedications.some(med => med.child_id === child.id))
                     .map((child) => {
-                      const childMeds = medications.filter(med => med.child_id === child.id);
+                      const childMeds = visibleMedications.filter(med => med.child_id === child.id);
                       return (
                         <div key={child.id} className="border rounded-lg p-4 space-y-3">
                           <div className="flex items-center gap-2">
@@ -990,16 +1101,17 @@ export default function Nurse() {
                               </Badge>
                             )}
                           </div>
-                          {childMeds.map((med) => {
+                            {sortMedicationsByMealTime(childMeds).map((med) => {
                             const isPastDate = isBefore(startOfDay(selectedDate), startOfDay(new Date()));
                             return (
-                              <div key={med.id} className="p-3 bg-muted/50 rounded space-y-2">
+                              <div key={`${med.id}-${med._displayDate ?? med.date}`} className="p-3 bg-muted/50 rounded space-y-2">
                                 <div className="flex items-start gap-3">
                                   {!isPastDate && (
                                     <Checkbox
                                       checked={med.administered}
-                                      onCheckedChange={() => !med.administered && handleAdminister(med.id)}
-                                      disabled={med.administered}
+                                      onCheckedChange={(checked) =>
+                                        handleMedicationCheckChange(med, checked === true)
+                                      }
                                     />
                                   )}
                                   <div className="flex-1">
@@ -1011,6 +1123,11 @@ export default function Nurse() {
                                           Given
                                         </Badge>
                                       )}
+                                      {med.is_recurring && (
+                                        <Badge variant="secondary" className="text-xs">
+                                          Recurring
+                                        </Badge>
+                                      )}
                                     </div>
                                     <p className="text-sm text-muted-foreground">
                                       {med.dosage} -{' '}
@@ -1020,6 +1137,28 @@ export default function Nurse() {
                                       <p className="text-sm text-muted-foreground mt-1">{med.notes}</p>
                                     )}
                                   </div>
+                                  {canManageMedications && (
+                                    <div className="flex gap-1">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                          setEditingMedication(med);
+                                          setIsEditDialogOpen(true);
+                                        }}
+                                      >
+                                        <Pencil className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleDelete(med._fromRecurringTemplate ? med._templateId : med.id)}
+                                        className="text-destructive hover:text-destructive"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  )}
                                 </div>
                                 
                                 {isPastDate && (
@@ -1076,14 +1215,14 @@ export default function Nurse() {
             <CardContent>
               {loading ? (
                 <p className="text-muted-foreground">Loading...</p>
-              ) : medications.length === 0 ? (
+              ) : visibleMedications.length === 0 ? (
                 <p className="text-muted-foreground">No medications scheduled for today</p>
               ) : (
                 <div className="space-y-4">
                   {filteredChildren
-                    .filter(child => medications.some(med => med.child_id === child.id))
+                    .filter(child => visibleMedications.some(med => med.child_id === child.id))
                     .map((child) => {
-                      const childMeds = medications.filter(med => med.child_id === child.id);
+                      const childMeds = visibleMedications.filter(med => med.child_id === child.id);
                       return (
                         <div key={child.id} className="border rounded-lg p-4">
                           <div className="flex items-center gap-2 mb-3">
@@ -1096,11 +1235,12 @@ export default function Nurse() {
                           </div>
                           <div className="space-y-2">
                             {sortMedicationsByMealTime(childMeds).map((med) => (
-                              <div key={med.id} className="flex items-start gap-3 p-3 bg-muted/50 rounded">
+                              <div key={`${med.id}-${med._displayDate ?? med.date}`} className="flex items-start gap-3 p-3 bg-muted/50 rounded">
                                 <Checkbox
                                   checked={med.administered}
-                                  onCheckedChange={() => !med.administered && handleAdminister(med.id)}
-                                  disabled={med.administered}
+                                  onCheckedChange={(checked) =>
+                                    handleMedicationCheckChange(med, checked === true)
+                                  }
                                 />
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2">
@@ -1157,7 +1297,7 @@ export default function Nurse() {
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      onClick={() => handleDelete(med.id)}
+                                      onClick={() => handleDelete(med._fromRecurringTemplate ? med._templateId : med.id)}
                                       className="text-destructive hover:text-destructive"
                                     >
                                       <Trash2 className="h-4 w-4" />
@@ -1184,7 +1324,7 @@ export default function Nurse() {
                   <CardTitle>Today's Medications</CardTitle>
                   <CardDescription>Track medication administration</CardDescription>
                 </div>
-                <Select value={medSortBy} onValueChange={(value: 'meal_time' | 'name' | 'status') => setMedSortBy(value)}>
+                <Select value={medSortBy} onValueChange={(value: 'meal_time' | 'name' | 'status' | 'division' | 'gender') => setMedSortBy(value)}>
                   <SelectTrigger className="w-[180px]">
                     <ArrowUpDown className="h-4 w-4 mr-2" />
                     <SelectValue placeholder="Sort by..." />
@@ -1192,6 +1332,8 @@ export default function Nurse() {
                   <SelectContent>
                     <SelectItem value="meal_time">Sort by Meal Time</SelectItem>
                     <SelectItem value="name">Sort by Name</SelectItem>
+                    <SelectItem value="division">Sort by Division</SelectItem>
+                    <SelectItem value="gender">Sort by Gender</SelectItem>
                     <SelectItem value="status">Sort by Status</SelectItem>
                   </SelectContent>
                 </Select>
@@ -1271,13 +1413,13 @@ export default function Nurse() {
 
               {loading ? (
                 <p className="text-muted-foreground">Loading...</p>
-              ) : medications.length === 0 ? (
+              ) : visibleMedications.length === 0 ? (
                 <p className="text-muted-foreground">No medications scheduled for today</p>
               ) : (
                 <div className="space-y-3">
-                  {getSortedMedications(medications).map((med) => (
+                  {getSortedMedications(visibleMedications).map((med) => (
                     <div
-                      key={med.id}
+                      key={`${med.id}-${med._displayDate ?? med.date}`}
                       className="p-4 rounded-lg border bg-card"
                     >
                       <div className="flex items-start justify-between mb-2">
@@ -1336,7 +1478,7 @@ export default function Nurse() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleDelete(med.id)}
+                              onClick={() => handleDelete(med._fromRecurringTemplate ? med._templateId : med.id)}
                               className="text-destructive hover:text-destructive"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -1344,13 +1486,22 @@ export default function Nurse() {
                           )}
                         </div>
                       </div>
-                      {!med.administered && (
+                      {!med.administered ? (
                         <Button
                           size="sm"
-                          onClick={() => handleAdminister(med.id)}
+                          onClick={() => handleAdminister(med)}
                           className="w-full mt-2"
                         >
                           Mark as Administered
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setUnadministerTarget(med)}
+                          className="w-full mt-2"
+                        >
+                          Mark as Not Administered
                         </Button>
                       )}
                       {med.administered && med.staff?.name && (
@@ -1992,6 +2143,26 @@ export default function Nurse() {
         onOpenChange={setIsEditDialogOpen}
         onSuccess={() => fetchMedications(selectedDate)}
       />
+
+      <AlertDialog open={!!unadministerTarget} onOpenChange={(open) => !open && setUnadministerTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark as not administered?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to undo this?{" "}
+              {unadministerTarget?.medication_name
+                ? `"${unadministerTarget.medication_name}" will be marked as pending again.`
+                : "This medication will be marked as pending again."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => unadministerTarget && handleUnadminister(unadministerTarget)}>
+              Yes, undo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

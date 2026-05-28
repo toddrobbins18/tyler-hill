@@ -16,7 +16,13 @@ import {
 import { z } from "zod";
 import { parseCsvDocument } from "@/lib/csvLine";
 import { STANDARD_MEAL_SCHEDULE_HHMM } from "@/lib/medicationBedtimeOptions";
-import { defaultMedicationStartDate } from "@/lib/medicationStartDate";
+import {
+  applyDailyMedicationDefaults,
+  campProgramEndDate,
+  mergeMedicationsForDate,
+  childMatchesGenderFilter,
+  type MedicationLogRow,
+} from "@/lib/medicationSchedule";
 import {
   CSV_REPLACE_CLEAR_TABLES,
   type CsvImportMode,
@@ -152,6 +158,8 @@ function sanitizeMedicationLogRowForInsert(row: Record<string, unknown>, season:
     row.scheduled_time =
       STANDARD_MEAL_SCHEDULE_HHMM[label as keyof typeof STANDARD_MEAL_SCHEDULE_HHMM] ?? "12:00";
   }
+
+  applyDailyMedicationDefaults(row, season);
 }
 
 interface CSVUploaderProps {
