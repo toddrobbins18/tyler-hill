@@ -26,6 +26,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useSpecialistSportScope } from "@/hooks/useSpecialistSportScope";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -34,6 +35,7 @@ export default function SportsCalendar() {
   const { currentSeason } = useSeasonContext();
   const { currentCompany } = useCompany();
   const { getDivisionFilter } = usePermissions();
+  const { assignedSports, hasSportScope, getSportFilter } = useSpecialistSportScope();
   const [events, setEvents] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
   const [selectedDivisions, setSelectedDivisions] = useState<string[]>([]);
@@ -176,6 +178,14 @@ export default function SportsCalendar() {
         const eventDivisions = event.sports_calendar_divisions?.map((d: any) => d.division_id) || [];
         if (event.division?.id) eventDivisions.push(event.division.id);
         return eventDivisions.some((divId: string) => divisionFilter.includes(divId)) || eventDivisions.length === 0;
+      });
+    }
+
+    const sportFilter = getSportFilter();
+    if (sportFilter) {
+      filteredEvents = filteredEvents.filter((event) => {
+        const sport = event.custom_sport_type || event.sport_type;
+        return sport && sportFilter.includes(sport);
       });
     }
 

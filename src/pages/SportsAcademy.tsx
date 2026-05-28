@@ -19,12 +19,25 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useSpecialistSportScope } from "@/hooks/useSpecialistSportScope";
+import {
+  enrichSportsAcademyEnrollments,
+  enrollmentMatchesSpecialistSports,
+  sportsAcademyCamperName,
+} from "@/lib/sportsAcademyUtils";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
 
 export default function SportsAcademy() {
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
   const { getDivisionFilter, loading: permissionsLoading, userDivisions } = usePermissions();
+  const {
+    assignedSports,
+    hasSportScope,
+    isSpecialist,
+    getSportFilter,
+    loading: sportScopeLoading,
+  } = useSpecialistSportScope();
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [children, setChildren] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
@@ -71,8 +84,7 @@ export default function SportsAcademy() {
   };
 
   useEffect(() => {
-    // Wait for permissions to load before fetching
-    if (permissionsLoading) return;
+    if (permissionsLoading || sportScopeLoading) return;
     fetchEnrollments();
     fetchChildren();
     fetchDivisions();
@@ -89,16 +101,25 @@ export default function SportsAcademy() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [permissionsLoading, userDivisions, currentCompany?.id, currentSeason]);
+  }, [permissionsLoading, sportScopeLoading, userDivisions, currentCompany?.id, currentSeason]);
+
+  useEffect(() => {
+    if (!hasSportScope || assignedSports.length !== 1) return;
+    setSelectedSport(assignedSports[0]);
+  }, [hasSportScope, assignedSports]);
 
   const fetchEnrollments = async () => {
+    if (!currentCompany?.id) {
+      setEnrollments([]);
+      setLoading(false);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("sports_academy")
-      .select(`
-        *,
-        child:children(id, name, age, gender, division_id, division:divisions(id, name, gender))
-      `)
-      .eq("company_id", currentCompany?.id || '')
+      .select("*")
+      .eq("company_id", currentCompany.id)
+      .eq("season", currentSeason)
       .order("sport_name", { ascending: true });
 
     if (error) {
@@ -106,17 +127,35 @@ export default function SportsAcademy() {
       setLoading(false);
       return;
     }
-    
-    // Filter enrollments by allowed divisions
+
+    let rows = data || [];
+    try {
+      rows = await enrichSportsAcademyEnrollments(
+        supabase,
+        rows,
+        currentCompany.id,
+        currentSeason,
+      );
+    } catch (enrichError) {
+      console.error("[SportsAcademy] Failed to enrich camper names:", enrichError);
+    }
+
+    const sportFilter = getSportFilter();
+    if (sportFilter) {
+      rows = rows.filter((enrollment) => enrollmentMatchesSpecialistSports(enrollment, sportFilter));
+    } else if (isSpecialist && assignedSports.length === 0) {
+      rows = [];
+    }
+
     const divisionFilter = getDivisionFilter();
     if (divisionFilter !== null && divisionFilter.length > 0) {
-      const filtered = (data || []).filter(enrollment => 
-        enrollment.child?.division_id && divisionFilter.includes(enrollment.child.division_id)
+      rows = rows.filter(
+        (enrollment) =>
+          enrollment.child?.division_id && divisionFilter.includes(enrollment.child.division_id),
       );
-      setEnrollments(filtered);
-    } else {
-      setEnrollments(data || []);
     }
+
+    setEnrollments(rows);
     setLoading(false);
   };
 
@@ -296,6 +335,10 @@ export default function SportsAcademy() {
     }));
   };
 
+  const availableSportsList = hasSportScope
+    ? sportsList.filter((sport) => assignedSports.includes(sport))
+    : sportsList;
+
   const filteredEnrollments = enrollments.filter(enrollment => {
     // Sport filter
     if (selectedSport !== "all" && enrollment.sport_name !== selectedSport) return false;
@@ -310,7 +353,7 @@ export default function SportsAcademy() {
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
       const searchableFields = [
-        enrollment.child?.name,
+        sportsAcademyCamperName(enrollment),
         enrollment.sport_name,
         enrollment.instructor
       ].filter(Boolean).join(" ").toLowerCase();
@@ -374,6 +417,16 @@ export default function SportsAcademy() {
             Sports Academy
           </h1>
           <p className="text-muted-foreground">Manage camper sports academy enrollments</p>
+          {hasSportScope && (
+            <p className="text-sm text-muted-foreground mt-1">
+              Showing {assignedSports.join(", ")} enrollments only (your assigned sports).
+            </p>
+          )}
+          {hasSportScope && assignedSports.length === 0 && (
+            <p className="text-sm text-amber-700 mt-1">
+              No sports assigned to your account yet. Ask an admin to set your sports in Specialist Sport Assignments.
+            </p>
+          )}
         </div>
         <div className="flex gap-2">
           <div className="flex gap-1 border rounded-md p-1 bg-muted/50">
@@ -496,7 +549,7 @@ export default function SportsAcademy() {
                         <div className="flex-1">
                           <CardTitle className="text-lg flex items-center gap-2">
                             <User className="h-4 w-4" />
-                            {enrollment.child?.name || "Unknown"}
+                            {sportsAcademyCamperName(enrollment)}
                           </CardTitle>
                           {enrollment.child?.division?.name && (
                             <Badge variant="outline" className="mt-1 w-fit">
@@ -566,7 +619,7 @@ export default function SportsAcademy() {
                         <div className="flex-1">
                           <CardTitle className="text-lg flex items-center gap-2">
                             <User className="h-4 w-4" />
-                            {enrollment.child?.name || "Unknown"}
+                            {sportsAcademyCamperName(enrollment)}
                           </CardTitle>
                           {enrollment.child?.division?.name && (
                             <Badge variant="outline" className="mt-1 w-fit">
@@ -651,7 +704,7 @@ export default function SportsAcademy() {
                   <SelectValue placeholder="Select sport" />
                 </SelectTrigger>
                 <SelectContent>
-                  {sportsList.map((sport) => (
+                  {availableSportsList.map((sport) => (
                     <SelectItem key={sport} value={sport}>
                       {sport}
                     </SelectItem>
