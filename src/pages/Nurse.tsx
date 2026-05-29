@@ -40,6 +40,7 @@ import { defaultMedicationStartDate } from "@/lib/medicationStartDate";
 import {
   campProgramEndDate,
   childMatchesGenderFilter,
+  findDaySpecificMedicationLog,
   mergeMedicationsForDate,
   type MedicationLogRow,
 } from "@/lib/medicationSchedule";
@@ -480,28 +481,54 @@ export default function Nurse() {
     const dateStr = format(selectedDate, "yyyy-MM-dd");
 
     if (med._fromRecurringTemplate) {
-      const { error } = await supabase.from("medication_logs").insert({
-        child_id: med.child_id,
-        date: dateStr,
-        medication_name: med.medication_name,
-        dosage: med.dosage,
-        meal_time: med.meal_time,
-        scheduled_time: med.scheduled_time,
-        notes: med.notes,
-        is_recurring: false,
-        frequency: med.frequency,
-        days_of_week: med.days_of_week,
-        end_date: med.end_date,
-        company_id: currentCompany?.id,
-        season: currentSeason,
-        administered: true,
-        administered_by: staffData?.id ?? null,
-        administered_at: new Date().toISOString(),
-      });
+      const { data: dayLogs } = await supabase
+        .from("medication_logs")
+        .select("id, child_id, medication_name, meal_time")
+        .eq("child_id", med.child_id)
+        .eq("date", dateStr)
+        .eq("company_id", currentCompany?.id)
+        .eq("season", currentSeason);
 
-      if (error) {
-        toast({ title: "Error updating medication", variant: "destructive" });
-        return;
+      const existingDayLog = findDaySpecificMedicationLog(dayLogs || [], med);
+
+      if (existingDayLog) {
+        const { error } = await supabase
+          .from("medication_logs")
+          .update({
+            administered: true,
+            administered_by: staffData?.id ?? null,
+            administered_at: new Date().toISOString(),
+          })
+          .eq("id", existingDayLog.id);
+
+        if (error) {
+          toast({ title: "Error updating medication", variant: "destructive" });
+          return;
+        }
+      } else {
+        const { error } = await supabase.from("medication_logs").insert({
+          child_id: med.child_id,
+          date: dateStr,
+          medication_name: med.medication_name,
+          dosage: med.dosage,
+          meal_time: med.meal_time,
+          scheduled_time: med.scheduled_time,
+          notes: med.notes,
+          is_recurring: false,
+          frequency: med.frequency,
+          days_of_week: med.days_of_week,
+          end_date: med.end_date,
+          company_id: currentCompany?.id,
+          season: currentSeason,
+          administered: true,
+          administered_by: staffData?.id ?? null,
+          administered_at: new Date().toISOString(),
+        });
+
+        if (error) {
+          toast({ title: "Error updating medication", variant: "destructive" });
+          return;
+        }
       }
     } else {
       const { error } = await supabase
@@ -524,9 +551,35 @@ export default function Nurse() {
   };
 
   const handleUnadminister = async (med: any) => {
+    const dateStr = format(selectedDate, "yyyy-MM-dd");
+    setUnadministerTarget(null);
+
+    let targetId = med.id as string;
+
     if (med._fromRecurringTemplate) {
-      setUnadministerTarget(null);
-      return;
+      const { data: dayLogs, error: lookupError } = await supabase
+        .from("medication_logs")
+        .select("id, child_id, medication_name, meal_time")
+        .eq("child_id", med.child_id)
+        .eq("date", dateStr)
+        .eq("company_id", currentCompany?.id)
+        .eq("season", currentSeason);
+
+      if (lookupError) {
+        toast({ title: "Error updating medication", variant: "destructive" });
+        return;
+      }
+
+      const match = findDaySpecificMedicationLog(dayLogs || [], med);
+      if (!match) {
+        toast({
+          title: "Nothing to undo",
+          description: "No administration record exists for this date.",
+          variant: "destructive",
+        });
+        return;
+      }
+      targetId = match.id;
     }
 
     const { error } = await supabase
@@ -536,9 +589,7 @@ export default function Nurse() {
         administered_by: null,
         administered_at: null,
       })
-      .eq("id", med.id);
-
-    setUnadministerTarget(null);
+      .eq("id", targetId);
 
     if (error) {
       toast({ title: "Error updating medication", variant: "destructive" });

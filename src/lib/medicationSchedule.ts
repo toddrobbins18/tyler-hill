@@ -32,8 +32,23 @@ export type MedicationLogRow = {
 };
 
 function mealTimeKey(mealTime: unknown): string {
-  if (Array.isArray(mealTime)) return mealTime.join("|");
-  return String(mealTime ?? "");
+  if (mealTime == null) return "";
+  if (Array.isArray(mealTime)) {
+    return mealTime.map(String).sort().join("|");
+  }
+  if (typeof mealTime === "string") {
+    const trimmed = mealTime.trim();
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(trimmed) as unknown;
+        if (Array.isArray(parsed)) return parsed.map(String).sort().join("|");
+      } catch {
+        /* use raw string */
+      }
+    }
+    return trimmed;
+  }
+  return String(mealTime);
 }
 
 /** Unique key for deduping the same med slot per child per day. */
@@ -93,6 +108,11 @@ export function mergeMedicationsForDate(
 
     result.push({
       ...template,
+      // Never inherit administered state from the template row on other days.
+      administered: false,
+      administered_by: null,
+      administered_at: null,
+      staff: undefined,
       _fromRecurringTemplate: true,
       _templateId: template.id,
       _displayDate: dateYmd,
@@ -101,6 +121,15 @@ export function mergeMedicationsForDate(
   }
 
   return result;
+}
+
+/** Find a concrete log row for a recurring slot on a specific calendar day. */
+export function findDaySpecificMedicationLog(
+  dayRows: Pick<MedicationLogRow, "id" | "child_id" | "medication_name" | "meal_time">[],
+  med: Pick<MedicationLogRow, "child_id" | "medication_name" | "meal_time">,
+): Pick<MedicationLogRow, "id"> | undefined {
+  const slotKey = medicationSlotKey(med);
+  return dayRows.find((row) => medicationSlotKey(row) === slotKey);
 }
 
 /** Normalize CSV / manual rows: daily scheduled meds recur through camp end. */
