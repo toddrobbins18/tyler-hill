@@ -1,7 +1,7 @@
 import { Users, Truck, FileText, Award, Utensils, Calendar as CalendarIcon, CalendarDays, MapPin, Cake, Trophy, Activity, Quote, Phone, Shirt, User, Camera, Globe, CalendarOff, Palmtree } from "lucide-react";
 import { useTigerTimesColors } from "@/hooks/useTigerTimesColors";
 import { StatCard } from "@/components/StatCard";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,13 +12,15 @@ import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { WeatherWidget } from "@/components/WeatherWidget";
 import NotesBoard from "@/components/dashboard/NotesBoard";
+import { DashboardWidgetGrid } from "@/components/dashboard/DashboardWidgetGrid";
+import { CompactInfoCard } from "@/components/dashboard/CompactInfoCard";
 import timberLakeWestBg from "@/assets/timber-lake-west-bg.jpeg";
 import tylerHillDashboardBg from "@/assets/image001.jpg";
 import timberLakeCampHero from "@/assets/tember-camp.jpeg";
-import { format } from "date-fns";
+import { addDays, format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { isActiveRosterStatus, isBirthdayTodayCalendar, parseBirthdayCalendarParts } from "@/lib/birthdayCalendar";
-import { isTimberLakeWestCompany, isTylerHillCamp, shouldShowTigerTimes } from "@/lib/camps";
+import { isTimberLakeCamp, isTimberLakeWestCompany, isTylerHillCamp, shouldShowTigerTimes } from "@/lib/camps";
 
 interface DailyWolfContent {
   officer_of_day: string;
@@ -179,7 +181,9 @@ export default function Dashboard() {
   const fetchDashboardData = async () => {
     if (!currentCompany?.id) return;
     
-    const today = new Date().toISOString().split('T')[0];
+    const todayDate = new Date();
+    const today = format(todayDate, "yyyy-MM-dd");
+    const tripWindowEnd = format(addDays(todayDate, 2), "yyyy-MM-dd");
     const weekStart = new Date();
     weekStart.setDate(weekStart.getDate() - 7);
     const divisionFilter = getDivisionFilter();
@@ -264,8 +268,10 @@ export default function Dashboard() {
       .gte('date', today)
       .order('date')
       .limit(5);
-    if (currentCompany.slug === 'timber-lake-camp') {
-      upcomingTripsQuery = upcomingTripsQuery.eq('season', currentSeason);
+    if (isTimberLakeCamp(currentCompany.slug)) {
+      upcomingTripsQuery = upcomingTripsQuery
+        .eq('season', currentSeason)
+        .lte('date', tripWindowEnd);
     }
     const { data: trips } = await upcomingTripsQuery;
 
@@ -438,7 +444,6 @@ export default function Dashboard() {
       isActiveRosterStatus(staff.status),
     );
 
-    const todayDate = new Date();
     const todayMonth = todayDate.getMonth() + 1;
     const todayDay = todayDate.getDate();
 
@@ -511,10 +516,27 @@ export default function Dashboard() {
     : showTigerTimes
       ? timberLakeCampHero
       : timberLakeWestBg;
-  const dashboardTitle = showTigerTimes ? "Tiger Times" : isTimberLakeWest ? "The Daily Wolf" : "Dashboard";
+  const dashboardTitle = showTigerTimes
+    ? "Tiger Times"
+    : isTimberLakeWest
+      ? "The Daily Wolf"
+      : isTylerHill
+        ? "The Bear"
+        : "Dashboard";
+
+  const menuMeals = [
+    { label: "Breakfast", value: todaysMenu.breakfast },
+    { label: "Lunch", value: todaysMenu.lunch },
+    { label: "Snack", value: todaysMenu.snack },
+    { label: "Dinner", value: todaysMenu.dinner },
+  ].filter((meal) => meal.value && meal.value !== "Not scheduled");
   
-  const glassCardClass = hasDashboardAerialBg ? 'bg-card/50 backdrop-blur-md border-white/30' : '';
-  const glassButtonClass = hasDashboardAerialBg ? 'bg-card/50 backdrop-blur-md border-white/40 hover:bg-card/70' : '';
+  const glassCardClass = hasDashboardAerialBg ? "bg-card/50 backdrop-blur-md border-white/30" : "";
+  const widgetHeaderClass = "flex flex-row items-center justify-between gap-2 p-4 pb-2 space-y-0";
+  const widgetTitleClass = "text-base font-semibold leading-tight";
+  const widgetContentClass = "px-4 pb-4 pt-0";
+  const widgetLinkClass = "h-auto shrink-0 p-0 text-xs font-medium text-primary hover:underline";
+  const widgetIconWrapClass = "shrink-0 rounded-md p-1.5";
   
   const today = new Date();
   const formattedDate = today.toLocaleDateString('en-US', { 
@@ -539,7 +561,7 @@ export default function Dashboard() {
 
   return (
     <div 
-      className="space-y-8 min-h-screen relative"
+      className={`${hasDashboardAerialBg ? "space-y-5" : "space-y-8"} min-h-screen relative`}
       style={hasDashboardAerialBg ? {
         backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.4), rgba(0,0,0,0.6)), url(${dashboardAerialBgSrc})`,
         backgroundSize: 'cover',
@@ -549,10 +571,10 @@ export default function Dashboard() {
         padding: '2rem',
       } : undefined}
     >
-      <div className={hasDashboardAerialBg ? 'text-white' : ''}>
-        <h1 className={`text-3xl font-bold mb-2 ${hasDashboardAerialBg ? 'text-white drop-shadow-lg' : 'text-foreground'}`}>{dashboardTitle}</h1>
+      <div className={hasDashboardAerialBg ? "text-white flex items-baseline justify-between gap-4" : ""}>
+        <h1 className={`text-3xl font-bold ${hasDashboardAerialBg ? "mb-0 text-white drop-shadow-lg" : "mb-2 text-foreground"}`}>{dashboardTitle}</h1>
         {hasDashboardAerialBg ? (
-          <p className="text-white/80 drop-shadow">{formattedDate}</p>
+          <p className="text-white/80 drop-shadow text-lg shrink-0 text-right">{formattedDate}</p>
         ) : (
           <p className="text-muted-foreground">Welcome back! Here's what's happening today.</p>
         )}
@@ -592,230 +614,207 @@ export default function Dashboard() {
       )}
 
       {/* Unified Dashboard Grid */}
-      <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+      <DashboardWidgetGrid balanced={hasDashboardAerialBg}>
 
         {/* Weather Widget */}
         {currentCompany?.zip_code && (
-          <WeatherWidget zipCode={currentCompany.zip_code} className={glassCardClass} />
+          <WeatherWidget zipCode={currentCompany.zip_code} className={glassCardClass} compact={hasDashboardAerialBg} />
         )}
 
         {/* Today's Menu Card */}
-        <Card className={`shadow-card h-full flex flex-col ${glassCardClass}`}>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-orange-500/10">
-                <Utensils className="h-5 w-5 text-orange-500" />
+        <Card className={`shadow-card ${glassCardClass}`}>
+          <CardHeader className={widgetHeaderClass}>
+            <div className="flex min-w-0 items-center gap-2">
+              <div className={`${widgetIconWrapClass} bg-orange-500/10`}>
+                <Utensils className="h-4 w-4 text-orange-500" />
               </div>
-              <div>
-                <CardTitle>Today's Menu</CardTitle>
-                <CardDescription>Meal schedule for today</CardDescription>
-              </div>
+              <CardTitle className={widgetTitleClass}>Today&apos;s Menu</CardTitle>
             </div>
+            <Button variant="link" className={widgetLinkClass} onClick={() => navigate("/menu")}>
+              View menu
+            </Button>
           </CardHeader>
-          <CardContent className="space-y-3 flex-1 flex flex-col">
-            <div className="grid grid-cols-2 gap-3 flex-1">
-              <div className="p-3 rounded-lg bg-muted/50">
-                <p className="text-xs font-semibold text-muted-foreground uppercase">Breakfast</p>
-                <p className="text-sm font-medium mt-1 line-clamp-2">{todaysMenu.breakfast}</p>
+          <CardContent className={`${widgetContentClass} space-y-2`}>
+            {menuMeals.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No meals scheduled for today</p>
+            ) : (
+              <div className={`grid gap-2 ${menuMeals.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+                {menuMeals.map((meal) => (
+                  <div key={meal.label} className="rounded-lg bg-muted/50 p-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{meal.label}</p>
+                    <p className="mt-0.5 line-clamp-2 text-sm font-medium">{meal.value}</p>
+                  </div>
+                ))}
               </div>
-              <div className="p-3 rounded-lg bg-muted/50">
-                <p className="text-xs font-semibold text-muted-foreground uppercase">Lunch</p>
-                <p className="text-sm font-medium mt-1 line-clamp-2">{todaysMenu.lunch}</p>
-              </div>
-              <div className="p-3 rounded-lg bg-muted/50">
-                <p className="text-xs font-semibold text-muted-foreground uppercase">Snack</p>
-                <p className="text-sm font-medium mt-1 line-clamp-2">{todaysMenu.snack}</p>
-              </div>
-              <div className="p-3 rounded-lg bg-muted/50">
-                <p className="text-xs font-semibold text-muted-foreground uppercase">Dinner</p>
-                <p className="text-sm font-medium mt-1 line-clamp-2">{todaysMenu.dinner}</p>
-              </div>
-            </div>
+            )}
             {todaysMenu.specialNotes && (
-              <div className="p-2 rounded-lg bg-warning/10 border border-warning/20">
+              <div className="rounded-lg border border-warning/20 bg-warning/10 p-2">
                 <p className="text-xs text-warning-foreground">
                   <span className="font-semibold">Allergens: </span>
                   {todaysMenu.specialNotes}
                 </p>
               </div>
             )}
-            <Button variant="outline" className={`w-full mt-auto ${glassButtonClass}`} onClick={() => navigate('/menu')}>
-              View Full Menu
-            </Button>
           </CardContent>
         </Card>
 
         {/* Timber Lake Camp: today's activities & upcoming trips */}
         {showTigerTimes && (
           <>
-            <Card className={`shadow-card h-full flex flex-col ${glassCardClass}`}>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-lg bg-emerald-500/10">
-                    <Palmtree className="h-5 w-5 text-emerald-600" />
+            <Card className={`shadow-card ${glassCardClass}`}>
+              <CardHeader className={widgetHeaderClass}>
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className={`${widgetIconWrapClass} bg-emerald-500/10`}>
+                    <Palmtree className="h-4 w-4 text-emerald-600" />
                   </div>
-                  <div>
-                    <CardTitle>Activities &amp; Field Trips</CardTitle>
-                    <CardDescription>Scheduled for today</CardDescription>
-                  </div>
+                  <CardTitle className={widgetTitleClass}>Activities &amp; Field Trips</CardTitle>
                 </div>
+                <Button variant="link" className={widgetLinkClass} onClick={() => navigate("/activities")}>
+                  View all
+                </Button>
               </CardHeader>
-              <CardContent className="space-y-2 flex-1 flex flex-col">
+              <CardContent className={`${widgetContentClass} space-y-2`}>
                 {activitiesToday.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">No activities or field trips today</p>
+                  <p className="text-sm text-muted-foreground">No activities or field trips today</p>
                 ) : (
-                  <div className="space-y-2 flex-1">
+                  <div className="space-y-1.5">
                     {activitiesToday.map((act) => (
                       <div
                         key={act.id}
-                        className="flex items-start gap-2 p-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
-                        onClick={() => navigate('/activities')}
+                        className="flex cursor-pointer items-start gap-2 rounded-lg bg-muted/50 p-2 transition-colors hover:bg-muted"
+                        onClick={() => navigate("/activities")}
                       >
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm">{act.title}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium">{act.title}</p>
                           <p className="text-xs text-muted-foreground">
-                            {(act.time || 'Time TBD') + (act.location ? ` · ${act.location}` : '')}
+                            {(act.time || "Time TBD") + (act.location ? ` · ${act.location}` : "")}
                           </p>
                         </div>
-                        <Badge variant="outline" className="text-xs shrink-0">{act.activity_type || 'Activity'}</Badge>
+                        <Badge variant="outline" className="shrink-0 text-xs">{act.activity_type || "Activity"}</Badge>
                       </div>
                     ))}
                   </div>
                 )}
-                <Button variant="outline" className={`w-full mt-auto ${glassButtonClass}`} onClick={() => navigate('/activities')}>
-                  View Activities &amp; Field Trips
-                </Button>
               </CardContent>
             </Card>
 
-            <Card className={`shadow-card h-full flex flex-col ${glassCardClass}`}>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-lg bg-sky-500/10">
-                    <Truck className="h-5 w-5 text-sky-600" />
+            <Card className={`shadow-card ${glassCardClass}`}>
+              <CardHeader className={widgetHeaderClass}>
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className={`${widgetIconWrapClass} bg-sky-500/10`}>
+                    <Truck className="h-4 w-4 text-sky-600" />
                   </div>
-                  <div>
-                    <CardTitle>Upcoming Trips</CardTitle>
-                    <CardDescription>Transportation &amp; trip schedule</CardDescription>
-                  </div>
+                  <CardTitle className={widgetTitleClass}>Upcoming Trips</CardTitle>
                 </div>
+                <Button variant="link" className={widgetLinkClass} onClick={() => navigate("/transportation")}>
+                  View all
+                </Button>
               </CardHeader>
-              <CardContent className="space-y-2 flex-1 flex flex-col">
+              <CardContent className={`${widgetContentClass} space-y-2`}>
+                <p className="text-xs text-muted-foreground">Next 3 days</p>
                 {upcomingEvents.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">No upcoming trips</p>
+                  <p className="text-sm text-muted-foreground">No upcoming trips</p>
                 ) : (
-                  <div className="space-y-2 flex-1">
+                  <div className="space-y-1.5">
                     {upcomingEvents.map((ev) => (
                       <div
                         key={ev.id}
-                        className="flex items-start gap-2 p-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
-                        onClick={() => navigate('/transportation')}
+                        className="flex cursor-pointer items-start gap-2 rounded-lg bg-muted/50 p-2 transition-colors hover:bg-muted"
+                        onClick={() => navigate("/transportation")}
                       >
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm">{ev.title}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium">{ev.title}</p>
                           <p className="text-xs text-muted-foreground">
-                            {ev.date} {ev.type ? `· ${ev.type}` : ''}
+                            {ev.date} {ev.type ? `· ${ev.type}` : ""}
                           </p>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
-                <Button variant="outline" className={`w-full mt-auto ${glassButtonClass}`} onClick={() => navigate('/transportation')}>
-                  View Transportation
-                </Button>
               </CardContent>
             </Card>
           </>
         )}
 
         {/* Athletics Schedule Card */}
-        <Card className={`shadow-card h-full flex flex-col ${glassCardClass}`}>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-warning/10">
-                <Trophy className="h-5 w-5 text-warning" />
+        <Card className={`shadow-card ${glassCardClass}`}>
+          <CardHeader className={widgetHeaderClass}>
+            <div className="flex min-w-0 items-center gap-2">
+              <div className={`${widgetIconWrapClass} bg-warning/10`}>
+                <Trophy className="h-4 w-4 text-warning" />
               </div>
-              <div>
-                <CardTitle>Athletics Schedule</CardTitle>
-                <CardDescription>{isTylerHill ? "Today & upcoming events" : "Today's sports events"}</CardDescription>
-              </div>
+              <CardTitle className={widgetTitleClass}>Athletics Schedule</CardTitle>
             </div>
+            <Button variant="link" className={widgetLinkClass} onClick={() => navigate("/athletics")}>
+              View schedule
+            </Button>
           </CardHeader>
-          <CardContent className="space-y-2 flex-1 flex flex-col">
-            {/* Today's Events */}
-            <div className="space-y-1 p-2 rounded-lg bg-info/5 dark:bg-info/10 border-l-4 border-info">
-              {sportsEvents.length === 0 ? (
-                <p className="text-muted-foreground text-sm">No sports events today</p>
-              ) : (
-                <>
-                  {isTylerHill && (
-                    <div className="flex items-center gap-2 mb-1">
-                      <CalendarIcon className="h-4 w-4 text-info" />
-                      <p className="text-sm font-semibold text-info uppercase tracking-wide">Today</p>
+          <CardContent className={`${widgetContentClass} space-y-2`}>
+            {sportsEvents.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No sports events today</p>
+            ) : (
+              <div className="space-y-1 rounded-lg border-l-4 border-info bg-info/5 p-2 dark:bg-info/10">
+                {isTylerHill && (
+                  <div className="mb-1 flex items-center gap-2">
+                    <CalendarIcon className="h-3.5 w-3.5 text-info" />
+                    <p className="text-xs font-semibold uppercase tracking-wide text-info">Today</p>
+                  </div>
+                )}
+                {sportsEvents.map((event) => (
+                  <div key={event.id} className="flex cursor-pointer items-center gap-2 rounded-lg bg-card p-2 transition-colors hover:bg-muted/50" onClick={() => navigate("/athletics")}>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">{event.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">{event.time || "TBD"}</p>
                     </div>
-                  )}
-                  {sportsEvents.map((event) => (
-                    <div key={event.id} className="flex items-center gap-2 p-2 rounded-lg bg-card hover:bg-muted/50 transition-colors cursor-pointer" onClick={() => navigate('/athletics')}>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm">{event.title}</p>
-                        <p className="text-xs text-muted-foreground truncate">{event.time || 'TBD'}</p>
-                      </div>
-                      <Badge variant="outline" className="text-xs shrink-0">{event.sport_type}</Badge>
-                    </div>
-                  ))}
-                </>
-              )}
-            </div>
-
-            {/* Three Day Outlook - Tyler Hill Camp only */}
-            {isTylerHill && threeDayOutlook.length > 0 && (
-              <div className="space-y-1 p-2 rounded-lg bg-warning/5 dark:bg-warning/10 border-l-4 border-warning">
-                <div className="flex items-center gap-2 mb-1">
-                  <CalendarDays className="h-4 w-4 text-warning" />
-                  <p className="text-sm font-semibold text-warning uppercase tracking-wide">Three Day Outlook</p>
-                </div>
-                {threeDayOutlook.map((event) => (
-                  <div key={event.id} className="flex items-center gap-2 p-2 rounded-lg bg-card hover:bg-muted/50 transition-colors cursor-pointer" onClick={() => navigate('/athletics')}>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm">{event.title}</p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {new Date(event.event_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} • {event.time || 'TBD'}
-                      </p>
-                    </div>
-                    <Badge variant="outline" className="text-xs shrink-0">{event.sport_type}</Badge>
+                    <Badge variant="outline" className="shrink-0 text-xs">{event.sport_type}</Badge>
                   </div>
                 ))}
               </div>
             )}
 
-            <Button variant="outline" className={`w-full mt-auto ${glassButtonClass}`} onClick={() => navigate('/athletics')}>View Full Schedule</Button>
+            {isTylerHill && threeDayOutlook.length > 0 && (
+              <div className="space-y-1 rounded-lg border-l-4 border-warning bg-warning/5 p-2 dark:bg-warning/10">
+                <div className="mb-1 flex items-center gap-2">
+                  <CalendarDays className="h-3.5 w-3.5 text-warning" />
+                  <p className="text-xs font-semibold uppercase tracking-wide text-warning">Three Day Outlook</p>
+                </div>
+                {threeDayOutlook.map((event) => (
+                  <div key={event.id} className="flex cursor-pointer items-center gap-2 rounded-lg bg-card p-2 transition-colors hover:bg-muted/50" onClick={() => navigate("/athletics")}>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">{event.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {new Date(event.event_date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} • {event.time || "TBD"}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="shrink-0 text-xs">{event.sport_type}</Badge>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Today's Birthdays Card */}
-        <Card className={`shadow-card h-full flex flex-col ${glassCardClass}`}>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-success/10">
-                <Cake className="h-5 w-5 text-success" />
+        <Card className={`shadow-card ${glassCardClass}`}>
+          <CardHeader className={widgetHeaderClass}>
+            <div className="flex min-w-0 items-center gap-2">
+              <div className={`${widgetIconWrapClass} bg-success/10`}>
+                <Cake className="h-4 w-4 text-success" />
               </div>
-              <div>
-                <CardTitle>Today's Birthdays</CardTitle>
-                <CardDescription>Celebrate with them!</CardDescription>
-              </div>
+              <CardTitle className={widgetTitleClass}>Today&apos;s Birthdays</CardTitle>
             </div>
           </CardHeader>
-          <CardContent className="space-y-3 flex-1 flex flex-col">
+          <CardContent className={`${widgetContentClass} space-y-2`}>
             {todaysBirthdays.length === 0 && staffBirthdays.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No birthdays today</p>
+              <p className="text-sm text-muted-foreground">No birthdays today</p>
             ) : (
-              <div className="space-y-3 flex-1">
+              <div className="space-y-2">
                 {todaysBirthdays.map((child: any) => (
-                  <div key={child.id} className="flex items-center gap-3 p-3 rounded-lg bg-success/10 border border-success/20">
-                    <Cake className="h-5 w-5 text-success" />
+                  <div key={child.id} className="flex items-center gap-2.5 rounded-lg border border-success/20 bg-success/10 p-2.5">
+                    <Cake className="h-4 w-4 shrink-0 text-success" />
                     <div>
-                      <p className="font-medium text-sm">{child.name}</p>
+                      <p className="text-sm font-medium">{child.name}</p>
                       <p className="text-xs text-muted-foreground">
                         Turning {calculateAge(child.date_of_birth)} today! 🎂
                       </p>
@@ -823,10 +822,10 @@ export default function Dashboard() {
                   </div>
                 ))}
                 {staffBirthdays.map((staff: any) => (
-                  <div key={staff.id} className="flex items-center gap-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
-                    <Cake className="h-5 w-5 text-primary" />
+                  <div key={staff.id} className="flex items-center gap-2.5 rounded-lg border border-primary/20 bg-primary/10 p-2.5">
+                    <Cake className="h-4 w-4 shrink-0 text-primary" />
                     <div>
-                      <p className="font-medium text-sm">{staff.name}</p>
+                      <p className="text-sm font-medium">{staff.name}</p>
                       <p className="text-xs text-muted-foreground">Staff Member 🎉</p>
                     </div>
                   </div>
@@ -838,291 +837,198 @@ export default function Dashboard() {
 
         {/* Evening Activities Card - Timber Lake West only */}
         {isTimberLakeWest && (
-          <Card className={`shadow-card h-full flex flex-col ${glassCardClass}`}>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-purple-500/10">
-                  <CalendarIcon className="h-5 w-5 text-purple-500" />
+          <Card className={`shadow-card ${glassCardClass}`}>
+            <CardHeader className={widgetHeaderClass}>
+              <div className="flex min-w-0 items-center gap-2">
+                <div className={`${widgetIconWrapClass} bg-purple-500/10`}>
+                  <CalendarIcon className="h-4 w-4 text-purple-500" />
                 </div>
-                <div>
-                  <CardTitle>Evening Activities</CardTitle>
-                  <CardDescription>Tonight's schedule</CardDescription>
-                </div>
+                <CardTitle className={widgetTitleClass}>Evening Activities</CardTitle>
               </div>
+              <Button variant="link" className={widgetLinkClass} onClick={() => navigate("/special-events")}>
+                View all
+              </Button>
             </CardHeader>
-            <CardContent className="space-y-3 flex-1 flex flex-col">
-              {specialEvents.filter(e => e.event_type === 'evening-activity').length === 0 ? (
-                <p className="text-muted-foreground text-sm">No evening activities tonight</p>
+            <CardContent className={`${widgetContentClass} space-y-2`}>
+              {specialEvents.filter((e) => e.event_type === "evening-activity").length === 0 ? (
+                <p className="text-sm text-muted-foreground">No evening activities tonight</p>
               ) : (
-                <div className="space-y-3 flex-1">
-                  {specialEvents.filter(e => e.event_type === 'evening-activity').map((event) => (
-                    <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer" onClick={() => navigate('/special-events')}>
-                      <div className="flex-1">
-                        <p className="font-medium text-sm mb-1">{event.title}</p>
-                        <span className="text-xs text-muted-foreground">{event.time_slot || 'All day'}</span>
+                <div className="space-y-1.5">
+                  {specialEvents.filter((e) => e.event_type === "evening-activity").map((event) => (
+                    <div key={event.id} className="flex cursor-pointer items-start gap-2 rounded-lg bg-muted/50 p-2 transition-colors hover:bg-muted" onClick={() => navigate("/special-events")}>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">{event.title}</p>
+                        <span className="text-xs text-muted-foreground">{event.time_slot || "All day"}</span>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
-              <Button variant="outline" className={`w-full mt-auto ${glassButtonClass}`} onClick={() => navigate('/special-events')}>View All Events</Button>
             </CardContent>
           </Card>
         )}
 
         {/* Special Events & Activities Card */}
-        <Card className={`shadow-card h-full flex flex-col ${glassCardClass}`}>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <CalendarIcon className="h-5 w-5 text-primary" />
+        <Card className={`shadow-card ${glassCardClass}`}>
+          <CardHeader className={widgetHeaderClass}>
+            <div className="flex min-w-0 items-center gap-2">
+              <div className={`${widgetIconWrapClass} bg-primary/10`}>
+                <CalendarIcon className="h-4 w-4 text-primary" />
               </div>
-              <div>
-                <CardTitle>Special Events & Activities</CardTitle>
-                <CardDescription>Today's schedule</CardDescription>
-              </div>
+              <CardTitle className={widgetTitleClass}>Special Events &amp; Activities</CardTitle>
             </div>
+            <Button variant="link" className={widgetLinkClass} onClick={() => navigate("/special-events")}>
+              View all
+            </Button>
           </CardHeader>
-          <CardContent className="space-y-3 flex-1 flex flex-col">
-            {(isTimberLakeWest ? specialEvents.filter(e => e.event_type !== 'evening-activity') : specialEvents).length === 0 ? (
-              <p className="text-muted-foreground text-sm">No special events today</p>
+          <CardContent className={`${widgetContentClass} space-y-2`}>
+            {(isTimberLakeWest ? specialEvents.filter((e) => e.event_type !== "evening-activity") : specialEvents).length === 0 ? (
+              <p className="text-sm text-muted-foreground">No special events today</p>
             ) : (
-              <div className="space-y-3 flex-1">
-                {(isTimberLakeWest ? specialEvents.filter(e => e.event_type !== 'evening-activity') : specialEvents).map((event) => (
-                  <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer" onClick={() => navigate('/special-events')}>
-                    <div className="flex-1">
-                      <p className="font-medium text-sm mb-1">{event.title}</p>
-                      <span className="text-xs text-muted-foreground">{event.time_slot || 'All day'}</span>
+              <div className="space-y-1.5">
+                {(isTimberLakeWest ? specialEvents.filter((e) => e.event_type !== "evening-activity") : specialEvents).map((event) => (
+                  <div key={event.id} className="flex cursor-pointer items-start gap-2 rounded-lg bg-muted/50 p-2 transition-colors hover:bg-muted" onClick={() => navigate("/special-events")}>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">{event.title}</p>
+                      <span className="text-xs text-muted-foreground">{event.time_slot || "All day"}</span>
                     </div>
-                    <Badge variant="outline" className="text-xs">{event.type}</Badge>
+                    <Badge variant="outline" className="shrink-0 text-xs">{event.type}</Badge>
                   </div>
                 ))}
               </div>
             )}
-            <Button variant="outline" className={`w-full mt-auto ${glassButtonClass}`} onClick={() => navigate('/special-events')}>View All Events</Button>
           </CardContent>
         </Card>
 
         {/* Notes Board for Tyler Hill - next to Special Events */}
         {isTylerHill && (
-          <NotesBoard className={glassCardClass} />
+          <NotesBoard className={glassCardClass} compact={hasDashboardAerialBg} />
         )}
 
         {/* Health Center Card - Timber Lake only */}
         {showTigerTimes && healthCenterAdmissions.length > 0 && (
-          <Card className={`shadow-card h-full flex flex-col ${glassCardClass}`}>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-destructive/10">
-                  <Activity className="h-5 w-5 text-destructive" />
+          <Card className={`shadow-card ${glassCardClass}`}>
+            <CardHeader className={widgetHeaderClass}>
+              <div className="flex min-w-0 items-center gap-2">
+                <div className={`${widgetIconWrapClass} bg-destructive/10`}>
+                  <Activity className="h-4 w-4 text-destructive" />
                 </div>
-                <div>
-                  <CardTitle>Health Center</CardTitle>
-                  <CardDescription>Current admissions</CardDescription>
-                </div>
+                <CardTitle className={widgetTitleClass}>Health Center</CardTitle>
               </div>
             </CardHeader>
-            <CardContent className="flex-1">
-              {healthCenterAdmissions.length === 0 ? (
-                <p className="text-muted-foreground text-sm">No current admissions</p>
-              ) : (
-                <div className="space-y-3">
-                  {healthCenterAdmissions.map((admission: any) => (
-                    <div key={admission.id} className="flex items-start justify-between p-3 rounded-lg bg-accent/50 border border-border">
-                      <div className="flex-1">
-                        <div className="font-medium text-foreground">
-                          {admission.children?.name || 'Unknown'}
-                        </div>
-                        {admission.reason && (
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {admission.reason}
-                          </p>
-                        )}
-                        <div className="text-xs text-muted-foreground mt-1">
-                          Admitted: {new Date(admission.admitted_at).toLocaleTimeString('en-US', { 
-                            hour: 'numeric', 
-                            minute: '2-digit' 
-                          })}
-                        </div>
+            <CardContent className={`${widgetContentClass} space-y-2`}>
+              <div className="space-y-2">
+                {healthCenterAdmissions.map((admission: any) => (
+                  <div key={admission.id} className="flex items-start justify-between rounded-lg border border-border bg-accent/50 p-2.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium text-foreground">
+                        {admission.children?.name || "Unknown"}
+                      </div>
+                      {admission.reason && (
+                        <p className="mt-0.5 text-sm text-muted-foreground">{admission.reason}</p>
+                      )}
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        Admitted: {new Date(admission.admitted_at).toLocaleTimeString("en-US", {
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         )}
-      </div>
+      </DashboardWidgetGrid>
 
       {/* Daily Wolf Content for Timber Lake West - at the bottom */}
       {isTimberLakeWest && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20">
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <User className="h-4 w-4 text-primary" />
-                </div>
-                <CardTitle className="text-base">Super OD</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-lg font-semibold text-foreground">
-                {dailyWolfContent?.officer_of_day || 'Not set'}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20">
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-amber-500/10">
-                  <Quote className="h-4 w-4 text-amber-600" />
-                </div>
-                <CardTitle className="text-base">Starfish Quote of the Day</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm italic text-muted-foreground">
-                {dailyWolfContent?.quote_of_the_day ? `"${dailyWolfContent.quote_of_the_day}"` : 'No quote set'}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20">
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-blue-500/10">
-                  <Shirt className="h-4 w-4 text-blue-600" />
-                </div>
-                <CardTitle className="text-base">Laundry</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground whitespace-pre-line">
-                {dailyWolfContent?.laundry_info || 'No laundry info'}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20">
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-green-500/10">
-                  <Phone className="h-4 w-4 text-green-600" />
-                </div>
-                <CardTitle className="text-base">Phone Calls</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground whitespace-pre-line">
-                {dailyWolfContent?.phone_calls_info || 'No phone call info'}
-              </p>
-            </CardContent>
-          </Card>
-
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <CompactInfoCard
+            title="Super OD"
+            value={dailyWolfContent?.officer_of_day || "Not set"}
+            icon={User}
+            iconClassName="text-primary"
+            iconWrapClassName="bg-primary/10"
+          />
+          <CompactInfoCard
+            title="Starfish Quote of the Day"
+            value={dailyWolfContent?.quote_of_the_day ? `"${dailyWolfContent.quote_of_the_day}"` : "No quote set"}
+            icon={Quote}
+            iconClassName="text-amber-600"
+            iconWrapClassName="bg-amber-500/10"
+          />
+          <CompactInfoCard
+            title="Laundry"
+            value={dailyWolfContent?.laundry_info || "No laundry info"}
+            icon={Shirt}
+            iconClassName="text-blue-600"
+            iconWrapClassName="bg-blue-500/10"
+          />
+          <CompactInfoCard
+            title="Phone Calls"
+            value={dailyWolfContent?.phone_calls_info || "No phone call info"}
+            icon={Phone}
+            iconClassName="text-green-600"
+            iconWrapClassName="bg-green-500/10"
+          />
           {dailyWolfContent?.notes && (
-            <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20 md:col-span-2 lg:col-span-4">
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-lg bg-purple-500/10">
-                    <FileText className="h-4 w-4 text-purple-600" />
-                  </div>
-                  <CardTitle className="text-base">Daily Notes</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground whitespace-pre-line">
-                  {dailyWolfContent.notes}
-                </p>
-              </CardContent>
-            </Card>
+            <CompactInfoCard
+              className="sm:col-span-2 lg:col-span-4"
+              title="Daily Notes"
+              value={dailyWolfContent.notes}
+              icon={FileText}
+              iconClassName="text-purple-600"
+              iconWrapClassName="bg-purple-500/10"
+            />
           )}
         </div>
       )}
 
       {/* Tiger Times Content for Timber Lake Camp */}
       {showTigerTimes && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20" style={{ borderTopWidth: '3px', borderTopColor: ttColors["Laundry"] }}>
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg" style={{ backgroundColor: ttColors["Laundry"] + '1a' }}>
-                  <Shirt className="h-4 w-4" style={{ color: ttColors["Laundry"] }} />
-                </div>
-                <CardTitle className="text-base">👕 Laundry</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground whitespace-pre-line">
-                {dailyWolfContent?.laundry_info || 'No info'}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20" style={{ borderTopWidth: '3px', borderTopColor: ttColors["Phone Calls"] }}>
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg" style={{ backgroundColor: ttColors["Phone Calls"] + '1a' }}>
-                  <Phone className="h-4 w-4" style={{ color: ttColors["Phone Calls"] }} />
-                </div>
-                <CardTitle className="text-base">📞 Phone Calls</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground whitespace-pre-line">
-                {dailyWolfContent?.phone_calls_info || 'No info'}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20" style={{ borderTopWidth: '3px', borderTopColor: ttColors["Outside Events"] }}>
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg" style={{ backgroundColor: ttColors["Outside Events"] + '1a' }}>
-                  <Globe className="h-4 w-4" style={{ color: ttColors["Outside Events"] }} />
-                </div>
-                <CardTitle className="text-base">🌐 Outside Events</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground whitespace-pre-line">
-                {dailyWolfContent?.outside_event || 'No info'}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20" style={{ borderTopWidth: '3px', borderTopColor: ttColors["Staff Days Off"] }}>
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg" style={{ backgroundColor: ttColors["Staff Days Off"] + '1a' }}>
-                  <CalendarOff className="h-4 w-4" style={{ color: ttColors["Staff Days Off"] }} />
-                </div>
-                <CardTitle className="text-base">🗓️ Staff Days Off</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground whitespace-pre-line">
-                {dailyWolfContent?.staff_days_off || 'No info'}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card/80 backdrop-blur-sm shadow-lg border-white/20" style={{ borderTopWidth: '3px', borderTopColor: ttColors["OD Notes"] }}>
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg" style={{ backgroundColor: ttColors["OD Notes"] + '1a' }}>
-                  <FileText className="h-4 w-4" style={{ color: ttColors["OD Notes"] }} />
-                </div>
-                <CardTitle className="text-base">💗 OD Notes</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground whitespace-pre-line">
-                {dailyWolfContent?.od_notes || 'No info'}
-              </p>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <CompactInfoCard
+            title="Laundry"
+            value={dailyWolfContent?.laundry_info || "No info"}
+            icon={Shirt}
+            iconClassName="text-foreground"
+            iconWrapClassName="bg-muted"
+            style={{ borderTopWidth: "3px", borderTopColor: ttColors["Laundry"] }}
+          />
+          <CompactInfoCard
+            title="Phone Calls"
+            value={dailyWolfContent?.phone_calls_info || "No info"}
+            icon={Phone}
+            iconClassName="text-foreground"
+            iconWrapClassName="bg-muted"
+            style={{ borderTopWidth: "3px", borderTopColor: ttColors["Phone Calls"] }}
+          />
+          <CompactInfoCard
+            title="Outside Events"
+            value={dailyWolfContent?.outside_event || "No info"}
+            icon={Globe}
+            iconClassName="text-foreground"
+            iconWrapClassName="bg-muted"
+            style={{ borderTopWidth: "3px", borderTopColor: ttColors["Outside Events"] }}
+          />
+          <CompactInfoCard
+            title="Staff Days Off"
+            value={dailyWolfContent?.staff_days_off || "No info"}
+            icon={CalendarOff}
+            iconClassName="text-foreground"
+            iconWrapClassName="bg-muted"
+            style={{ borderTopWidth: "3px", borderTopColor: ttColors["Staff Days Off"] }}
+          />
+          <CompactInfoCard
+            title="OD Notes"
+            value={dailyWolfContent?.od_notes || "No info"}
+            icon={FileText}
+            iconClassName="text-foreground"
+            iconWrapClassName="bg-muted"
+            style={{ borderTopWidth: "3px", borderTopColor: ttColors["OD Notes"] }}
+          />
         </div>
       )}
     </div>

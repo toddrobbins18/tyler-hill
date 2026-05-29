@@ -11,9 +11,10 @@ import { cn } from "@/lib/utils";
 
 interface NotesBoardProps {
   className?: string;
+  compact?: boolean;
 }
 
-export default function NotesBoard({ className }: NotesBoardProps) {
+export default function NotesBoard({ className, compact = false }: NotesBoardProps) {
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
   const [content, setContent] = useState("");
@@ -109,14 +110,14 @@ export default function NotesBoard({ className }: NotesBoardProps) {
   if (loading) {
     return (
       <Card className={cn("shadow-card", className)}>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2">
-            <StickyNote className="h-5 w-5" />
+        <CardHeader className={compact ? "p-4 pb-2" : "pb-3"}>
+          <CardTitle className={cn("flex items-center gap-2", compact && "text-base font-semibold")}>
+            <StickyNote className="h-4 w-4" />
             Notes
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="text-center text-muted-foreground py-4">Loading...</div>
+        <CardContent className={compact ? "px-4 pb-4 pt-0" : undefined}>
+          <div className="py-2 text-center text-sm text-muted-foreground">Loading...</div>
         </CardContent>
       </Card>
     );
@@ -124,20 +125,25 @@ export default function NotesBoard({ className }: NotesBoardProps) {
 
   return (
     <Card className={cn("shadow-card", className)}>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center justify-between">
+      <CardHeader className={compact ? "flex flex-row items-center justify-between space-y-0 p-4 pb-2" : "pb-3"}>
+        <CardTitle className={cn("flex items-center justify-between", compact && "text-base font-semibold")}>
           <div className="flex items-center gap-2">
-            <StickyNote className="h-5 w-5" />
+            <StickyNote className="h-4 w-4" />
             <span>Notes</span>
           </div>
-          {!isEditing && (
+          {!isEditing && !compact && (
             <Button size="sm" variant="ghost" onClick={handleEdit}>
               <Pencil className="h-4 w-4" />
             </Button>
           )}
         </CardTitle>
+        {!isEditing && compact && (
+          <Button size="sm" variant="link" className="h-auto p-0 text-xs" onClick={handleEdit}>
+            Edit
+          </Button>
+        )}
       </CardHeader>
-      <CardContent>
+      <CardContent className={compact ? "px-4 pb-4 pt-0" : undefined}>
         {isEditing ? (
           <div className="space-y-3">
             <Textarea
@@ -159,8 +165,11 @@ export default function NotesBoard({ className }: NotesBoardProps) {
             </div>
           </div>
         ) : (
-          <div 
-            className="min-h-[80px] text-foreground whitespace-pre-wrap cursor-pointer hover:bg-muted/50 rounded-md p-2 -m-2 transition-colors"
+          <div
+            className={cn(
+              "cursor-pointer whitespace-pre-wrap rounded-md text-foreground transition-colors hover:bg-muted/50",
+              compact ? "p-1 text-sm" : "min-h-[80px] p-2 -m-2",
+            )}
             onClick={handleEdit}
           >
             {content || <span className="text-muted-foreground italic">Click to add notes...</span>}
