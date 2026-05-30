@@ -22,6 +22,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { AwardCategoryDisplay } from "@/components/AwardCategoryDisplay";
+import { fetchAwardsForSeason } from "@/lib/awardsQueries";
 
 export default function Awards() {
   const navigate = useNavigate();
@@ -55,35 +56,38 @@ export default function Awards() {
 
   const fetchAwards = async () => {
     setLoading(true);
-    const divisionFilter = getDivisionFilter();
-    
-    let query = supabase
-      .from("awards")
-      .select(`
-        *,
-        children:child_id (
-          id,
-          name,
-          division_id
-        )
-      `)
-      .or(`season.eq.${currentSeason},season.is.null`)
-      .eq("company_id", currentCompany!.id)
-      .order("date", { ascending: false });
-    
-    const { data, error } = await query;
-
-    if (!error && data) {
-      // Filter awards by division on client side (since we need to filter via children table)
+    try {
       const divisionFilter = getDivisionFilter();
+      let allDivisions: { id: string; name?: string | null }[] = [];
+
       if (divisionFilter !== null && divisionFilter.length > 0) {
-        const filtered = data.filter(award => 
-          award.children?.division_id && divisionFilter.includes(award.children.division_id)
-        );
-        setAwards(filtered);
-      } else {
-        setAwards(data);
+        const { data } = await supabase
+          .from("divisions")
+          .select("id, name")
+          .eq("company_id", currentCompany!.id)
+          .eq("is_active", true);
+        allDivisions = data || [];
       }
+
+      const data = await fetchAwardsForSeason(
+        supabase,
+        currentCompany!.id,
+        currentSeason,
+        divisionFilter,
+        allDivisions,
+      );
+      setAwards(data);
+    } catch (error) {
+      console.error("Failed to load awards:", error);
+      const message =
+        error &&
+        typeof error === "object" &&
+        "message" in error &&
+        typeof (error as { message?: string }).message === "string"
+          ? (error as { message: string }).message
+          : "Failed to load awards";
+      toast.error(message);
+      setAwards([]);
     }
     setLoading(false);
   };
