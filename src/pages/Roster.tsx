@@ -16,6 +16,12 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import {
+  camperMatchesDivisionFilter,
+  expandDivisionIdsForRosterFilter,
+  getDivisionDropdownLabel,
+  normalizeDivisionNameForFilter,
+} from "@/lib/divisionFilterUtils";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -34,18 +40,6 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-
-const normalizeDivisionNameForFilter = (name?: string | null): string => {
-  if (!name) return "";
-
-  // Treat "Super Girls" and "Super Senior Girls" as the same filter bucket.
-  return name.replace(/\bSuper\s+Senior\b/gi, "Super").trim();
-};
-
-const getDivisionDropdownLabel = (name?: string | null): string => {
-  if (!name) return "";
-  return name.trim().toLowerCase() === "super girls" ? "Super Senior Girls" : name;
-};
 
 export default function Roster() {
   const { currentSeason } = useSeasonContext();
@@ -83,6 +77,21 @@ export default function Roster() {
     }
     
     const divisionFilter = getDivisionFilter();
+    let effectiveDivisionFilter = divisionFilter;
+
+    if (divisionFilter !== null && divisionFilter.length > 0) {
+      const { data: allDivisions } = await supabase
+        .from("divisions")
+        .select("id, name")
+        .eq("company_id", currentCompany.id)
+        .eq("is_active", true);
+
+      effectiveDivisionFilter = expandDivisionIdsForRosterFilter(
+        divisionFilter,
+        allDivisions || [],
+      );
+    }
+
     const rows: any[] = [];
     let from = 0;
 
@@ -99,8 +108,8 @@ export default function Roster() {
           .eq('company_id', currentCompany.id)
           .eq('season', currentSeason);
 
-        if (divisionFilter !== null && divisionFilter.length > 0) {
-          query = query.in('division_id', divisionFilter);
+        if (effectiveDivisionFilter !== null && effectiveDivisionFilter.length > 0) {
+          query = query.in('division_id', effectiveDivisionFilter);
         }
 
         const { data, error } = await query
@@ -160,7 +169,6 @@ export default function Roster() {
   }, [searchTerm, selectedDivision, selectedSession, currentSeason, sortBy]);
 
   const selectedDivisionRecord = divisions.find((div) => div.id === selectedDivision);
-  const selectedDivisionNormalizedName = normalizeDivisionNameForFilter(selectedDivisionRecord?.name);
 
   const filteredChildren = children
     .filter((child) => {
@@ -169,12 +177,12 @@ export default function Roster() {
         (child.grade?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
         (child.division?.name?.toLowerCase() || "").includes(searchTerm.toLowerCase());
       
-      const childDivisionNormalizedName = normalizeDivisionNameForFilter(child.division?.name);
-      const matchesDivision =
-        selectedDivision === "all" ||
-        child.division_id === selectedDivision ||
-        (selectedDivisionNormalizedName.length > 0 &&
-          childDivisionNormalizedName === selectedDivisionNormalizedName);
+      const matchesDivision = camperMatchesDivisionFilter(
+        child.division_id,
+        child.division?.name,
+        selectedDivision,
+        selectedDivisionRecord?.name,
+      );
       
       const matchesSession = 
         selectedSession === "all" || 
@@ -192,7 +200,11 @@ export default function Roster() {
       if (sortBy === "division") {
         const divA = a.division?.sort_order || 999;
         const divB = b.division?.sort_order || 999;
-        return divA - divB;
+        if (divA !== divB) return divA - divB;
+        const nameA = normalizeDivisionNameForFilter(a.division?.name);
+        const nameB = normalizeDivisionNameForFilter(b.division?.name);
+        if (nameA !== nameB) return nameA.localeCompare(nameB);
+        return a.name.localeCompare(b.name);
       }
       return a.name.localeCompare(b.name);
     });
