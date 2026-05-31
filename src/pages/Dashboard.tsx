@@ -629,7 +629,7 @@ export default function Dashboard() {
                 <Utensils className="h-4 w-4 text-orange-500" />
               </div>
               <CardTitle className={widgetTitleClass}>Today&apos;s Menu</CardTitle>
-            </div>
+              </div>
             <Button variant="link" className={widgetLinkClass} onClick={() => navigate("/menu")}>
               View menu
             </Button>
@@ -643,7 +643,7 @@ export default function Dashboard() {
                   <div key={meal.label} className="rounded-lg bg-muted/50 p-2.5">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{meal.label}</p>
                     <p className="mt-0.5 line-clamp-2 text-sm font-medium">{meal.value}</p>
-                  </div>
+              </div>
                 ))}
               </div>
             )}
@@ -668,7 +668,7 @@ export default function Dashboard() {
                     <Palmtree className="h-4 w-4 text-emerald-600" />
                   </div>
                   <CardTitle className={widgetTitleClass}>Activities &amp; Field Trips</CardTitle>
-                </div>
+                  </div>
                 <Button variant="link" className={widgetLinkClass} onClick={() => navigate("/activities")}>
                   View all
                 </Button>
@@ -705,7 +705,7 @@ export default function Dashboard() {
                     <Truck className="h-4 w-4 text-sky-600" />
                   </div>
                   <CardTitle className={widgetTitleClass}>Upcoming Trips</CardTitle>
-                </div>
+                  </div>
                 <Button variant="link" className={widgetLinkClass} onClick={() => navigate("/transportation")}>
                   View all
                 </Button>
@@ -745,13 +745,13 @@ export default function Dashboard() {
                 <Trophy className="h-4 w-4 text-warning" />
               </div>
               <CardTitle className={widgetTitleClass}>Athletics Schedule</CardTitle>
-            </div>
+              </div>
             <Button variant="link" className={widgetLinkClass} onClick={() => navigate("/athletics")}>
               View schedule
             </Button>
           </CardHeader>
           <CardContent className={`${widgetContentClass} space-y-2`}>
-            {sportsEvents.length === 0 ? (
+              {sportsEvents.length === 0 ? (
               <p className="text-sm text-muted-foreground">No sports events today</p>
             ) : (
               <div className="space-y-1 rounded-lg border-l-4 border-info bg-info/5 p-2 dark:bg-info/10">
@@ -759,18 +759,18 @@ export default function Dashboard() {
                   <div className="mb-1 flex items-center gap-2">
                     <CalendarIcon className="h-3.5 w-3.5 text-info" />
                     <p className="text-xs font-semibold uppercase tracking-wide text-info">Today</p>
-                  </div>
-                )}
-                {sportsEvents.map((event) => (
+                    </div>
+                  )}
+                  {sportsEvents.map((event) => (
                   <div key={event.id} className="flex cursor-pointer items-center gap-2 rounded-lg bg-card p-2 transition-colors hover:bg-muted/50" onClick={() => navigate("/athletics")}>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium">{event.title}</p>
                       <p className="truncate text-xs text-muted-foreground">{event.time || "TBD"}</p>
-                    </div>
+                      </div>
                     <Badge variant="outline" className="shrink-0 text-xs">{event.sport_type}</Badge>
-                  </div>
-                ))}
-              </div>
+                    </div>
+                  ))}
+            </div>
             )}
 
             {isTylerHill && threeDayOutlook.length > 0 && (
@@ -844,7 +844,7 @@ export default function Dashboard() {
                   <CalendarIcon className="h-4 w-4 text-purple-500" />
                 </div>
                 <CardTitle className={widgetTitleClass}>Evening Activities</CardTitle>
-              </div>
+                </div>
               <Button variant="link" className={widgetLinkClass} onClick={() => navigate("/special-events")}>
                 View all
               </Button>
@@ -876,7 +876,7 @@ export default function Dashboard() {
                 <CalendarIcon className="h-4 w-4 text-primary" />
               </div>
               <CardTitle className={widgetTitleClass}>Special Events &amp; Activities</CardTitle>
-            </div>
+              </div>
             <Button variant="link" className={widgetLinkClass} onClick={() => navigate("/special-events")}>
               View all
             </Button>
@@ -918,25 +918,25 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent className={`${widgetContentClass} space-y-2`}>
               <div className="space-y-2">
-                {healthCenterAdmissions.map((admission: any) => (
+                  {healthCenterAdmissions.map((admission: any) => (
                   <div key={admission.id} className="flex items-start justify-between rounded-lg border border-border bg-accent/50 p-2.5">
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium text-foreground">
                         {admission.children?.name || "Unknown"}
-                      </div>
-                      {admission.reason && (
+                        </div>
+                        {admission.reason && (
                         <p className="mt-0.5 text-sm text-muted-foreground">{admission.reason}</p>
                       )}
                       <div className="mt-0.5 text-xs text-muted-foreground">
                         Admitted: {new Date(admission.admitted_at).toLocaleTimeString("en-US", {
                           hour: "numeric",
                           minute: "2-digit",
-                        })}
+                          })}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
             </CardContent>
           </Card>
         )}
