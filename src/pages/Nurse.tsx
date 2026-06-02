@@ -34,7 +34,6 @@ import {
   STANDARD_MEAL_LABEL_ORDER,
   resolveBedtimeOptionFromDivisionName,
   findBedtimeOptionFromStoredMealLabel,
-  formatMedicationMealTimeForDisplay,
 } from "@/lib/medicationBedtimeOptions";
 import { defaultMedicationStartDate } from "@/lib/medicationStartDate";
 import {
@@ -44,6 +43,11 @@ import {
   mergeMedicationsForDate,
   type MedicationLogRow,
 } from "@/lib/medicationSchedule";
+import {
+  MEDICATION_MEAL_FILTER_OPTIONS,
+  medicationMatchesListVisibility,
+} from "@/lib/medicationMealTimeDisplay";
+import { MedicationMealTimeBadges } from "@/components/nurse/MedicationMealTimeBadges";
 
 // Helper to check if we should show limited features for Timber Lake
 const useTimberLakeMode = () => {
@@ -83,6 +87,11 @@ export default function Nurse() {
   const [selectedGender, setSelectedGender] = useState<"all" | "boys" | "girls">("all");
   const [sortBy, setSortBy] = useState<'name' | 'division'>('name');
   const [medSortBy, setMedSortBy] = useState<'meal_time' | 'name' | 'status' | 'division' | 'gender'>('meal_time');
+  const [medMealFilter, setMedMealFilter] = useState<string>("all");
+  const [admissionNotesByAdmission, setAdmissionNotesByAdmission] = useState<
+    Record<string, { id: string; note: string; created_at: string }[]>
+  >({});
+  const [newAdmissionNote, setNewAdmissionNote] = useState<Record<string, string>>({});
   const [unadministerTarget, setUnadministerTarget] = useState<any | null>(null);
   const [rfidInput, setRfidInput] = useState("");
   const [scannedChild, setScannedChild] = useState<any>(null);
@@ -126,6 +135,7 @@ export default function Nurse() {
     fetchMedications(selectedDate);
     fetchAdmissions();
     fetchAdmissionHistory();
+    fetchAdmissionNotes();
 
     // Realtime subscription for medication logs and health center admissions
     const channel = supabase
@@ -141,7 +151,13 @@ export default function Nurse() {
         () => {
           fetchAdmissions();
           fetchAdmissionHistory();
+          fetchAdmissionNotes();
         }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'health_center_admission_notes' },
+        () => fetchAdmissionNotes()
       )
       .subscribe();
 
@@ -649,7 +665,7 @@ export default function Nurse() {
         .single();
 
       // Find all unadministered medications for this child today
-      const todayMeds = visibleMedications.filter(
+      const todayMeds = activeListMedications.filter(
         med => med.child_id === child.id && !med.administered
       );
 
@@ -798,6 +814,58 @@ export default function Nurse() {
         setAdmissionHistory(data);
       }
     }
+  };
+
+  const fetchAdmissionNotes = async () => {
+    if (!currentCompany?.id) return;
+
+    const { data, error } = await supabase
+      .from("health_center_admission_notes")
+      .select("id, admission_id, note, created_at")
+      .eq("company_id", currentCompany.id)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.warn("Admission notes unavailable (run migration if needed):", error.message);
+      return;
+    }
+
+    const grouped: Record<string, { id: string; note: string; created_at: string }[]> = {};
+    (data || []).forEach((row: { id: string; admission_id: string; note: string; created_at: string }) => {
+      if (!grouped[row.admission_id]) grouped[row.admission_id] = [];
+      grouped[row.admission_id].push({
+        id: row.id,
+        note: row.note,
+        created_at: row.created_at,
+      });
+    });
+    setAdmissionNotesByAdmission(grouped);
+  };
+
+  const handleAddAdmissionNote = async (admissionId: string) => {
+    const text = (newAdmissionNote[admissionId] || "").trim();
+    if (!text || !currentCompany?.id) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase.from("health_center_admission_notes").insert({
+      admission_id: admissionId,
+      company_id: currentCompany.id,
+      note: text,
+      created_by: user?.id ?? null,
+    });
+
+    if (error) {
+      toast({
+        title: "Could not save note",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setNewAdmissionNote((prev) => ({ ...prev, [admissionId]: "" }));
+    toast({ title: "Note added" });
+    fetchAdmissionNotes();
   };
 
   const handleAdmit = async (entityId: string, entityType: 'child' | 'staff', reason: string, notes: string) => {
@@ -1029,7 +1097,78 @@ export default function Nurse() {
     });
 
   const visibleChildIds = new Set(filteredChildren.map((child) => child.id));
+
+  const childForMedication = (med: { child_id: string; children?: { name?: string; division?: { name?: string } } }) =>
+    children.find((c) => c.id === med.child_id) ?? med.children;
+
+  const medMatchesActiveListRules = (med: (typeof medications)[0]) => {
+    const child = childForMedication(med);
+    const divisionName =
+      (child && "division" in child ? child.division?.name : null) ??
+      med.children?.division?.name ??
+      null;
+    const childName =
+      (child && "name" in child ? child.name : null) ?? med.children?.name ?? "";
+
+    return medicationMatchesListVisibility(med, {
+      searchQuery: searchQuery,
+      mealFilter: medMealFilter,
+      divisionName,
+      childName,
+    });
+  };
+
   const visibleMedications = medications.filter((med) => visibleChildIds.has(med.child_id));
+  const activeListMedications = visibleMedications.filter(medMatchesActiveListRules);
+
+  const renderMedSortFilterControls = () => (
+    <div className="flex flex-row flex-nowrap items-center gap-2">
+      <Select value={medMealFilter} onValueChange={setMedMealFilter}>
+        <SelectTrigger className="w-[180px] shrink-0">
+          <SelectValue placeholder="Filter meal time" />
+        </SelectTrigger>
+        <SelectContent>
+          {MEDICATION_MEAL_FILTER_OPTIONS.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value}>
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        value={medSortBy}
+        onValueChange={(value: 'meal_time' | 'name' | 'status' | 'division' | 'gender') =>
+          setMedSortBy(value)
+        }
+      >
+        <SelectTrigger className="w-[180px] shrink-0">
+          <ArrowUpDown className="h-4 w-4 mr-2" />
+          <SelectValue placeholder="Sort by..." />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="meal_time">Sort by Meal Time</SelectItem>
+          <SelectItem value="name">Sort by Name</SelectItem>
+          <SelectItem value="division">Sort by Division</SelectItem>
+          <SelectItem value="gender">Sort by Gender</SelectItem>
+          <SelectItem value="status">Sort by Status</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
+  const renderMedicationMetaBadges = (
+    med: (typeof medications)[0],
+    divisionName?: string | null,
+  ) => (
+    <div className="flex flex-wrap items-center gap-2">
+      {med.is_recurring && (
+        <Badge variant="secondary" className="text-xs">
+          Recurring
+        </Badge>
+      )}
+      <MedicationMealTimeBadges mealTime={med.meal_time} divisionName={divisionName} />
+    </div>
+  );
 
   return (
     <div className="space-y-8">
@@ -1166,24 +1305,17 @@ export default function Nurse() {
                                     />
                                   )}
                                   <div className="flex-1">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                       <span className="font-medium">{med.medication_name}</span>
                                       {med.administered && (
-                                        <Badge variant="outline" className="flex items-center gap-1">
+                                        <Badge variant="outline" className="flex items-center gap-1 text-xs">
                                           <CheckCircle2 className="h-3 w-3" />
                                           Given
                                         </Badge>
                                       )}
-                                      {med.is_recurring && (
-                                        <Badge variant="secondary" className="text-xs">
-                                          Recurring
-                                        </Badge>
-                                      )}
+                                      {renderMedicationMetaBadges(med, child.division?.name)}
                                     </div>
-                                    <p className="text-sm text-muted-foreground">
-                                      {med.dosage} -{' '}
-                                      {formatMedicationMealTimeForDisplay(med.meal_time, child.division?.name)}
-                                    </p>
+                                    <p className="text-sm text-muted-foreground mt-1">{med.dosage}</p>
                                     {med.notes && (
                                       <p className="text-sm text-muted-foreground mt-1">{med.notes}</p>
                                     )}
@@ -1260,20 +1392,29 @@ export default function Nurse() {
         <TabsContent value="log">
           <Card>
             <CardHeader>
-              <CardTitle>Daily Medication Log</CardTitle>
-              <CardDescription>Mark off medications administered today</CardDescription>
+              <div className="space-y-3">
+                <div>
+                  <CardTitle>Daily Medication Log</CardTitle>
+                  <CardDescription>
+                    Mark off medications administered today. Given meds and meds without a meal time are hidden — search by child or medication name to find them.
+                  </CardDescription>
+                </div>
+                {renderMedSortFilterControls()}
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (
                 <p className="text-muted-foreground">Loading...</p>
-              ) : visibleMedications.length === 0 ? (
+              ) : activeListMedications.length === 0 ? (
                 <p className="text-muted-foreground">No medications scheduled for today</p>
               ) : (
                 <div className="space-y-4">
                   {filteredChildren
-                    .filter(child => visibleMedications.some(med => med.child_id === child.id))
+                    .filter(child => activeListMedications.some(med => med.child_id === child.id))
                     .map((child) => {
-                      const childMeds = visibleMedications.filter(med => med.child_id === child.id);
+                      const childMeds = getSortedMedications(
+                        activeListMedications.filter(med => med.child_id === child.id),
+                      );
                       return (
                         <div key={child.id} className="border rounded-lg p-4">
                           <div className="flex items-center gap-2 mb-3">
@@ -1285,7 +1426,7 @@ export default function Nurse() {
                             )}
                           </div>
                           <div className="space-y-2">
-                            {sortMedicationsByMealTime(childMeds).map((med) => (
+                            {childMeds.map((med) => (
                               <div key={`${med.id}-${med._displayDate ?? med.date}`} className="flex items-start gap-3 p-3 bg-muted/50 rounded">
                                 <Checkbox
                                   checked={med.administered}
@@ -1294,24 +1435,17 @@ export default function Nurse() {
                                   }
                                 />
                                 <div className="flex-1">
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
                                     <span className="font-medium">{med.medication_name}</span>
                                     {med.administered && (
-                                      <Badge variant="outline" className="flex items-center gap-1">
+                                      <Badge variant="outline" className="flex items-center gap-1 text-xs">
                                         <CheckCircle2 className="h-3 w-3" />
                                         Given
                                       </Badge>
                                     )}
-                                    {med.is_recurring && (
-                                      <Badge variant="secondary" className="text-xs">
-                                        Recurring
-                                      </Badge>
-                                    )}
+                                    {renderMedicationMetaBadges(med, child.division?.name)}
                                   </div>
-                                  <p className="text-sm text-muted-foreground">
-                                    {med.dosage} -{' '}
-                                    {formatMedicationMealTimeForDisplay(med.meal_time, child.division?.name)}
-                                  </p>
+                                  <p className="text-sm text-muted-foreground mt-1">{med.dosage}</p>
                                   {/* Show start/end date info */}
                                   {(med.date || med.end_date) && (
                                     <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
@@ -1324,11 +1458,6 @@ export default function Nurse() {
                                   )}
                                   {med.notes && (
                                     <p className="text-xs text-muted-foreground mt-1">{med.notes}</p>
-                                  )}
-                                  {med.administered && med.staff?.name && (
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                      By {med.staff.name}
-                                    </p>
                                   )}
                                 </div>
                                 <div className="flex gap-1">
@@ -1370,24 +1499,14 @@ export default function Nurse() {
         <TabsContent value="today">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="space-y-3">
                 <div>
                   <CardTitle>Today's Medications</CardTitle>
-                  <CardDescription>Track medication administration</CardDescription>
+                  <CardDescription>
+                    Track medication administration. Given meds and meds without a meal time are hidden — search by child or medication name to find them.
+                  </CardDescription>
                 </div>
-                <Select value={medSortBy} onValueChange={(value: 'meal_time' | 'name' | 'status' | 'division' | 'gender') => setMedSortBy(value)}>
-                  <SelectTrigger className="w-[180px]">
-                    <ArrowUpDown className="h-4 w-4 mr-2" />
-                    <SelectValue placeholder="Sort by..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="meal_time">Sort by Meal Time</SelectItem>
-                    <SelectItem value="name">Sort by Name</SelectItem>
-                    <SelectItem value="division">Sort by Division</SelectItem>
-                    <SelectItem value="gender">Sort by Gender</SelectItem>
-                    <SelectItem value="status">Sort by Status</SelectItem>
-                  </SelectContent>
-                </Select>
+                {renderMedSortFilterControls()}
               </div>
             </CardHeader>
             <CardContent>
@@ -1464,11 +1583,11 @@ export default function Nurse() {
 
               {loading ? (
                 <p className="text-muted-foreground">Loading...</p>
-              ) : visibleMedications.length === 0 ? (
+              ) : activeListMedications.length === 0 ? (
                 <p className="text-muted-foreground">No medications scheduled for today</p>
               ) : (
                 <div className="space-y-3">
-                  {getSortedMedications(visibleMedications).map((med) => (
+                  {getSortedMedications(activeListMedications).map((med) => (
                     <div
                       key={`${med.id}-${med._displayDate ?? med.date}`}
                       className="p-4 rounded-lg border bg-card"
@@ -1476,15 +1595,18 @@ export default function Nurse() {
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex-1">
                           <p className="font-medium">{med.children?.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {med.medication_name} - {med.dosage}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {formatMedicationMealTimeForDisplay(
-                              med.meal_time,
-                              med.children?.division?.name,
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
+                            <span className="text-sm text-muted-foreground">
+                              {med.medication_name} - {med.dosage}
+                            </span>
+                            {med.administered && (
+                              <Badge variant="outline" className="flex items-center gap-1 text-xs">
+                                <CheckCircle2 className="h-3 w-3" />
+                                Given
+                              </Badge>
                             )}
-                          </p>
+                            {renderMedicationMetaBadges(med, med.children?.division?.name)}
+                          </div>
                           {/* Show start/end date info */}
                           {(med.date || med.end_date) && (
                             <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
@@ -1495,24 +1617,8 @@ export default function Nurse() {
                               </span>
                             </div>
                           )}
-                          {med.is_recurring && (
-                            <Badge variant="secondary" className="text-xs mt-1">
-                              Recurring {med.frequency !== 'daily' ? `(${med.frequency})` : ''}
-                            </Badge>
-                          )}
                         </div>
                         <div className="flex items-center gap-2">
-                          {med.administered ? (
-                            <Badge variant="outline" className="flex items-center gap-1">
-                              <CheckCircle2 className="h-3 w-3" />
-                              Given
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="flex items-center gap-1">
-                              <AlertCircle className="h-3 w-3 text-warning" />
-                              Pending
-                            </Badge>
-                          )}
                           {canManageMedications && (
                             <Button
                               variant="ghost"
@@ -1537,15 +1643,7 @@ export default function Nurse() {
                           )}
                         </div>
                       </div>
-                      {!med.administered ? (
-                        <Button
-                          size="sm"
-                          onClick={() => handleAdminister(med)}
-                          className="w-full mt-2"
-                        >
-                          Mark as Administered
-                        </Button>
-                      ) : (
+                      {med.administered ? (
                         <Button
                           size="sm"
                           variant="outline"
@@ -1554,11 +1652,14 @@ export default function Nurse() {
                         >
                           Mark as Not Administered
                         </Button>
-                      )}
-                      {med.administered && med.staff?.name && (
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Administered by {med.staff.name}
-                        </p>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => handleAdminister(med)}
+                          className="w-full mt-2"
+                        >
+                          Mark as Administered
+                        </Button>
                       )}
                     </div>
                   ))}
@@ -1775,9 +1876,46 @@ export default function Nurse() {
                               {admission.reason && (
                                 <p className="text-sm mt-2"><strong>Reason:</strong> {admission.reason}</p>
                               )}
-                              {admission.notes && (
-                                <p className="text-sm text-muted-foreground mt-1">{admission.notes}</p>
-                              )}
+                              <div className="mt-2 space-y-2">
+                                <p className="text-xs font-medium text-muted-foreground">Notes</p>
+                                {admission.notes && (
+                                  <p className="text-sm rounded-md border bg-muted/40 px-2 py-1.5">{admission.notes}</p>
+                                )}
+                                {(admissionNotesByAdmission[admission.id] || []).map((note) => (
+                                  <p
+                                    key={note.id}
+                                    className="text-sm rounded-md border bg-muted/40 px-2 py-1.5"
+                                  >
+                                    {note.note}
+                                    <span className="block text-xs text-muted-foreground mt-1">
+                                      {format(new Date(note.created_at), "MMM d, h:mm a")}
+                                    </span>
+                                  </p>
+                                ))}
+                                {canManageMedications && (
+                                  <div className="flex flex-col gap-2 sm:flex-row">
+                                    <Textarea
+                                      placeholder="Add a follow-up note..."
+                                      value={newAdmissionNote[admission.id] || ""}
+                                      onChange={(e) =>
+                                        setNewAdmissionNote((prev) => ({
+                                          ...prev,
+                                          [admission.id]: e.target.value,
+                                        }))
+                                      }
+                                      rows={2}
+                                      className="text-sm"
+                                    />
+                                    <Button
+                                      size="sm"
+                                      className="shrink-0"
+                                      onClick={() => handleAddAdmissionNote(admission.id)}
+                                    >
+                                      Add note
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                             <Button
                               size="sm"
@@ -1941,12 +2079,48 @@ export default function Nurse() {
                                       </div>
                                     )}
                                     
-                                    {admission.notes && (
-                                      <div className="mb-2">
-                                        <p className="text-xs font-medium text-muted-foreground">Notes:</p>
-                                        <p className="text-sm">{admission.notes}</p>
-                                      </div>
-                                    )}
+                                    <div className="mb-2 space-y-2">
+                                      <p className="text-xs font-medium text-muted-foreground">Notes</p>
+                                      {admission.notes && (
+                                        <p className="text-sm rounded-md border bg-muted/40 px-2 py-1.5">
+                                          {admission.notes}
+                                        </p>
+                                      )}
+                                      {(admissionNotesByAdmission[admission.id] || []).map((note) => (
+                                        <p
+                                          key={note.id}
+                                          className="text-sm rounded-md border bg-muted/40 px-2 py-1.5"
+                                        >
+                                          {note.note}
+                                          <span className="block text-xs text-muted-foreground mt-1">
+                                            {format(new Date(note.created_at), "MMM d, yyyy h:mm a")}
+                                          </span>
+                                        </p>
+                                      ))}
+                                      {canManageMedications && (
+                                        <div className="flex flex-col gap-2 sm:flex-row pt-1">
+                                          <Textarea
+                                            placeholder="Add another note..."
+                                            value={newAdmissionNote[admission.id] || ""}
+                                            onChange={(e) =>
+                                              setNewAdmissionNote((prev) => ({
+                                                ...prev,
+                                                [admission.id]: e.target.value,
+                                              }))
+                                            }
+                                            rows={2}
+                                            className="text-sm"
+                                          />
+                                          <Button
+                                            size="sm"
+                                            className="shrink-0"
+                                            onClick={() => handleAddAdmissionNote(admission.id)}
+                                          >
+                                            Add note
+                                          </Button>
+                                        </div>
+                                      )}
+                                    </div>
                                     
                                     <div className="flex gap-4 text-xs text-muted-foreground mt-2">
                                       <span>
