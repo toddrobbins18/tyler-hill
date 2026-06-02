@@ -17,6 +17,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import BirthdayReportTable from "./BirthdayReportTable";
+import { fetchAwardsForSeason } from "@/lib/awardsQueries";
+import { fetchExpandedMedicationSchedule } from "@/lib/medicationReportSchedule";
+import { parseMedicationMealTimeLabels } from "@/lib/medicationMealTimeDisplay";
 
 type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'conflicts' | 'medications' | 'allergies' | 're_enrollment' | 'appointments' | 'tshirt_sizes' | 'birthdays';
 
@@ -179,10 +182,9 @@ export default function ReportingCenter() {
           
           // Get staff names separately
           const staffIds = [...new Set(evals?.map(e => e.staff_id).filter(Boolean))];
-          const { data: staffData } = await supabase
-            .from('staff')
-            .select('id, name')
-            .in('id', staffIds);
+          const { data: staffData } = staffIds.length
+            ? await supabase.from('staff').select('id, name').in('id', staffIds)
+            : { data: [] as { id: string; name: string }[] };
           
           const staffMap = new Map(staffData?.map(s => [s.id, s.name]));
           
@@ -202,41 +204,113 @@ export default function ReportingCenter() {
           };
           break;
 
-        case 'awards':
-          const { data: awards } = await supabase
-            .from('awards')
+        case 'awards': {
+          const rangeStart = startDate || '1900-01-01';
+          const rangeEnd = endDate || '2100-12-31';
+          const awardsList = await fetchAwardsForSeason(
+            supabase,
+            currentCompany.id,
+            selectedSeason,
+            allowedDivisionIds,
+            divisions,
+          );
+          const filteredAwards = awardsList.filter(
+            (a) => a.date >= rangeStart && a.date <= rangeEnd,
+          );
+          const divisionNameById = new Map(
+            divisions.map((division) => [division.id, division.name]),
+          );
+
+          data = filteredAwards.map((a) => {
+            const divisionName =
+              (a.children?.division_id && divisionNameById.get(a.children.division_id)) ||
+              'N/A';
+
+            return withDivisionMeta(
+              {
+                Date: a.date,
+                Child: a.children?.name || 'Unknown',
+                Division: divisionName,
+                Title: a.title,
+                Category: a.category,
+                Description: a.description,
+              },
+              [a.children?.division_id],
+              [divisionName],
+            );
+          });
+
+          summaryData = {
+            'Total Awards': filteredAwards.length,
+          };
+          break;
+        }
+
+        case 'camper_reports': {
+          const { data: camperReports, error: camperReportsError } = await supabase
+            .from('camper_reports')
             .select(`
-              *, 
-              children(
+              report_date,
+              report_type,
+              report_data,
+              children (
                 name,
                 division_id,
-                divisions(name)
+                divisions (name)
               )
             `)
             .eq('company_id', currentCompany.id)
             .eq('season', selectedSeason)
-            .gte('date', startDate || '1900-01-01')
-            .lte('date', endDate || '2100-12-31')
-            .order('date', { ascending: false });
-          
-          // Filter by allowed divisions if user has restrictions
-          const filteredAwards = allowedDivisionIds 
-            ? awards?.filter(a => a.children?.division_id && allowedDivisionIds.includes(a.children.division_id))
-            : awards;
-          
-          data = filteredAwards?.map(a => withDivisionMeta({
-            Date: a.date,
-            Child: a.children?.name || 'Unknown',
-            Division: a.children?.divisions?.name || 'N/A',
-            Title: a.title,
-            Category: a.category,
-            Description: a.description,
-          }, [a.children?.division_id], [a.children?.divisions?.name])) || [];
-          
+            .gte('report_date', startDate || '1900-01-01')
+            .lte('report_date', endDate || '2100-12-31')
+            .order('report_date', { ascending: false });
+
+          if (camperReportsError) throw camperReportsError;
+
+          const filteredCamperReports = allowedDivisionIds
+            ? camperReports?.filter(
+                (r) =>
+                  r.children?.division_id &&
+                  allowedDivisionIds.includes(r.children.division_id),
+              )
+            : camperReports;
+
+          data =
+            filteredCamperReports?.map((r) => {
+              const payload =
+                r.report_data && typeof r.report_data === 'object'
+                  ? (r.report_data as Record<string, unknown>)
+                  : {};
+              const questionCount = Array.isArray(payload.responses)
+                ? payload.responses.length
+                : typeof payload === 'object'
+                  ? Object.keys(payload).length
+                  : 0;
+
+              return withDivisionMeta(
+                {
+                  Date: r.report_date,
+                  Child: r.children?.name || 'Unknown',
+                  Division: r.children?.divisions?.name || 'N/A',
+                  'Report Type':
+                    r.report_type === '10_day' ? '10-Day' : 'End of Summer',
+                  Questions: questionCount,
+                },
+                [r.children?.division_id],
+                [r.children?.divisions?.name],
+              );
+            }) || [];
+
           summaryData = {
-            'Total Awards': filteredAwards?.length || 0,
+            'Total Camper Reports': filteredCamperReports?.length || 0,
+            '10-Day Reports':
+              filteredCamperReports?.filter((r) => r.report_type === '10_day').length || 0,
+            'End of Summer Reports':
+              filteredCamperReports?.filter((r) => r.report_type === 'end_of_summer')
+                .length || 0,
           };
           break;
+        }
 
         case 'sports_events':
           const { data: sports } = await supabase
@@ -378,53 +452,63 @@ export default function ReportingCenter() {
           };
           break;
 
-        case 'medications':
-          const { data: meds } = await supabase
-            .from('medication_logs')
-            .select(`
-              *,
-              children (
-                name,
-                division_id,
-                divisions (name)
+        case 'medications': {
+          const expandedMeds = await fetchExpandedMedicationSchedule(
+            supabase,
+            currentCompany.id,
+            selectedSeason,
+            startDate,
+            endDate,
+          );
+
+          const filteredMeds = allowedDivisionIds
+            ? expandedMeds.filter(
+                (m) =>
+                  (m as { children?: { division_id?: string } }).children?.division_id &&
+                  allowedDivisionIds.includes(
+                    (m as { children?: { division_id?: string } }).children!.division_id!,
+                  ),
               )
-            `)
-            .eq('company_id', currentCompany.id)
-            .eq('season', selectedSeason)
-            .gte('date', startDate || '1900-01-01')
-            .lte('date', endDate || '2100-12-31')
-            .order('date', { ascending: false });
-          
-          // Filter by allowed divisions if user has restrictions
-          const filteredMeds = allowedDivisionIds 
-            ? meds?.filter(m => m.children?.division_id && allowedDivisionIds.includes(m.children.division_id))
-            : meds;
-          
-          data = filteredMeds?.map(m => withDivisionMeta({
-            Date: m.date,
-            Child: m.children?.name || 'Unknown',
-            Division: m.children?.divisions?.name || 'N/A',
-            Medication: m.medication_name,
-            Dosage: m.dosage || 'N/A',
-            'Meal Time': Array.isArray(m.meal_time) ? m.meal_time.join(', ') : m.meal_time || 'N/A',
-            'Scheduled Time': m.scheduled_time || 'N/A',
-            Administered: m.administered ? 'Yes' : 'No',
-            Notes: m.notes || '',
-          }, [m.children?.division_id], [m.children?.divisions?.name])) || [];
-          
-          const uniqueChildren = new Set(filteredMeds?.map(m => m.child_id));
-          const uniqueMedications = new Set(filteredMeds?.map(m => m.medication_name));
-          const administeredCount = filteredMeds?.filter(m => m.administered).length || 0;
-          const pendingCount = filteredMeds?.filter(m => !m.administered).length || 0;
-          
+            : expandedMeds;
+
+          data = filteredMeds.map((m) => {
+            const child = (m as {
+              children?: { name?: string; division_id?: string; divisions?: { name?: string } };
+            }).children;
+            const divisionName = child?.divisions?.name ?? null;
+            const mealLabel = parseMedicationMealTimeLabels(m.meal_time, divisionName).join(", ");
+
+            return withDivisionMeta(
+              {
+                Date: m._displayDate || m.date,
+                Child: child?.name || 'Unknown',
+                Division: divisionName || 'N/A',
+                Medication: m.medication_name,
+                Dosage: m.dosage || 'N/A',
+                'Meal Time': mealLabel || 'N/A',
+                'Scheduled Time': (m as { scheduled_time?: string }).scheduled_time || 'N/A',
+                Administered: m.administered ? 'Yes' : 'No',
+                Notes: (m as { notes?: string }).notes || '',
+              },
+              [child?.division_id],
+              [divisionName],
+            );
+          });
+
+          const uniqueChildren = new Set(filteredMeds.map((m) => m.child_id));
+          const uniqueMedications = new Set(filteredMeds.map((m) => m.medication_name));
+          const administeredCount = filteredMeds.filter((m) => m.administered).length;
+          const pendingCount = filteredMeds.filter((m) => !m.administered).length;
+
           summaryData = {
-            'Total Medication Entries': filteredMeds?.length || 0,
+            'Total Medication Entries': filteredMeds.length,
             'Unique Children': uniqueChildren.size,
             'Different Medications': uniqueMedications.size,
             'Administered': administeredCount,
             'Pending': pendingCount,
           };
           break;
+        }
 
         case 'allergies':
           let allergiesQuery = supabase
@@ -919,7 +1003,7 @@ export default function ReportingCenter() {
     if (currentCompany?.id && !permissionsLoading) {
       fetchReportData();
     }
-  }, [reportType, currentCompany, selectedSeason, allowedDivisionIds, permissionsLoading, startDate, endDate]);
+  }, [reportType, currentCompany, selectedSeason, allowedDivisionIds, permissionsLoading, startDate, endDate, divisions]);
 
   useEffect(() => {
     setSortColumn(null);
@@ -988,6 +1072,18 @@ export default function ReportingCenter() {
         return {
           'Total Awards': filteredReportData.length,
         };
+      case 'camper_reports': {
+        const tenDay = filteredReportData.filter((row) => row['Report Type'] === '10-Day').length;
+        const endOfSummer = filteredReportData.filter(
+          (row) => row['Report Type'] === 'End of Summer',
+        ).length;
+
+        return {
+          'Total Camper Reports': filteredReportData.length,
+          '10-Day Reports': tenDay,
+          'End of Summer Reports': endOfSummer,
+        };
+      }
       case 'sports_events':
         return {
           'Total Events': filteredReportData.length,
@@ -1221,6 +1317,7 @@ export default function ReportingCenter() {
     const baseOptions = [
       { value: 'incidents', label: 'Incident Reports' },
       { value: 'staff_evaluations', label: 'Staff Evaluations' },
+      { value: 'camper_reports', label: 'Camper Reports' },
       { value: 'awards', label: 'Awards' },
       { value: 'sports_events', label: 'Sports Events' },
       { value: 'conflicts', label: 'Schedule Conflicts' },
