@@ -113,21 +113,39 @@ export async function fetchAwardsForSeason(
   divisionFilter: string[] | null,
   allDivisions: DivisionRow[] = [],
 ): Promise<AwardWithChild[]> {
+  if (divisionFilter !== null && divisionFilter.length === 0) {
+    return [];
+  }
+
+  let effectiveDivisionFilter = divisionFilter;
+  if (divisionFilter !== null && divisionFilter.length > 0 && allDivisions.length > 0) {
+    effectiveDivisionFilter = expandDivisionIdsForRosterFilter(
+      divisionFilter,
+      allDivisions,
+    );
+  }
+
   const roster = await fetchAllRows<{
     id: string;
     person_id: string | null;
     name: string;
     division_id: string | null;
-  }>(async (from, to) =>
-    supabase
+  }>(async (from, to) => {
+    let query = supabase
       .from("children")
       .select("id, person_id, name, division_id")
       .eq("company_id", companyId)
       .eq("season", season)
       .neq("status", "inactive")
       .order("id")
-      .range(from, to),
-  );
+      .range(from, to);
+
+    if (effectiveDivisionFilter !== null && effectiveDivisionFilter.length > 0) {
+      query = query.in("division_id", effectiveDivisionFilter);
+    }
+
+    return query;
+  });
 
   if (roster.length === 0) {
     return [];
@@ -136,6 +154,8 @@ export async function fetchAwardsForSeason(
   const rosterPersonIds = roster
     .map((child) => normalizeCsvPersonId(child.person_id))
     .filter(Boolean);
+  const rosterChildIds = new Set(roster.map((child) => child.id));
+  const rosterPersonIdSet = new Set(rosterPersonIds);
 
   const awardChildIds = new Set(roster.map((child) => child.id));
 
@@ -188,14 +208,13 @@ export async function fetchAwardsForSeason(
   }) as AwardWithChild[];
 
   if (divisionFilter !== null && divisionFilter.length > 0) {
-    const expanded =
-      allDivisions.length > 0
-        ? expandDivisionIdsForRosterFilter(divisionFilter, allDivisions)
-        : divisionFilter;
-
-    result = result.filter(
-      (award) => award.children?.division_id && expanded.includes(award.children.division_id),
-    );
+    result = result.filter((award) => {
+      const childId = award.children?.id;
+      const personId = normalizeCsvPersonId(award.children?.person_id);
+      if (childId && rosterChildIds.has(childId)) return true;
+      if (personId && rosterPersonIdSet.has(personId)) return true;
+      return false;
+    });
   }
 
   return result;

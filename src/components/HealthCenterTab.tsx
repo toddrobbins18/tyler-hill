@@ -11,9 +11,14 @@ interface HealthCenterTabProps {
   entityType: "child" | "staff";
 }
 
+type AdmissionNote = { id: string; note: string; created_at: string };
+
 export function HealthCenterTab({ entityId, entityType }: HealthCenterTabProps) {
   const { currentCompany } = useCompany();
   const [admissions, setAdmissions] = useState<any[]>([]);
+  const [admissionNotesByAdmission, setAdmissionNotesByAdmission] = useState<
+    Record<string, AdmissionNote[]>
+  >({});
   const [medications, setMedications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -42,6 +47,29 @@ export function HealthCenterTab({ entityId, entityType }: HealthCenterTabProps) 
 
       const { data: admissionsData } = await admissionsQuery;
       setAdmissions(admissionsData || []);
+
+      const admissionIds = (admissionsData || []).map((row) => row.id);
+      if (admissionIds.length > 0) {
+        const { data: notesData } = await supabase
+          .from("health_center_admission_notes")
+          .select("id, admission_id, note, created_at")
+          .eq("company_id", currentCompany!.id)
+          .in("admission_id", admissionIds)
+          .order("created_at", { ascending: true });
+
+        const grouped: Record<string, AdmissionNote[]> = {};
+        (notesData || []).forEach((row) => {
+          if (!grouped[row.admission_id]) grouped[row.admission_id] = [];
+          grouped[row.admission_id].push({
+            id: row.id,
+            note: row.note,
+            created_at: row.created_at,
+          });
+        });
+        setAdmissionNotesByAdmission(grouped);
+      } else {
+        setAdmissionNotesByAdmission({});
+      }
 
       // Fetch medications (only for children)
       if (entityType === "child") {
@@ -86,6 +114,34 @@ export function HealthCenterTab({ entityId, entityType }: HealthCenterTabProps) 
   const currentAdmission = admissions.find(a => !a.checked_out_at);
   const pastAdmissions = admissions.filter(a => a.checked_out_at);
 
+  const renderAdmissionNotes = (admissionId: string, initialNotes?: string | null) => (
+    <div className="space-y-2">
+      {(initialNotes || (admissionNotesByAdmission[admissionId] || []).length > 0) && (
+        <p className="text-sm text-muted-foreground font-medium">Notes</p>
+      )}
+      {initialNotes && (
+        <div className="flex items-start gap-2 p-2 rounded-md border bg-muted/40 text-sm">
+          <FileText className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+          <span>{initialNotes}</span>
+        </div>
+      )}
+      {(admissionNotesByAdmission[admissionId] || []).map((note) => (
+        <div
+          key={note.id}
+          className="flex items-start gap-2 p-2 rounded-md border bg-muted/40 text-sm"
+        >
+          <FileText className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+          <div>
+            <p>{note.note}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {format(new Date(note.created_at), "MMM d, h:mm a")}
+            </p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       {/* Current Admission Status */}
@@ -108,10 +164,10 @@ export function HealthCenterTab({ entityId, entityType }: HealthCenterTabProps) 
                 <p className="text-sm text-muted-foreground">Duration</p>
                 <p className="font-medium">{getAdmissionDuration(currentAdmission.admitted_at)}</p>
               </div>
-              {currentAdmission.notes && (
-                <div className="p-3 rounded-lg bg-background md:col-span-2">
-                  <p className="text-sm text-muted-foreground">Notes</p>
-                  <p className="font-medium">{currentAdmission.notes}</p>
+              {(currentAdmission.notes ||
+                (admissionNotesByAdmission[currentAdmission.id] || []).length > 0) && (
+                <div className="md:col-span-2">
+                  {renderAdmissionNotes(currentAdmission.id, currentAdmission.notes)}
                 </div>
               )}
             </div>
@@ -162,10 +218,10 @@ export function HealthCenterTab({ entityId, entityType }: HealthCenterTabProps) 
                     {admission.reason && (
                       <p className="text-sm text-muted-foreground">{admission.reason}</p>
                     )}
-                    {admission.notes && (
-                      <div className="flex items-start gap-2 pt-1 border-t text-xs text-muted-foreground">
-                        <FileText className="h-3 w-3 mt-0.5" />
-                        <span>{admission.notes}</span>
+                    {(admission.notes ||
+                      (admissionNotesByAdmission[admission.id] || []).length > 0) && (
+                      <div className="pt-1 border-t">
+                        {renderAdmissionNotes(admission.id, admission.notes)}
                       </div>
                     )}
                   </div>

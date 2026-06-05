@@ -285,6 +285,9 @@ export default function Nurse() {
   };
 
   const getSortedMedications = (meds: any[]) => {
+    const resolveChild = (med: (typeof medications)[0]) =>
+      children.find((c) => c.id === med.child_id) ?? med.children;
+
     switch (medSortBy) {
       case 'name':
         return sortMedicationsByName(meds);
@@ -292,18 +295,26 @@ export default function Nurse() {
         return sortMedicationsByStatus(meds);
       case 'division': {
         return [...meds].sort((a, b) => {
-          const divA = a.children?.division?.name || '';
-          const divB = b.children?.division?.name || '';
-          if (divA !== divB) return divA.localeCompare(divB);
-          return (a.children?.name || '').localeCompare(b.children?.name || '');
+          const childA = resolveChild(a);
+          const childB = resolveChild(b);
+          const divA = childA?.division?.sort_order ?? 999;
+          const divB = childB?.division?.sort_order ?? 999;
+          if (divA !== divB) return divA - divB;
+          const nameA = childA?.name || a.children?.name || '';
+          const nameB = childB?.name || b.children?.name || '';
+          return nameA.localeCompare(nameB);
         });
       }
       case 'gender': {
         return [...meds].sort((a, b) => {
-          const gA = String(a.children?.gender ?? a.children?.division?.gender ?? '');
-          const gB = String(b.children?.gender ?? b.children?.division?.gender ?? '');
+          const childA = resolveChild(a);
+          const childB = resolveChild(b);
+          const gA = String(childA?.gender ?? childA?.division?.gender ?? '');
+          const gB = String(childB?.gender ?? childB?.division?.gender ?? '');
           if (gA !== gB) return gA.localeCompare(gB);
-          return (a.children?.name || '').localeCompare(b.children?.name || '');
+          const nameA = childA?.name || a.children?.name || '';
+          const nameB = childB?.name || b.children?.name || '';
+          return nameA.localeCompare(nameB);
         });
       }
       case 'meal_time':
@@ -320,7 +331,7 @@ export default function Nurse() {
 
     const dateStr = date ? format(date, "yyyy-MM-dd") : localDateYmd();
     const baseSelect =
-      "*, children(name, gender, division_id, division:divisions(name, gender)), staff(name)";
+      "*, children(name, gender, division_id, division:divisions(name, gender, sort_order)), staff(name)";
 
     const [dateResult, recurringResult] = await Promise.all([
       supabase
@@ -1121,6 +1132,54 @@ export default function Nurse() {
   const visibleMedications = medications.filter((med) => visibleChildIds.has(med.child_id));
   const activeListMedications = visibleMedications.filter(medMatchesActiveListRules);
 
+  const childrenWithActiveMeds = filteredChildren.filter((child) =>
+    activeListMedications.some((med) => med.child_id === child.id),
+  );
+
+  const sortedChildrenForMedList = [...childrenWithActiveMeds].sort((a, b) => {
+    switch (medSortBy) {
+      case 'division': {
+        const divA = a.division?.sort_order ?? 999;
+        const divB = b.division?.sort_order ?? 999;
+        if (divA !== divB) return divA - divB;
+        return a.name.localeCompare(b.name);
+      }
+      case 'gender': {
+        const gA = String(a.gender ?? a.division?.gender ?? '');
+        const gB = String(b.gender ?? b.division?.gender ?? '');
+        if (gA !== gB) return gA.localeCompare(gB);
+        return a.name.localeCompare(b.name);
+      }
+      case 'status': {
+        const pendingA = activeListMedications.some(
+          (med) => med.child_id === a.id && !med.administered,
+        );
+        const pendingB = activeListMedications.some(
+          (med) => med.child_id === b.id && !med.administered,
+        );
+        if (pendingA !== pendingB) return pendingA ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      }
+      case 'name':
+        return a.name.localeCompare(b.name);
+      case 'meal_time':
+      default: {
+        const priorityA = Math.min(
+          ...activeListMedications
+            .filter((med) => med.child_id === a.id)
+            .map((med) => getMealTimePriority(med.meal_time)),
+        );
+        const priorityB = Math.min(
+          ...activeListMedications
+            .filter((med) => med.child_id === b.id)
+            .map((med) => getMealTimePriority(med.meal_time)),
+        );
+        if (priorityA !== priorityB) return priorityA - priorityB;
+        return a.name.localeCompare(b.name);
+      }
+    }
+  });
+
   const renderMedSortFilterControls = () => (
     <div className="flex flex-row flex-nowrap items-center gap-2">
       <Select value={medMealFilter} onValueChange={setMedMealFilter}>
@@ -1409,9 +1468,7 @@ export default function Nurse() {
                 <p className="text-muted-foreground">No medications scheduled for today</p>
               ) : (
                 <div className="space-y-4">
-                  {filteredChildren
-                    .filter(child => activeListMedications.some(med => med.child_id === child.id))
-                    .map((child) => {
+                  {sortedChildrenForMedList.map((child) => {
                       const childMeds = getSortedMedications(
                         activeListMedications.filter(med => med.child_id === child.id),
                       );

@@ -68,15 +68,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUserRole(effectiveRole);
       setIsSuperAdmin(isSuperAdminUser);
 
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', currentUser.id)
+        .maybeSingle();
+
+      const profileCompanyId = profileData?.company_id ?? null;
+
       // Fetch only what we need (skip divisions for full-access roles)
       const emptyResult = { data: [] as any[], error: null };
 
       const divisionsPromise = (!roles.includes('admin') && !isSuperAdminUser)
-        ? supabase
-            .from('division_permissions')
-            .select('division_id')
-            .eq('user_id', currentUser.id)
-            .eq('can_access', true)
+        ? (() => {
+            let query = supabase
+              .from('division_permissions')
+              .select('division_id')
+              .eq('user_id', currentUser.id)
+              .eq('can_access', true);
+            if (profileCompanyId) {
+              query = query.eq('company_id', profileCompanyId);
+            }
+            return query;
+          })()
         : Promise.resolve(emptyResult);
 
       const permissionsPromise = roles.length > 0
