@@ -28,12 +28,17 @@ export function usePermissions() {
   const { 
     userRole, 
     userRoles, 
-    userDivisions, 
+    userDivisions,
+    userDivisionsByCompany,
     loading, 
     isSuperAdmin,
     hasPagePermission 
   } = useAuth();
   const { currentCompany } = useCompany();
+
+  const scopedUserDivisions = currentCompany?.id
+    ? userDivisionsByCompany[currentCompany.id] ?? []
+    : userDivisions;
 
   // Check if user can access a page - now synchronous, no DB call!
   const canAccessPage = useCallback(async (
@@ -64,8 +69,8 @@ export function usePermissions() {
     }
     
     // Other roles (division_leader, viewer) can only see their assigned divisions
-    return userDivisions.includes(divisionId);
-  }, [userRole, userDivisions]);
+    return scopedUserDivisions.includes(divisionId);
+  }, [userRole, scopedUserDivisions]);
 
   // Get division filter for queries
   const getDivisionFilter = useCallback((): string[] | null => {
@@ -75,13 +80,14 @@ export function usePermissions() {
     }
     
     // Other roles (division_leader, viewer) see only their assigned divisions
-    return userDivisions.length > 0 ? userDivisions : [];
-  }, [userRole, userDivisions]);
+    // Empty array = defer to RLS (same as Roster when client ids aren't loaded)
+    return scopedUserDivisions.length > 0 ? scopedUserDivisions : [];
+  }, [userRole, scopedUserDivisions]);
 
   return {
     userRole,
     userRoles,
-    userDivisions,
+    userDivisions: scopedUserDivisions,
     loading,
     canAccessPage,
     canSeeDivision,

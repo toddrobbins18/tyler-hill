@@ -8,7 +8,14 @@ const PAGE_SIZE = 1000;
 const PERSON_ID_BATCH_SIZE = 500;
 const CHILD_ID_BATCH_SIZE = 100;
 
-export type AwardWithChild = {
+type RosterChild = {
+  id: string;
+  person_id: string | null;
+  name: string;
+  division_id: string | null;
+};
+
+type AwardRow = {
   id: string;
   child_id: string;
   company_id: string;
@@ -17,6 +24,9 @@ export type AwardWithChild = {
   title: string;
   description?: string | null;
   category?: string | null;
+};
+
+export type AwardWithChild = AwardRow & {
   children?: {
     id: string;
     name?: string | null;
@@ -46,50 +56,46 @@ async function fetchAllRows<T>(
   return rows;
 }
 
-async function fetchChildIdsForPersonIds(
+/** Map child row id → normalized person_id (all seasons the caller can read via RLS). */
+async function fetchChildPersonIdMap(
   supabase: SupabaseClient,
   companyId: string,
   personIds: string[],
-): Promise<Set<string>> {
-  const childIds = new Set<string>();
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
   const unique = Array.from(new Set(personIds.filter(Boolean)));
 
   for (let i = 0; i < unique.length; i += PERSON_ID_BATCH_SIZE) {
     const batch = unique.slice(i, i + PERSON_ID_BATCH_SIZE);
     const { data, error } = await supabase
       .from("children")
-      .select("id")
+      .select("id, person_id")
       .eq("company_id", companyId)
       .in("person_id", batch);
 
     if (error) throw error;
-    (data || []).forEach((child) => childIds.add(child.id));
+    (data || []).forEach((child: { id: string; person_id: string | null }) => {
+      const personId = normalizeCsvPersonId(child.person_id);
+      if (personId) map.set(child.id, personId);
+    });
   }
 
-  return childIds;
+  return map;
 }
 
 async function fetchAwardsForChildIds(
   supabase: SupabaseClient,
   companyId: string,
   childIds: string[],
-): Promise<AwardWithChild[]> {
-  const awards: AwardWithChild[] = [];
+): Promise<AwardRow[]> {
+  const awards: AwardRow[] = [];
 
   for (let i = 0; i < childIds.length; i += CHILD_ID_BATCH_SIZE) {
     const batch = childIds.slice(i, i + CHILD_ID_BATCH_SIZE);
-    const batchAwards = await fetchAllRows<AwardWithChild>(async (from, to) =>
+    const batchAwards = await fetchAllRows<AwardRow>(async (from, to) =>
       supabase
         .from("awards")
-        .select(`
-          *,
-          children:child_id (
-            id,
-            name,
-            division_id,
-            person_id
-          )
-        `)
+        .select("id, child_id, company_id, season, date, title, description, category")
         .eq("company_id", companyId)
         .in("child_id", batch)
         .order("date", { ascending: false })
@@ -105,6 +111,9 @@ async function fetchAwardsForChildIds(
 /**
  * Load awards for the active season roster, including achievements stored against
  * prior-season child rows for the same person_id.
+ *
+ * When divisionFilter is an empty array, client-side division filtering is skipped
+ * and RLS scopes results (same as the Roster page for division leaders).
  */
 export async function fetchAwardsForSeason(
   supabase: SupabaseClient,
@@ -113,10 +122,6 @@ export async function fetchAwardsForSeason(
   divisionFilter: string[] | null,
   allDivisions: DivisionRow[] = [],
 ): Promise<AwardWithChild[]> {
-  if (divisionFilter !== null && divisionFilter.length === 0) {
-    return [];
-  }
-
   let effectiveDivisionFilter = divisionFilter;
   if (divisionFilter !== null && divisionFilter.length > 0 && allDivisions.length > 0) {
     effectiveDivisionFilter = expandDivisionIdsForRosterFilter(
@@ -125,12 +130,7 @@ export async function fetchAwardsForSeason(
     );
   }
 
-  const roster = await fetchAllRows<{
-    id: string;
-    person_id: string | null;
-    name: string;
-    division_id: string | null;
-  }>(async (from, to) => {
+  const roster = await fetchAllRows<RosterChild>(async (from, to) => {
     let query = supabase
       .from("children")
       .select("id, person_id, name, division_id")
@@ -154,18 +154,25 @@ export async function fetchAwardsForSeason(
   const rosterPersonIds = roster
     .map((child) => normalizeCsvPersonId(child.person_id))
     .filter(Boolean);
-  const rosterChildIds = new Set(roster.map((child) => child.id));
-  const rosterPersonIdSet = new Set(rosterPersonIds);
+
+  const childIdToPersonId = new Map<string, string>();
+  roster.forEach((child) => {
+    const personId = normalizeCsvPersonId(child.person_id);
+    if (personId) childIdToPersonId.set(child.id, personId);
+  });
 
   const awardChildIds = new Set(roster.map((child) => child.id));
 
   if (rosterPersonIds.length > 0) {
-    const relatedChildIds = await fetchChildIdsForPersonIds(
+    const relatedPersonIds = await fetchChildPersonIdMap(
       supabase,
       companyId,
       rosterPersonIds,
     );
-    relatedChildIds.forEach((id) => awardChildIds.add(id));
+    relatedPersonIds.forEach((personId, childId) => {
+      awardChildIds.add(childId);
+      childIdToPersonId.set(childId, personId);
+    });
   }
 
   if (awardChildIds.size === 0) {
@@ -185,13 +192,12 @@ export async function fetchAwardsForSeason(
   );
   const rosterById = new Map(roster.map((child) => [child.id, child]));
 
-  let result = awards.map((award) => {
-    const linked = award.children;
-    const linkedPersonId = normalizeCsvPersonId(linked?.person_id);
+  return awards.map((award) => {
+    const linkedPersonId = childIdToPersonId.get(award.child_id) || "";
     const currentRosterChild =
       (linkedPersonId && rosterByPersonId.get(linkedPersonId)) ||
-      (linked?.id && rosterById.get(linked.id)) ||
-      linked;
+      rosterById.get(award.child_id) ||
+      null;
 
     return {
       ...award,
@@ -203,19 +209,7 @@ export async function fetchAwardsForSeason(
             season,
             person_id: linkedPersonId || null,
           }
-        : award.children,
+        : null,
     };
-  }) as AwardWithChild[];
-
-  if (divisionFilter !== null && divisionFilter.length > 0) {
-    result = result.filter((award) => {
-      const childId = award.children?.id;
-      const personId = normalizeCsvPersonId(award.children?.person_id);
-      if (childId && rosterChildIds.has(childId)) return true;
-      if (personId && rosterPersonIdSet.has(personId)) return true;
-      return false;
-    });
-  }
-
-  return result;
+  }).filter((award) => award.children != null) as AwardWithChild[];
 }

@@ -10,6 +10,7 @@ interface AuthContextType {
   userRole: AppRole | null;
   isSuperAdmin: boolean;
   userDivisions: string[];
+  userDivisionsByCompany: Record<string, string[]>;
   loading: boolean;
   // All permissions keyed by companyId -> menuItem -> boolean
   allPermissions: Record<string, Record<string, boolean>>;
@@ -27,6 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [userDivisions, setUserDivisions] = useState<string[]>([]);
+  const [userDivisionsByCompany, setUserDivisionsByCompany] = useState<Record<string, string[]>>({});
   const [allPermissions, setAllPermissions] = useState<Record<string, Record<string, boolean>>>({});
   const [loading, setLoading] = useState(true);
   
@@ -43,6 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUserRole(null);
         setIsSuperAdmin(false);
         setUserDivisions([]);
+        setUserDivisionsByCompany({});
         setAllPermissions({});
         setLoading(false);
         return;
@@ -68,29 +71,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUserRole(effectiveRole);
       setIsSuperAdmin(isSuperAdminUser);
 
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('company_id')
-        .eq('id', currentUser.id)
-        .maybeSingle();
-
-      const profileCompanyId = profileData?.company_id ?? null;
-
       // Fetch only what we need (skip divisions for full-access roles)
       const emptyResult = { data: [] as any[], error: null };
 
       const divisionsPromise = (!roles.includes('admin') && !isSuperAdminUser)
-        ? (() => {
-            let query = supabase
-              .from('division_permissions')
-              .select('division_id')
-              .eq('user_id', currentUser.id)
-              .eq('can_access', true);
-            if (profileCompanyId) {
-              query = query.eq('company_id', profileCompanyId);
-            }
-            return query;
-          })()
+        ? supabase
+            .from('division_permissions')
+            .select('division_id, company_id')
+            .eq('user_id', currentUser.id)
+            .eq('can_access', true)
         : Promise.resolve(emptyResult);
 
       const permissionsPromise = roles.length > 0
@@ -106,10 +95,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         permissionsPromise,
       ]);
 
-      // Process divisions
+      // Process divisions (keyed by company so multi-camp users scope correctly)
       if (!roles.includes('admin') && !isSuperAdminUser) {
-        setUserDivisions((divisionsResult.data || []).map((d: any) => d.division_id));
+        const byCompany: Record<string, string[]> = {};
+        for (const row of divisionsResult.data || []) {
+          const companyId = (row as { company_id?: string }).company_id;
+          const divisionId = (row as { division_id?: string }).division_id;
+          if (!companyId || !divisionId) continue;
+          if (!byCompany[companyId]) byCompany[companyId] = [];
+          if (!byCompany[companyId].includes(divisionId)) {
+            byCompany[companyId].push(divisionId);
+          }
+        }
+        setUserDivisionsByCompany(byCompany);
+        setUserDivisions(Object.values(byCompany).flat());
       } else {
+        setUserDivisionsByCompany({});
         setUserDivisions([]);
       }
 
@@ -145,6 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUserRole(null);
         setIsSuperAdmin(false);
         setUserDivisions([]);
+        setUserDivisionsByCompany({});
         setAllPermissions({});
         setLoading(false);
         hasInitializedRef.current = false;
@@ -172,6 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userRole,
         isSuperAdmin,
         userDivisions,
+        userDivisionsByCompany,
         loading,
         allPermissions,
         hasPagePermission,
