@@ -75,7 +75,7 @@ export default function Staff() {
       .select("*")
       .eq("company_id", currentCompany.id)
       .eq("season", currentSeason)
-      .neq("status", "inactive")
+      .or("status.eq.active,status.is.null,status.eq.Active")
       .neq("name", "Unknown")
       .not("name", "is", null)
       .order("name");
@@ -90,7 +90,9 @@ export default function Staff() {
       return;
     }
 
-    const staffRows = staffData || [];
+    const staffRows = (staffData || []).filter(
+      (member: any) => String(member.status ?? "active").toLowerCase() !== "inactive",
+    );
 
     // Fetch evaluations (if any) and map them to staff_id
     const staffIds = staffRows.map((s: any) => s.id).filter(Boolean);

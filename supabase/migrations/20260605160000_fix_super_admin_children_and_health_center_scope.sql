@@ -1,45 +1,5 @@
--- Let division leaders resolve prior-season child rows (and their awards) when the
--- same camper is on their current roster via person_id.
-
-CREATE OR REPLACE FUNCTION public.normalize_person_id_for_match(raw text)
-RETURNS text
-LANGUAGE sql
-IMMUTABLE
-AS $$
-  SELECT NULLIF(
-    regexp_replace(trim(COALESCE(raw, '')), '\.0+$', ''),
-    ''
-  );
-$$;
-
-CREATE OR REPLACE FUNCTION public.user_can_access_child_person_id(_person_id text)
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT EXISTS (
-    SELECT 1
-    FROM public.children accessible
-    WHERE accessible.company_id = public.get_user_company(auth.uid())
-      AND public.normalize_person_id_for_match(accessible.person_id)
-        = public.normalize_person_id_for_match(_person_id)
-      AND (
-        public.has_role(auth.uid(), 'admin'::app_role)
-        OR public.has_role(auth.uid(), 'staff'::app_role)
-        OR public.has_role(auth.uid(), 'health_center'::app_role)
-        OR public.has_role(auth.uid(), 'specialist'::app_role)
-        OR (
-          (
-            public.has_role(auth.uid(), 'division_leader'::app_role)
-            OR public.has_role(auth.uid(), 'viewer'::app_role)
-          )
-          AND accessible.division_id = ANY(COALESCE(public.get_user_divisions(auth.uid()), ARRAY[]::uuid[]))
-        )
-      )
-  )
-$$;
+-- Restore super_admin bypass on children SELECT (regression from 20260605140000).
+-- Tighten health_center_admissions so super admins still rely on client company filter.
 
 CREATE OR REPLACE FUNCTION public.can_access_child(_child_id uuid)
 RETURNS boolean
@@ -74,16 +34,6 @@ AS $$
     )
 $$;
 
-CREATE OR REPLACE FUNCTION public.can_access_award(_child_id uuid)
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT public.can_access_child(_child_id)
-$$;
-
 DROP POLICY IF EXISTS "Users can view children from their company" ON public.children;
 
 CREATE POLICY "Users can view children from their company"
@@ -112,10 +62,31 @@ USING (
   )
 );
 
-DROP POLICY IF EXISTS "Users can view awards from their company" ON public.awards;
+-- Super admins switching camps must filter by currentCompany on the client;
+-- RLS still allows read when company_id matches profile OR user is super_admin.
+DROP POLICY IF EXISTS "Health center and admins can view health admissions" ON public.health_center_admissions;
+DROP POLICY IF EXISTS "Users can view health admissions from their company" ON public.health_center_admissions;
+DROP POLICY IF EXISTS "Users can view health center admissions from their company" ON public.health_center_admissions;
 
-CREATE POLICY "Users can view awards from their company"
-ON public.awards
+CREATE POLICY "Health center and admins can view health admissions"
+ON public.health_center_admissions
+FOR SELECT
+USING (
+  public.is_super_admin(auth.uid())
+  OR (
+    company_id = public.get_user_company(auth.uid())
+    AND (
+      public.has_role(auth.uid(), 'admin'::app_role)
+      OR public.has_role(auth.uid(), 'health_center'::app_role)
+    )
+  )
+);
+
+-- Staff directory: include health_center role and treat null status as active.
+DROP POLICY IF EXISTS "Users can view staff from their company" ON public.staff;
+
+CREATE POLICY "Users can view staff from their company"
+ON public.staff
 FOR SELECT
 USING (
   public.is_super_admin(auth.uid())
@@ -124,7 +95,10 @@ USING (
     AND (
       public.has_role(auth.uid(), 'admin'::app_role)
       OR public.has_role(auth.uid(), 'staff'::app_role)
-      OR (child_id IS NOT NULL AND public.can_access_award(child_id))
+      OR public.has_role(auth.uid(), 'division_leader'::app_role)
+      OR public.has_role(auth.uid(), 'specialist'::app_role)
+      OR public.has_role(auth.uid(), 'viewer'::app_role)
+      OR public.has_role(auth.uid(), 'health_center'::app_role)
     )
   )
 );

@@ -54,6 +54,7 @@ import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 import UpdatePassword from "./pages/UpdatePassword";
 import Privacy from "./pages/Privacy";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -179,19 +180,21 @@ function AppContent() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthProvider>
-          <CompanyProvider>
-            <SeasonProvider>
-              <TooltipProvider>
-                <AppContent />
-              </TooltipProvider>
-            </SeasonProvider>
-          </CompanyProvider>
-        </AuthProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <AuthProvider>
+            <CompanyProvider>
+              <SeasonProvider>
+                <TooltipProvider>
+                  <AppContent />
+                </TooltipProvider>
+              </SeasonProvider>
+            </CompanyProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

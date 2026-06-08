@@ -126,6 +126,11 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         targetCompany = companies.find(c => c.id === profile.company_id) || null;
       }
 
+      if (!targetCompany && authIsSuperAdmin && companies && companies.length > 0) {
+        // Super admin with no saved/profile company — default to first active camp
+        targetCompany = companies[0];
+      }
+
       if (!targetCompany && profile?.companies) {
         // Regular user or fallback
         targetCompany = profile.companies as unknown as Company;

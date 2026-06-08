@@ -41,10 +41,12 @@ export default function ChildProfile() {
   const [conflicts, setConflicts] = useState<any[]>([]);
 
   useEffect(() => {
-    if (id && !permissionsLoading) {
+    if (id && currentCompany?.id && !permissionsLoading) {
+      setLoading(true);
+      setAccessDenied(false);
       fetchChildData();
     }
-  }, [id, permissionsLoading]);
+  }, [id, currentCompany?.id, permissionsLoading]);
 
   const fetchChildData = async () => {
     try {

@@ -164,7 +164,7 @@ export default function Nurse() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedDate, currentSeason, permissionsLoading, userDivisions]);
+  }, [selectedDate, currentSeason, currentCompany?.id, permissionsLoading, userDivisions]);
 
   const fetchChildren = async () => {
     if (!currentCompany?.id) {
@@ -745,6 +745,11 @@ export default function Nurse() {
   };
 
   const fetchAdmissions = async () => {
+    if (!currentCompany?.id) {
+      setAdmissions([]);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("health_center_admissions")
       .select(`
@@ -764,6 +769,7 @@ export default function Nurse() {
           allergies
         )
       `)
+      .eq("company_id", currentCompany.id)
       .eq("season", currentSeason)
       .is("checked_out_at", null)
       .order("admitted_at", { ascending: false });
@@ -773,13 +779,11 @@ export default function Nurse() {
       return;
     }
     
-    // Filter child admissions by allowed divisions (staff admissions are not filtered)
+    // Filter child admissions by allowed divisions; staff admissions stay camp-scoped above
     const divisionFilter = getDivisionFilter();
     if (divisionFilter !== null && divisionFilter.length > 0) {
       const filtered = (data || []).filter(admission => {
-        // If it's a staff admission (no child), include it
         if (!admission.child_id) return true;
-        // If it's a child admission, check division
         return admission.children?.division_id && divisionFilter.includes(admission.children.division_id);
       });
       setAdmissions(filtered);
@@ -789,6 +793,11 @@ export default function Nurse() {
   };
 
   const fetchAdmissionHistory = async (childId?: string) => {
+    if (!currentCompany?.id) {
+      setAdmissionHistory([]);
+      return;
+    }
+
     let query = supabase
       .from("health_center_admissions")
       .select(`
@@ -802,6 +811,7 @@ export default function Nurse() {
           )
         )
       `)
+      .eq("company_id", currentCompany.id)
       .eq("season", currentSeason)
       .not("checked_out_at", "is", null)
       .order("admitted_at", { ascending: false });
@@ -813,7 +823,6 @@ export default function Nurse() {
     const { data, error } = await query;
     
     if (!error && data) {
-      // Filter by allowed divisions
       const divisionFilter = getDivisionFilter();
       if (divisionFilter !== null && divisionFilter.length > 0) {
         const filtered = data.filter(admission => {
@@ -880,12 +889,18 @@ export default function Nurse() {
   };
 
   const handleAdmit = async (entityId: string, entityType: 'child' | 'staff', reason: string, notes: string) => {
+    if (!currentCompany?.id) {
+      toast({ title: "No camp selected", variant: "destructive" });
+      return;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     
     const checkColumn = entityType === 'child' ? 'child_id' : 'staff_id';
     const { data: existing } = await supabase
       .from("health_center_admissions")
       .select("id")
+      .eq("company_id", currentCompany.id)
       .eq(checkColumn, entityId)
       .is("checked_out_at", null)
       .maybeSingle();
@@ -998,6 +1013,7 @@ export default function Nurse() {
       const { data: existingAdmission } = await supabase
         .from("health_center_admissions")
         .select("id")
+        .eq("company_id", currentCompany?.id)
         .eq(checkColumn, entity.id)
         .is("checked_out_at", null)
         .maybeSingle();

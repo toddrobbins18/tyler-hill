@@ -25,7 +25,7 @@ export default function CamperReportsTab({ childId, reportType }: CamperReportsT
 
   useEffect(() => {
     fetchReports();
-  }, [childId, reportType, currentCompany]);
+  }, [childId, reportType, currentCompany?.id]);
 
   const fetchReports = async () => {
     if (!currentCompany?.id) return;

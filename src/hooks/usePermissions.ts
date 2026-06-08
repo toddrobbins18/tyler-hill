@@ -1,7 +1,9 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useAuth, AppRole } from '@/contexts/AuthContext';
 import { useCompany } from '@/contexts/CompanyContext';
 
+/** Stable empty array — avoids useEffect loops when used as a dependency. */
+const EMPTY_DIVISIONS: string[] = [];
 // Re-export AppRole for backward compatibility
 export type { AppRole } from '@/contexts/AuthContext';
 
@@ -36,10 +38,12 @@ export function usePermissions() {
   } = useAuth();
   const { currentCompany } = useCompany();
 
-  const scopedUserDivisions = currentCompany?.id
-    ? userDivisionsByCompany[currentCompany.id] ?? []
-    : userDivisions;
-
+  const scopedUserDivisions = useMemo((): string[] => {
+    if (currentCompany?.id) {
+      return userDivisionsByCompany?.[currentCompany.id] ?? EMPTY_DIVISIONS;
+    }
+    return userDivisions.length > 0 ? userDivisions : EMPTY_DIVISIONS;
+  }, [currentCompany?.id, userDivisionsByCompany, userDivisions]);
   // Check if user can access a page - now synchronous, no DB call!
   const canAccessPage = useCallback(async (
     pageName: string,
