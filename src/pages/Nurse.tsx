@@ -66,7 +66,7 @@ export default function Nurse() {
   const isTimberLake = useTimberLakeMode();
   const { currentSeason } = useSeasonContext();
   const { currentCompany } = useCompany();
-  const { getDivisionFilter, loading: permissionsLoading, userDivisions } = usePermissions();
+  const { getDivisionFilter, loading: permissionsLoading, userDivisionsKey } = usePermissions();
   const [children, setChildren] = useState<any[]>([]);
   const [staff, setStaff] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
@@ -164,7 +164,7 @@ export default function Nurse() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedDate, currentSeason, currentCompany?.id, permissionsLoading, userDivisions]);
+  }, [selectedDate, currentSeason, currentCompany?.id, permissionsLoading, userDivisionsKey]);
 
   const fetchChildren = async () => {
     if (!currentCompany?.id) {

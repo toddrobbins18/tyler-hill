@@ -44,6 +44,12 @@ export function usePermissions() {
     }
     return userDivisions.length > 0 ? userDivisions : EMPTY_DIVISIONS;
   }, [currentCompany?.id, userDivisionsByCompany, userDivisions]);
+
+  const userDivisionsKey = useMemo(
+    () => scopedUserDivisions.join(','),
+    [scopedUserDivisions],
+  );
+
   // Check if user can access a page - now synchronous, no DB call!
   const canAccessPage = useCallback(async (
     pageName: string,
@@ -92,6 +98,7 @@ export function usePermissions() {
     userRole,
     userRoles,
     userDivisions: scopedUserDivisions,
+    userDivisionsKey,
     loading,
     canAccessPage,
     canSeeDivision,

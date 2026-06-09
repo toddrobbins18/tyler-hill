@@ -63,7 +63,7 @@ export default function Roster() {
   const [scannerMode, setScannerMode] = useState(false);
   const rfidInputRef = useRef<HTMLInputElement>(null);
 
-  const { getDivisionFilter, loading: permissionsLoading, userDivisions } = usePermissions();
+  const { getDivisionFilter, loading: permissionsLoading, userDivisionsKey } = usePermissions();
 
   const CAMPERS_PAGE_SIZE = 1000;
 
@@ -162,7 +162,7 @@ export default function Roster() {
       fetchChildren();
       fetchDivisions();
     }
-  }, [currentSeason, currentCompany?.id, permissionsLoading, userDivisions]);
+  }, [currentSeason, currentCompany?.id, permissionsLoading, userDivisionsKey]);
 
   useEffect(() => {
     setCurrentPage(1);

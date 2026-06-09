@@ -11,10 +11,10 @@ function parseSeasonYear(season: string): number {
   return new Date().getFullYear();
 }
 
-/** First day of the camp program for a season (June 25 of the season year). */
+/** First day of the camp program for a season (June 26 of the season year). */
 export function campProgramStartDate(season: string): string {
   const year = parseSeasonYear(season);
-  return `${year}-06-25`;
+  return `${year}-06-26`;
 }
 
 /**
