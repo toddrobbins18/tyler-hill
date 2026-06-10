@@ -1,6 +1,7 @@
 import { STANDARD_MEAL_SCHEDULE_HHMM } from "@/lib/medicationBedtimeOptions";
 import { applyDailyMedicationDefaults } from "@/lib/medicationSchedule";
 import { defaultMedicationStartDate } from "@/lib/medicationStartDate";
+import { normalizeSpreadsheetDate } from "@/lib/spreadsheetDates";
 
 /** Map CSV Meal Time uppercase labels → DB constraint values (`valid_meal_times`). */
 const CSV_MEAL_SLOT_TO_LABEL: Record<string, string> = {
@@ -25,19 +26,7 @@ const WEEKDAY_ALIASES: Record<string, string> = {
 };
 
 function normalizeDateStringOrNull(value: unknown): string | null {
-  const raw = String(value ?? "").trim();
-  if (!raw) return null;
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-
-  const us = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (us) {
-    const mm = us[1].padStart(2, "0");
-    const dd = us[2].padStart(2, "0");
-    return `${us[3]}-${mm}-${dd}`;
-  }
-
-  return null;
+  return normalizeSpreadsheetDate(value);
 }
 
 function normalizeMedicationFrequencyValue(raw: unknown): string | null {
@@ -68,6 +57,10 @@ export function sanitizeMedicationLogRowForInsert(
   row.date = normalizedDate || defaultMedicationStartDate(season);
 
   row.end_date = normalizeDateStringOrNull(row.end_date);
+
+  if (row.dosage === "" || row.dosage === undefined) {
+    row.dosage = null;
+  }
 
   const normalizedFrequency = normalizeMedicationFrequencyValue(row.frequency);
   row.frequency = normalizedFrequency;

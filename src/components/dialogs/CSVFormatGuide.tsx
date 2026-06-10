@@ -45,13 +45,12 @@ const ALL_FORMATS: Record<string, FormatDef> = {
   },
   medication_logs: {
     title: "Medication Logs",
-    columns:
-      'person_id, medication_name, dosage (synonyms OK: Person ID · Medication Name · Dosage — same three columns)',
+    columns: "person_id, medication_name (required). dosage optional.",
     optionalColumns:
-      "scheduled_time, date, notes, is_recurring, frequency, days_of_week, end_date (Excel/Campminder export also accepts: Meal Time → time; END DATE → end date; \"Recurring (if daily or not)\" YES/NO → recurring)",
-    example: '14251496, Cosentyx, N/A, AFTER LUNCH, "WILL GIVE DATES", NO, MONTHLY,',
+      "SCHEDULED TIME / Meal Time, START DATE / date, END DATE, NOTES, RECURRING (YES/NO), FREQUENCY, days_of_week. CampMinder Excel columns (CHILD NAME, LAST NAME, DIVISION, DOB) are ignored — camper is matched by person_id. Upload .csv or .xlsx.",
+    example: "15956699, Supplements, 1 package, BEFORE BREAKFAST, Give with food, YES, DAILY, (start), (end)",
     notes:
-      "REQUIRED each row: Person ID matching an active camper in your roster for the selected season, plus medication name and dosage. OPTIONAL: Meal Time or Scheduled Time, date, Notes (multi-line OK if the whole cell is in double-quotes — Excel saves this automatically), recurrence fields. Wrong/missing campers in Nest for that season produce a Person ID error — sync/import Children roster first or switch season.",
+      "REQUIRED: person_id + medication_name on each row (must match a camper in your roster for the selected season). All other columns are optional — missing dosage, dates, or meal time is fine. Excel date serials (e.g. 46198) are converted automatically. Defaults: start = Jun 26 (or today after camp opens), end = Aug 12 for daily recurring meds.",
   },
   trips: {
     title: "Transportation/Trips",

@@ -14,7 +14,7 @@ import {
   parseIncidentReportRow, parseMedicationRow, parseCalendarEventRow, parseSportsCalendarRow, parseDailyWolfContentRow
 } from "@/lib/validationSchemas";
 import { z } from "zod";
-import { parseCsvDocument } from "@/lib/csvLine";
+import { parseSpreadsheetFile, isSpreadsheetFileName } from "@/lib/spreadsheetImport";
 import { sanitizeMedicationLogRowForInsert } from "@/lib/medicationCsvImport";
 import {
   CSV_REPLACE_CLEAR_TABLES,
@@ -266,7 +266,7 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
           ? (error as { message: string }).message
           : "";
       toast.error(
-        msg ? `Upload failed: ${msg}` : "Failed to upload CSV. Please check the format and try again.",
+        msg ? `Upload failed: ${msg}` : "Failed to upload file. Please check the format and try again.",
       );
     } finally {
       setUploading(false);
@@ -280,39 +280,27 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.csv')) {
-      toast.error("Please upload a CSV file");
+    if (!isSpreadsheetFileName(file.name)) {
+      toast.error("Please upload a CSV or Excel file (.csv, .xlsx, .xls)");
       return;
     }
 
     setUploading(true);
 
     try {
-      const text = await file.text();
-      const records = parseCsvDocument(text);
+      const { rows: rawRows } = await parseSpreadsheetFile(file);
 
-      if (records.length === 0) {
-        toast.error("CSV file is empty");
+      if (rawRows.length === 0) {
+        toast.error("Spreadsheet is empty");
         setUploading(false);
         return;
       }
 
-      // Limit logical rows (header + data) to prevent DoS
-      if (records.length > 1001) {
-        toast.error("CSV file too large. Maximum 1000 data rows allowed.");
+      if (rawRows.length > 1000) {
+        toast.error("File too large. Maximum 1000 data rows allowed.");
         setUploading(false);
         return;
       }
-
-      const headers = records[0].map((h) => h.replace(/^"|"$/g, "").trim());
-      const rawRows = records.slice(1).map((values) => {
-        const obj: Record<string, any> = {};
-        headers.forEach((header, index) => {
-          const v = values[index];
-          obj[header] = v != null && String(v).length > 0 ? String(v).trim() : null;
-        });
-        return obj;
-      });
 
       // Select appropriate schema and parser based on table
       let schema;
@@ -367,8 +355,7 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
           if (tableName === "medication_logs") {
             const pid = String(parsed.person_id ?? "").trim();
             const med = String(parsed.medication_name ?? "").trim();
-            const dose = String(parsed.dosage ?? "").trim();
-            if (!pid && !med && !dose) continue;
+            if (!pid && !med) continue;
           }
           const validated = schema.parse(parsed);
           validatedRows.push(validated);
@@ -388,7 +375,7 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
       }
 
       if (validatedRows.length === 0) {
-        toast.error("No data rows to import. Add rows with the required columns (for medications: person_id, medication_name, dosage).");
+        toast.error("No data rows to import. For medications, each row needs at least person_id and medication_name.");
         setUploading(false);
         resetFileInput();
         return;
@@ -413,7 +400,7 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
           ? (error as { message: string }).message
           : "";
       toast.error(
-        msg ? `Upload failed: ${msg}` : "Failed to upload CSV. Please check the format and try again.",
+        msg ? `Upload failed: ${msg}` : "Failed to upload file. Please check the format and try again.",
       );
     } finally {
       setUploading(false);
@@ -427,7 +414,7 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
         <Input
           ref={fileInputRef}
           type="file"
-          accept=".csv"
+          accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
           onChange={handleFileUpload}
           disabled={uploading}
           className="hidden"
@@ -447,7 +434,7 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
           disabled={uploading}
         >
           <Upload className="h-4 w-4 mr-2" />
-          {uploading ? "Uploading..." : "Upload CSV"}
+          {uploading ? "Uploading..." : "Upload CSV / Excel"}
         </Button>
       </div>
 

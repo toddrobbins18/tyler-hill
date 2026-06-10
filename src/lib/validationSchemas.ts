@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { normalizeCsvPersonId } from "./csvPersonIdResolve";
+import { pickCell, parseYesNo } from "./spreadsheetRowUtils";
 
 // Child validation schema - Only name and person_id are required
 export const childSchema = z.object({
@@ -126,7 +127,7 @@ export const medicationSchema = z.object({
   person_id: z.string().trim().min(1, "Person ID is required"),
   date: z.string().optional().default(""),
   medication_name: z.string().min(1, "Medication name is required"),
-  dosage: z.string().trim().min(1, "Dosage is required"),
+  dosage: z.string().trim().optional().nullable().default(""),
   scheduled_time: z.string().optional().default(""),
   notes: z.string().optional(),
   is_recurring: z.boolean().optional(),
@@ -305,30 +306,42 @@ export function parseIncidentReportRow(row: Record<string, any>) {
   };
 }
 
-// Medication CSV parser
+// Medication CSV / Excel parser (CampMinder export compatible)
 export function parseMedicationRow(row: Record<string, any>) {
-  const recurringRaw =
-    row.is_recurring ??
-    row['Is Recurring'] ??
-    row['Recurring (if daily or not)'] ??
-    '';
-  const isRecurring = ['true', 'yes', '1', 'y'].includes(String(recurringRaw).toLowerCase().trim());
+  const recurringRaw = pickCell(
+    row,
+    "is_recurring",
+    "Is Recurring",
+    "Recurring (if daily or not)",
+    "RECURRING",
+    "Recurring",
+  );
+  const isRecurring = parseYesNo(recurringRaw);
+
+  const daysRaw = pickCell(row, "days_of_week", "Days of Week", "DAYS OF WEEK");
+  const frequencyRaw = pickCell(row, "frequency", "Frequency", "FREQUENCY");
 
   return {
     person_id: normalizeCsvPersonId(
-      row.person_id || row['Person ID'] || row.PersonID || row.personid || row['Camper ID'] || row.CamperID,
+      pickCell(row, "person_id", "Person ID", "PersonID", "personid", "Camper ID", "CamperID"),
     ),
-    date: String(row.date || row.Date || ''),
-    medication_name: String(row.medication_name || row['Medication Name'] || '').trim(),
-    dosage: String(row.dosage || row.Dosage || '').trim(),
-    scheduled_time: String(
-      row.scheduled_time || row['Scheduled Time'] || row['Meal Time'] || row.meal_time || ''
+    date: pickCell(row, "date", "Date", "START DATE", "Start Date", "start_date", "START DATE "),
+    medication_name: pickCell(row, "medication_name", "Medication Name", "MEDICATION NAME", "Medication"),
+    dosage: pickCell(row, "dosage", "Dosage", "DOSAGE") || null,
+    scheduled_time: pickCell(
+      row,
+      "scheduled_time",
+      "Scheduled Time",
+      "SCHEDULED TIME",
+      "Meal Time",
+      "meal_time",
+      "MEAL TIME",
     ),
-    notes: String(row.notes || row.Notes || ''),
+    notes: pickCell(row, "notes", "Notes", "NOTES"),
     is_recurring: isRecurring,
-    frequency: String(row.frequency || row.Frequency || 'daily'),
-    days_of_week: row.days_of_week ? String(row.days_of_week).split(',') : [],
-    end_date: String(row.end_date || row['End Date'] || row['END DATE'] || '') || null,
+    frequency: frequencyRaw || "daily",
+    days_of_week: daysRaw ? daysRaw.split(",").map((d) => d.trim()).filter(Boolean) : [],
+    end_date: pickCell(row, "end_date", "End Date", "END DATE", "END DATE ") || null,
   };
 }
 
