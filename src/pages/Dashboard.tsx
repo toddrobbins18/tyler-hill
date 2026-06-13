@@ -21,6 +21,7 @@ import { addDays, format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { isActiveRosterStatus, isBirthdayTodayCalendar, parseBirthdayCalendarParts } from "@/lib/birthdayCalendar";
 import { isTimberLakeCamp, isTimberLakeWestCompany, isTylerHillCamp, shouldShowTigerTimes } from "@/lib/camps";
+import { formatTime12Hour } from "@/lib/utils";
 
 interface DailyWolfContent {
   officer_of_day: string;
@@ -487,8 +488,12 @@ export default function Dashboard() {
     const eventsData = trips?.map(trip => ({
       id: trip.id,
       title: trip.name,
-      date: new Date(trip.date + 'T00:00:00').toLocaleDateString('en-US'),
-      type: trip.type
+      date: new Date(trip.date + 'T00:00:00').toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      }),
+      departureTime: trip.departure_time ? formatTime12Hour(trip.departure_time) : '',
+      type: trip.type,
     })) || [];
     setUpcomingEvents(eventsData);
 
@@ -538,12 +543,21 @@ export default function Dashboard() {
   const widgetLinkClass = "h-auto shrink-0 p-0 text-xs font-medium text-primary hover:underline";
   const widgetIconWrapClass = "shrink-0 rounded-md p-1.5";
   
-  const today = new Date();
-  const formattedDate = today.toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    month: 'long', 
-    day: 'numeric', 
-    year: 'numeric' 
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const formattedDate = now.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const formattedTime = now.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
   });
 
   const calculateAge = (dateOfBirth: string): number => {
@@ -571,13 +585,12 @@ export default function Dashboard() {
         padding: '2rem',
       } : undefined}
     >
-      <div className={hasDashboardAerialBg ? "text-white flex items-baseline justify-between gap-4" : ""}>
-        <h1 className={`text-3xl font-bold ${hasDashboardAerialBg ? "mb-0 text-white drop-shadow-lg" : "mb-2 text-foreground"}`}>{dashboardTitle}</h1>
-        {hasDashboardAerialBg ? (
-          <p className="text-white/80 drop-shadow text-lg shrink-0 text-right">{formattedDate}</p>
-        ) : (
-          <p className="text-muted-foreground">Welcome back! Here's what's happening today.</p>
-        )}
+      <div className={`flex items-baseline justify-between gap-4 ${hasDashboardAerialBg ? "text-white" : ""}`}>
+        <h1 className={`text-3xl font-bold ${hasDashboardAerialBg ? "mb-0 text-white drop-shadow-lg" : "mb-0 text-foreground"}`}>{dashboardTitle}</h1>
+        <div className={`shrink-0 text-right ${hasDashboardAerialBg ? "text-white/80 drop-shadow" : "text-muted-foreground"}`}>
+          <p className="text-lg">{formattedDate}</p>
+          <p className={`text-sm font-semibold ${hasDashboardAerialBg ? "text-white" : "text-foreground"}`}>{formattedTime}</p>
+        </div>
       </div>
 
       {!showTigerTimes && !isTylerHill && !isTimberLakeWest && (
@@ -687,7 +700,7 @@ export default function Dashboard() {
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium">{act.title}</p>
                           <p className="text-xs text-muted-foreground">
-                            {(act.time || "Time TBD") + (act.location ? ` · ${act.location}` : "")}
+                            {(formatTime12Hour(act.time) || act.time || "Time TBD") + (act.location ? ` · ${act.location}` : "")}
                           </p>
                         </div>
                         <Badge variant="outline" className="shrink-0 text-xs">{act.activity_type || "Activity"}</Badge>
@@ -725,7 +738,7 @@ export default function Dashboard() {
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium">{ev.title}</p>
                           <p className="text-xs text-muted-foreground">
-                            {ev.date} {ev.type ? `· ${ev.type}` : ""}
+                            {[ev.date, ev.departureTime, ev.type].filter(Boolean).join(" · ")}
                           </p>
                         </div>
                       </div>
@@ -751,9 +764,9 @@ export default function Dashboard() {
             </Button>
           </CardHeader>
           <CardContent className={`${widgetContentClass} space-y-2`}>
-              {sportsEvents.length === 0 ? (
+              {sportsEvents.length === 0 && (!isTylerHill || threeDayOutlook.length === 0) ? (
               <p className="text-sm text-muted-foreground">No sports events today</p>
-            ) : (
+            ) : sportsEvents.length > 0 ? (
               <div className="space-y-1 rounded-lg border-l-4 border-info bg-info/5 p-2 dark:bg-info/10">
                 {isTylerHill && (
                   <div className="mb-1 flex items-center gap-2">
@@ -765,13 +778,13 @@ export default function Dashboard() {
                   <div key={event.id} className="flex cursor-pointer items-center gap-2 rounded-lg bg-card p-2 transition-colors hover:bg-muted/50" onClick={() => navigate("/athletics")}>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium">{event.title}</p>
-                      <p className="truncate text-xs text-muted-foreground">{event.time || "TBD"}</p>
+                      <p className="truncate text-xs text-muted-foreground">{formatTime12Hour(event.time) || event.time || "TBD"}</p>
                       </div>
                     <Badge variant="outline" className="shrink-0 text-xs">{event.sport_type}</Badge>
                     </div>
                   ))}
             </div>
-            )}
+            ) : null}
 
             {isTylerHill && threeDayOutlook.length > 0 && (
               <div className="space-y-1 rounded-lg border-l-4 border-warning bg-warning/5 p-2 dark:bg-warning/10">
@@ -784,7 +797,7 @@ export default function Dashboard() {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium">{event.title}</p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {new Date(event.event_date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} • {event.time || "TBD"}
+                        {new Date(event.event_date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} • {formatTime12Hour(event.time) || event.time || "TBD"}
                       </p>
                     </div>
                     <Badge variant="outline" className="shrink-0 text-xs">{event.sport_type}</Badge>
@@ -858,7 +871,7 @@ export default function Dashboard() {
                     <div key={event.id} className="flex cursor-pointer items-start gap-2 rounded-lg bg-muted/50 p-2 transition-colors hover:bg-muted" onClick={() => navigate("/special-events")}>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium">{event.title}</p>
-                        <span className="text-xs text-muted-foreground">{event.time_slot || "All day"}</span>
+                        <span className="text-xs text-muted-foreground">{formatTime12Hour(event.time_slot) || event.time_slot || "All day"}</span>
                       </div>
                     </div>
                   ))}
@@ -890,7 +903,7 @@ export default function Dashboard() {
                   <div key={event.id} className="flex cursor-pointer items-start gap-2 rounded-lg bg-muted/50 p-2 transition-colors hover:bg-muted" onClick={() => navigate("/special-events")}>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium">{event.title}</p>
-                      <span className="text-xs text-muted-foreground">{event.time_slot || "All day"}</span>
+                      <span className="text-xs text-muted-foreground">{formatTime12Hour(event.time_slot) || event.time_slot || "All day"}</span>
                     </div>
                     <Badge variant="outline" className="shrink-0 text-xs">{event.type}</Badge>
                   </div>
