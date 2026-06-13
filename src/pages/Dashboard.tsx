@@ -58,13 +58,7 @@ export default function Dashboard() {
   const [staffBirthdays, setStaffBirthdays] = useState<any[]>([]);
   const [healthCenterAdmissions, setHealthCenterAdmissions] = useState<any[]>([]);
   const [dailyWolfContent, setDailyWolfContent] = useState<DailyWolfContent | null>(null);
-  const [todaysMenu, setTodaysMenu] = useState<any>({
-    breakfast: "",
-    lunch: "",
-    snack: "",
-    dinner: "",
-    specialNotes: ""
-  });
+  const [todaysMenuItems, setTodaysMenuItems] = useState<any[]>([]);
 
   useEffect(() => {
     if (currentCompany?.id) {
@@ -498,18 +492,29 @@ export default function Dashboard() {
     setUpcomingEvents(eventsData);
 
     if (menu && menu.length > 0) {
-      const menuData: any = {};
-      menu.forEach(item => {
-        menuData[item.meal_type] = item.items;
+      const mealOrder: Record<string, number> = {
+        breakfast: 1,
+        lunch: 2,
+        snack: 3,
+        dinner: 4,
+        special_meal: 5,
+      };
+      const sortedMenu = [...menu].sort((a, b) => {
+        const aKey = (a.meal_type || "").toLowerCase();
+        const bKey = (b.meal_type || "").toLowerCase();
+        const orderDiff = (mealOrder[aKey] ?? 99) - (mealOrder[bKey] ?? 99);
+        if (orderDiff !== 0) return orderDiff;
+        return (a.items || "").localeCompare(b.items || "");
       });
-      setTodaysMenu({
-        breakfast: menuData.breakfast || "Not scheduled",
-        lunch: menuData.lunch || "Not scheduled",
-        snack: menuData.snack || "Not scheduled",
-        dinner: menuData.dinner || "Not scheduled",
-        specialNotes: menu[0]?.allergens || ""
-      });
+      setTodaysMenuItems(sortedMenu);
+    } else {
+      setTodaysMenuItems([]);
     }
+  };
+
+  const formatDashboardMealTypeLabel = (mealType: string) => {
+    if (mealType === "special_meal") return "Special Meal";
+    return mealType.charAt(0).toUpperCase() + mealType.slice(1);
   };
 
   const showTigerTimes = shouldShowTigerTimes(currentCompany);
@@ -529,13 +534,7 @@ export default function Dashboard() {
         ? "The Bear"
         : "Dashboard";
 
-  const menuMeals = [
-    { label: "Breakfast", value: todaysMenu.breakfast },
-    { label: "Lunch", value: todaysMenu.lunch },
-    { label: "Snack", value: todaysMenu.snack },
-    { label: "Dinner", value: todaysMenu.dinner },
-  ].filter((meal) => meal.value && meal.value !== "Not scheduled");
-  
+  const menuMeals = todaysMenuItems;
   const glassCardClass = hasDashboardAerialBg ? "bg-card/50 backdrop-blur-md border-white/30" : "";
   const widgetHeaderClass = "flex flex-row items-center justify-between gap-2 p-4 pb-2 space-y-0";
   const widgetTitleClass = "text-base font-semibold leading-tight";
@@ -652,20 +651,17 @@ export default function Dashboard() {
               <p className="text-sm text-muted-foreground">No meals scheduled for today</p>
             ) : (
               <div className={`grid gap-2 ${menuMeals.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
-                {menuMeals.map((meal) => (
-                  <div key={meal.label} className="rounded-lg bg-muted/50 p-2.5">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{meal.label}</p>
-                    <p className="mt-0.5 line-clamp-2 text-sm font-medium">{meal.value}</p>
-              </div>
+                {menuMeals.map((item) => (
+                  <div key={item.id} className="rounded-lg bg-muted/50 p-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      {formatDashboardMealTypeLabel(item.meal_type)}
+                    </p>
+                    <p className="mt-0.5 text-sm font-medium whitespace-pre-wrap">{item.items}</p>
+                    {item.allergens && (
+                      <p className="text-xs text-muted-foreground mt-1">Allergens: {item.allergens}</p>
+                    )}
+                  </div>
                 ))}
-              </div>
-            )}
-            {todaysMenu.specialNotes && (
-              <div className="rounded-lg border border-warning/20 bg-warning/10 p-2">
-                <p className="text-xs text-warning-foreground">
-                  <span className="font-semibold">Allergens: </span>
-                  {todaysMenu.specialNotes}
-                </p>
               </div>
             )}
           </CardContent>

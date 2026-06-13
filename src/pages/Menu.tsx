@@ -18,12 +18,14 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { CalendarZoomWrapper } from "@/components/CalendarZoomWrapper";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
 
 export default function Menu() {
   const [menuItems, setMenuItems] = useState<any[]>([]);
+  const [divisions, setDivisions] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
@@ -39,10 +41,36 @@ export default function Menu() {
     meal_type: "breakfast",
     items: "",
     allergens: "",
+    division_ids: [] as string[],
   });
+
+  const isSpecialMeal = formData.meal_type === "special_meal";
+
+  const resetFormData = () => ({
+    date: new Date().toISOString().split('T')[0],
+    meal_type: "breakfast",
+    items: "",
+    allergens: "",
+    division_ids: [] as string[],
+  });
+
+  const fetchDivisions = async () => {
+    if (!currentCompany?.id) {
+      setDivisions([]);
+      return;
+    }
+    const { data } = await supabase
+      .from("divisions")
+      .select("id, name")
+      .eq("company_id", currentCompany.id)
+      .eq("is_active", true)
+      .order("sort_order");
+    setDivisions(data || []);
+  };
 
   useEffect(() => {
     fetchMenuItems();
+    fetchDivisions();
 
     const channel = supabase
       .channel('menu-changes')
@@ -78,10 +106,23 @@ export default function Menu() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (isSpecialMeal && formData.division_ids.length === 0) {
+      toast({ title: "Select at least one division for a special meal", variant: "destructive" });
+      return;
+    }
+
+    const payload = {
+      date: formData.date,
+      meal_type: formData.meal_type,
+      items: formData.items,
+      allergens: formData.allergens,
+      division_ids: isSpecialMeal ? formData.division_ids : null,
+    };
+
     if (editingItem) {
       const { error } = await supabase
         .from("menu_items")
-        .update(formData)
+        .update(payload)
         .eq("id", editingItem.id);
 
       if (error) {
@@ -91,8 +132,8 @@ export default function Menu() {
       toast({ title: "Menu item updated successfully" });
     } else {
       const { error } = await supabase.from("menu_items").insert({
-        ...formData,
-        company_id: currentCompany?.id
+        ...payload,
+        company_id: currentCompany?.id,
       });
 
       if (error) {
@@ -102,7 +143,7 @@ export default function Menu() {
       toast({ title: "Menu item added successfully" });
     }
 
-    setFormData({ date: new Date().toISOString().split('T')[0], meal_type: "breakfast", items: "", allergens: "" });
+    setFormData(resetFormData());
     setEditingItem(null);
     setDialogOpen(false);
     fetchMenuItems();
@@ -115,8 +156,16 @@ export default function Menu() {
       meal_type: item.meal_type,
       items: item.items,
       allergens: item.allergens || "",
+      division_ids: Array.isArray(item.division_ids) ? item.division_ids : [],
     });
     setDialogOpen(true);
+  };
+
+  const divisionNameById = (id: string) => divisions.find((d) => d.id === id)?.name ?? "Division";
+
+  const formatMealTypeLabel = (mealType: string) => {
+    if (mealType === "special_meal") return "Special Meal";
+    return mealType.charAt(0).toUpperCase() + mealType.slice(1);
   };
 
   const handleDelete = async (id: string) => {
@@ -132,7 +181,7 @@ export default function Menu() {
 
   const calendarEvents = menuItems.map(item => ({
     id: item.id,
-    title: `${item.meal_type.charAt(0).toUpperCase() + item.meal_type.slice(1)}: ${item.items.substring(0, 30)}...`,
+    title: `${formatMealTypeLabel(item.meal_type)}: ${item.items.substring(0, 30)}...`,
     start: new Date(item.date + 'T00:00:00'),
     end: new Date(item.date + 'T23:59:59'),
     resource: item,
@@ -167,7 +216,7 @@ export default function Menu() {
             setDialogOpen(open);
             if (!open) {
               setEditingItem(null);
-              setFormData({ date: new Date().toISOString().split('T')[0], meal_type: "breakfast", items: "", allergens: "" });
+              setFormData(resetFormData());
             }
           }}>
             <DialogTrigger asChild>
@@ -185,16 +234,83 @@ export default function Menu() {
                 </div>
                 <div className="space-y-2">
                   <Label>Meal Type</Label>
-                  <Select value={formData.meal_type} onValueChange={(value) => setFormData({ ...formData, meal_type: value })}>
+                  <Select
+                    value={formData.meal_type}
+                    onValueChange={(value) =>
+                      setFormData({
+                        ...formData,
+                        meal_type: value,
+                        division_ids: value === "special_meal" ? formData.division_ids : [],
+                      })
+                    }
+                  >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="breakfast">Breakfast</SelectItem>
                       <SelectItem value="lunch">Lunch</SelectItem>
                       <SelectItem value="snack">Snack</SelectItem>
                       <SelectItem value="dinner">Dinner</SelectItem>
+                      <SelectItem value="special_meal">Special Meal</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+                {isSpecialMeal && (
+                  <div className="space-y-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <Label>Divisions</Label>
+                      {divisions.length > 0 && (
+                        <div className="flex gap-2 flex-wrap">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setFormData({ ...formData, division_ids: divisions.map((d) => d.id) })}
+                          >
+                            Select All
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setFormData({ ...formData, division_ids: [] })}
+                          >
+                            Deselect All
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="border rounded-md p-3 space-y-2 max-h-[200px] overflow-y-auto">
+                      {divisions.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No divisions available</p>
+                      ) : (
+                        divisions.map((div) => (
+                          <div key={div.id} className="flex items-center gap-2">
+                            <Checkbox
+                              id={`menu-div-${div.id}`}
+                              checked={formData.division_ids.includes(div.id)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setFormData({ ...formData, division_ids: [...formData.division_ids, div.id] });
+                                } else {
+                                  setFormData({
+                                    ...formData,
+                                    division_ids: formData.division_ids.filter((id) => id !== div.id),
+                                  });
+                                }
+                              }}
+                            />
+                            <label htmlFor={`menu-div-${div.id}`} className="text-sm cursor-pointer">
+                              {div.name}
+                            </label>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      For kitchen reference only — this meal still appears for everyone on the menu.
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label>Menu Items</Label>
                   <Textarea value={formData.items} onChange={(e) => setFormData({ ...formData, items: e.target.value })} placeholder="e.g., Pancakes, Fresh Fruit, Milk" required />
@@ -257,15 +373,20 @@ export default function Menu() {
                 <CardContent className="space-y-3">
                   {items
                     .sort((a, b) => {
-                      const mealOrder = { breakfast: 1, lunch: 2, snack: 3, dinner: 4 };
-                      return (mealOrder[a.meal_type as keyof typeof mealOrder] || 5) - (mealOrder[b.meal_type as keyof typeof mealOrder] || 5);
+                      const mealOrder = { breakfast: 1, lunch: 2, snack: 3, dinner: 4, special_meal: 5 };
+                      return (mealOrder[a.meal_type as keyof typeof mealOrder] || 6) - (mealOrder[b.meal_type as keyof typeof mealOrder] || 6);
                     })
                     .map((item) => (
                       <div key={item.id} className="p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors group relative">
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
-                            <p className="font-medium capitalize mb-1">{item.meal_type}</p>
+                            <p className="font-medium mb-1">{formatMealTypeLabel(item.meal_type)}</p>
                             <p className="text-sm">{item.items}</p>
+                            {item.meal_type === "special_meal" && Array.isArray(item.division_ids) && item.division_ids.length > 0 && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Divisions: {item.division_ids.map((id: string) => divisionNameById(id)).join(", ")}
+                              </p>
+                            )}
                             {item.allergens && (<p className="text-xs text-muted-foreground mt-1">Allergens: {item.allergens}</p>)}
                           </div>
                           <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

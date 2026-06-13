@@ -100,12 +100,13 @@ export const tripSchema = z.object({
 // Menu items validation schema
 export const menuItemSchema = z.object({
   date: z.string().min(1, "Date is required"),
-  meal_type: z.enum(["breakfast", "lunch", "snack", "dinner"], { 
+  meal_type: z.enum(["breakfast", "lunch", "snack", "dinner", "special_meal"], { 
     required_error: "Meal type is required",
-    invalid_type_error: "Meal type must be breakfast, lunch, snack, or dinner"
+    invalid_type_error: "Meal type must be breakfast, lunch, snack, dinner, or special_meal"
   }),
   items: z.string().min(1, "Menu items are required"),
   allergens: z.string().nullable().optional(),
+  division_ids: z.array(z.string().uuid()).nullable().optional(),
 });
 
 // Incident report validation schema

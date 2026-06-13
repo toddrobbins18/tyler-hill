@@ -1918,6 +1918,7 @@ export type Database = {
           items: string
           meal_type: string
           season: string | null
+          division_ids: string[] | null
         }
         Insert: {
           allergens?: string | null
@@ -1928,6 +1929,7 @@ export type Database = {
           items: string
           meal_type: string
           season?: string | null
+          division_ids?: string[] | null
         }
         Update: {
           allergens?: string | null
@@ -1938,6 +1940,7 @@ export type Database = {
           items?: string
           meal_type?: string
           season?: string | null
+          division_ids?: string[] | null
         }
         Relationships: [
           {

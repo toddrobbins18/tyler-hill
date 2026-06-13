@@ -62,7 +62,7 @@ const ALL_FORMATS: Record<string, FormatDef> = {
     title: "Menu Items",
     columns: "date, meal_type, items, allergens",
     example: "2024-06-15, lunch, Chicken Nuggets; Fries; Apple Slices, Contains: Wheat; Soy",
-    notes: "REQUIRED: date, meal_type, items. meal_type must be: breakfast, lunch, snack, or dinner."
+    notes: "REQUIRED: date, meal_type, items. meal_type must be: breakfast, lunch, snack, dinner, or special_meal. special_meal division tags are added in the app UI, not CSV.",
   },
   awards: {
     title: "Awards",
