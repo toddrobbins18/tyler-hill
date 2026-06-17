@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { User } from '@supabase/supabase-js';
+import { expandDivisionIdsForRosterFilter } from '@/lib/divisionFilterUtils';
 
 export type AppRole = 'admin' | 'staff' | 'division_leader' | 'specialist' | 'viewer' | 'super_admin' | 'health_center';
 
@@ -107,6 +108,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             byCompany[companyId].push(divisionId);
           }
         }
+
+        const companyIds = Object.keys(byCompany);
+        if (companyIds.length > 0) {
+          const { data: allDivisions } = await supabase
+            .from('divisions')
+            .select('id, name, company_id')
+            .in('company_id', companyIds)
+            .eq('is_active', true);
+
+          for (const companyId of companyIds) {
+            byCompany[companyId] = expandDivisionIdsForRosterFilter(
+              byCompany[companyId],
+              (allDivisions || []).filter((d) => d.company_id === companyId),
+            );
+          }
+        }
+
         setUserDivisionsByCompany(byCompany);
         setUserDivisions(Object.values(byCompany).flat());
       } else {

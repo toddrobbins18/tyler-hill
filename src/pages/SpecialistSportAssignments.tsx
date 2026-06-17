@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
+import { getAvailableSpecialistSports } from "@/lib/specialistSportOptions";
 
 function normalizeStaffEmail(value: string | null | undefined): string | null {
   if (!value || typeof value !== "string") return null;
@@ -15,25 +16,13 @@ function normalizeStaffEmail(value: string | null | undefined): string | null {
   return t || null;
 }
 
-const AVAILABLE_SPORTS = [
-  "Baseball",
-  "Basketball",
-  "Dance",
-  "Football",
-  "Golf",
-  "Gymnastics",
-  "Hockey",
-  "Lacrosse",
-  "Soccer",
-  "Softball",
-  "Tennis",
-  "Volleyball",
-  "Waterfront"
-];
-
 export default function SpecialistSportAssignments() {
   const { currentCompany, isSuperAdmin } = useCompany();
   const { currentSeason } = useSeasonContext();
+  const availableSports = useMemo(
+    () => getAvailableSpecialistSports(currentCompany?.slug),
+    [currentCompany?.slug],
+  );
   const [specialists, setSpecialists] = useState<any[]>([]);
   const [staffSpecialists, setStaffSpecialists] = useState<any[]>([]);
   const [assignments, setAssignments] = useState<Record<string, string[]>>({});
@@ -291,7 +280,7 @@ export default function SpecialistSportAssignments() {
                     <div className="flex gap-2">
                       <button
                         onClick={async () => {
-                          for (const sport of AVAILABLE_SPORTS) {
+                          for (const sport of availableSports) {
                             if (!assignments[specialist.user_id]?.includes(sport)) {
                               await toggleSportAssignment(specialist.user_id, sport, false);
                             }
@@ -303,7 +292,7 @@ export default function SpecialistSportAssignments() {
                       </button>
                       <button
                         onClick={async () => {
-                          for (const sport of AVAILABLE_SPORTS) {
+                          for (const sport of availableSports) {
                             if (assignments[specialist.user_id]?.includes(sport)) {
                               await toggleSportAssignment(specialist.user_id, sport, true);
                             }
@@ -318,7 +307,7 @@ export default function SpecialistSportAssignments() {
                 </CardHeader>
                 <CardContent>
                   <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
-                    {AVAILABLE_SPORTS.map(sport => {
+                    {availableSports.map(sport => {
                       const isAssigned = assignments[specialist.user_id]?.includes(sport) ?? false;
                       return (
                         <div 
@@ -380,7 +369,7 @@ export default function SpecialistSportAssignments() {
                   </CardHeader>
                   <CardContent>
                     <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
-                      {AVAILABLE_SPORTS.map(sport => {
+                      {availableSports.map(sport => {
                         const isAssigned = selectedSports.includes(sport);
                         return (
                           <div

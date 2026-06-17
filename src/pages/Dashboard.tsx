@@ -746,6 +746,71 @@ export default function Dashboard() {
           </>
         )}
 
+        {isTimberLakeWest && (
+          <Card className={`shadow-card ${glassCardClass}`}>
+            <CardHeader className={widgetHeaderClass}>
+              <div className="flex min-w-0 items-center gap-2">
+                <div className={`${widgetIconWrapClass} bg-purple-500/10`}>
+                  <CalendarIcon className="h-4 w-4 text-purple-500" />
+                </div>
+                <CardTitle className={widgetTitleClass}>Evening Activities</CardTitle>
+                </div>
+              <Button variant="link" className={widgetLinkClass} onClick={() => navigate("/special-events")}>
+                View all
+              </Button>
+            </CardHeader>
+            <CardContent className={`${widgetContentClass} space-y-2`}>
+              {specialEvents.filter((e) => e.event_type === "evening-activity").length === 0 ? (
+                <p className="text-sm text-muted-foreground">No evening activities tonight</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {specialEvents.filter((e) => e.event_type === "evening-activity").map((event) => (
+                    <div key={event.id} className="flex cursor-pointer items-start gap-2 rounded-lg bg-muted/50 p-2 transition-colors hover:bg-muted" onClick={() => navigate("/special-events")}>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">{event.title}</p>
+                        <span className="text-xs text-muted-foreground">{formatTime12Hour(event.time_slot) || event.time_slot || "All day"}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {isTimberLakeWest && (
+          <Card className={`shadow-card ${glassCardClass}`}>
+            <CardHeader className={widgetHeaderClass}>
+              <div className="flex min-w-0 items-center gap-2">
+                <div className={`${widgetIconWrapClass} bg-primary/10`}>
+                  <CalendarIcon className="h-4 w-4 text-primary" />
+                </div>
+                <CardTitle className={widgetTitleClass}>Special Events</CardTitle>
+                </div>
+              <Button variant="link" className={widgetLinkClass} onClick={() => navigate("/special-events")}>
+                View all
+              </Button>
+            </CardHeader>
+            <CardContent className={`${widgetContentClass} space-y-2`}>
+              {specialEvents.filter((e) => e.event_type !== "evening-activity").length === 0 ? (
+                <p className="text-sm text-muted-foreground">No special events today</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {specialEvents.filter((e) => e.event_type !== "evening-activity").map((event) => (
+                    <div key={event.id} className="flex cursor-pointer items-start gap-2 rounded-lg bg-muted/50 p-2 transition-colors hover:bg-muted" onClick={() => navigate("/special-events")}>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">{event.title}</p>
+                        <span className="text-xs text-muted-foreground">{formatTime12Hour(event.time_slot) || event.time_slot || "All day"}</span>
+                      </div>
+                      <Badge variant="outline" className="shrink-0 text-xs">{event.type}</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Athletics Schedule Card */}
         <Card className={`shadow-card ${glassCardClass}`}>
           <CardHeader className={widgetHeaderClass}>
@@ -844,40 +909,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Evening Activities Card - Timber Lake West only */}
-        {isTimberLakeWest && (
-          <Card className={`shadow-card ${glassCardClass}`}>
-            <CardHeader className={widgetHeaderClass}>
-              <div className="flex min-w-0 items-center gap-2">
-                <div className={`${widgetIconWrapClass} bg-purple-500/10`}>
-                  <CalendarIcon className="h-4 w-4 text-purple-500" />
-                </div>
-                <CardTitle className={widgetTitleClass}>Evening Activities</CardTitle>
-                </div>
-              <Button variant="link" className={widgetLinkClass} onClick={() => navigate("/special-events")}>
-                View all
-              </Button>
-            </CardHeader>
-            <CardContent className={`${widgetContentClass} space-y-2`}>
-              {specialEvents.filter((e) => e.event_type === "evening-activity").length === 0 ? (
-                <p className="text-sm text-muted-foreground">No evening activities tonight</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {specialEvents.filter((e) => e.event_type === "evening-activity").map((event) => (
-                    <div key={event.id} className="flex cursor-pointer items-start gap-2 rounded-lg bg-muted/50 p-2 transition-colors hover:bg-muted" onClick={() => navigate("/special-events")}>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium">{event.title}</p>
-                        <span className="text-xs text-muted-foreground">{formatTime12Hour(event.time_slot) || event.time_slot || "All day"}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Special Events & Activities Card */}
+        {!isTimberLakeWest && (
         <Card className={`shadow-card ${glassCardClass}`}>
           <CardHeader className={widgetHeaderClass}>
             <div className="flex min-w-0 items-center gap-2">
@@ -891,11 +923,11 @@ export default function Dashboard() {
             </Button>
           </CardHeader>
           <CardContent className={`${widgetContentClass} space-y-2`}>
-            {(isTimberLakeWest ? specialEvents.filter((e) => e.event_type !== "evening-activity") : specialEvents).length === 0 ? (
+            {specialEvents.length === 0 ? (
               <p className="text-sm text-muted-foreground">No special events today</p>
             ) : (
               <div className="space-y-1.5">
-                {(isTimberLakeWest ? specialEvents.filter((e) => e.event_type !== "evening-activity") : specialEvents).map((event) => (
+                {specialEvents.map((event) => (
                   <div key={event.id} className="flex cursor-pointer items-start gap-2 rounded-lg bg-muted/50 p-2 transition-colors hover:bg-muted" onClick={() => navigate("/special-events")}>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium">{event.title}</p>
@@ -908,6 +940,7 @@ export default function Dashboard() {
             )}
           </CardContent>
         </Card>
+        )}
 
         {/* Notes Board for Tyler Hill - next to Special Events */}
         {isTylerHill && (

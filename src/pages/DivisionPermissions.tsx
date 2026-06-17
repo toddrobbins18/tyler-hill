@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
+import { getDivisionDropdownLabel } from "@/lib/divisionFilterUtils";
 
 const DIVISION_SCOPED_ROLES = new Set(["division_leader", "viewer"]);
 
@@ -312,7 +313,7 @@ export default function DivisionPermissions() {
                             className="flex items-center gap-2 cursor-pointer"
                           >
                             <Users className="h-4 w-4 shrink-0" />
-                            <span className="text-sm">{division.name}</span>
+                            <span className="text-sm">{getDivisionDropdownLabel(division.name)}</span>
                           </Label>
                           <Switch
                             id={`${user.id}-${division.id}`}

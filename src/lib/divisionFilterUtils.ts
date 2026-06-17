@@ -14,9 +14,15 @@ export function normalizeDivisionNameForFilter(name?: string | null): string {
     .toLowerCase();
 }
 
+/** User-facing division label (canonical names Todd expects). */
 export function getDivisionDropdownLabel(name?: string | null): string {
   if (!name) return "";
-  return name.trim().toLowerCase() === "super girls" ? "Super Senior Girls" : name;
+
+  return name
+    .replace(/\bSuper\s+Senior\b/gi, "Super")
+    .replace(/\bTN\d+\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function divisionsMatchForFilter(a?: string | null, b?: string | null): boolean {

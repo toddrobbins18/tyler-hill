@@ -19,11 +19,10 @@ import { startOfWeek, format } from "date-fns";
 
 const PERIODS = [
   { id: "period-1", label: "Period 1", time: "10:00 – 11:00 AM" },
-  { id: "period-2", label: "Period 2", time: "11:00 AM – 12:00 PM" },
-  { id: "period-3", label: "Period 3", time: "2:00 – 3:00 PM" },
-  { id: "period-4", label: "Period 4", time: "3:00 – 4:00 PM" },
-  { id: "period-5", label: "Period 5", time: "4:00 – 5:00 PM" },
-  { id: "period-6", label: "Period 6", time: "5:00 – 6:00 PM" },
+  { id: "period-2", label: "Period 2", time: "11:15 AM – 12:15 PM" },
+  { id: "period-3", label: "Period 3", time: "1:45 – 2:45 PM" },
+  { id: "period-4", label: "Period 4", time: "3:15 – 4:15 PM" },
+  { id: "period-5", label: "Period 5", time: "4:30 – 5:30 PM" },
 ];
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
