@@ -1471,7 +1471,7 @@ export default function Nurse() {
                 <div>
                   <CardTitle>Daily Medication Log</CardTitle>
                   <CardDescription>
-                    Mark off medications administered today. Given meds and meds without a meal time are hidden — search by child or medication name to find them.
+                    Mark off medications administered today. As-needed meds stay on the camper profile only. Given meds and meds without a meal time are hidden — search by child or medication name to find them.
                   </CardDescription>
                 </div>
                 {renderMedSortFilterControls()}
@@ -1576,7 +1576,7 @@ export default function Nurse() {
                 <div>
                   <CardTitle>Today's Medications</CardTitle>
                   <CardDescription>
-                    Track medication administration. Given meds and meds without a meal time are hidden — search by child or medication name to find them.
+                    Track medication administration. As-needed meds stay on the camper profile only. Given meds and meds without a meal time are hidden — search by child or medication name to find them.
                   </CardDescription>
                 </div>
                 {renderMedSortFilterControls()}

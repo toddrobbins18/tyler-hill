@@ -60,11 +60,33 @@ export function parseMedicationMealTimeLabels(
   return labels;
 }
 
+function isAsNeededMealLabel(label: string): boolean {
+  const upper = label.trim().toUpperCase();
+  return !upper || upper.includes("AS NEEDED") || upper === "PRN";
+}
+
+/** Non-recurring meds without a scheduled meal slot — profile only, not daily log. */
+export function isAsNeededMedication(med: {
+  is_recurring?: boolean | null;
+  meal_time?: string[] | string | null;
+  frequency?: string | null;
+}): boolean {
+  if (med.is_recurring) return false;
+
+  const freq = String(med.frequency ?? "").trim().toUpperCase();
+  if (freq.includes("AS NEEDED") || freq === "PRN") return true;
+
+  const labels = parseMedicationMealTimeLabels(med.meal_time);
+  const scheduledLabels = labels.filter((label) => !isAsNeededMealLabel(label));
+  return scheduledLabels.length === 0;
+}
+
 export function medicationHasMealTime(
   mealTime: string[] | string | null | undefined,
   divisionName?: string | null,
 ): boolean {
-  return parseMedicationMealTimeLabels(mealTime, divisionName).length > 0;
+  const labels = parseMedicationMealTimeLabels(mealTime, divisionName);
+  return labels.some((label) => !isAsNeededMealLabel(label));
 }
 
 export function getMealTimeBadgeClass(label: string): string {
@@ -106,11 +128,13 @@ export function medicationMatchesMealFilter(
 
 type MedicationListVisibilityMed = {
   administered?: boolean;
+  is_recurring?: boolean | null;
+  frequency?: string | null;
   meal_time?: string[] | string | null;
   medication_name?: string | null;
 };
 
-/** Hide given / no-meal-time meds unless the user is searching for them. */
+/** Hide given / no-meal-time meds unless searching; as-needed meds never appear here. */
 export function medicationMatchesListVisibility(
   med: MedicationListVisibilityMed,
   options: {
@@ -120,6 +144,8 @@ export function medicationMatchesListVisibility(
     childName?: string | null;
   },
 ): boolean {
+  if (isAsNeededMedication(med)) return false;
+
   const searchLower = options.searchQuery.trim().toLowerCase();
   const isSearching = searchLower.length > 0;
   const childName = (options.childName ?? "").toLowerCase();
