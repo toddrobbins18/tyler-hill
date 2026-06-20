@@ -1,11 +1,19 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getRecipientsForEmailTypeWithFilters, sendEmailNotifications } from "../_shared/emailHelpers.ts";
+import { calculateSendTime } from "../_shared/timingHelpers.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+const EMAIL_TYPE = 'sports_academy';
+
+/** Legacy configs may still store day_before for Sports Academy — treat as 1 hour before. */
+function normalizeSportsAcademyTiming(timing: string): string {
+  return timing === 'day_before' ? '1_hour_before' : timing;
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -21,7 +29,6 @@ serve(async (req) => {
     const { enrollment_id, action } = await req.json();
     console.log(`Sports academy notification triggered: ${action} for enrollment ${enrollment_id}`);
 
-    // Fetch enrollment with child and division info
     const { data: enrollment, error } = await supabase
       .from('sports_academy')
       .select(`
@@ -41,32 +48,32 @@ serve(async (req) => {
       throw error;
     }
 
-    // Get division IDs and sport type for filtering
-    const divisionIds = enrollment.children?.division_id 
-      ? [enrollment.children.division_id] 
+    const divisionIds = enrollment.children?.division_id
+      ? [enrollment.children.division_id]
       : [];
-    
+
     const sportType = enrollment.sport_name;
 
     console.log(`Enrollment for ${enrollment.children?.name}, Division: ${enrollment.children?.divisions?.name}, Sport: ${sportType}`);
 
-    // Get recipients with BOTH division and sport filtering
+    const { data: config } = await supabase
+      .from('automated_email_config')
+      .select('send_timing, enabled')
+      .eq('company_id', enrollment.company_id)
+      .eq('email_type', EMAIL_TYPE)
+      .maybeSingle();
+
+    const sendTimings = config?.send_timing || ['on_create'];
+    const actionKey = action === 'INSERT' ? 'on_create' : 'on_update';
+    const shouldSendNow = sendTimings.includes(actionKey);
+
     const recipients = await getRecipientsForEmailTypeWithFilters(
       supabase,
-      'sports_academy',
+      EMAIL_TYPE,
       enrollment.company_id,
       { divisionIds, sportType }
     );
 
-    if (!recipients.length) {
-      console.log('No recipients configured for sports_academy notifications');
-      return new Response(
-        JSON.stringify({ message: 'No recipients configured' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      );
-    }
-
-    // Build email content
     const actionText = action === 'INSERT' ? 'New' : 'Updated';
     const subject = `${actionText} Sports Academy Enrollment: ${sportType} - ${enrollment.children?.name}`;
     const content = `
@@ -79,23 +86,63 @@ serve(async (req) => {
       ${enrollment.start_date ? `<p><strong>Start Date:</strong> ${enrollment.start_date}</p>` : ''}
       ${enrollment.end_date ? `<p><strong>End Date:</strong> ${enrollment.end_date}</p>` : ''}
       ${enrollment.notes ? `<p><strong>Notes:</strong> ${enrollment.notes}</p>` : ''}
-      <p><em>This notification was sent to ${recipients.length} staff member(s) in the ${sportType} program and relevant division leaders.</em></p>
+      <p><em>This notification was sent to staff in the ${sportType} program and relevant division leaders.</em></p>
     `;
 
-    // Send notifications
-    await sendEmailNotifications(supabase, recipients, subject, content, enrollment.company_id);
+    let immediateRecipientCount = 0;
 
-    // Log notification
+    if (shouldSendNow && recipients.length) {
+      await sendEmailNotifications(supabase, recipients, subject, content, enrollment.company_id);
+      immediateRecipientCount = recipients.length;
+      console.log(`Sent immediate sports academy notification to ${recipients.length} recipients`);
+    } else if (shouldSendNow) {
+      console.log('No recipients configured for immediate sports_academy notification');
+    } else {
+      console.log(`Skipping immediate sports academy notification (not configured for ${actionKey})`);
+    }
+
+    const futureTimings = sendTimings
+      .filter((timing: string) => !['on_create', 'on_update'].includes(timing))
+      .map(normalizeSportsAcademyTiming);
+
+    if (futureTimings.length > 0 && enrollment.start_date) {
+      const eventData = {
+        title: `${sportType} - ${enrollment.children?.name}`,
+        content,
+        divisionIds,
+        sportType,
+      };
+
+      for (const timing of futureTimings) {
+        const sendAt = calculateSendTime(enrollment.start_date, null, timing);
+
+        await supabase.from('scheduled_notifications').insert({
+          company_id: enrollment.company_id,
+          email_type: EMAIL_TYPE,
+          event_id: enrollment_id,
+          event_date: enrollment.start_date,
+          event_time: null,
+          send_at: sendAt,
+          timing_type: timing,
+          event_data: eventData,
+        });
+      }
+
+      console.log(`Queued ${futureTimings.length} scheduled sports academy notification(s)`);
+    }
+
     await supabase.from('notification_logs').insert({
-      event_type: 'sports_academy',
+      event_type: EMAIL_TYPE,
       event_id: enrollment_id,
-      recipient_count: recipients.length
+      recipient_count: immediateRecipientCount,
     });
 
-    console.log(`✅ Sent sports academy notification to ${recipients.length} recipients`);
-
     return new Response(
-      JSON.stringify({ success: true, recipientCount: recipients.length }),
+      JSON.stringify({
+        success: true,
+        recipientCount: immediateRecipientCount,
+        scheduledCount: futureTimings.length,
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
 

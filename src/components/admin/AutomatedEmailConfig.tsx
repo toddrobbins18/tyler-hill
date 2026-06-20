@@ -129,7 +129,13 @@ const TIMING_OPTIONS: Record<string, {
     value: 'day_before',
     label: 'Day Before',
     description: 'Send 24 hours before the event',
-    applicableTo: ['sports_event_home', 'sports_event_away', 'trip_update', 'transportation_events', 'tutoring_therapy', 'sports_academy', 'appointment']
+    applicableTo: ['sports_event_home', 'sports_event_away', 'trip_update', 'transportation_events', 'tutoring_therapy', 'appointment']
+  },
+  '1_hour_before': {
+    value: '1_hour_before',
+    label: '1 Hour Before',
+    description: 'Send 1 hour before the session',
+    applicableTo: ['sports_academy']
   },
   morning_of: {
     value: 'morning_of',
@@ -247,6 +253,13 @@ export default function AutomatedEmailConfig() {
     return Object.values(TIMING_OPTIONS).filter(option => 
       option.applicableTo.includes('all') || option.applicableTo.includes(emailType)
     );
+  };
+
+  const getTimingDisplayLabel = (emailType: string, timing: string) => {
+    if (emailType === 'sports_academy' && timing === 'day_before') {
+      return '1 Hour Before';
+    }
+    return TIMING_OPTIONS[timing]?.label || timing;
   };
 
   if (loading) {
@@ -428,7 +441,7 @@ export default function AutomatedEmailConfig() {
                         <div className="flex flex-wrap gap-2">
                           {config.send_timing.map((timing) => (
                             <Badge key={timing} variant="outline" className="text-xs">
-                              {TIMING_OPTIONS[timing]?.label || timing}
+                              {getTimingDisplayLabel(config.email_type, timing)}
                             </Badge>
                           ))}
                         </div>

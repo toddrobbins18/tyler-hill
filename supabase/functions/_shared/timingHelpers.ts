@@ -9,6 +9,16 @@ export function calculateSendTime(
   const date = new Date(eventDate + 'T00:00:00Z');
 
   switch (timing) {
+    case '1_hour_before':
+      if (eventTime) {
+        const [hours, minutes] = eventTime.split(':').map(Number);
+        date.setUTCHours(hours + 4, minutes, 0, 0); // Convert EST to UTC
+        date.setTime(date.getTime() - 60 * 60 * 1000);
+      } else {
+        date.setUTCHours(12, 0, 0, 0); // Default 8 AM EST if no session time
+      }
+      break;
+
     case 'day_before':
       date.setUTCDate(date.getUTCDate() - 1);
       date.setUTCHours(18, 0, 0, 0); // 6 PM UTC day before
@@ -59,6 +69,8 @@ export function buildTimingSubject(
   action?: string
 ): string {
   switch (timing) {
+    case '1_hour_before':
+      return `⏰ Starting Soon: ${baseTitle}`;
     case 'day_before':
       return `📅 Reminder: Tomorrow's ${baseTitle}`;
     case 'morning_of':
@@ -85,6 +97,9 @@ export function addTimingContext(content: string, timing: string): string {
   let prefix = '';
 
   switch (timing) {
+    case '1_hour_before':
+      prefix = '⏰ **STARTING IN 1 HOUR**\n\n';
+      break;
     case 'day_before':
       prefix = '📅 **REMINDER: This event is tomorrow.**\n\n';
       break;
