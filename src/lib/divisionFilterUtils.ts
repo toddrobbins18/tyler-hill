@@ -56,6 +56,32 @@ export function expandDivisionIdsForRosterFilter(
   return [...expanded];
 }
 
+/** Resolve permission division ids to active roster buckets (handles inactive alias rows). */
+export function resolvePermissionDivisionIds(
+  permissionDivisionIds: string[],
+  divisions: { id: string; name?: string | null; is_active?: boolean | null }[],
+): string[] {
+  if (permissionDivisionIds.length === 0) return permissionDivisionIds;
+
+  const activeDivisions = divisions.filter((d) => d.is_active !== false);
+  const seedNames = new Set<string>();
+
+  for (const id of permissionDivisionIds) {
+    const div = divisions.find((d) => d.id === id);
+    const normalized = normalizeDivisionNameForFilter(div?.name);
+    if (normalized) seedNames.add(normalized);
+  }
+
+  const resolved = activeDivisions
+    .filter((d) => seedNames.has(normalizeDivisionNameForFilter(d.name)))
+    .map((d) => d.id);
+
+  return expandDivisionIdsForRosterFilter(
+    resolved.length > 0 ? resolved : permissionDivisionIds,
+    activeDivisions,
+  );
+}
+
 export function camperMatchesDivisionFilter(
   camperDivisionId: string | null | undefined,
   camperDivisionName: string | null | undefined,

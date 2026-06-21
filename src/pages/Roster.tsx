@@ -17,7 +17,6 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import {
   camperMatchesDivisionFilter,
-  expandDivisionIdsForRosterFilter,
   getDivisionDropdownLabel,
   normalizeDivisionNameForFilter,
 } from "@/lib/divisionFilterUtils";
@@ -63,7 +62,7 @@ export default function Roster() {
   const [scannerMode, setScannerMode] = useState(false);
   const rfidInputRef = useRef<HTMLInputElement>(null);
 
-  const { getDivisionFilter, loading: permissionsLoading, userDivisionsKey } = usePermissions();
+  const { loading: permissionsLoading, userDivisionsKey } = usePermissions();
 
   const CAMPERS_PAGE_SIZE = 1000;
 
@@ -76,22 +75,8 @@ export default function Roster() {
       return;
     }
     
-    const divisionFilter = getDivisionFilter();
-    let effectiveDivisionFilter = divisionFilter;
-
-    if (divisionFilter !== null && divisionFilter.length > 0) {
-      const { data: allDivisions } = await supabase
-        .from("divisions")
-        .select("id, name")
-        .eq("company_id", currentCompany.id)
-        .eq("is_active", true);
-
-      effectiveDivisionFilter = expandDivisionIdsForRosterFilter(
-        divisionFilter,
-        allDivisions || [],
-      );
-    }
-
+    // Division leaders/viewers: RLS (get_user_divisions) scopes rows — do not add a second
+    // division_id filter here; client-side alias expansion can drift from DB permissions.
     const rows: any[] = [];
     let from = 0;
 
@@ -107,10 +92,6 @@ export default function Roster() {
           `)
           .eq('company_id', currentCompany.id)
           .eq('season', currentSeason);
-
-        if (effectiveDivisionFilter !== null && effectiveDivisionFilter.length > 0) {
-          query = query.in('division_id', effectiveDivisionFilter);
-        }
 
         const { data, error } = await query
           .neq('status', 'inactive')
@@ -497,7 +478,7 @@ export default function Roster() {
                   onClick={() => navigate(`/child/${child.id}`)}
                 >
                   <div className="space-y-1 min-w-0">
-                    <p className="text-muted-foreground">Division: {child.division?.name || "N/A"}</p>
+                    <p className="text-muted-foreground">Division: {getDivisionDropdownLabel(child.division?.name) || "N/A"}</p>
                     {child.group_name && (
                       <p className="text-muted-foreground">Team: {child.group_name}</p>
                     )}

@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { User } from '@supabase/supabase-js';
-import { expandDivisionIdsForRosterFilter } from '@/lib/divisionFilterUtils';
+import { resolvePermissionDivisionIds } from '@/lib/divisionFilterUtils';
 
 export type AppRole = 'admin' | 'staff' | 'division_leader' | 'specialist' | 'viewer' | 'super_admin' | 'health_center';
 
@@ -113,12 +113,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (companyIds.length > 0) {
           const { data: allDivisions } = await supabase
             .from('divisions')
-            .select('id, name, company_id')
-            .in('company_id', companyIds)
-            .eq('is_active', true);
+            .select('id, name, company_id, is_active')
+            .in('company_id', companyIds);
 
           for (const companyId of companyIds) {
-            byCompany[companyId] = expandDivisionIdsForRosterFilter(
+            byCompany[companyId] = resolvePermissionDivisionIds(
               byCompany[companyId],
               (allDivisions || []).filter((d) => d.company_id === companyId),
             );
