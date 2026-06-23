@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarIcon, AlertTriangle, Search, ArrowLeftRight, ChevronLeft, ChevronRight, Radio, Settings, Clock, AlertCircle, Moon } from "lucide-react";
+import { CalendarIcon, AlertTriangle, Search, ArrowLeftRight, ChevronLeft, ChevronRight, Radio, Settings, Clock, AlertCircle, Moon, Upload } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
   buildNightOffScheduleDateRange,
@@ -30,6 +30,7 @@ import {
 } from "@/lib/odNightOffSchedule";
 import { cn } from "@/lib/utils";
 import BunkManagement from "@/components/admin/BunkManagement";
+import StaffDaysOffCSVUploader from "@/components/admin/StaffDaysOffCSVUploader";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
@@ -107,6 +108,7 @@ export default function ODManagement() {
   const [selectedStaffForSwap, setSelectedStaffForSwap] = useState<string | null>(null);
   const [newSwapDate, setNewSwapDate] = useState<Date | undefined>(undefined);
   const [showBunkManagement, setShowBunkManagement] = useState(false);
+  const [showScheduleUpload, setShowScheduleUpload] = useState(false);
   
   // Filters
   const [genderFilter, setGenderFilter] = useState<string>("all");
@@ -718,6 +720,11 @@ export default function ODManagement() {
           >
             <Radio className={`h-4 w-4 mr-2 ${scannerMode ? "animate-pulse" : ""}`} />
             {scannerMode ? "Scanner Active" : "Scan Wristband"}
+          </Button>
+
+          <Button variant="outline" onClick={() => setShowScheduleUpload(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Upload Schedule
           </Button>
 
           {/* Bunk Management */}
@@ -1344,6 +1351,28 @@ export default function ODManagement() {
               className="bg-yellow-600 hover:bg-yellow-700"
             >
               Approve Override
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Upload Schedule Dialog */}
+      <Dialog open={showScheduleUpload} onOpenChange={setShowScheduleUpload}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Upload Day & Night Off Schedule</DialogTitle>
+            <DialogDescription>
+              Import staff day offs and night offs from CSV or Excel. Matches staff by Person ID for the current season.
+            </DialogDescription>
+          </DialogHeader>
+          <StaffDaysOffCSVUploader
+            onUploadComplete={() => {
+              fetchData();
+            }}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowScheduleUpload(false)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

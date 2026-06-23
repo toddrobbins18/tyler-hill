@@ -89,6 +89,13 @@ const ALL_FORMATS: Record<string, FormatDef> = {
     example: "S98765, 12, Cabin A, true",
     notes: "REQUIRED: person_id, bunk_number. The person_id must match the staff member's Person ID."
   },
+  staff_days_off: {
+    title: "Staff Days Off Schedule",
+    columns: "person_id, date, day_off, night_off, notes",
+    example: "S98765, 2026-07-15, yes, no, Wednesday day off",
+    notes:
+      "REQUIRED: person_id, date. Set day_off and/or night_off to yes/no (one row per date). Day off and night off are independent.",
+  },
   master_calendar: {
     title: "Master Calendar",
     columns: "event_date, title, type, description, time, location",
@@ -145,6 +152,7 @@ const TAB_LABELS: Record<string, string> = {
   daily_notes: "Daily Notes",
   incident_reports: "Incidents",
   bunk_staff: "Bunk Staff",
+  staff_days_off: "Staff Days Off",
   master_calendar: "Calendar",
   sports_calendar: "Sports",
   daily_wolf_content: "Daily Wolf",
