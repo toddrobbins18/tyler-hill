@@ -1,4 +1,5 @@
 import { format, parseISO } from "date-fns";
+import { isAsNeededMedication } from "./medicationMealTimeDisplay";
 import { campProgramStartDate } from "./medicationStartDate";
 
 function parseSeasonYear(season: string): number {
@@ -24,6 +25,7 @@ export type MedicationLogRow = {
   days_of_week?: string[] | null;
   medication_name?: string;
   meal_time?: string[] | string | null;
+  scheduled_time?: string | null;
   administered?: boolean;
   /** Expanded from a recurring template for a specific calendar day. */
   _fromRecurringTemplate?: boolean;
@@ -100,6 +102,7 @@ export function mergeMedicationsForDate(
 
   for (const template of recurringRows) {
     if (!template.is_recurring) continue;
+    if (isAsNeededMedication(template)) continue;
     if (template.date === dateYmd) continue;
     if (!medicationAppliesOnDate(template, dateYmd, season)) continue;
 

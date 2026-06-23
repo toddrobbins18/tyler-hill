@@ -1348,14 +1348,14 @@ export default function Nurse() {
             <CardContent>
               {loading ? (
                 <p className="text-muted-foreground">Loading...</p>
-              ) : visibleMedications.length === 0 ? (
+              ) : activeListMedications.length === 0 ? (
                 <p className="text-muted-foreground">No medications scheduled for this date</p>
               ) : (
                 <div className="space-y-4">
                   {filteredChildren
-                    .filter(child => visibleMedications.some(med => med.child_id === child.id))
+                    .filter(child => activeListMedications.some(med => med.child_id === child.id))
                     .map((child) => {
-                      const childMeds = visibleMedications.filter(med => med.child_id === child.id);
+                      const childMeds = activeListMedications.filter(med => med.child_id === child.id);
                       return (
                         <div key={child.id} className="border rounded-lg p-4 space-y-3">
                           <div className="flex items-center gap-2">

@@ -18,7 +18,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarIcon, AlertTriangle, Search, ArrowLeftRight, ChevronLeft, ChevronRight, Radio, Settings, Clock, AlertCircle } from "lucide-react";
+import { CalendarIcon, AlertTriangle, Search, ArrowLeftRight, ChevronLeft, ChevronRight, Radio, Settings, Clock, AlertCircle, Moon } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import {
+  buildNightOffScheduleDateRange,
+  formatNightOffScheduleLabel,
+  mergeNightOffScheduleEntries,
+  type NightOffScheduleEntry,
+  staffIsScheduledOff,
+  shouldRemoveDayOffRecord,
+} from "@/lib/odNightOffSchedule";
 import { cn } from "@/lib/utils";
 import BunkManagement from "@/components/admin/BunkManagement";
 import { useAuth } from "@/contexts/AuthContext";
@@ -113,6 +122,13 @@ export default function ODManagement() {
   const [showLateOverrideDialog, setShowLateOverrideDialog] = useState(false);
   const [lateOverrideStaffId, setLateOverrideStaffId] = useState<string | null>(null);
   const [lateOverrideReason, setLateOverrideReason] = useState("");
+
+  const [showManageNightsDialog, setShowManageNightsDialog] = useState(false);
+  const [manageNightsStaffId, setManageNightsStaffId] = useState<string | null>(null);
+  const [manageNightsStaffName, setManageNightsStaffName] = useState("");
+  const [nightOffSchedule, setNightOffSchedule] = useState<NightOffScheduleEntry[]>([]);
+  const [loadingNightSchedule, setLoadingNightSchedule] = useState(false);
+  const [savingNightDate, setSavingNightDate] = useState<string | null>(null);
 
   // OD Management is available globally for all camps
 
@@ -271,7 +287,7 @@ export default function ODManagement() {
       const dateStr = format(selectedDate, "yyyy-MM-dd");
       const existingDayOff = daysOff.find(d => d.staff_id === staffMember.id);
 
-      if (!existingDayOff || !existingDayOff.is_day_off) {
+      if (!existingDayOff || !staffIsScheduledOff(existingDayOff)) {
         // Staff is not scheduled off - prompt for late override
         setLateOverrideStaffId(staffMember.id);
         setShowLateOverrideDialog(true);
@@ -367,7 +383,7 @@ export default function ODManagement() {
           date: dateStr,
           season: currentSeason,
           is_day_off: true,
-          is_night_off: true,
+          is_night_off: false,
           checked_out: true,
           checked_out_at: new Date().toISOString(),
           late_override: true,
@@ -403,11 +419,6 @@ export default function ODManagement() {
       if (existing) {
         const newValue = !existing[field];
         const updates: Partial<DayOff> = { [field]: newValue };
-        
-        // Auto-calculate night off when day off changes
-        if (field === 'is_day_off') {
-          updates.is_night_off = newValue;
-        }
 
         const { error } = await supabase
           .from("staff_days_off")
@@ -415,6 +426,15 @@ export default function ODManagement() {
           .eq("id", existing.id);
 
         if (error) throw error;
+
+        if (
+          shouldRemoveDayOffRecord({
+            ...existing,
+            ...updates,
+          } as DayOff)
+        ) {
+          await supabase.from("staff_days_off").delete().eq("id", existing.id);
+        }
       } else {
         const newRecord = {
           company_id: currentCompany.id,
@@ -422,7 +442,7 @@ export default function ODManagement() {
           date: dateStr,
           season: currentSeason,
           is_day_off: field === 'is_day_off',
-          is_night_off: field === 'is_day_off' || field === 'is_night_off',
+          is_night_off: field === 'is_night_off',
           is_sleeping_out: field === 'is_sleeping_out'
         };
 
@@ -438,6 +458,100 @@ export default function ODManagement() {
     } catch (error) {
       console.error("Error updating day off:", error);
       toast({ title: "Error updating", variant: "destructive" });
+    }
+  };
+
+  const loadNightOffSchedule = async (staffId: string) => {
+    if (!currentCompany?.id) return;
+    setLoadingNightSchedule(true);
+    try {
+      const rangeDates = buildNightOffScheduleDateRange(selectedDate);
+      const startDate = rangeDates[0];
+      const endDate = rangeDates[rangeDates.length - 1];
+      const { data, error } = await supabase
+        .from("staff_days_off")
+        .select("id, date, is_day_off, is_night_off, is_sleeping_out, checked_out, checked_in")
+        .eq("company_id", currentCompany.id)
+        .eq("season", currentSeason)
+        .eq("staff_id", staffId)
+        .gte("date", startDate)
+        .lte("date", endDate);
+
+      if (error) throw error;
+      setNightOffSchedule(mergeNightOffScheduleEntries(rangeDates, (data || []) as DayOff[]));
+    } catch (error) {
+      console.error("Error loading night off schedule:", error);
+      toast({ title: "Error loading night schedule", variant: "destructive" });
+    } finally {
+      setLoadingNightSchedule(false);
+    }
+  };
+
+  const openManageNights = (staffId: string, staffName: string) => {
+    setManageNightsStaffId(staffId);
+    setManageNightsStaffName(staffName);
+    setShowManageNightsDialog(true);
+    void loadNightOffSchedule(staffId);
+  };
+
+  const handleSetNightOffForDate = async (staffId: string, dateYmd: string, enabled: boolean) => {
+    if (!currentCompany?.id) return;
+    setSavingNightDate(dateYmd);
+    try {
+      const { data: existing, error: fetchError } = await supabase
+        .from("staff_days_off")
+        .select("id, is_day_off, is_night_off, is_sleeping_out, checked_out, checked_in")
+        .eq("company_id", currentCompany.id)
+        .eq("season", currentSeason)
+        .eq("staff_id", staffId)
+        .eq("date", dateYmd)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+
+      if (enabled) {
+        if (existing) {
+          const { error } = await supabase
+            .from("staff_days_off")
+            .update({ is_night_off: true })
+            .eq("id", existing.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from("staff_days_off").insert({
+            company_id: currentCompany.id,
+            staff_id: staffId,
+            date: dateYmd,
+            season: currentSeason,
+            is_day_off: false,
+            is_night_off: true,
+            is_sleeping_out: false,
+          });
+          if (error) throw error;
+        }
+      } else if (existing) {
+        const nextRecord = { ...existing, is_night_off: false };
+        if (shouldRemoveDayOffRecord(nextRecord as DayOff)) {
+          const { error } = await supabase.from("staff_days_off").delete().eq("id", existing.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from("staff_days_off")
+            .update({ is_night_off: false })
+            .eq("id", existing.id);
+          if (error) throw error;
+        }
+      }
+
+      await loadNightOffSchedule(staffId);
+      if (dateYmd === format(selectedDate, "yyyy-MM-dd")) {
+        await fetchData();
+      }
+      toast({ title: enabled ? "Night off added" : "Night off removed" });
+    } catch (error) {
+      console.error("Error updating night off:", error);
+      toast({ title: "Error updating night off", variant: "destructive" });
+    } finally {
+      setSavingNightDate(null);
     }
   };
 
@@ -469,7 +583,7 @@ export default function ODManagement() {
     }
 
     // Check if signing out on wrong day
-    if (type === 'out' && !existing.is_day_off) {
+    if (type === 'out' && !staffIsScheduledOff(existing)) {
       setLateOverrideStaffId(staffId);
       setShowLateOverrideDialog(true);
       return;
@@ -519,7 +633,7 @@ export default function ODManagement() {
           date: newDateStr,
           season: currentSeason,
           is_day_off: true,
-          is_night_off: true
+          is_night_off: false
         });
 
       setShowSwapDialog(false);
@@ -549,7 +663,9 @@ export default function ODManagement() {
 
   // Filter for sign-in status in Off tab
   const getFilteredOffStaff = () => {
-    const offStaff = filteredStaffWithBunk.filter(item => item.dayOff?.is_day_off);
+    const offStaff = filteredStaffWithBunk.filter(item =>
+      item.dayOff?.is_day_off || item.dayOff?.is_night_off
+    );
     
     if (signInStatusFilter === "all") return offStaff;
     if (signInStatusFilter === "signed_out") return offStaff.filter(item => item.dayOff?.checked_out && !item.dayOff?.checked_in);
@@ -561,9 +677,9 @@ export default function ODManagement() {
 
   // Get staff who are due back (checked out but not checked in)
   const getDueBackStaff = () => {
-    return filteredStaffWithBunk.filter(item => 
-      item.dayOff?.is_day_off && 
-      item.dayOff?.checked_out && 
+    return filteredStaffWithBunk.filter(item =>
+      staffIsScheduledOff(item.dayOff) &&
+      item.dayOff?.checked_out &&
       !item.dayOff?.checked_in
     );
   };
@@ -796,13 +912,30 @@ export default function ODManagement() {
                             />
                           </TableCell>
                           <TableCell>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleToggleDayOff(item.staff_id, 'is_day_off')}
-                            >
-                              Mark Off
-                            </Button>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleToggleDayOff(item.staff_id, 'is_day_off')}
+                              >
+                                Mark Off
+                              </Button>
+                              <Button
+                                variant={item.dayOff?.is_night_off ? "secondary" : "outline"}
+                                size="sm"
+                                onClick={() => handleToggleDayOff(item.staff_id, 'is_night_off')}
+                              >
+                                <Moon className="h-3 w-3 mr-1" />
+                                {item.dayOff?.is_night_off ? "Remove Night Off" : "Night Off"}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openManageNights(item.staff_id, item.staff?.name || "Staff")}
+                              >
+                                Manage Nights
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -829,7 +962,7 @@ export default function ODManagement() {
                 <div>
                   <CardTitle>Staff Off</CardTitle>
                   <CardDescription>
-                    Staff members off for {format(selectedDate, "MMMM d, yyyy")}
+                    Staff with a day off or night off for {format(selectedDate, "MMMM d, yyyy")}
                   </CardDescription>
                 </div>
                 <div className="flex gap-2">
@@ -941,7 +1074,15 @@ export default function ODManagement() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 flex-wrap">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openManageNights(item.staff_id, item.staff?.name || "Staff")}
+                              >
+                                <Moon className="h-4 w-4 mr-1" />
+                                Manage Nights
+                              </Button>
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -953,13 +1094,24 @@ export default function ODManagement() {
                                 <ArrowLeftRight className="h-4 w-4 mr-1" />
                                 Switch
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleToggleDayOff(item.staff_id, 'is_day_off')}
-                              >
-                                Remove
-                              </Button>
+                              {item.dayOff?.is_day_off && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleToggleDayOff(item.staff_id, 'is_day_off')}
+                                >
+                                  Remove Day Off
+                                </Button>
+                              )}
+                              {item.dayOff?.is_night_off && !item.dayOff?.is_day_off && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleToggleDayOff(item.staff_id, 'is_night_off')}
+                                >
+                                  Remove Night Off
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -967,7 +1119,7 @@ export default function ODManagement() {
                     {getFilteredOffStaff().length === 0 && (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                          No staff off today
+                          No staff with a day off or night off today
                         </TableCell>
                       </TableRow>
                     )}
@@ -1050,6 +1202,62 @@ export default function ODManagement() {
           </TabsContent>
         )}
       </Tabs>
+
+      {/* Manage Nights Dialog */}
+      <Dialog open={showManageNightsDialog} onOpenChange={setShowManageNightsDialog}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Manage Night Offs</DialogTitle>
+            <DialogDescription>
+              {manageNightsStaffName} — toggle night off for dates around{" "}
+              {format(selectedDate, "MMMM d, yyyy")}. Day offs and night offs are scheduled independently
+              (e.g. day off Wednesday, night off Friday/Monday/Tuesday).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            {loadingNightSchedule ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">Loading schedule...</p>
+            ) : (
+              nightOffSchedule.map((entry) => (
+                <div
+                  key={entry.date}
+                  className="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm">{formatNightOffScheduleLabel(entry.date)}</p>
+                    <div className="flex gap-1 mt-1 flex-wrap">
+                      {entry.date === format(selectedDate, "yyyy-MM-dd") && (
+                        <Badge variant="outline" className="text-xs">Selected day</Badge>
+                      )}
+                      {entry.is_day_off && <Badge className="text-xs">Day Off</Badge>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Label htmlFor={`night-${entry.date}`} className="text-xs text-muted-foreground">
+                      Night off
+                    </Label>
+                    <Switch
+                      id={`night-${entry.date}`}
+                      checked={entry.is_night_off}
+                      disabled={savingNightDate === entry.date || !manageNightsStaffId}
+                      onCheckedChange={(checked) => {
+                        if (manageNightsStaffId) {
+                          void handleSetNightOffForDate(manageNightsStaffId, entry.date, checked);
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowManageNightsDialog(false)}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Swap Day Off Dialog */}
       <Dialog open={showSwapDialog} onOpenChange={setShowSwapDialog}>

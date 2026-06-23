@@ -161,14 +161,14 @@ serve(async (req) => {
 
         const recipientEmail = (config.low_balance_recipient_email || child?.guardian_email || "").trim();
         if (recipientEmail) {
-          const subject = `Owl Pay Low Balance Alert - ${child?.name || "Camper"}`;
+          const camperName = child?.name || "Camper";
+          const subject = `Canteen Balance Alert - ${camperName}`;
           const content = [
-            `A camper balance fell below the configured threshold.`,
+            `Camper: ${camperName}`,
             ``,
-            `Camper: ${child?.name || "Unknown"}`,
-            `New Balance: $${Number(new_balance).toFixed(2)}`,
-            `Threshold: $${threshold.toFixed(2)}`,
-            `Last Purchase Amount: $${Number(amount || 0).toFixed(2)}`,
+            `Your camper's canteen spending account balance has fallen below the $${threshold.toFixed(2)} threshold. Please log in to your CampMinder account to replenish the account.`,
+            ``,
+            `Please note that the balance displayed in CampMinder may not always reflect the most current amount, as CampMinder and our new canteen system do not update in real time.`,
           ].join("\n");
           lowBalanceSent = await sendEmailViaM365(recipientEmail, subject, content);
         }

@@ -65,16 +65,17 @@ function isAsNeededMealLabel(label: string): boolean {
   return !upper || upper.includes("AS NEEDED") || upper === "PRN";
 }
 
-/** Non-recurring meds without a scheduled meal slot — profile only, not daily log. */
+/** Meds without a scheduled meal slot — camper profile only, not daily log. */
 export function isAsNeededMedication(med: {
   is_recurring?: boolean | null;
   meal_time?: string[] | string | null;
   frequency?: string | null;
+  scheduled_time?: string | null;
 }): boolean {
-  if (med.is_recurring) return false;
-
   const freq = String(med.frequency ?? "").trim().toUpperCase();
   if (freq.includes("AS NEEDED") || freq === "PRN") return true;
+
+  if (med.scheduled_time) return false;
 
   const labels = parseMedicationMealTimeLabels(med.meal_time);
   const scheduledLabels = labels.filter((label) => !isAsNeededMealLabel(label));
