@@ -18,6 +18,8 @@ import { parseSpreadsheetFile, isSpreadsheetFileName } from "@/lib/spreadsheetIm
 import { sanitizeMedicationLogRowForInsert } from "@/lib/medicationCsvImport";
 import {
   CSV_REPLACE_CLEAR_TABLES,
+  clearExistingMenuItemsForKeys,
+  dedupeMenuItemsForDisplay,
   type CsvImportMode,
   syncChildrenFromCsv,
   syncStaffFromCsv,
@@ -240,6 +242,18 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
           .eq("company_id", currentCompany.id)
           .eq("season", selectedSeason);
         if (clearError) throw clearError;
+      }
+
+      if (tableName === "menu_items" && mode === "merge" && currentCompany?.id) {
+        const clearResult = await clearExistingMenuItemsForKeys(
+          supabase,
+          currentCompany.id,
+          rowsToInsert.map((row) => ({
+            date: String((row as { date?: string }).date ?? ""),
+            meal_type: String((row as { meal_type?: string }).meal_type ?? ""),
+          })),
+        );
+        if (clearResult.error) throw new Error(clearResult.error);
       }
 
       const { error } = await supabase.from(tableName as any).insert(rowsToInsert as any);

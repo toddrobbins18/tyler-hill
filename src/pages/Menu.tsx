@@ -17,6 +17,7 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
+import { clearExistingMenuItemsForKeys } from "@/lib/csvRosterSync";
 import { CalendarZoomWrapper } from "@/components/CalendarZoomWrapper";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -131,6 +132,14 @@ export default function Menu() {
       }
       toast({ title: "Menu item updated successfully" });
     } else {
+      const clearResult = await clearExistingMenuItemsForKeys(supabase, currentCompany!.id, [
+        { date: formData.date, meal_type: formData.meal_type },
+      ]);
+      if (clearResult.error) {
+        toast({ title: "Error replacing existing menu item", variant: "destructive" });
+        return;
+      }
+
       const { error } = await supabase.from("menu_items").insert({
         ...payload,
         company_id: currentCompany?.id,

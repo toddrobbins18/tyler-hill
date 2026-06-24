@@ -223,6 +223,75 @@ export async function syncStaffFromCsv(
   );
 }
 
+export type MenuItemKeyRow = { date: string; meal_type: string };
+
+/** Remove existing menu rows for the same date + meal type before merge import or manual add. */
+export async function clearExistingMenuItemsForKeys(
+  client: SupabaseClient,
+  companyId: string,
+  rows: MenuItemKeyRow[],
+): Promise<{ error: string | null }> {
+  const keys = new Set<string>();
+  for (const row of rows) {
+    const date = String(row.date ?? "").trim();
+    const mealType = String(row.meal_type ?? "").trim().toLowerCase();
+    if (!date || !mealType) continue;
+    keys.add(`${date}|${mealType}`);
+  }
+
+  for (const key of keys) {
+    const [date, meal_type] = key.split("|");
+    const { error } = await client
+      .from("menu_items")
+      .delete()
+      .eq("company_id", companyId)
+      .eq("date", date)
+      .eq("meal_type", meal_type);
+    if (error) return { error: error.message };
+  }
+
+  return { error: null };
+}
+
+export type MenuDisplayItem = {
+  id: string;
+  meal_type: string;
+  items: string;
+  allergens?: string | null;
+  division_ids?: string[] | null;
+  created_at?: string | null;
+};
+
+const STANDARD_MENU_MEAL_TYPES = new Set(["breakfast", "lunch", "snack", "dinner"]);
+
+function preferNewerMenuItem<T extends { created_at?: string | null; id: string }>(a: T, b: T): T {
+  const aTime = a.created_at || "";
+  const bTime = b.created_at || "";
+  if (aTime && bTime) return aTime >= bTime ? a : b;
+  if (aTime) return a;
+  if (bTime) return b;
+  return a.id >= b.id ? a : b;
+}
+
+/** Keep one row per standard meal type; retain all special meals. */
+export function dedupeMenuItemsForDisplay<T extends MenuDisplayItem>(items: T[]): T[] {
+  const bestByMealType = new Map<string, T>();
+  const specialMeals: T[] = [];
+
+  for (const item of items) {
+    const key = (item.meal_type || "").toLowerCase();
+    if (key === "special_meal") {
+      specialMeals.push(item);
+      continue;
+    }
+    if (!STANDARD_MENU_MEAL_TYPES.has(key)) continue;
+    const existing = bestByMealType.get(key);
+    bestByMealType.set(key, existing ? preferNewerMenuItem(item, existing) : item);
+  }
+
+  return [...bestByMealType.values(), ...specialMeals];
+}
+
 export const CSV_REPLACE_CLEAR_TABLES = new Set([
   "awards",
   "daily_notes",

@@ -22,6 +22,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { isActiveRosterStatus, isBirthdayTodayCalendar, parseBirthdayCalendarParts } from "@/lib/birthdayCalendar";
 import { isTimberLakeCamp, isTimberLakeWestCompany, isTylerHillCamp, shouldShowTigerTimes } from "@/lib/camps";
 import { formatTime12Hour } from "@/lib/utils";
+import { dedupeMenuItemsForDisplay } from "@/lib/csvRosterSync";
 
 interface DailyWolfContent {
   officer_of_day: string;
@@ -499,7 +500,7 @@ export default function Dashboard() {
         dinner: 4,
         special_meal: 5,
       };
-      const sortedMenu = [...menu].sort((a, b) => {
+      const sortedMenu = dedupeMenuItemsForDisplay([...menu]).sort((a, b) => {
         const aKey = (a.meal_type || "").toLowerCase();
         const bKey = (b.meal_type || "").toLowerCase();
         const orderDiff = (mealOrder[aKey] ?? 99) - (mealOrder[bKey] ?? 99);
