@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,10 +6,14 @@ import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Minus, Plus, Trash2, CheckCircle, AlertCircle, Sparkles } from "lucide-react";
+import { Minus, Plus, Trash2, AlertCircle, Sparkles } from "lucide-react";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useCountAnimation } from "@/hooks/useCountAnimation";
 import { useSignedPhotoUrl } from "@/hooks/useSignedPhotoUrl";
+import {
+  buildOwlPayPurchaseRows,
+  calculateOwlPayCartPricing,
+} from "@/lib/owlPayFreeItem";
 import type { OwlPayCamper } from "./OwlPayCamperCard";
 import type { OwlPayCartItem } from "./OwlPayItemGrid";
 import OwlPaySuccessModal from "./OwlPaySuccessModal";
@@ -17,7 +21,7 @@ import OwlPaySuccessModal from "./OwlPaySuccessModal";
 interface OwlPayTransactionSummaryProps {
   camper: OwlPayCamper;
   cart: OwlPayCartItem[];
-  isFirstScanToday: boolean;
+  hasFreeDailyItemAvailable: boolean;
   isStaff?: boolean;
   onUpdateCart: (cart: OwlPayCartItem[]) => void;
   onComplete: () => void;
@@ -26,7 +30,7 @@ interface OwlPayTransactionSummaryProps {
 const OwlPayTransactionSummary = ({
   camper,
   cart,
-  isFirstScanToday,
+  hasFreeDailyItemAvailable,
   isStaff = false,
   onUpdateCart,
   onComplete,
@@ -36,14 +40,21 @@ const OwlPayTransactionSummary = ({
     show: boolean;
     chargedAmount: number;
     newBalance: number;
+    freeItemApplied: boolean;
   } | null>(null);
   const { toast } = useToast();
   const { currentCompany } = useCompany();
   const { signedUrl } = useSignedPhotoUrl(camper.photo_url);
 
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const total = isFirstScanToday ? 0 : subtotal;
-  // Staff: running tab totals up; Campers: deduct from balance
+  const pricing = useMemo(
+    () =>
+      calculateOwlPayCartPricing(cart, {
+        hasFreeDailyItemAvailable,
+        isStaff,
+      }),
+    [cart, hasFreeDailyItemAvailable, isStaff]
+  );
+  const { subtotal, freeDiscount, total } = pricing;
   const newBalance = isStaff ? camper.owl_pay_balance + total : camper.owl_pay_balance - total;
   const animatedBalance = useCountAnimation(newBalance, 500);
 
@@ -64,12 +75,12 @@ const OwlPayTransactionSummary = ({
   const handleComplete = async () => {
     if (!currentCompany?.id) return;
 
-    if (cart.length === 0 && !isFirstScanToday) {
+    if (cart.length === 0) {
       toast({ title: "No items selected", variant: "destructive" });
       return;
     }
 
-    if (!isStaff && !isFirstScanToday && newBalance < 0) {
+    if (!isStaff && newBalance < 0) {
       toast({ title: "Insufficient funds", variant: "destructive" });
       return;
     }
@@ -78,73 +89,55 @@ const OwlPayTransactionSummary = ({
     try {
       const { data: { user } } = await supabase.auth.getUser();
 
-      // Record first scan if applicable
-      if (isFirstScanToday && !isStaff) {
+      if (pricing.freeItemApplied && !isStaff) {
         const { error: scanError } = await supabase.from("owl_pay_daily_scans" as any).insert({
           child_id: camper.id,
           company_id: currentCompany.id,
         });
         if (scanError) throw scanError;
-
-        const { error: firstScanError } = await supabase.from("owl_pay_transactions" as any).insert({
-          child_id: camper.id,
-          company_id: currentCompany.id,
-          amount: 0,
-          is_free: true,
-          transaction_type: "first_scan",
-          notes: "First scan of the day - free entry",
-          created_by: user?.id,
-        });
-        if (firstScanError) throw firstScanError;
       }
 
-      // Record item-level purchases (one row per quantity). First scan keeps rows but amounts are free ($0).
-      if (cart.length > 0) {
-        const transactionInserts = cart.flatMap(item =>
-          Array(item.quantity).fill(null).map(() => ({
+      const transactionInserts = buildOwlPayPurchaseRows(cart, pricing, {
+        child_id: isStaff ? null : camper.id,
+        staff_id: isStaff ? camper.id : null,
+        company_id: currentCompany.id,
+        created_by: user?.id,
+      });
+
+      const { error: txError } = await supabase
+        .from("owl_pay_transactions" as any)
+        .insert(transactionInserts);
+      if (txError) throw txError;
+
+      if (!isStaff && total !== 0) {
+        const { error: balError } = await supabase.rpc("increment_camper_balance", {
+          _child_id: camper.id,
+          _amount: -total,
+        } as any);
+        if (balError) throw balError;
+      }
+
+      try {
+        await supabase.functions.invoke("send-owlpay-notifications", {
+          body: {
+            company_id: currentCompany.id,
+            transaction_type: "purchase",
             child_id: isStaff ? null : camper.id,
             staff_id: isStaff ? camper.id : null,
-            company_id: currentCompany.id,
-            item_id: item.id,
-            amount: isFirstScanToday ? 0 : item.price,
-            is_free: isFirstScanToday,
-            transaction_type: "purchase",
-            created_by: user?.id,
-          }))
-        );
-
-        const { error: txError } = await supabase
-          .from("owl_pay_transactions" as any)
-          .insert(transactionInserts);
-        if (txError) throw txError;
-
-        // Only deduct balance for campers (not staff), using RPC for atomic adjustments.
-        if (!isStaff && total !== 0) {
-          const { error: balError } = await supabase.rpc("increment_camper_balance", {
-            _child_id: camper.id,
-            _amount: -total,
-          } as any);
-          if (balError) throw balError;
-        }
-
-        // Notify low-balance alerts and periodic staff reports without blocking checkout success.
-        try {
-          await supabase.functions.invoke("send-owlpay-notifications", {
-            body: {
-              company_id: currentCompany.id,
-              transaction_type: "purchase",
-              child_id: isStaff ? null : camper.id,
-              staff_id: isStaff ? camper.id : null,
-              amount: total,
-              new_balance: isStaff ? null : newBalance,
-            },
-          });
-        } catch (notifyError) {
-          console.error("Owl Pay notification call failed:", notifyError);
-        }
+            amount: total,
+            new_balance: isStaff ? null : newBalance,
+          },
+        });
+      } catch (notifyError) {
+        console.error("Owl Pay notification call failed:", notifyError);
       }
 
-      setSuccessData({ show: true, chargedAmount: total, newBalance });
+      setSuccessData({
+        show: true,
+        chargedAmount: total,
+        newBalance,
+        freeItemApplied: pricing.freeItemApplied,
+      });
     } catch (error: any) {
       console.error("Transaction error:", error);
       toast({ title: "Transaction failed", description: error.message, variant: "destructive" });
@@ -166,7 +159,7 @@ const OwlPayTransactionSummary = ({
         camperInitials={initials}
         chargedAmount={successData?.chargedAmount ?? 0}
         newBalance={successData?.newBalance ?? 0}
-        isFirstScan={isFirstScanToday}
+        freeItemApplied={successData?.freeItemApplied ?? false}
       />
 
       <Card className="sticky top-4 rounded-xl shadow-xl">
@@ -181,9 +174,9 @@ const OwlPayTransactionSummary = ({
               <div className="font-semibold text-lg">{camper.name}</div>
               <div className="text-sm text-muted-foreground">{isStaff ? "Running Tab" : `Current Balance: $${camper.owl_pay_balance.toFixed(2)}`}</div>
             </div>
-            {isFirstScanToday && (
+            {hasFreeDailyItemAvailable && !isStaff && (
               <Badge className="bg-green-500 text-white mt-2">
-                <Sparkles className="w-3 h-3 mr-1" /> First Scan
+                <Sparkles className="w-3 h-3 mr-1" /> 1 free snack or drink today
               </Badge>
             )}
           </div>
@@ -195,7 +188,12 @@ const OwlPayTransactionSummary = ({
                 {cart.map((item) => (
                   <div key={item.id} className="flex items-center justify-between gap-2 p-2 rounded-lg hover:bg-muted/50">
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{item.name}</div>
+                      <div className="text-sm font-medium truncate">
+                        {item.name}
+                        {pricing.freeItemLineId === item.id && pricing.freeItemApplied && (
+                          <span className="ml-2 text-xs text-green-600">(1 free)</span>
+                        )}
+                      </div>
                       <div className="text-xs text-muted-foreground">${item.price.toFixed(2)} each</div>
                     </div>
                     <div className="flex items-center gap-1">
@@ -219,11 +217,16 @@ const OwlPayTransactionSummary = ({
                   <span>Subtotal:</span>
                   <span className="font-medium">${subtotal.toFixed(2)}</span>
                 </div>
-                {isFirstScanToday && (
+                {freeDiscount > 0 && (
                   <div className="flex justify-between text-sm text-green-600">
-                    <span><Sparkles className="w-3 h-3 inline mr-1" />First Scan Discount:</span>
-                    <span>-${subtotal.toFixed(2)}</span>
+                    <span><Sparkles className="w-3 h-3 inline mr-1" />Free daily item:</span>
+                    <span>-${freeDiscount.toFixed(2)}</span>
                   </div>
+                )}
+                {hasFreeDailyItemAvailable && !isStaff && freeDiscount === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Add a snack or drink to use today&apos;s free item.
+                  </p>
                 )}
                 <Separator />
                 <div className="flex justify-between text-lg font-bold">
@@ -238,30 +241,28 @@ const OwlPayTransactionSummary = ({
                 </div>
               </div>
             </>
-          ) : isFirstScanToday ? (
-            <div className="text-center py-6 text-muted-foreground">
-              <CheckCircle className="h-12 w-12 mx-auto mb-2 text-green-500" />
-              <p className="font-medium">First scan - free entry!</p>
-            </div>
           ) : (
             <div className="text-center py-6 text-muted-foreground">
               <AlertCircle className="h-12 w-12 mx-auto mb-2 opacity-50" />
               <p>No items selected</p>
+              {hasFreeDailyItemAvailable && !isStaff && (
+                <p className="text-xs mt-2 text-green-600">One free snack or drink available today</p>
+              )}
             </div>
           )}
 
-          {(cart.length > 0 || isFirstScanToday) && (
+          {cart.length > 0 && (
             <Button
               className="w-full owlpay-gradient-header text-white shadow-xl text-lg active:scale-95 transition-transform"
               size="lg"
               onClick={handleComplete}
-              disabled={processing || (!isStaff && !isFirstScanToday && newBalance < 0)}
+              disabled={processing || (!isStaff && newBalance < 0)}
             >
-              {processing ? "Processing..." : isFirstScanToday && cart.length === 0 ? "🎉 Record First Scan" : "💳 Complete Transaction"}
+              {processing ? "Processing..." : "💳 Complete Transaction"}
             </Button>
           )}
 
-          {!isStaff && !isFirstScanToday && newBalance < 0 && cart.length > 0 && (
+          {!isStaff && newBalance < 0 && cart.length > 0 && (
             <p className="text-sm text-destructive text-center">⚠️ Insufficient funds</p>
           )}
         </CardContent>

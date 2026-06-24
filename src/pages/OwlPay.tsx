@@ -31,7 +31,7 @@ function OwlPayPage() {
   const [campers, setCampers] = useState<OwlPayCamper[]>([]);
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [cart, setCart] = useState<OwlPayCartItem[]>([]);
-  const [isFirstScanToday, setIsFirstScanToday] = useState(false);
+  const [hasFreeDailyItemAvailable, setHasFreeDailyItemAvailable] = useState(false);
   const [isStaffSelected, setIsStaffSelected] = useState(false);
   const [scanStatus, setScanStatus] = useState<"idle" | "scanning" | "success" | "error">("idle");
   const [scanBuffer, setScanBuffer] = useState("");
@@ -130,11 +130,11 @@ function OwlPayPage() {
     };
     setSelectedCamper(staffAsCamper);
     setCart([]);
-    setIsFirstScanToday(false);
+    setHasFreeDailyItemAvailable(false);
     setIsStaffSelected(true);
   };
 
-  const checkFirstScanToday = async (camperId: string) => {
+  const checkFreeDailyItemAvailable = async (camperId: string) => {
     const today = new Date().toISOString().split('T')[0];
     const { data } = await supabase
       .from("owl_pay_daily_scans" as any)
@@ -149,10 +149,13 @@ function OwlPayPage() {
     setSelectedCamper(camper);
     setCart([]);
     setIsStaffSelected(false);
-    const isFirst = await checkFirstScanToday(camper.id);
-    setIsFirstScanToday(isFirst);
-    if (isFirst) {
-      toast({ title: "First scan today!", description: `${camper.name}'s first visit is free.` });
+    const hasFreeItem = await checkFreeDailyItemAvailable(camper.id);
+    setHasFreeDailyItemAvailable(hasFreeItem);
+    if (hasFreeItem) {
+      toast({
+        title: "Free daily item available",
+        description: `${camper.name} can get one free snack or drink today.`,
+      });
     }
   };
 
@@ -182,7 +185,7 @@ function OwlPayPage() {
       };
       setSelectedCamper(staffAsCamper);
       setCart([]);
-      setIsFirstScanToday(false);
+      setHasFreeDailyItemAvailable(false);
       setIsStaffSelected(true);
       toast({ title: "✓ Staff Found", description: staffMatch.name, duration: 2000 });
       setTimeout(() => { setSearchTerm(""); setScanStatus("idle"); }, 1000);
@@ -345,12 +348,13 @@ function OwlPayPage() {
                 <OwlPayTransactionSummary
                   camper={selectedCamper}
                   cart={cart}
-                  isFirstScanToday={isFirstScanToday}
+                  hasFreeDailyItemAvailable={hasFreeDailyItemAvailable}
                   isStaff={isStaffSelected}
                   onUpdateCart={setCart}
                   onComplete={() => {
                     setSelectedCamper(null);
                     setCart([]);
+                    setHasFreeDailyItemAvailable(false);
                     loadCampers();
                   }}
                 />

@@ -12,12 +12,12 @@ interface OwlPaySuccessModalProps {
   camperInitials: string;
   chargedAmount: number;
   newBalance: number;
-  isFirstScan: boolean;
+  freeItemApplied: boolean;
 }
 
 const OwlPaySuccessModal = ({
   open, onClose, camperName, camperPhoto, camperInitials,
-  chargedAmount, newBalance, isFirstScan,
+  chargedAmount, newBalance, freeItemApplied,
 }: OwlPaySuccessModalProps) => {
   const { signedUrl } = useSignedPhotoUrl(camperPhoto);
 
@@ -42,14 +42,17 @@ const OwlPaySuccessModal = ({
           </Avatar>
           <h2 className="text-lg font-bold">{camperName}</h2>
 
-          {isFirstScan ? (
+          {freeItemApplied && chargedAmount === 0 ? (
             <div className="flex items-center gap-2 text-green-600 font-medium">
               <Sparkles className="h-4 w-4" />
-              <span>First Scan - Free Entry!</span>
+              <span>Free daily snack or drink applied!</span>
             </div>
           ) : (
             <div className="text-muted-foreground">
               Charged: <span className="font-semibold text-foreground">${chargedAmount.toFixed(2)}</span>
+              {freeItemApplied && (
+                <span className="block text-xs text-green-600 mt-1">Includes 1 free snack or drink</span>
+              )}
             </div>
           )}
 

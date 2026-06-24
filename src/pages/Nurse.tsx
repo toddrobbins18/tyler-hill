@@ -40,6 +40,7 @@ import {
   campProgramEndDate,
   childMatchesGenderFilter,
   findDaySpecificMedicationLog,
+  medicationSlotKey,
   mergeMedicationsForDate,
   type MedicationLogRow,
 } from "@/lib/medicationSchedule";
@@ -574,6 +575,15 @@ export default function Nurse() {
     }
 
     toast({ title: "Medication marked as administered" });
+    const slotKey = medicationSlotKey(med);
+    const administeredAt = new Date().toISOString();
+    setMedications((prev) =>
+      prev.map((row) =>
+        medicationSlotKey(row) === slotKey
+          ? { ...row, administered: true, administered_at: administeredAt }
+          : row,
+      ),
+    );
     fetchMedications(selectedDate);
   };
 
@@ -624,6 +634,14 @@ export default function Nurse() {
     }
 
     toast({ title: "Medication marked as not administered" });
+    const slotKey = medicationSlotKey(med);
+    setMedications((prev) =>
+      prev.map((row) =>
+        medicationSlotKey(row) === slotKey
+          ? { ...row, administered: false, administered_by: null, administered_at: null }
+          : row,
+      ),
+    );
     fetchMedications(selectedDate);
   };
 

@@ -154,7 +154,7 @@ export function medicationMatchesListVisibility(
   const matchesSearch =
     isSearching && (childName.includes(searchLower) || medName.includes(searchLower));
 
-  if (med.administered) return matchesSearch;
+  if (med.administered === true) return matchesSearch;
 
   const hasMeal = medicationHasMealTime(med.meal_time, options.divisionName);
   if (!hasMeal) return matchesSearch;
