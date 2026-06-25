@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CalendarIcon, Clock, MapPin, Users, ChevronLeft, ChevronRight, Filter, Loader2, FileText, Camera, Shirt, Phone, Globe, CalendarOff } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatTime12Hour } from "@/lib/utils";
 import { useTigerTimesColors } from "@/hooks/useTigerTimesColors";
 import DivisionScheduleUploader from "@/components/admin/DivisionScheduleUploader";
 import { useSeasonContext } from "@/contexts/SeasonContext";
@@ -134,7 +134,7 @@ export default function DailySchedule() {
         supabase
           .from("sports_calendar")
           .select(`
-            id, title, sport_type, opponent, event_date, time, start_time_field, location, description, home_away,
+            id, title, sport_type, opponent, event_date, time, start_time_field, depart_time, location, description, home_away,
             sports_calendar_divisions(division_id)
           `)
           .eq("company_id", currentCompany.id)
@@ -177,7 +177,7 @@ export default function DailySchedule() {
             id: event.id,
             title: event.title || `${event.sport_type}${event.opponent ? ` vs ${event.opponent}` : ''}`,
             type: event.home_away === 'home' ? 'Home Game' : event.home_away === 'away' ? 'Away Game' : 'Sports',
-            time: event.start_time_field || event.time,
+            time: formatTime12Hour(event.start_time_field || event.time || event.depart_time) || event.start_time_field || event.time || event.depart_time || null,
             location: event.location,
             description: event.description,
             source: 'sports',

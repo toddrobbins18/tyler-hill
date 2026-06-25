@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { usePermissions } from '@/hooks/usePermissions';
 import { isActiveRosterStatus, isBirthdayTodayCalendar } from '@/lib/birthdayCalendar';
+import { formatTime12Hour } from '@/lib/utils';
 
 interface BirthdayRow {
   id: string;
@@ -214,7 +215,7 @@ export default function DailyWolfPrintable() {
       // Fetch all sports events for athletics section
       const { data: allSportsData } = await supabase
         .from('sports_calendar')
-        .select('id, title, time, location, opponent, description')
+        .select('id, title, time, start_time_field, depart_time, location, opponent, description')
         .eq('company_id', currentCompany.id)
         .eq('event_date', today)
         .eq('season', currentSeason)
@@ -388,7 +389,7 @@ export default function DailyWolfPrintable() {
                     {sportsEvents.map((event) => (
                       <li key={event.id} className="flex gap-3 py-2 first:pt-0 last:pb-0">
                         <span className="shrink-0 w-16 text-xs font-bold text-primary">
-                          {event.time || 'TBD'}
+                          {formatTime12Hour(event.start_time_field || event.time || event.depart_time) || event.start_time_field || event.time || event.depart_time || 'TBD'}
                         </span>
                         <span className="text-foreground">
                           {event.title}

@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { usePermissions } from '@/hooks/usePermissions';
 import { isActiveRosterStatus, isBirthdayTodayCalendar } from '@/lib/birthdayCalendar';
+import { formatTime12Hour } from '@/lib/utils';
 
 interface BirthdayRow {
   id: string;
@@ -142,14 +143,18 @@ export default function DailyNotes() {
       // Sports calendar
       const { data: sportsData } = await supabase
         .from('sports_calendar')
-        .select('id, title, time, location, description')
+        .select('id, title, time, start_time_field, depart_time, location, description')
         .eq('company_id', currentCompany.id)
         .eq('event_date', today)
         .eq('season', currentSeason)
         .order('time');
       
       if (sportsData) {
-        events.push(...sportsData.map(e => ({ ...e, type: 'Sports' })));
+        events.push(...sportsData.map(e => ({
+          ...e,
+          type: 'Sports',
+          time: formatTime12Hour(e.start_time_field || e.time || e.depart_time) || e.start_time_field || e.time || e.depart_time
+        })));
       }
 
       // Activities & Field Trips

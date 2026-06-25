@@ -840,7 +840,9 @@ export default function Dashboard() {
                   <div key={event.id} className="flex cursor-pointer items-center gap-2 rounded-lg bg-card p-2 transition-colors hover:bg-muted/50" onClick={() => navigate("/athletics")}>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium">{event.title}</p>
-                      <p className="truncate text-xs text-muted-foreground">{formatTime12Hour(event.time) || event.time || "TBD"}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {formatTime12Hour(event.start_time_field || event.time || event.depart_time) || event.start_time_field || event.time || event.depart_time || "TBD"}
+                      </p>
                       </div>
                     <Badge variant="outline" className="shrink-0 text-xs">{event.sport_type}</Badge>
                     </div>
@@ -859,7 +861,7 @@ export default function Dashboard() {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium">{event.title}</p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {new Date(event.event_date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} • {formatTime12Hour(event.time) || event.time || "TBD"}
+                        {new Date(event.event_date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} • {formatTime12Hour(event.start_time_field || event.time || event.depart_time) || event.start_time_field || event.time || event.depart_time || "TBD"}
                       </p>
                     </div>
                     <Badge variant="outline" className="shrink-0 text-xs">{event.sport_type}</Badge>
