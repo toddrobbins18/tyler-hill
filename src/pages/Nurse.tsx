@@ -827,6 +827,12 @@ export default function Nurse() {
           division:division_id (
             name
           )
+        ),
+        staff (
+          id,
+          name,
+          role,
+          allergies
         )
       `)
       .eq("company_id", currentCompany.id)
@@ -1113,16 +1119,18 @@ export default function Nurse() {
     return `${diffMins}m`;
   };
 
-  // Group admission history by child
+  // Group admission history by child or staff member
   const groupedHistory = admissionHistory.reduce((acc: any, admission: any) => {
-    const childId = admission.child_id;
-    if (!acc[childId]) {
-      acc[childId] = {
+    const key = admission.child_id || admission.staff_id;
+    if (!key) return acc;
+    if (!acc[key]) {
+      acc[key] = {
         child: admission.children,
+        staff: admission.staff,
         admissions: [],
       };
     }
-    acc[childId].admissions.push(admission);
+    acc[key].admissions.push(admission);
     return acc;
   }, {});
 
@@ -1140,6 +1148,12 @@ export default function Nurse() {
       }
       return a.name.localeCompare(b.name);
     });
+
+  const filteredStaff = staff
+    .filter(member =>
+      member.name.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const visibleChildIds = new Set(filteredChildren.map((child) => child.id));
 
@@ -1912,11 +1926,33 @@ export default function Nurse() {
                 </CardContent>
               </Card>
 
+              {/* Type Toggle */}
+              <div className="flex gap-2 p-1 bg-muted rounded-lg max-w-xs">
+                <Button
+                  type="button"
+                  variant={admissionType === 'camper' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => setAdmissionType('camper')}
+                >
+                  Campers
+                </Button>
+                <Button
+                  type="button"
+                  variant={admissionType === 'staff' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => setAdmissionType('staff')}
+                >
+                  Staff
+                </Button>
+              </div>
+
               {/* Search Bar */}
               <div className="space-y-2">
-                <Label>Search Children</Label>
+                <Label>Search {admissionType === 'camper' ? 'Children' : 'Staff'}</Label>
                 <Input
-                  placeholder="Search by name..."
+                  placeholder={`Search ${admissionType === 'camper' ? 'children' : 'staff'} by name...`}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -2024,52 +2060,94 @@ export default function Nurse() {
                 </div>
               )}
 
-              {/* Available Children Section */}
+              {/* Available Entities Section */}
               <div className="space-y-3">
                 <h3 className="font-semibold text-lg flex items-center gap-2">
                   <CheckCircle2 className="h-5 w-5 text-success" />
-                  Available Children
+                  Available {admissionType === 'camper' ? 'Campers' : 'Staff'}
                 </h3>
                 {loading ? (
                   <p className="text-muted-foreground">Loading...</p>
-                ) : filteredChildren.length === 0 ? (
-                  <p className="text-muted-foreground">No children found</p>
-                ) : (
-                  <div className="grid gap-2">
-                    {filteredChildren
-                      .filter(child => !admissions.some(a => a.child_id === child.id))
-                      .map((child) => (
-                        <div key={child.id} className="border rounded-lg p-3 flex items-center justify-between bg-card hover:bg-accent/50 transition-colors">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="font-medium">{child.name}</p>
-                              {child.division?.name && (
-                                <Badge variant="outline" className="text-xs">
-                                  {child.division.name}
-                                </Badge>
+                ) : admissionType === 'camper' ? (
+                  filteredChildren.length === 0 ? (
+                    <p className="text-muted-foreground">No children found</p>
+                  ) : (
+                    <div className="grid gap-2">
+                      {filteredChildren
+                        .filter(child => !admissions.some(a => a.child_id === child.id))
+                        .map((child) => (
+                          <div key={child.id} className="border rounded-lg p-3 flex items-center justify-between bg-card hover:bg-accent/50 transition-colors">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium">{child.name}</p>
+                                {child.division?.name && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {child.division.name}
+                                  </Badge>
+                                )}
+                              </div>
+                              {child.medical_notes && (
+                                <p className="text-xs text-muted-foreground">{child.medical_notes}</p>
                               )}
                             </div>
-                            {child.medical_notes && (
-                              <p className="text-xs text-muted-foreground">{child.medical_notes}</p>
-                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                const reason = prompt("Reason for admission (optional):");
+                                const notes = prompt("Additional notes (optional):");
+                                if (reason !== null) {
+                                  handleAdmit(child.id, 'child', reason || "", notes || "");
+                                }
+                              }}
+                            >
+                              <Hospital className="h-4 w-4 mr-2" />
+                              Admit
+                            </Button>
                           </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              const reason = prompt("Reason for admission (optional):");
-                              const notes = prompt("Additional notes (optional):");
-                              if (reason !== null) {
-                                handleAdmit(child.id, 'child', reason || "", notes || "");
-                              }
-                            }}
-                          >
-                            <Hospital className="h-4 w-4 mr-2" />
-                            Admit
-                          </Button>
-                        </div>
-                      ))}
-                  </div>
+                        ))}
+                    </div>
+                  )
+                ) : (
+                  filteredStaff.length === 0 ? (
+                    <p className="text-muted-foreground">No staff members found</p>
+                  ) : (
+                    <div className="grid gap-2">
+                      {filteredStaff
+                        .filter(member => !admissions.some(a => a.staff_id === member.id))
+                        .map((member) => (
+                          <div key={member.id} className="border rounded-lg p-3 flex items-center justify-between bg-card hover:bg-accent/50 transition-colors">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium">{member.name}</p>
+                                {member.role && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {member.role}
+                                  </Badge>
+                                )}
+                              </div>
+                              {member.allergies && (
+                                <p className="text-xs text-destructive font-medium">⚠️ Allergies: {member.allergies}</p>
+                              )}
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                const reason = prompt("Reason for admission (optional):");
+                                const notes = prompt("Additional notes (optional):");
+                                if (reason !== null) {
+                                  handleAdmit(member.id, 'staff', reason || "", notes || "");
+                                }
+                              }}
+                            >
+                              <Hospital className="h-4 w-4 mr-2" />
+                              Admit
+                            </Button>
+                          </div>
+                        ))}
+                    </div>
+                  )
                 )}
               </div>
 
