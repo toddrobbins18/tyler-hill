@@ -105,6 +105,7 @@ export default function ManageSportsRosterDialog({
         *,
         roster_template_children(child_id)
       `)
+      .eq("company_id", currentCompany.id)
       .order("created_at", { ascending: false });
 
     setChildren(childrenData || []);

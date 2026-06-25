@@ -262,15 +262,16 @@ export default function RosterTemplates() {
     return children.find(c => c.id === childId)?.name || "Unknown";
   };
 
-  // Check if current company is Tyler Hill
+  // Check if current company is Tyler Hill or Timber Lake Camp
   const isTylerHill = currentCompany?.slug === 'tyler-hill-camp';
+  const isTimberLake = currentCompany?.slug === 'timber-lake-camp';
 
-  if (!isTylerHill) {
+  if (!isTylerHill && !isTimberLake) {
     return (
       <div className="space-y-8">
         <div>
           <h1 className="text-3xl font-bold mb-2">Roster Templates</h1>
-          <p className="text-muted-foreground">This feature is only available for Tyler Hill Camp.</p>
+          <p className="text-muted-foreground">This feature is only available for Tyler Hill Camp and Timber Lake Camp.</p>
         </div>
       </div>
     );
