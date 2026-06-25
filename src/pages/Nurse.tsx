@@ -213,6 +213,7 @@ export default function Nurse() {
       .select("*")
       .eq("status", "active")
       .eq("company_id", currentCompany.id)
+      .eq("season", currentSeason)
       .order("name");
 
     if (!error && data) {
@@ -1009,11 +1010,13 @@ export default function Nurse() {
       // If not a child, check staff
       let staffMember: any = null;
       if (!child) {
-        const staffResult = await (supabase as any)
+        const staffResult = await supabase
           .from('staff')
           .select('id, name, role, allergies, rfid')
           .eq('rfid', healthCenterRfidInput.trim())
           .eq('company_id', currentCompany?.id || '')
+          .eq('season', currentSeason)
+          .eq('status', 'active')
           .maybeSingle();
         staffMember = staffResult?.data;
       }

@@ -74,3 +74,7 @@ verify_jwt = true
 
 [functions.send-owlpay-notifications]
 verify_jwt = false
+
+[functions.send-appointment-notification]
+verify_jwt = false
+
