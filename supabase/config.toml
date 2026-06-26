@@ -78,3 +78,6 @@ verify_jwt = false
 [functions.send-appointment-notification]
 verify_jwt = false
 
+[functions.send-daily-dashboard]
+verify_jwt = false
+
