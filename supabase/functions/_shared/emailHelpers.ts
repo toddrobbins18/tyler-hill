@@ -299,4 +299,110 @@ export async function sendEmailNotifications(
   }
   
   console.log(`Successfully sent ${messages.length} in-app messages`);
+
+  // --- Real Email Sending via Microsoft 365 ---
+  if (!companyId) {
+    console.log('No company_id provided, skipping real email sending.');
+    return;
+  }
+
+  const { data: emailConfig } = await supabase
+    .from("company_email_config")
+    .select("*")
+    .eq("company_id", companyId)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (!emailConfig || !emailConfig.is_configured) {
+    console.log("Email not configured for company, skipping M365 email.");
+    return;
+  }
+
+  const { data: decryptedSecret, error: decryptError } = await supabase.rpc("decrypt_secret", {
+    encrypted: emailConfig.m365_client_secret_encrypted,
+  });
+
+  if (decryptError || !decryptedSecret) {
+    console.error("Failed to decrypt M365 secret", decryptError);
+    return;
+  }
+
+  const tokenResponse = await fetch(
+    `https://login.microsoftonline.com/${emailConfig.m365_tenant_id}/oauth2/v2.0/token`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: emailConfig.m365_client_id,
+        client_secret: decryptedSecret,
+        scope: "https://graph.microsoft.com/.default",
+        grant_type: "client_credentials",
+      }),
+    },
+  );
+
+  const tokenData = await tokenResponse.json();
+  if (!tokenResponse.ok || !tokenData?.access_token) {
+    console.error("Failed to get Graph token", tokenData);
+    return;
+  }
+
+  let successCount = 0;
+  let failCount = 0;
+
+  for (const recipient of recipients) {
+    if (!recipient.email || recipient.email === 'no-email@example.com') {
+      continue;
+    }
+
+    try {
+      const emailPayload = {
+        message: {
+          subject,
+          body: {
+            contentType: "HTML",
+            content: content.replace(/\n/g, "<br>"),
+          },
+          from: {
+            emailAddress: {
+              address: emailConfig.m365_sender_email,
+              name: emailConfig.m365_sender_name || "Camp Notification",
+            },
+          },
+          toRecipients: [
+            {
+              emailAddress: {
+                address: recipient.email,
+                name: recipient.full_name || "",
+              },
+            },
+          ],
+        },
+      };
+
+      const sendResponse = await fetch(
+        `https://graph.microsoft.com/v1.0/users/${emailConfig.m365_sender_email}/sendMail`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${tokenData.access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(emailPayload),
+        },
+      );
+
+      if (sendResponse.ok) {
+        successCount++;
+      } else {
+        failCount++;
+        console.error(`M365 send failed for ${recipient.email}:`, await sendResponse.text());
+      }
+    } catch (e) {
+      failCount++;
+      console.error(`Error sending M365 email to ${recipient.email}:`, e);
+    }
+  }
+
+  console.log(`Successfully sent ${successCount} emails, failed ${failCount}`);
 }

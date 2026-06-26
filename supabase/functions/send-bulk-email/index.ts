@@ -176,21 +176,21 @@ const handler = async (req: Request): Promise<Response> => {
 
     recipientsByTag.forEach((item: any) => {
       const profile = item.profiles;
-      if (profile && profile.email) {
+      if (profile) {
         allRecipients.set(profile.id, {
           id: profile.id,
-          email: profile.email,
-          full_name: profile.full_name,
+          email: profile.email || "no-email@example.com",
+          full_name: profile.full_name || "Camp User",
         });
       }
     });
 
     recipientsByIds.forEach((profile: any) => {
-      if (profile && profile.email) {
+      if (profile) {
         allRecipients.set(profile.id, {
           id: profile.id,
-          email: profile.email,
-          full_name: profile.full_name,
+          email: profile.email || "no-email@example.com",
+          full_name: profile.full_name || "Camp User",
         });
       }
     });
@@ -307,6 +307,11 @@ const handler = async (req: Request): Promise<Response> => {
 
           // Send emails via Microsoft Graph API
           for (const recipient of recipients) {
+            // Skip sending Microsoft email if user has no email address
+            if (!recipient.email || recipient.email === "no-email@example.com") {
+              console.log(`Skipping external email for ${recipient.full_name} - no email on file`);
+              continue;
+            }
             try {
               const emailPayload = {
                 message: {

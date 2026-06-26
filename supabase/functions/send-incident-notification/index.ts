@@ -42,7 +42,7 @@ serve(async (req) => {
     }
 
     // Get recipients based on configuration
-    const recipients = await getRecipientsForEmailType(supabase, 'incident_report');
+    const recipients = await getRecipientsForEmailType(supabase, 'incident_report', incident.company_id);
 
     if (!recipients.length) {
       console.log('No recipients configured for incident reports');
@@ -80,7 +80,7 @@ Please review this incident in the Incident Reports section.
     `.trim();
 
     // Send notifications
-    await sendEmailNotifications(supabase, recipients, subject, content);
+    await sendEmailNotifications(supabase, recipients, subject, content, incident.company_id);
 
     // Log notification
     await supabase.from('notification_logs').insert({

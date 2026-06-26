@@ -356,6 +356,13 @@ export default function Dashboard() {
         }
       }
       
+      // Sort events by time
+      events.sort((a: any, b: any) => {
+        const timeA = a.start_time_field || a.time || a.depart_time || "23:59";
+        const timeB = b.start_time_field || b.time || b.depart_time || "23:59";
+        return timeA.localeCompare(timeB);
+      });
+
       sportsData = events;
     } catch (error) {
       console.error('Error fetching sports events:', error);
@@ -399,6 +406,17 @@ export default function Dashboard() {
           }
         }
         
+        // Sort events by date and time
+        events.sort((a: any, b: any) => {
+          const dateA = a.event_date || "9999-12-31";
+          const dateB = b.event_date || "9999-12-31";
+          if (dateA !== dateB) return dateA.localeCompare(dateB);
+          
+          const timeA = a.start_time_field || a.time || a.depart_time || "23:59";
+          const timeB = b.start_time_field || b.time || b.depart_time || "23:59";
+          return timeA.localeCompare(timeB);
+        });
+
         threeDayData = events;
       } catch (error) {
         console.error('Error fetching three day outlook:', error);

@@ -1,5 +1,10 @@
+// @ts-ignore
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// @ts-ignore
+declare const Deno: any;
 
 const CM_AUTH_URL = 'https://api.campminder.com/auth/apikey';
 const CM_PERSONS_URL = 'https://api.campminder.com/persons';
@@ -68,6 +73,16 @@ function normalizeDateOfBirthForDb(value: unknown): string | null {
   if (value == null) return null;
   const raw = String(value).trim();
   if (!raw) return null;
+
+  if (raw.includes('T')) {
+    const d = new Date(raw);
+    if (!isNaN(d.getTime())) {
+      const year = d.getUTCFullYear();
+      const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(d.getUTCDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+  }
 
   const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (iso) {
@@ -1606,24 +1621,6 @@ async function performFullSync(
         console.log(`[Bunk Sync] BunkIDs: ${Array.from(uniqueBunkIds).slice(0, 10).join(', ')}${uniqueBunkIds.size > 10 ? '...' : ''}`);
       }
 
-      // Fetch existing bunks from our database to map by bunk_number
-      // CampMinder BunkID appears to be their internal ID - we'll need to create bunks
-      // and store the CM BunkID for future reference, or map by name/number
-      const { data: existingBunks } = await supabase
-        .from('bunks')
-        .select('id, bunk_number, bunk_name')
-        .eq('company_id', companyId)
-        .eq('is_active', true);
-      
-      if (existingBunks) {
-        console.log(`[Bunk Sync] Found ${existingBunks.length} existing bunks in database`);
-        // For now, we'll map CampMinder BunkID directly to our bunk IDs
-        // In a full implementation, you might want to store cm_bunk_id on bunks table
-        for (const bunk of existingBunks) {
-          // Map bunk_number to itself as a simple mapping
-          cmBunkIdMap.set(bunk.bunk_number, bunk.id);
-        }
-      }
 
 
       const enrolledPersonIds = new Set(
@@ -2013,7 +2010,7 @@ async function performFullSync(
       
       const name = `${firstName} ${lastName}`;
       
-      let gender = null;
+      let gender: string | null = null;
       if (person.GenderID === 0) gender = 'Female';
       else if (person.GenderID === 1) gender = 'Male';
       
@@ -2026,9 +2023,15 @@ async function performFullSync(
       let guardianPhone = parentPersonId ? parentPhoneMap.get(parentPersonId) || '' : '';
       let guardianName = parentPersonId ? parentNameMap.get(parentPersonId) || '' : '';
       
-      // NO FALLBACK to camper's own contact info - we only want P1 parent email
-      // If no P1 parent email found, leave guardian_email empty (do not use camper's email)
-      // Phone fallback is acceptable since it's less critical than email
+      // Fallback to camper's ContactDetails for email if not found on parent
+      if (!guardianEmail && person.ContactDetails?.Emails?.length > 0) {
+        const emailObj = person.ContactDetails.Emails.find((e: any) => e.IsLogin || e.IsPrimary) || person.ContactDetails.Emails[0];
+        if (emailObj && emailObj.Address) {
+          guardianEmail = emailObj.Address;
+        }
+      }
+
+      // Fallback to camper's ContactDetails for phone if not found on parent
       if (!guardianPhone && person.ContactDetails?.PhoneNumbers?.length > 0) {
         guardianPhone = person.ContactDetails.PhoneNumbers[0].Number;
       }
@@ -2052,7 +2055,7 @@ async function performFullSync(
         person_id: String(person.ID),
         name,
         gender,
-        date_of_birth: person.DateOfBirth || null,
+        date_of_birth: normalizeDateOfBirthForDb(person.DateOfBirth),
         grade,
         guardian_name: guardianName || null,
         guardian_email: guardianEmail || null,
@@ -2092,7 +2095,7 @@ async function performFullSync(
 
       const name = `${firstName} ${lastName}`;
       const genderSource = person ?? fallbackData;
-      let gender = null;
+      let gender: string | null = null;
       if (genderSource?.GenderID === 0) gender = 'Female';
       else if (genderSource?.GenderID === 1) gender = 'Male';
 
@@ -2105,7 +2108,7 @@ async function performFullSync(
         person_id: personIdStr,
         name,
         gender,
-        date_of_birth: person?.DateOfBirth || fallbackData?.DateOfBirth || null,
+        date_of_birth: normalizeDateOfBirthForDb(person?.DateOfBirth || fallbackData?.DateOfBirth),
         grade: gradeMap[person?.CamperDetails?.CampGradeID] ?? null,
         guardian_name: null,
         guardian_email: null,
@@ -2891,7 +2894,7 @@ async function performFullSync(
 }
 
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }

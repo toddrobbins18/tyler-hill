@@ -88,51 +88,88 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       // Read saved viewing company early
       const savedViewingId = sessionStorage.getItem('viewing_company_id');
 
-      // Fetch profile + company data in parallel with companies list for super admins
+      // Fetch profile + company data in parallel with companies list for super admins or multi-camp users
+      // Users with multiple role assignments across camps (like Welsford) need to see all their camps
       const profilePromise = supabase
         .from('profiles')
         .select('company_id, companies(id, name, slug, logo_url, theme_color, zip_code, owl_pay_enabled)')
         .eq('id', user.id)
         .single();
-
-      const companiesPromise = authIsSuperAdmin 
+        
+      // Also get all distinct companies the user has a role in to support camp switching for non-super-admins
+      const userRolesPromise = !authIsSuperAdmin 
         ? supabase
-            .from('companies')
-            .select('id, name, slug, logo_url, theme_color, zip_code, owl_pay_enabled')
-            .eq('is_active', true)
-            .order('name')
+            .from('user_roles')
+            .select('company_id')
+            .eq('user_id', user.id)
         : Promise.resolve({ data: null, error: null });
 
-      const [profileResult, companiesResult] = await Promise.all([profilePromise, companiesPromise]);
-
+      const [profileResult, userRolesResult] = await Promise.all([profilePromise, userRolesPromise]);
       const profile = profileResult.data;
+      
+      // Determine which companies the user should have access to in the switcher
+      let allowedCompanyIds: string[] = [];
+      if (!authIsSuperAdmin && userRolesResult.data) {
+        // Extract unique company IDs from user_roles
+        const uniqueIds = new Set(
+          userRolesResult.data
+            .map(r => r.company_id)
+            .filter(id => id !== null)
+        );
+        
+        // Always include their primary profile company if set
+        if (profile?.company_id) {
+          uniqueIds.add(profile.company_id);
+        }
+        
+        allowedCompanyIds = Array.from(uniqueIds);
+      }
+
+      // Only fetch the companies the user has access to (or all if super admin)
+      let companiesQuery = supabase
+        .from('companies')
+        .select('id, name, slug, logo_url, theme_color, zip_code, owl_pay_enabled')
+        .eq('is_active', true)
+        .order('name');
+        
+      if (!authIsSuperAdmin && allowedCompanyIds.length > 0) {
+        companiesQuery = companiesQuery.in('id', allowedCompanyIds);
+      } else if (!authIsSuperAdmin) {
+        // If not super admin and no roles found, they only get their primary company (handled below)
+        companiesQuery = supabase.from('companies').select('id').eq('id', '00000000-0000-0000-0000-000000000000'); // Returns empty
+      }
+
+      const companiesResult = await companiesQuery;
       const companies = companiesResult.data;
 
-      // For super admins, set available companies
-      if (authIsSuperAdmin && companies) {
+      // For super admins AND multi-camp users, set available companies
+      if (companies && companies.length > 0) {
         setAvailableCompanies(companies);
+      } else if (profile?.companies && !Array.isArray(profile.companies)) {
+        // Fallback for single-camp users
+        setAvailableCompanies([profile.companies as unknown as Company]);
       }
 
       // Determine which company to set as current
       let targetCompany: Company | null = null;
 
-      if (authIsSuperAdmin && savedViewingId && companies) {
-        // Super admin with saved viewing company
+      if (savedViewingId && companies) {
+        // Any user with multiple camps and a saved viewing company
         targetCompany = companies.find(c => c.id === savedViewingId) || null;
       }
 
-      if (!targetCompany && authIsSuperAdmin && companies && profile?.company_id) {
-        // Super admin fallback to their primary company
+      if (!targetCompany && companies && profile?.company_id) {
+        // Fallback to their primary company
         targetCompany = companies.find(c => c.id === profile.company_id) || null;
       }
 
-      if (!targetCompany && authIsSuperAdmin && companies && companies.length > 0) {
-        // Super admin with no saved/profile company — default to first active camp
+      if (!targetCompany && companies && companies.length > 0) {
+        // Fallback to first active camp
         targetCompany = companies[0];
       }
 
       if (!targetCompany && profile?.companies) {
-        // Regular user or fallback
+        // Regular user or extreme fallback
         targetCompany = profile.companies as unknown as Company;
       }
 

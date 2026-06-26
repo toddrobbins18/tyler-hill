@@ -52,7 +52,7 @@ serve(async (req) => {
     const emailType = event_type === 'checkout' ? 'health_center_checkout' : 'health_center_admission';
     
     // Get recipients based on configuration
-    const recipients = await getRecipientsForEmailType(supabase, emailType);
+    const recipients = await getRecipientsForEmailType(supabase, emailType, admission.company_id);
 
     if (!recipients.length) {
       console.log(`No recipients configured for ${emailType}`);
@@ -93,7 +93,7 @@ ${admission.notes ? `**Notes:** ${admission.notes}` : ''}
     `.trim();
 
     // Send notifications
-    await sendEmailNotifications(supabase, recipients, subject, content);
+    await sendEmailNotifications(supabase, recipients, subject, content, admission.company_id);
 
     // Log notification
     await supabase.from('notification_logs').insert({

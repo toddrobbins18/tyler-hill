@@ -13,6 +13,7 @@ import EditStaffDialog from "@/components/dialogs/EditStaffDialog";
 import { EvaluateStaffDialog } from "@/components/dialogs/EvaluateStaffDialog";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
+import { formatBirthdayDisplay } from "@/lib/birthdayCalendar";
 import ConflictIndicator from "@/components/ConflictIndicator";
 import { HealthCenterTab } from "@/components/HealthCenterTab";
 import ProfilePhotoUpload from "@/components/ProfilePhotoUpload";
@@ -405,12 +406,7 @@ export default function StaffProfile() {
                     <div>
                       <p className="text-sm text-muted-foreground">Date of Birth</p>
                       <p className="text-2xl font-bold text-primary">
-                        {new Date(staff.date_of_birth).toLocaleDateString('en-US', { 
-                          weekday: 'long', 
-                          year: 'numeric', 
-                          month: 'long', 
-                          day: 'numeric' 
-                        })}
+                        {formatBirthdayDisplay(staff.date_of_birth)}
                       </p>
                     </div>
                   </div>

@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { formatLocalDate } from "@/lib/utils";
+import { formatBirthdayDisplay } from "@/lib/birthdayCalendar";
 import { ArrowLeft, Award, Trophy, Star, Calendar, AlertTriangle, FileText, Pencil, Users, MapPin, Shield, Stethoscope, Clock, Hospital } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -488,12 +488,7 @@ export default function ChildProfile() {
                           <div>
                             <p className="text-sm text-muted-foreground">Date of Birth</p>
                             <p className="text-2xl font-bold text-primary">
-                              {formatLocalDate(child.date_of_birth, { 
-                                weekday: 'long', 
-                                year: 'numeric', 
-                                month: 'long', 
-                                day: 'numeric' 
-                              })}
+                              {formatBirthdayDisplay(child.date_of_birth)}
                             </p>
                           </div>
                         </div>

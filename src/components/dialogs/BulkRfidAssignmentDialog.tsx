@@ -117,65 +117,126 @@ export function BulkRfidAssignmentDialog({ type, onSuccess }: BulkRfidAssignment
     const newResults: AssignmentResult[] = [];
 
     try {
-      // Parse CSV - expect format: name,rfid or personId,rfid
-      const lines = csvData.trim().split('\n');
+      // Parse CSV - handle both TSV (Excel copy-paste) and standard CSV
+      const lines = csvData.trim().split(/\r?\n/);
       
+      // Parse lines into valid tasks first
+      const tasks = [];
       for (const line of lines) {
-        const parts = line.split(',').map(p => p.trim());
-        if (parts.length < 2) continue;
+        if (!line.trim()) continue;
 
-        const [identifier, rfid] = parts;
-        if (!identifier || !rfid) continue;
-
-        // Try to find by name first, then by person_id
-        let query = supabase
-          .from(tableName)
-          .select("id, name")
-          .eq("company_id", currentCompany.id)
-          .eq("season", currentSeason);
-
-        // Check if identifier looks like a person_id (numeric or uuid-like)
-        const isPersonId = /^[0-9a-f-]+$/i.test(identifier) && identifier.length > 5;
-        
-        if (isPersonId) {
-          query = query.eq("person_id", identifier);
+        let parts: string[];
+        if (line.includes('\t')) {
+          parts = line.split('\t').map(p => p.trim());
         } else {
-          query = query.ilike("name", identifier);
+          // Simple CSV parsing that respects quotes
+          parts = [];
+          let current = '';
+          let inQuotes = false;
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') inQuotes = !inQuotes;
+            else if (char === ',' && !inQuotes) {
+              parts.push(current.trim());
+              current = '';
+            } else current += char;
+          }
+          parts.push(current.trim());
+          parts = parts.map(p => (p.startsWith('"') && p.endsWith('"') ? p.slice(1, -1).trim() : p));
         }
 
-        const { data, error } = await query.limit(1).single();
-
-        if (error || !data) {
+        if (parts.length < 2) {
           newResults.push({
-            name: identifier,
-            rfid,
-            status: "not_found",
-            message: `${entityLabel} not found`
+            name: line.substring(0, 20) + '...',
+            rfid: '',
+            status: 'error',
+            message: 'Invalid format (needs name/id and RFID)'
           });
           continue;
         }
 
-        // Update RFID
-        const { error: updateError } = await supabase
-          .from(tableName)
-          .update({ rfid })
-          .eq("id", data.id);
+        const [identifierRaw, rfidValRaw] = parts;
+        let identifier = identifierRaw.trim();
+        const rfid = rfidValRaw.trim();
 
-        if (updateError) {
-          newResults.push({
-            name: data.name,
-            rfid,
-            status: "error",
-            message: updateError.message
-          });
-        } else {
-          newResults.push({
-            name: data.name,
-            rfid,
-            status: "success",
-            message: "Wristband assigned"
-          });
+        if (!identifier || !rfid) continue;
+
+        // If identifier is "Last, First", convert to "First Last" to match DB
+        if (identifier.includes(',') && !/^[0-9a-f-]+$/i.test(identifier)) {
+          const nameParts = identifier.split(',');
+          if (nameParts.length === 2) {
+            identifier = `${nameParts[1].trim()} ${nameParts[0].trim()}`;
+          }
         }
+        
+        tasks.push({ identifier, rfid });
+      }
+
+      // Process tasks in batches to avoid overwhelming the database connection
+      const BATCH_SIZE = 10;
+      for (let i = 0; i < tasks.length; i += BATCH_SIZE) {
+        const batch = tasks.slice(i, i + BATCH_SIZE);
+        
+        await Promise.all(batch.map(async ({ identifier, rfid }) => {
+          // Try to find by name first, then by person_id
+          let query = supabase
+            .from(tableName)
+            .select("id, name")
+            .eq("company_id", currentCompany.id)
+            .eq("season", currentSeason);
+
+          // Check if identifier looks like a person_id (numeric or uuid-like)
+          const isPersonId = /^[0-9a-f-]+$/i.test(identifier) && identifier.length > 5;
+          
+          if (isPersonId) {
+            query = query.eq("person_id", identifier);
+          } else {
+            query = query.ilike("name", identifier);
+          }
+
+          const { data, error } = await query.limit(1).single();
+
+          if (error || !data) {
+            newResults.push({
+              name: identifier,
+              rfid,
+              status: "not_found",
+              message: `${entityLabel} not found`
+            });
+            return;
+          }
+
+          // Clear this RFID from anyone else to prevent duplicates
+          await supabase
+            .from(tableName)
+            .update({ rfid: null })
+            .eq("company_id", currentCompany.id)
+            .eq("season", currentSeason)
+            .eq("rfid", rfid)
+            .neq("id", data.id);
+
+          // Update RFID
+          const { error: updateError } = await supabase
+            .from(tableName)
+            .update({ rfid })
+            .eq("id", data.id);
+
+          if (updateError) {
+            newResults.push({
+              name: data.name,
+              rfid,
+              status: "error",
+              message: updateError.message
+            });
+          } else {
+            newResults.push({
+              name: data.name,
+              rfid,
+              status: "success",
+              message: "Wristband assigned"
+            });
+          }
+        }));
       }
 
       setResults(newResults);
@@ -207,7 +268,7 @@ export function BulkRfidAssignmentDialog({ type, onSuccess }: BulkRfidAssignment
     reader.onload = (event) => {
       const text = event.target?.result as string;
       // Skip header row if it looks like a header
-      const lines = text.split('\n');
+      const lines = text.split(/\r?\n/);
       if (lines[0]?.toLowerCase().includes('name') || lines[0]?.toLowerCase().includes('rfid')) {
         setCsvData(lines.slice(1).join('\n'));
       } else {

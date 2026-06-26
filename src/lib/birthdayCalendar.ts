@@ -45,3 +45,20 @@ export function toBirthdayIsoDate(value: unknown): string | null {
   const d = String(p.day).padStart(2, '0');
   return `${p.year}-${m}-${d}`;
 }
+
+/** Display a birthday without UTC timezone shifts from `new Date("YYYY-MM-DD")`. */
+export function formatBirthdayDisplay(
+  value: unknown,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  const p = parseBirthdayCalendarParts(value);
+  if (!p) return '';
+  const date = new Date(p.year, p.month - 1, p.day);
+  const defaultOptions: Intl.DateTimeFormatOptions = {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  };
+  return date.toLocaleDateString('en-US', options || defaultOptions);
+}

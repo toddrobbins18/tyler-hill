@@ -63,6 +63,7 @@ serve(async (req) => {
         dosage,
         scheduled_time,
         date,
+        company_id,
         child:children (
           id,
           name,
@@ -106,44 +107,45 @@ serve(async (req) => {
 
     console.log(`Found ${dueMeds.length} missed medications past scheduled time (${missedMeds.length} pending total)`);
 
-    // Get recipients based on configuration
-    const recipients = await getRecipientsForEmailType(supabase, 'missed_medication');
-
-    if (!recipients.length) {
-      console.log('No recipients configured for missed medication alerts');
-      return new Response(
-        JSON.stringify({ message: 'No recipients configured', alerts_sent: 0 }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      );
-    }
-
     let alertsSent = 0;
 
-    // Group medications by child for better notifications
-    const medsByChild = dueMeds.reduce((acc: any, med: any) => {
+    // Group medications by company_id, then by child for better notifications
+    const medsByCompanyAndChild = dueMeds.reduce((acc: any, med: any) => {
+      const companyId = med.company_id || 'default';
       const childId = med.child?.id;
       if (!childId) return acc;
       
-      if (!acc[childId]) {
-        acc[childId] = {
+      if (!acc[companyId]) acc[companyId] = {};
+      if (!acc[companyId][childId]) {
+        acc[companyId][childId] = {
           child: med.child,
           medications: []
         };
       }
-      acc[childId].medications.push(med);
+      acc[companyId][childId].medications.push(med);
       return acc;
     }, {});
 
-    // Send notifications for each child
-    for (const [childId, data] of Object.entries(medsByChild) as any) {
-      const { child, medications } = data;
-      
-      const medList = medications
-        .map((m: any) => `- ${m.medication_name} (${m.dosage || 'N/A'}) at ${m.scheduled_time}`)
-        .join('\n');
+    // Send notifications for each company
+    for (const [companyId, childGroups] of Object.entries(medsByCompanyAndChild)) {
+      // Get recipients based on configuration for this company
+      const recipients = await getRecipientsForEmailType(supabase, 'missed_medication', companyId === 'default' ? undefined : companyId);
 
-      const subject = `Missed Medication Alert: ${child.name}`;
-      const content = `
+      if (!recipients.length) {
+        console.log(`No recipients configured for missed medication alerts in company ${companyId}`);
+        continue;
+      }
+
+      // Send notifications for each child
+      for (const [childId, data] of Object.entries(childGroups as any) as any) {
+        const { child, medications } = data;
+        
+        const medList = medications
+          .map((m: any) => `- ${m.medication_name} (${m.dosage || 'N/A'}) at ${m.scheduled_time}`)
+          .join('\n');
+
+        const subject = `Missed Medication Alert: ${child.name}`;
+        const content = `
 **Child:** ${child.name}
 **Division:** ${child.division?.name || 'N/A'}
 **Date:** ${today}
@@ -152,28 +154,26 @@ serve(async (req) => {
 ${medList}
 
 Please ensure these medications are administered as soon as possible.
-      `.trim();
+        `.trim();
 
-      // Send notification
-      await sendEmailNotifications(supabase, recipients, subject, content);
+        // Send notification
+        await sendEmailNotifications(supabase, recipients, subject, content, companyId === 'default' ? undefined : companyId);
 
-      // Mark alerts as sent
-      const medIds = medications.map((m: any) => m.id);
-      await supabase
-        .from('medication_logs')
-        .update({ alert_sent: true })
-        .in('id', medIds);
+        // Mark alerts as sent
+        const medIds = medications.map((m: any) => m.id);
+        await supabase
+          .from('medication_logs')
+          .update({ alert_sent: true })
+          .in('id', medIds);
 
-      alertsSent++;
+        alertsSent++;
+      }
     }
-
-    console.log(`Successfully sent ${alertsSent} medication alerts to ${recipients.length} recipients`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        alerts_sent: alertsSent,
-        recipients_notified: recipients.length
+        alerts_sent: alertsSent
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );

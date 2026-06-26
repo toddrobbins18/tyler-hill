@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { toBirthdayIsoDate } from "./birthdayCalendar";
 import { normalizeCsvPersonId } from "./csvPersonIdResolve";
 import { pickCell, parseYesNo } from "./spreadsheetRowUtils";
 
@@ -227,13 +228,14 @@ export function parseStaffRow(row: Record<string, any>) {
     email: row.email || row.Email || null,
     phone: row.phone || row.Phone || null,
     hire_date: row.hire_date || row['Hire Date'] || null,
-    date_of_birth:
+    date_of_birth: toBirthdayIsoDate(
       row.date_of_birth ||
       row['Date of Birth'] ||
       row['Birth Date'] ||
       row.dob ||
       row.DOB ||
       null,
+    ),
   };
 }
 

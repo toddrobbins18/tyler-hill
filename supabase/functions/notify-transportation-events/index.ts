@@ -22,7 +22,7 @@ serve(async (req) => {
     console.log(`Processing transportation event: ${type}`);
 
     // Get recipients based on configuration
-    const recipients = await getRecipientsForEmailType(supabase, 'transportation_events');
+    const recipients = await getRecipientsForEmailType(supabase, 'transportation_events', record.company_id);
 
     if (!recipients.length) {
       console.log('No recipients configured for transportation events');
@@ -79,7 +79,7 @@ Please review the updated trip details in the Transportation section.
     }
 
     // Send notifications
-    await sendEmailNotifications(supabase, recipients, subject, content);
+    await sendEmailNotifications(supabase, recipients, subject, content, record.company_id);
 
     console.log(`Successfully sent transportation notifications to ${recipients.length} recipients`);
 

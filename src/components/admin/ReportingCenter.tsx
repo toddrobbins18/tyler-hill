@@ -12,6 +12,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { Download, FileText, Calendar, ArrowUpDown, ArrowUp, ArrowDown, Filter, X } from "lucide-react";
 import { exportToCSV, exportToPDF } from "@/lib/reportExports";
 import { format } from "date-fns";
+import { formatTime12Hour } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
@@ -335,6 +336,8 @@ export default function ReportingCenter() {
             const divisionIds = [s.division_id, ...relatedDivisionIds];
             const divisionNames = [s.division?.name, ...relatedDivisionNames];
 
+            const eventTime = s.start_time_field || s.time || s.depart_time;
+
             return withDivisionMeta({
               Date: s.event_date,
               Title: s.title,
@@ -343,7 +346,7 @@ export default function ReportingCenter() {
               Opponent: s.opponent,
               Division: Array.from(new Set(divisionNames.filter(Boolean))).join(', ') || 'All Divisions',
               Location: s.location,
-              Time: s.time,
+              Time: formatTime12Hour(eventTime) || eventTime || 'TBD',
             }, divisionIds, divisionNames);
           }) || [];
           

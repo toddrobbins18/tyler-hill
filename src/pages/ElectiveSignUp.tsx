@@ -94,7 +94,14 @@ export default function ElectiveSignUp() {
     ]);
 
     if (divisionsRes.data) setDivisions(sortDivisionsAlternatingGender(divisionsRes.data));
-    if (electivesRes.data) setElectives(electivesRes.data);
+    if (electivesRes.data) {
+      let filteredElectives = electivesRes.data;
+      // Timberlake Water Ski logic: Only available periods 3, 4, 5 for all days
+      if (currentCompany.name.toLowerCase().includes("timber lake camp") && (selectedPeriod < 3 || selectedPeriod > 5)) {
+        filteredElectives = filteredElectives.filter(e => !e.name.toLowerCase().includes('water ski'));
+      }
+      setElectives(filteredElectives);
+    }
     if (signupsRes.data) setSignups(signupsRes.data);
     if (allChildrenRes.data) setAllChildren(allChildrenRes.data);
     setLoading(false);

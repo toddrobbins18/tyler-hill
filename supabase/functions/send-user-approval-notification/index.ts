@@ -21,8 +21,19 @@ serve(async (req) => {
     const { user_id, user_email, user_name } = await req.json();
     console.log(`Processing user approval notification for: ${user_email}`);
 
+    // Get user's company_id
+    let company_id = null;
+    if (user_id) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user_id)
+        .single();
+      if (profile) company_id = profile.company_id;
+    }
+
     // Get recipients based on configuration
-    const recipients = await getRecipientsForEmailType(supabase, 'user_approval_request');
+    const recipients = await getRecipientsForEmailType(supabase, 'user_approval_request', company_id);
 
     if (!recipients.length) {
       console.log('No recipients configured for user approval requests');
@@ -45,7 +56,7 @@ Please review and approve this user in the Admin Panel > User Management section
     `.trim();
 
     // Send notifications
-    await sendEmailNotifications(supabase, recipients, subject, content);
+    await sendEmailNotifications(supabase, recipients, subject, content, company_id);
 
     // Log notification
     await supabase.from('notification_logs').insert({
