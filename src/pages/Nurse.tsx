@@ -670,7 +670,7 @@ export default function Nurse() {
       const { data: child, error } = await supabase
         .from('children')
         .select('*, division:divisions(name)')
-        .eq('rfid', rfidInput.trim())
+        .ilike('rfid', rfidInput.trim())
         .eq('company_id', currentCompany?.id)
         .eq('season', currentSeason)
         .single();
@@ -1002,7 +1002,7 @@ export default function Nurse() {
       const { data: child } = await supabase
         .from('children')
         .select('id, name, allergies, rfid, medical_notes, division:divisions(name)')
-        .eq('rfid', healthCenterRfidInput.trim())
+        .ilike('rfid', healthCenterRfidInput.trim())
         .eq('company_id', currentCompany?.id || '')
         .eq('season', currentSeason)
         .maybeSingle() as { data: any };
@@ -1013,7 +1013,7 @@ export default function Nurse() {
         const staffResult = await supabase
           .from('staff')
           .select('id, name, role, allergies, rfid')
-          .eq('rfid', healthCenterRfidInput.trim())
+          .ilike('rfid', healthCenterRfidInput.trim())
           .eq('company_id', currentCompany?.id || '')
           .eq('season', currentSeason)
           .eq('status', 'active')

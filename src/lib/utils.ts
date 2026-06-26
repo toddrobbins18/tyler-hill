@@ -8,11 +8,17 @@ export function cn(...inputs: ClassValue[]) {
 // Convert 24-hour time to 12-hour format with AM/PM
 export function formatTime12Hour(time24: string): string {
   if (!time24) return '';
-  const [hours, minutes] = time24.split(':');
-  const hour = parseInt(hours, 10);
+  // If already contains AM/PM, return as is
+  if (time24.toUpperCase().includes('AM') || time24.toUpperCase().includes('PM')) {
+    return time24;
+  }
+  const parts = time24.split(':');
+  if (parts.length < 2) return time24;
+  const hour = parseInt(parts[0], 10);
+  if (isNaN(hour)) return time24;
   const ampm = hour >= 12 ? 'PM' : 'AM';
   const hour12 = hour % 12 || 12;
-  return `${hour12}:${minutes} ${ampm}`;
+  return `${hour12}:${parts[1]} ${ampm}`;
 }
 
 // Convert 12-hour time with AM/PM to 24-hour format

@@ -90,6 +90,57 @@ export function HealthCenterTab({ entityId, entityType }: HealthCenterTabProps) 
     }
   };
 
+  const handleAdminister = async (med: any) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: staffData } = await supabase
+        .from("staff")
+        .select("id")
+        .eq("email", user?.email)
+        .maybeSingle();
+
+      const { error } = await supabase
+        .from("medication_logs")
+        .update({
+          administered: true,
+          administered_by: staffData?.id ?? null,
+          administered_at: new Date().toISOString(),
+        })
+        .eq("id", med.id);
+
+      if (error) throw error;
+      
+      // Update local state
+      setMedications((prev) => 
+        prev.map((m) => m.id === med.id ? { ...m, administered: true } : m)
+      );
+    } catch (error) {
+      console.error("Error administering medication:", error);
+    }
+  };
+
+  const handleUnadminister = async (med: any) => {
+    try {
+      const { error } = await supabase
+        .from("medication_logs")
+        .update({
+          administered: false,
+          administered_by: null,
+          administered_at: null,
+        })
+        .eq("id", med.id);
+
+      if (error) throw error;
+
+      // Update local state
+      setMedications((prev) => 
+        prev.map((m) => m.id === med.id ? { ...m, administered: false } : m)
+      );
+    } catch (error) {
+      console.error("Error unadministering medication:", error);
+    }
+  };
+
   const getAdmissionDuration = (admittedAt: string, checkedOutAt?: string | null) => {
     const start = new Date(admittedAt);
     const end = checkedOutAt ? new Date(checkedOutAt) : new Date();
@@ -272,6 +323,23 @@ export function HealthCenterTab({ entityId, entityType }: HealthCenterTabProps) 
                       {med.notes && (
                         <p className="text-xs text-muted-foreground border-t pt-1 mt-1">{med.notes}</p>
                       )}
+                      <div className="mt-2 pt-2 border-t flex justify-end">
+                        {med.administered ? (
+                          <button 
+                            className="text-xs text-destructive hover:underline"
+                            onClick={() => handleUnadminister(med)}
+                          >
+                            Undo Administration
+                          </button>
+                        ) : (
+                          <button 
+                            className="text-xs font-medium text-primary hover:underline bg-primary/10 px-2 py-1 rounded"
+                            onClick={() => handleAdminister(med)}
+                          >
+                            Mark as Administered
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
