@@ -88,7 +88,8 @@ export default function Roster() {
           .select(`
             id, name, grade, status, session, season, division_id, person_id, group_name,
             division:division_id(id, name, gender, sort_order),
-            leader:leader_id(id, name)
+            leader:leader_id(id, name),
+            bunk:bunk_id(id, bunk_number, bunk_name)
           `)
           .eq('company_id', currentCompany.id)
           .eq('season', currentSeason);
@@ -479,6 +480,9 @@ export default function Roster() {
                 >
                   <div className="space-y-1 min-w-0">
                     <p className="text-muted-foreground">Division: {getDivisionDropdownLabel(child.division?.name) || "N/A"}</p>
+                    {child.bunk && (
+                      <p className="text-muted-foreground">Bunk: {child.bunk.bunk_name || `Bunk ${child.bunk.bunk_number}`}</p>
+                    )}
                     {child.group_name && (
                       <p className="text-muted-foreground">Team: {child.group_name}</p>
                     )}

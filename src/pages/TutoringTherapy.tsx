@@ -66,6 +66,7 @@ const TutoringTherapy = () => {
     service_type: "",
     instructor: "",
     schedule_periods: [] as string[],
+    weekdays: [] as string[],
     start_date: undefined as Date | undefined,
     end_date: undefined as Date | undefined,
     notes: "",
@@ -210,17 +211,18 @@ const TutoringTherapy = () => {
     e.preventDefault();
 
     try {
-      const enrollmentData = {
-        child_id: formData.child_id,
-        service_type: formData.service_type,
-        instructor: formData.instructor || null,
-        schedule_periods: formData.schedule_periods,
-        start_date: formData.start_date ? format(formData.start_date, "yyyy-MM-dd") : null,
-        end_date: formData.end_date ? format(formData.end_date, "yyyy-MM-dd") : null,
-        notes: formData.notes || null,
-        company_id: currentCompany?.id,
-        season: currentSeason,
-      };
+        const enrollmentData = {
+          child_id: formData.child_id,
+          service_type: formData.service_type,
+          instructor: formData.instructor || null,
+          schedule_periods: formData.schedule_periods,
+          weekdays: formData.weekdays,
+          start_date: formData.start_date ? format(formData.start_date, "yyyy-MM-dd") : null,
+          end_date: formData.end_date ? format(formData.end_date, "yyyy-MM-dd") : null,
+          notes: formData.notes || null,
+          company_id: currentCompany?.id,
+          season: currentSeason,
+        };
 
       if (editingEnrollment) {
         const { error } = await supabase
@@ -245,15 +247,16 @@ const TutoringTherapy = () => {
   };
 
   const resetForm = () => {
-    setFormData({
-      child_id: "",
-      service_type: "",
-      instructor: "",
-      schedule_periods: [],
-      start_date: undefined,
-      end_date: undefined,
-      notes: "",
-    });
+      setFormData({
+        child_id: "",
+        service_type: "",
+        instructor: "",
+        schedule_periods: [],
+        weekdays: [],
+        start_date: undefined,
+        end_date: undefined,
+        notes: "",
+      });
     setEditingEnrollment(null);
     setDialogOpen(false);
   };
@@ -264,6 +267,7 @@ const TutoringTherapy = () => {
       service_type: enrollment.service_type,
       instructor: enrollment.instructor || "",
       schedule_periods: enrollment.schedule_periods || [],
+      weekdays: enrollment.weekdays || [],
       start_date: enrollment.start_date ? new Date(enrollment.start_date) : undefined,
       end_date: enrollment.end_date ? new Date(enrollment.end_date) : undefined,
       notes: enrollment.notes || "",
@@ -291,6 +295,15 @@ const TutoringTherapy = () => {
       schedule_periods: prev.schedule_periods.includes(period)
         ? prev.schedule_periods.filter((p) => p !== period)
         : [...prev.schedule_periods, period],
+    }));
+  };
+
+  const toggleWeekday = (day: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      weekdays: prev.weekdays.includes(day)
+        ? prev.weekdays.filter((d) => d !== day)
+        : [...prev.weekdays, day],
     }));
   };
 
@@ -427,45 +440,63 @@ const TutoringTherapy = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                {currentCompany?.slug === 'timber-lake-camp' ? (
                   <div className="space-y-2">
-                    <Label>Start Date</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full justify-start text-left font-normal">
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {formData.start_date ? format(formData.start_date, "PPP") : "Pick a date"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar
-                          mode="single"
-                          selected={formData.start_date}
-                          onSelect={(date) => setFormData({ ...formData, start_date: date })}
-                        />
-                      </PopoverContent>
-                    </Popover>
+                    <Label>Weekdays</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day) => (
+                        <Badge
+                          key={day}
+                          variant={formData.weekdays.includes(day) ? "default" : "outline"}
+                          className="cursor-pointer"
+                          onClick={() => toggleWeekday(day)}
+                        >
+                          {day}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Start Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-start text-left font-normal">
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {formData.start_date ? format(formData.start_date, "PPP") : "Pick a date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar
+                            mode="single"
+                            selected={formData.start_date}
+                            onSelect={(date) => setFormData({ ...formData, start_date: date })}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
 
-                  <div className="space-y-2">
-                    <Label>End Date</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full justify-start text-left font-normal">
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {formData.end_date ? format(formData.end_date, "PPP") : "Pick a date"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar
-                          mode="single"
-                          selected={formData.end_date}
-                          onSelect={(date) => setFormData({ ...formData, end_date: date })}
-                        />
-                      </PopoverContent>
-                    </Popover>
+                    <div className="space-y-2">
+                      <Label>End Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-start text-left font-normal">
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {formData.end_date ? format(formData.end_date, "PPP") : "Pick a date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar
+                            mode="single"
+                            selected={formData.end_date}
+                            onSelect={(date) => setFormData({ ...formData, end_date: date })}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="notes">Notes</Label>
@@ -635,7 +666,13 @@ const TutoringTherapy = () => {
                             </div>
                           )}
 
-                          {(enrollment.start_date || enrollment.end_date) && (
+                          {currentCompany?.slug === 'timber-lake-camp' && enrollment.weekdays && enrollment.weekdays.length > 0 && (
+                            <div className="text-sm text-muted-foreground">
+                              {enrollment.weekdays.join(', ')}
+                            </div>
+                          )}
+
+                          {currentCompany?.slug !== 'timber-lake-camp' && (enrollment.start_date || enrollment.end_date) && (
                             <div className="text-sm text-muted-foreground">
                               {enrollment.start_date && format(new Date(enrollment.start_date + 'T00:00:00'), "MMM d")}
                               {enrollment.start_date && enrollment.end_date && " - "}

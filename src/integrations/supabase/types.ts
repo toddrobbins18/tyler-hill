@@ -2947,6 +2947,7 @@ export type Database = {
           sport_name: string
           start_date: string | null
           updated_at: string | null
+          weekdays: string[] | null
         }
         Insert: {
           child_id: string
@@ -2961,6 +2962,7 @@ export type Database = {
           sport_name: string
           start_date?: string | null
           updated_at?: string | null
+          weekdays?: string[] | null
         }
         Update: {
           child_id?: string
@@ -2975,6 +2977,7 @@ export type Database = {
           sport_name?: string
           start_date?: string | null
           updated_at?: string | null
+          weekdays?: string[] | null
         }
         Relationships: [
           {
@@ -3834,6 +3837,7 @@ export type Database = {
           service_type: string
           start_date: string | null
           updated_at: string | null
+          weekdays: string[] | null
         }
         Insert: {
           child_id: string
@@ -3848,6 +3852,7 @@ export type Database = {
           service_type: string
           start_date?: string | null
           updated_at?: string | null
+          weekdays?: string[] | null
         }
         Update: {
           child_id?: string
@@ -3862,6 +3867,7 @@ export type Database = {
           service_type?: string
           start_date?: string | null
           updated_at?: string | null
+          weekdays?: string[] | null
         }
         Relationships: [
           {

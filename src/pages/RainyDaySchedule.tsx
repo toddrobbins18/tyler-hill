@@ -111,8 +111,30 @@ export default function RainyDaySchedule() {
     }
   };
 
-  const handleViewPDF = (fileUrl: string) => {
-    window.open(fileUrl, '_blank');
+  const handleViewPDF = async (fileUrl: string) => {
+    try {
+      let filePath = "";
+      const urlParts = fileUrl.split('/rainy-day-documents/');
+      if (urlParts.length > 1) {
+        filePath = urlParts[1].split('?')[0];
+      } else {
+        // Fallback if it's already just the path
+        filePath = fileUrl;
+      }
+
+      const { data, error } = await supabase.storage
+        .from("rainy-day-documents")
+        .createSignedUrl(filePath, 60 * 60); // 1 hour expiry
+
+      if (error || !data) {
+        throw error || new Error("Failed to generate signed URL");
+      }
+
+      window.open(data.signedUrl, '_blank');
+    } catch (error) {
+      console.error("Error opening PDF:", error);
+      toast.error("Failed to open PDF");
+    }
   };
 
   const handleDelete = async (id: string, fileUrl: string) => {

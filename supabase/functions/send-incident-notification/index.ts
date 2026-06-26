@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getRecipientsForEmailType, sendEmailNotifications } from "../_shared/emailHelpers.ts";
+import { getRecipientsForEmailTypeWithFilters, sendEmailNotifications } from "../_shared/emailHelpers.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -42,7 +42,28 @@ serve(async (req) => {
     }
 
     // Get recipients based on configuration
-    const recipients = await getRecipientsForEmailType(supabase, 'incident_report', incident.company_id);
+    const allRecipientsMap = new Map<string, any>();
+    
+    // First, get general recipients (health center, admins) without division filter
+    const generalRecipients = await getRecipientsForEmailTypeWithFilters(supabase, 'incident_report', incident.company_id);
+    generalRecipients.forEach(r => allRecipientsMap.set(r.id, r));
+
+    // Then, if there are children with divisions, get their specific division leaders
+    if (incident.incident_children && incident.incident_children.length > 0) {
+      const divisionIds = new Set<string>();
+      for (const ic of incident.incident_children) {
+        if (ic.child?.division_id) {
+          divisionIds.add(ic.child.division_id);
+        }
+      }
+
+      for (const divId of divisionIds) {
+        const divRecipients = await getRecipientsForEmailTypeWithFilters(supabase, 'incident_report', incident.company_id, divId);
+        divRecipients.forEach(r => allRecipientsMap.set(r.id, r));
+      }
+    }
+
+    const recipients = Array.from(allRecipientsMap.values());
 
     if (!recipients.length) {
       console.log('No recipients configured for incident reports');

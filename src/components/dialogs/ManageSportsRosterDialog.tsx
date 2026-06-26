@@ -271,6 +271,22 @@ Please review this conflict and take appropriate action.`;
         await supabase.from("sports_event_staff").insert(staffEntries);
       }
 
+      // Notify Health Center & Dining Hall
+      const isInitialSubmission = originalRoster.size === 0 && roster.size > 0;
+      const isUpdate = originalRoster.size > 0 && roster.size !== originalRoster.size;
+      
+      if (isInitialSubmission || isUpdate) {
+        supabase.functions.invoke('send-roster-notification', {
+          body: {
+            eventId,
+            companyId: currentCompany?.id,
+            eventTitle,
+            rosterCount: roster.size,
+            action: isInitialSubmission ? 'submitted' : 'updated'
+          }
+        }).catch(err => console.error("Failed to invoke send-roster-notification", err));
+      }
+
       toast.success(`Roster updated: ${roster.size} campers, ${assignedCoaches.length} coaches, ${assignedRefs.length} refs`);
       onOpenChange(false);
     } catch (error) {
