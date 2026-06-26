@@ -27,7 +27,7 @@ interface Division {
 
 interface Bunk {
   id: string;
-  bunk_number: number;
+  bunk_number: string;
   bunk_name: string | null;
   division_id: string | null;
   is_active: boolean;
@@ -57,7 +57,7 @@ export default function BunkManagement({ onClose }: BunkManagementProps) {
   const [divisions, setDivisions] = useState<Division[]>([]);
 
   // New bunk form
-  const [newBunkNumber, setNewBunkNumber] = useState<number>(1);
+  const [newBunkNumber, setNewBunkNumber] = useState<string>("");
   const [newBunkName, setNewBunkName] = useState("");
   const [newBunkDivision, setNewBunkDivision] = useState<string>("none");
 
@@ -108,8 +108,13 @@ export default function BunkManagement({ onClose }: BunkManagementProps) {
       if (bunksRes.data) {
         setBunks(bunksRes.data);
         // Set default new bunk number
-        const maxBunk = Math.max(0, ...bunksRes.data.map(b => b.bunk_number));
-        setNewBunkNumber(maxBunk + 1);
+        const maxBunk = bunksRes.data.length > 0 
+          ? Math.max(...bunksRes.data.map(b => {
+              const num = parseInt(b.bunk_number);
+              return isNaN(num) ? 0 : num;
+            }))
+          : 0;
+        setNewBunkNumber(String(maxBunk + 1));
       }
       if (bunkStaffRes.data) setBunkStaff(bunkStaffRes.data as unknown as BunkStaff[]);
       if (staffRes.data) setStaff(staffRes.data);
@@ -123,7 +128,10 @@ export default function BunkManagement({ onClose }: BunkManagementProps) {
   };
 
   const handleAddBunk = async () => {
-    if (!currentCompany?.id) return;
+    if (!currentCompany?.id || !String(newBunkNumber).trim()) {
+      toast({ title: "Bunk number is required", variant: "destructive" });
+      return;
+    }
 
     try {
       const { error } = await supabase
@@ -242,10 +250,10 @@ export default function BunkManagement({ onClose }: BunkManagementProps) {
           <div className="space-y-2">
             <Label>Bunk Number</Label>
             <Input
-              type="number"
+              type="text"
               value={newBunkNumber}
-              onChange={(e) => setNewBunkNumber(parseInt(e.target.value) || 1)}
-              min={1}
+              onChange={(e) => setNewBunkNumber(e.target.value)}
+              placeholder="e.g., 2, 1A, G1"
             />
           </div>
           <div className="space-y-2">

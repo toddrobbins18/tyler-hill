@@ -35,7 +35,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
   const [rfidJustScanned, setRfidJustScanned] = useState(false);
   const [tshirtSize, setTshirtSize] = useState<string>("");
   const [divisionId, setDivisionId] = useState<string>("");
-  const [bunks, setBunks] = useState<Array<{ id: string; bunk_number: number; bunk_name: string | null }>>([]);
+  const [bunks, setBunks] = useState<Array<{ id: string; bunk_number: string; bunk_name: string | null }>>([]);
   const [bunkId, setBunkId] = useState<string>("");
   const [showAddBunkDialog, setShowAddBunkDialog] = useState(false);
   const [newBunkNumber, setNewBunkNumber] = useState("");
@@ -199,7 +199,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
       }
 
       if (data) {
-        setBunks((prev) => [...prev, data].sort((a, b) => a.bunk_number - b.bunk_number));
+        setBunks((prev) => [...prev, data].sort((a, b) => String(a.bunk_number).localeCompare(String(b.bunk_number), undefined, { numeric: true })));
         setBunkId(data.id);
       }
 

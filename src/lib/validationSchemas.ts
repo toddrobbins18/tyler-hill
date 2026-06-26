@@ -174,22 +174,33 @@ export const dailyWolfContentSchema = z.object({
 // Bunk staff assignment validation schema
 export const bunkStaffSchema = z.object({
   person_id: z.string().min(1, "Person ID is required"),
-  bunk_number: z.number().int().min(1, "Bunk number is required"),
+  bunk_number: z.string().or(z.number()).transform(val => String(val)).optional(),
   bunk_name: z.string().optional(),
   is_primary: z.boolean().optional().default(false),
 });
 
 export function parseBunkStaffRow(row: Record<string, any>) {
-  let bunkNumber = row.bunk_number || row['Bunk Number'] || row.bunk || row.Bunk || '';
-  bunkNumber = parseInt(String(bunkNumber).trim(), 10);
+  // Use a case-insensitive key lookup to make matching bulletproof
+  const getVal = (...keys: string[]) => {
+    const lowerKeys = keys.map(k => k.toLowerCase());
+    for (const [key, value] of Object.entries(row)) {
+      if (lowerKeys.includes(key.toLowerCase().trim())) {
+        return value;
+      }
+    }
+    return '';
+  };
+
+  let bunkNumberRaw = getVal('bunk_number', 'Bunk Number', 'bunk');
+  let bunkNameRaw = getVal('bunk_name', 'Bunk Name');
   
-  let isPrimary = row.is_primary || row['Is Primary'] || row.primary || row.Primary || '';
+  let isPrimary = getVal('is_primary', 'Is Primary', 'primary');
   isPrimary = ['true', 'yes', '1', 'primary'].includes(String(isPrimary).toLowerCase().trim());
   
   return {
-    person_id: String(row.person_id || row['Person ID'] || row.PersonID || row.personid || '').trim(),
-    bunk_number: isNaN(bunkNumber) ? 0 : bunkNumber,
-    bunk_name: String(row.bunk_name || row['Bunk Name'] || '').trim() || undefined,
+    person_id: String(getVal('person_id', 'Person ID', 'PersonID', 'personid')).trim(),
+    bunk_number: bunkNumberRaw,
+    bunk_name: String(bunkNameRaw).trim() || undefined,
     is_primary: isPrimary,
   };
 }
@@ -339,6 +350,8 @@ export function parseMedicationRow(row: Record<string, any>) {
       "Meal Time",
       "meal_time",
       "MEAL TIME",
+      "Time",
+      "time"
     ),
     notes: pickCell(row, "notes", "Notes", "NOTES"),
     is_recurring: isRecurring,

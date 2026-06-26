@@ -46,7 +46,7 @@ interface Staff {
 
 interface Bunk {
   id: string;
-  bunk_number: number;
+  bunk_number: string;
   bunk_name: string | null;
   division_id: string | null;
   divisions?: {
@@ -245,7 +245,7 @@ export default function ODManagement() {
         dayOff
       };
     }).filter(item => item.staff && item.bunk)
-      .sort((a, b) => (a.bunk?.bunk_number || 0) - (b.bunk?.bunk_number || 0));
+      .sort((a, b) => String(a.bunk?.bunk_number || '').localeCompare(String(b.bunk?.bunk_number || ''), undefined, { numeric: true }));
   };
 
   // Get bunk gender from division

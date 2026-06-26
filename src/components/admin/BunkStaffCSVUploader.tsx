@@ -8,6 +8,7 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
 import { bunkStaffSchema, parseBunkStaffRow } from "@/lib/validationSchemas";
 import { z } from "zod";
+import { parseSpreadsheetFile } from "@/lib/spreadsheetImport";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface BunkStaffCSVUploaderProps {
@@ -40,30 +41,21 @@ export default function BunkStaffCSVUploader({ onUploadComplete }: BunkStaffCSVU
     setResult(null);
 
     try {
-      const text = await file.text();
-      const lines = text.split('\n').filter(line => line.trim());
+      const { rows } = await parseSpreadsheetFile(file);
       
-      if (lines.length === 0) {
-        toast.error("CSV file is empty");
+      if (!rows || rows.length === 0) {
+        toast.error("CSV file is empty or formatted incorrectly.");
         setUploading(false);
         return;
       }
 
-      if (lines.length > 501) {
+      if (rows.length > 500) {
         toast.error("CSV file too large. Maximum 500 rows allowed.");
         setUploading(false);
         return;
       }
 
-      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-      const rawRows = lines.slice(1).map(line => {
-        const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
-        const obj: Record<string, any> = {};
-        headers.forEach((header, index) => {
-          obj[header] = values[index] || null;
-        });
-        return obj;
-      });
+      const rawRows = rows as Record<string, any>[];
 
       // Fetch all staff and bunks for lookup
       const [staffRes, bunksRes] = await Promise.all([
@@ -91,9 +83,9 @@ export default function BunkStaffCSVUploader({ onUploadComplete }: BunkStaffCSVU
         }
       }
       
-      const bunkByNumber = new Map<number, string>();
+      const bunkByNumber = new Map<string, string>();
       for (const b of bunksList) {
-        bunkByNumber.set(b.bunk_number, b.id);
+        bunkByNumber.set(String(b.bunk_number).trim(), b.id);
       }
 
       // Parse and validate each row
@@ -117,11 +109,27 @@ export default function BunkStaffCSVUploader({ onUploadComplete }: BunkStaffCSVU
             continue;
           }
 
-          // Find bunk by number
-          const bunkId = bunkByNumber.get(validated.bunk_number);
+          // Find bunk by number OR name (to handle strings like "LL Teens" or "G13" from CampMinder)
+          let bunkId = bunkByNumber.get(String(validated.bunk_number).trim());
+          
           if (!bunkId) {
+            // Try matching against bunk_name if bunk_number failed
+            const rawBunkValue = rawRows[i]["Bunk Number"] || rawRows[i]["bunk_number"];
+            if (rawBunkValue) {
+              const matchedBunk = bunksList.find(b => 
+                (b.bunk_name || "").toLowerCase().trim() === String(rawBunkValue).toLowerCase().trim() ||
+                String(b.bunk_number) === String(rawBunkValue).trim()
+              );
+              if (matchedBunk) {
+                bunkId = matchedBunk.id;
+              }
+            }
+          }
+
+          if (!bunkId) {
+            const rawBunkValue = rawRows[i]["Bunk Number"] || rawRows[i]["bunk_number"];
             uploadResult.failed++;
-            uploadResult.errors.push(`Row ${i + 2}: Bunk #${validated.bunk_number} not found`);
+            uploadResult.errors.push(`Row ${i + 2}: Bunk "${rawBunkValue || validated.bunk_number}" not found`);
             continue;
           }
 

@@ -19,7 +19,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
   const [loading, setLoading] = useState(false);
   const [supervisors, setSupervisors] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
-  const [bunks, setBunks] = useState<Array<{ id: string; bunk_number: number; bunk_name: string | null }>>([]);
+  const [bunks, setBunks] = useState<Array<{ id: string; bunk_number: string; bunk_name: string | null }>>([]);
   const [leaderId, setLeaderId] = useState("");
   const [staffType, setStaffType] = useState<string>("");
   const [session, setSession] = useState<string>("");
@@ -193,7 +193,7 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
       }
 
       if (data) {
-        setBunks((prev) => [...prev, data].sort((a, b) => a.bunk_number - b.bunk_number));
+        setBunks((prev) => [...prev, data].sort((a, b) => String(a.bunk_number).localeCompare(String(b.bunk_number), undefined, { numeric: true })));
         setBunkId(data.id);
       }
 

@@ -435,7 +435,7 @@ export type Database = {
       bunks: {
         Row: {
           bunk_name: string | null
-          bunk_number: number
+          bunk_number: string
           cm_bunk_id: number | null
           company_id: string
           created_at: string | null
@@ -447,7 +447,7 @@ export type Database = {
         }
         Insert: {
           bunk_name?: string | null
-          bunk_number: number
+          bunk_number: string
           cm_bunk_id?: number | null
           company_id: string
           created_at?: string | null
@@ -459,7 +459,7 @@ export type Database = {
         }
         Update: {
           bunk_name?: string | null
-          bunk_number?: number
+          bunk_number?: string
           cm_bunk_id?: number | null
           company_id?: string
           created_at?: string | null
