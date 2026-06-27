@@ -472,7 +472,11 @@ export default function Dashboard() {
     // Fetch health center admissions (not yet checked out) with division filtering
     let healthCenterQuery = supabase
       .from('health_center_admissions')
-      .select('*, children:child_id(id, name, division_id)')
+      .select(`
+        *,
+        children:child_id(id, name, division_id),
+        staff:staff_id(id, name, role)
+      `)
       .eq('company_id', currentCompany.id)
       .eq('season', currentSeason)
       .is('checked_out_at', null)
@@ -985,7 +989,10 @@ export default function Dashboard() {
                   <div key={admission.id} className="flex items-start justify-between rounded-lg border border-border bg-accent/50 p-2.5">
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium text-foreground">
-                        {admission.children?.name || "Unknown"}
+                        {admission.children?.name || admission.staff?.name || "Unknown"}
+                        {admission.staff_id && !admission.child_id ? (
+                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">(Staff)</span>
+                        ) : null}
                         </div>
                         {admission.reason && (
                         <p className="mt-0.5 text-sm text-muted-foreground">{admission.reason}</p>
