@@ -22,9 +22,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Calendar } from "@/components/ui/calendar";
-import { format, isSameDay, isWithinInterval, parseISO } from "date-fns";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { formatTime12Hour } from "@/lib/utils";
+import { format, isSameDay, isWithinInterval } from "date-fns";
+import { formatTime12Hour, parseLocalDate } from "@/lib/utils";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 
@@ -249,16 +248,15 @@ export default function Transportation() {
     const days: Date[] = [];
     trips.forEach(trip => {
       if (trip.is_multi_day && trip.end_date) {
-        // For multi-day trips, add all days in the range
-        const start = new Date(trip.date);
-        const end = new Date(trip.end_date);
+        const start = parseLocalDate(trip.date);
+        const end = parseLocalDate(trip.end_date);
         const current = new Date(start);
         while (current <= end) {
           days.push(new Date(current));
           current.setDate(current.getDate() + 1);
         }
       } else {
-        days.push(new Date(trip.date));
+        days.push(parseLocalDate(trip.date));
       }
     });
     return days;
@@ -267,20 +265,19 @@ export default function Transportation() {
   const getTripsForDate = (date: Date) => {
     return filteredAndSortedTrips.filter(trip => {
       if (trip.is_multi_day && trip.end_date) {
-        // Check if date falls within the multi-day trip range
-        const start = parseISO(trip.date);
-        const end = parseISO(trip.end_date);
+        const start = parseLocalDate(trip.date);
+        const end = parseLocalDate(trip.end_date);
         return isWithinInterval(date, { start, end }) || isSameDay(date, start) || isSameDay(date, end);
       }
-      return isSameDay(new Date(trip.date), date);
+      return isSameDay(parseLocalDate(trip.date), date);
     });
   };
 
   // Helper to format trip date display
   const formatTripDate = (trip: any) => {
     if (trip.is_multi_day && trip.end_date) {
-      const startDate = new Date(trip.date + 'T00:00:00');
-      const endDate = new Date(trip.end_date + 'T00:00:00');
+      const startDate = parseLocalDate(trip.date);
+      const endDate = parseLocalDate(trip.end_date);
       const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
       return {
@@ -289,7 +286,7 @@ export default function Transportation() {
       };
     }
     return {
-      dateText: new Date(trip.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      dateText: parseLocalDate(trip.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       durationBadge: null
     };
   };
@@ -340,7 +337,7 @@ export default function Transportation() {
       }
       
       // Default: sort by date
-      const dateCompare = new Date(b.date).getTime() - new Date(a.date).getTime();
+      const dateCompare = parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime();
       if (dateCompare !== 0) return dateCompare;
       
       // If same date, sort by departure time

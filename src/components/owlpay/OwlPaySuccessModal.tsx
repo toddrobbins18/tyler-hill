@@ -1,7 +1,7 @@
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { CheckCircle, Sparkles } from "lucide-react";
-import { useEffect } from "react";
 import { useSignedPhotoUrl } from "@/hooks/useSignedPhotoUrl";
 
 interface OwlPaySuccessModalProps {
@@ -21,19 +21,21 @@ const OwlPaySuccessModal = ({
 }: OwlPaySuccessModalProps) => {
   const { signedUrl } = useSignedPhotoUrl(camperPhoto);
 
-  useEffect(() => {
-    if (open) {
-      const timer = setTimeout(onClose, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [open, onClose]);
-
   const balanceColor = newBalance < 5 ? "text-destructive" : newBalance < 15 ? "text-yellow-600" : "text-green-600";
   const photoSrc = signedUrl || camperPhoto;
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-md text-center" onClick={onClose}>
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) onClose();
+      }}
+    >
+      <DialogContent
+        className="sm:max-w-md text-center"
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <div className="flex flex-col items-center py-4 space-y-4">
           <CheckCircle className="h-14 w-14 text-green-500" />
           <Avatar className="h-20 w-20 border-4 border-green-500/30 shadow-xl">
@@ -66,7 +68,9 @@ const OwlPaySuccessModal = ({
               <div className="text-sm text-destructive mt-1">⚠️ Low balance - please add funds</div>
             )}
           </div>
-          <p className="text-xs text-muted-foreground">Tap anywhere to close</p>
+          <Button className="w-full" onClick={onClose}>
+            Done — next customer
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

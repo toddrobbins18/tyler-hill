@@ -16,16 +16,14 @@ import { Plus, Trash2, Users, ClipboardList, BarChart3, Clock, History, Search, 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { startOfWeek, format } from "date-fns";
+import {
+  filterElectivesForPeriod,
+  TIMBER_LAKE_ELECTIVE_DAYS,
+  TIMBER_LAKE_ELECTIVE_PERIODS,
+} from "@/lib/timberLakeElectiveSchedule";
 
-const PERIODS = [
-  { id: "period-1", label: "Period 1", time: "10:00 – 11:00 AM" },
-  { id: "period-2", label: "Period 2", time: "11:15 AM – 12:15 PM" },
-  { id: "period-3", label: "Period 3", time: "1:45 – 2:45 PM" },
-  { id: "period-4", label: "Period 4", time: "3:15 – 4:15 PM" },
-  { id: "period-5", label: "Period 5", time: "4:30 – 5:30 PM" },
-];
-
-const DAYS = ["Monday", "Tuesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const PERIODS = [...TIMBER_LAKE_ELECTIVE_PERIODS];
+const DAYS = [...TIMBER_LAKE_ELECTIVE_DAYS];
 
 export default function ElectiveSignUp() {
   const { currentCompany } = useCompany();
@@ -95,10 +93,11 @@ export default function ElectiveSignUp() {
 
     if (divisionsRes.data) setDivisions(sortDivisionsAlternatingGender(divisionsRes.data));
     if (electivesRes.data) {
-      let filteredElectives = electivesRes.data;
-      // Timberlake Water Ski logic: Only available periods 3, 4, 5 for all days
-      if (currentCompany.name.toLowerCase().includes("timber lake camp") && (selectedPeriod < 3 || selectedPeriod > 5)) {
-        filteredElectives = filteredElectives.filter(e => !e.name.toLowerCase().includes('water ski'));
+      let filteredElectives = electivesRes.data.filter(
+        (e: { is_active?: boolean | null }) => e.is_active !== false,
+      );
+      if (currentCompany.name.toLowerCase().includes("timber lake camp")) {
+        filteredElectives = filterElectivesForPeriod(filteredElectives, selectedPeriod);
       }
       setElectives(filteredElectives);
     }

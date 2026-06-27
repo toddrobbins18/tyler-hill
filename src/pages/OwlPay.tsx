@@ -359,7 +359,7 @@ function OwlPayPage() {
             </div>
 
             {/* Right: Transaction */}
-            <div>
+            <div id="owlpay-checkout" className="scroll-mt-24">
               {selectedCamper && (
                 <OwlPayTransactionSummary
                   camper={selectedCamper}
@@ -377,6 +377,29 @@ function OwlPayPage() {
               )}
             </div>
           </div>
+
+          {selectedCamper && (
+            <div className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 p-3 shadow-lg lg:hidden">
+              <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate font-semibold">{selectedCamper.name}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {cart.length === 0
+                      ? "Add items, then scroll to checkout"
+                      : `${cart.length} item${cart.length === 1 ? "" : "s"} in cart`}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() =>
+                    document.getElementById("owlpay-checkout")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  }
+                >
+                  {cart.length === 0 ? "Checkout" : "Review order"}
+                </Button>
+              </div>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="items">
