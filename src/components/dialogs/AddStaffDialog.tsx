@@ -13,6 +13,7 @@ import { z } from "zod";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { sortDivisionsAlternatingGender, Division } from "@/lib/divisionUtils";
+import { filterSupervisorCandidates } from "@/lib/staffSupervisorUtils";
 
 export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }) {
   const [open, setOpen] = useState(false);
@@ -42,15 +43,20 @@ export default function AddStaffDialog({ onSuccess }: { onSuccess?: () => void }
 
   const fetchSupervisors = async () => {
     if (!currentCompany?.id) return;
+
     const { data } = await supabase
       .from("staff")
-      .select("id, name, role")
+      .select("id, name, role, staff_type")
       .eq("status", "active")
       .eq("company_id", currentCompany.id)
       .eq("season", currentSeason)
-      .in("role", ["Director", "Supervisor", "Manager"])
       .order("name");
-    setSupervisors(data || []);
+
+    setSupervisors(
+      filterSupervisorCandidates(data || [], {
+        includeStaffIds: leaderId ? [leaderId] : [],
+      }),
+    );
   };
 
   const fetchDivisions = async () => {

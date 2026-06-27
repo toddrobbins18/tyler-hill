@@ -14,6 +14,7 @@ import { useSeasonContext } from "@/contexts/SeasonContext";
 import { Radio, CheckCircle2 } from "lucide-react";
 import { sortDivisionsAlternatingGender, Division } from "@/lib/divisionUtils";
 import { normalizeRfidInput } from "@/lib/rfidUtils";
+import { filterSupervisorCandidates } from "@/lib/staffSupervisorUtils";
 
 interface EditStaffDialogProps {
   staffId: string;
@@ -47,10 +48,15 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
   useEffect(() => {
     if (open && staffId && currentCompany?.id) {
       fetchStaff();
-      fetchSupervisors();
       fetchDivisions();
     }
   }, [open, staffId, currentSeason, currentCompany?.id]);
+
+  useEffect(() => {
+    if (open && currentCompany?.id) {
+      fetchSupervisors();
+    }
+  }, [open, currentCompany?.id, currentSeason, staff?.season, staffId, leaderId]);
 
   const fetchBunksForSeason = async (seasonKey: string) => {
     if (!currentCompany?.id || !seasonKey) return;
@@ -112,16 +118,22 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
 
   const fetchSupervisors = async () => {
     if (!currentCompany?.id) return;
+
+    const seasonKey = staff?.season || currentSeason;
     const { data } = await supabase
       .from("staff")
-      .select("id, name, role")
+      .select("id, name, role, staff_type")
       .eq("status", "active")
       .eq("company_id", currentCompany.id)
-      .eq("season", currentSeason)
-      .in("role", ["Director", "Supervisor", "Manager"])
-      .neq("id", staffId)
+      .eq("season", seasonKey)
       .order("name");
-    setSupervisors(data || []);
+
+    setSupervisors(
+      filterSupervisorCandidates(data || [], {
+        excludeStaffId: staffId,
+        includeStaffIds: leaderId ? [leaderId] : [],
+      }),
+    );
   };
 
   const fetchDivisions = async () => {
