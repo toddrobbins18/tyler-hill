@@ -28,6 +28,7 @@ import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
+import { lookupCamperOrStaffByRfid, lookupChildByRfid, normalizeRfidInput } from "@/lib/rfidUtils";
 import { EditMedicationDialog } from "@/components/dialogs/EditMedicationDialog";
 import {
   STANDARD_MEAL_SCHEDULE_HHMM,
@@ -655,7 +656,8 @@ export default function Nurse() {
   };
 
   const handleRfidScan = async () => {
-    if (!rfidInput.trim()) {
+    const rfidValue = normalizeRfidInput(rfidInput);
+    if (!rfidValue) {
       toast({ 
         title: "Please enter or scan an RFID", 
         variant: "destructive" 
@@ -663,19 +665,21 @@ export default function Nurse() {
       return;
     }
 
+    if (!currentCompany?.id || !currentSeason) {
+      toast({
+        title: "Scan unavailable",
+        description: "Company or season is not loaded.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsScanning(true);
     
     try {
-      // Find child by RFID (with company and season filtering)
-      const { data: child, error } = await supabase
-        .from('children')
-        .select('*, division:divisions(name)')
-        .ilike('rfid', rfidInput.trim())
-        .eq('company_id', currentCompany?.id)
-        .eq('season', currentSeason)
-        .single();
+      const child = await lookupChildByRfid(rfidValue, currentCompany.id, currentSeason);
 
-      if (error || !child) {
+      if (!child) {
         toast({
           title: "RFID Not Found",
           description: "No camper found with this RFID bracelet",
@@ -685,6 +689,14 @@ export default function Nurse() {
         setIsScanning(false);
         return;
       }
+
+      const { data: childDetails } = await supabase
+        .from('children')
+        .select('*, division:divisions(name)')
+        .eq('id', child.id)
+        .single();
+
+      const resolvedChild = childDetails ?? child;
 
       // Get current user (nurse/staff)
       const { data: { user } } = await supabase.auth.getUser();
@@ -987,7 +999,8 @@ export default function Nurse() {
 
   // Health Center RFID Scan Handler
   const handleHealthCenterRfidScan = async () => {
-    if (!healthCenterRfidInput.trim()) {
+    const rfidValue = normalizeRfidInput(healthCenterRfidInput);
+    if (!rfidValue) {
       toast({ 
         title: "Please enter or scan an RFID", 
         variant: "destructive" 
@@ -995,36 +1008,21 @@ export default function Nurse() {
       return;
     }
 
+    if (!currentCompany?.id || !currentSeason) {
+      toast({
+        title: "Scan unavailable",
+        description: "Company or season is not loaded.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsHealthCenterScanning(true);
     
     try {
-      // First check children
-      const { data: child } = await supabase
-        .from('children')
-        .select('id, name, allergies, rfid, medical_notes, division:divisions(name)')
-        .ilike('rfid', healthCenterRfidInput.trim())
-        .eq('company_id', currentCompany?.id || '')
-        .eq('season', currentSeason)
-        .maybeSingle() as { data: any };
+      const match = await lookupCamperOrStaffByRfid(rfidValue, currentCompany.id, currentSeason);
 
-      // If not a child, check staff
-      let staffMember: any = null;
-      if (!child) {
-        const staffResult = await supabase
-          .from('staff')
-          .select('id, name, role, allergies, rfid')
-          .ilike('rfid', healthCenterRfidInput.trim())
-          .eq('company_id', currentCompany?.id || '')
-          .eq('season', currentSeason)
-          .eq('status', 'active')
-          .maybeSingle();
-        staffMember = staffResult?.data;
-      }
-
-      const entity = child || staffMember;
-      const entityType = child ? 'child' : 'staff';
-
-      if (!entity) {
+      if (!match) {
         toast({
           title: "RFID Not Found",
           description: "No camper or staff found with this RFID",
@@ -1035,12 +1033,15 @@ export default function Nurse() {
         return;
       }
 
+      const { entity, isStaff } = match;
+      const entityType = isStaff ? 'staff' : 'child';
+
       // Check if already admitted
       const checkColumn = entityType === 'child' ? 'child_id' : 'staff_id';
       const { data: existingAdmission } = await supabase
         .from("health_center_admissions")
         .select("id")
-        .eq("company_id", currentCompany?.id)
+        .eq("company_id", currentCompany.id)
         .eq(checkColumn, entity.id)
         .is("checked_out_at", null)
         .maybeSingle();
