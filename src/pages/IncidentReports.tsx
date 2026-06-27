@@ -53,7 +53,7 @@ export default function IncidentReports() {
           child_id,
           children(name, division_id)
         ),
-        staff(name)
+        staff:reporter_id(name)
       `)
       .or(`season.eq.${selectedSeason},season.is.null`)
       .eq("company_id", currentCompany!.id)

@@ -36,10 +36,10 @@ export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: Add
   const { toast } = useToast();
 
   useEffect(() => {
-    if (open) {
+    if (open && currentCompany?.id) {
       fetchChildren();
     }
-  }, [open, currentSeason]);
+  }, [open, currentSeason, currentCompany?.id]);
 
   const fetchChildren = async () => {
     if (!currentCompany?.id) return;
@@ -67,6 +67,11 @@ export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: Add
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!currentCompany?.id) {
+      toast({ title: "No camp selected", description: "Select a camp before adding an incident.", variant: "destructive" });
+      return;
+    }
+
     if (selectedChildren.length === 0) {
       toast({ title: "Please select at least one child", variant: "destructive" });
       return;
@@ -79,12 +84,16 @@ export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: Add
 
     const { data: incident, error: incidentError } = await supabase
       .from("incident_reports")
-      .insert({ ...formData, tags, company_id: currentCompany?.id, season: currentSeason })
+      .insert({ ...formData, tags, company_id: currentCompany.id, season: currentSeason })
       .select()
       .single();
 
     if (incidentError || !incident) {
-      toast({ title: "Error adding incident", variant: "destructive" });
+      toast({
+        title: "Error adding incident",
+        description: incidentError?.message || "Could not create incident report.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -98,7 +107,11 @@ export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: Add
       .insert(childrenInserts);
 
     if (childrenError) {
-      toast({ title: "Error linking children to incident", variant: "destructive" });
+      toast({
+        title: "Error linking children to incident",
+        description: childrenError.message,
+        variant: "destructive",
+      });
       return;
     }
 
