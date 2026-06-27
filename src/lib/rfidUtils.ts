@@ -85,8 +85,43 @@ export async function lookupCamperOrStaffByRfid(
   const child = await lookupChildByRfid(rfid, companyId, season);
   if (child) return { entity: child, isStaff: false };
 
-  const staff = await lookupStaffByRfid(rfid, companyId, season, { requireActiveStaff: true });
+  const staff = await lookupStaffByRfid(rfid, companyId, season);
   if (staff) return { entity: staff, isStaff: true };
+
+  return null;
+}
+
+/** DB lookup with optional in-memory roster fallback (Health / offline). */
+export async function resolveCamperOrStaffByRfid(
+  rfidRaw: string,
+  companyId: string,
+  season: string,
+  lists?: {
+    campers?: Array<{ id: string; name: string; rfid?: string | null }>;
+    staff?: Array<{ id: string; name: string; rfid?: string | null }>;
+  },
+): Promise<{ entity: RfidPerson; isStaff: boolean } | null> {
+  const normalized = normalizeRfidInput(rfidRaw);
+  if (!normalized || !companyId || !season) return null;
+
+  const fromDb = await lookupCamperOrStaffByRfid(normalized, companyId, season);
+  if (fromDb) return fromDb;
+
+  const camperMatch = lists?.campers ? findInListByRfid(lists.campers, normalized) : undefined;
+  if (camperMatch) {
+    return {
+      entity: { id: camperMatch.id, name: camperMatch.name, rfid: camperMatch.rfid },
+      isStaff: false,
+    };
+  }
+
+  const staffMatch = lists?.staff ? findInListByRfid(lists.staff, normalized) : undefined;
+  if (staffMatch) {
+    return {
+      entity: { id: staffMatch.id, name: staffMatch.name, rfid: staffMatch.rfid },
+      isStaff: true,
+    };
+  }
 
   return null;
 }

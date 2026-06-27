@@ -28,7 +28,7 @@ import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
-import { lookupCamperOrStaffByRfid, lookupChildByRfid, normalizeRfidInput } from "@/lib/rfidUtils";
+import { lookupCamperOrStaffByRfid, lookupChildByRfid, normalizeRfidInput, resolveCamperOrStaffByRfid, findInListByRfid } from "@/lib/rfidUtils";
 import { EditMedicationDialog } from "@/components/dialogs/EditMedicationDialog";
 import {
   STANDARD_MEAL_SCHEDULE_HHMM,
@@ -677,7 +677,10 @@ export default function Nurse() {
     setIsScanning(true);
     
     try {
-      const child = await lookupChildByRfid(rfidValue, currentCompany.id, currentSeason);
+      const childMatch =
+        (await lookupChildByRfid(rfidValue, currentCompany.id, currentSeason)) ??
+        findInListByRfid(children, rfidValue);
+      const child = childMatch ?? null;
 
       if (!child) {
         toast({
@@ -1020,7 +1023,12 @@ export default function Nurse() {
     setIsHealthCenterScanning(true);
     
     try {
-      const match = await lookupCamperOrStaffByRfid(rfidValue, currentCompany.id, currentSeason);
+      const match = await resolveCamperOrStaffByRfid(
+        rfidValue,
+        currentCompany.id,
+        currentSeason,
+        { campers: children, staff },
+      );
 
       if (!match) {
         toast({

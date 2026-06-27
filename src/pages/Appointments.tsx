@@ -231,10 +231,17 @@ export default function Appointments() {
     appointmentSaveInFlight.current = true;
     setAppointmentSaveBusy(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const personName =
+        personType === "child"
+          ? children.find((c) => c.id === selectedChildId)?.name ?? null
+          : staff.find((s) => s.id === selectedStaffId)?.name ?? null;
+
       const appointmentData = {
         company_id: currentCompany.id,
         child_id: personType === "child" ? selectedChildId : null,
         staff_id: personType === "staff" ? selectedStaffId : null,
+        person_name: personName,
         appointment_type: appointmentType,
         appointment_date: format(appointmentDate, "yyyy-MM-dd"),
         appointment_time: appointmentTime || null,
@@ -245,7 +252,8 @@ export default function Appointments() {
         outcome: outcome || null,
         follow_up_required: followUpRequired,
         follow_up_date: followUpDate ? format(followUpDate, "yyyy-MM-dd") : null,
-        season: currentSeason
+        season: currentSeason,
+        ...(user?.id && !editingAppointment ? { created_by: user.id } : {}),
       };
 
       if (editingAppointment) {
@@ -284,9 +292,13 @@ export default function Appointments() {
       setShowDialog(false);
       resetForm();
       await fetchData();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving appointment:", error);
-      toast({ title: "Error saving appointment", variant: "destructive" });
+      toast({
+        title: "Error saving appointment",
+        description: error?.message || "You may not have permission to save appointments for this camp.",
+        variant: "destructive",
+      });
     } finally {
       appointmentSaveInFlight.current = false;
       setAppointmentSaveBusy(false);
