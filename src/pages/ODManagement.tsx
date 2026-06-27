@@ -28,6 +28,13 @@ import {
   staffIsScheduledOff,
   shouldRemoveDayOffRecord,
 } from "@/lib/odNightOffSchedule";
+import {
+  bunkMatchesOdGenderFilter,
+  isOdGirlsBunk,
+  odGenderSortRank,
+  sortOdRowsByGenderThenBunkNumber,
+  type OdGenderFilter,
+} from "@/lib/odManagementUtils";
 import { cn } from "@/lib/utils";
 import BunkManagement from "@/components/admin/BunkManagement";
 import StaffDaysOffCSVUploader from "@/components/admin/StaffDaysOffCSVUploader";
@@ -111,7 +118,7 @@ export default function ODManagement() {
   const [showScheduleUpload, setShowScheduleUpload] = useState(false);
   
   // Filters
-  const [genderFilter, setGenderFilter] = useState<string>("all");
+  const [genderFilter, setGenderFilter] = useState<OdGenderFilter>("all");
   const [signInStatusFilter, setSignInStatusFilter] = useState<string>("all");
 
   // RFID Scanner state
@@ -233,7 +240,7 @@ export default function ODManagement() {
   };
 
   const getStaffWithBunk = () => {
-    return bunkStaff.map(bs => {
+    const rows = bunkStaff.map(bs => {
       const staffMember = staff.find(s => s.id === bs.staff_id);
       const bunk = bunks.find(b => b.id === bs.bunk_id);
       const dayOff = daysOff.find(d => d.staff_id === bs.staff_id);
@@ -244,14 +251,13 @@ export default function ODManagement() {
         bunk,
         dayOff
       };
-    }).filter(item => item.staff && item.bunk)
-      .sort((a, b) => String(a.bunk?.bunk_number || '').localeCompare(String(b.bunk?.bunk_number || ''), undefined, { numeric: true }));
-  };
+    }).filter(item => item.staff && item.bunk);
 
-  // Get bunk gender from division
-  const getBunkGender = (bunk: Bunk | undefined): string | null => {
-    if (!bunk) return null;
-    return (bunk as any).divisions?.gender || null;
+    return sortOdRowsByGenderThenBunkNumber(
+      rows,
+      (item) => item.bunk,
+      (item) => item.bunk?.bunk_number,
+    );
   };
 
   // RFID Scanner handler
@@ -655,10 +661,7 @@ export default function ODManagement() {
       item.staff?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.bunk?.bunk_name?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const bunkGender = getBunkGender(item.bunk);
-    const matchesGender = genderFilter === "all" || 
-      (genderFilter === "girls" && bunkGender === "girls") ||
-      (genderFilter === "boys" && bunkGender === "boys");
+    const matchesGender = bunkMatchesOdGenderFilter(item.bunk, genderFilter);
     
     return matchesSearch && matchesGender;
   });
@@ -881,9 +884,9 @@ export default function ODManagement() {
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">
                               {item.bunk?.bunk_name || item.bunk?.bunk_number}
-                              {getBunkGender(item.bunk) && (
+                              {odGenderSortRank(item.bunk) < 2 && (
                                 <Badge variant="outline" className="text-xs">
-                                  {getBunkGender(item.bunk) === 'girls' ? 'G' : 'B'}
+                                  {isOdGirlsBunk(item.bunk) ? 'G' : 'B'}
                                 </Badge>
                               )}
                             </div>
@@ -1017,9 +1020,9 @@ export default function ODManagement() {
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">
                               {item.bunk?.bunk_name || item.bunk?.bunk_number}
-                              {getBunkGender(item.bunk) && (
+                              {odGenderSortRank(item.bunk) < 2 && (
                                 <Badge variant="outline" className="text-xs">
-                                  {getBunkGender(item.bunk) === 'girls' ? 'G' : 'B'}
+                                  {isOdGirlsBunk(item.bunk) ? 'G' : 'B'}
                                 </Badge>
                               )}
                             </div>
@@ -1165,9 +1168,9 @@ export default function ODManagement() {
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
                             {item.bunk?.bunk_name || item.bunk?.bunk_number}
-                            {getBunkGender(item.bunk) && (
+                            {odGenderSortRank(item.bunk) < 2 && (
                               <Badge variant="outline" className="text-xs">
-                                {getBunkGender(item.bunk) === 'girls' ? 'G' : 'B'}
+                                {isOdGirlsBunk(item.bunk) ? 'G' : 'B'}
                               </Badge>
                             )}
                           </div>
