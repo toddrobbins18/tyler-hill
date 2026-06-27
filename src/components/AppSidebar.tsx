@@ -177,6 +177,8 @@ export function AppSidebar() {
     [userRoles]
   );
 
+  const showCampSwitcher = availableCompanies.length > 1;
+
   const visibleItems = useMemo(() => {
     // While auth/company are still loading, show the full menu (routes are still protected)
     if (!currentCompany || authLoading || userRoles.length === 0) return items;
@@ -210,7 +212,7 @@ export function AppSidebar() {
           </h1>
         </div>
         
-        {isSuperAdmin && (
+        {showCampSwitcher && (
           isCollapsed ? (
             <div className="px-2 pb-4">
               <Popover>

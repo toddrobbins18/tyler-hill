@@ -19,7 +19,7 @@ export function UserProfileDropdown() {
   const { user, userRoles, loading } = useAuth();
 
   const userEmail = user?.email || "";
-  const allRoles = userRoles;
+  const allRoles = [...new Set(userRoles)];
 
   const handleLogout = async () => {
     try {

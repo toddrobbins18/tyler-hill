@@ -212,7 +212,15 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Save to sessionStorage for super admins FIRST
+      // Non-super-admins: RLS uses profiles.company_id, so persist the active camp there.
+      if (!authIsSuperAdmin && user) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ company_id: companyId })
+          .eq('id', user.id);
+        if (profileError) throw profileError;
+      }
+
       sessionStorage.setItem('viewing_company_id', companyId);
       
       // Update state synchronously
