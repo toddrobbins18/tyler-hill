@@ -5,23 +5,40 @@ export function normalizeRfidInput(raw: string): string {
   return raw.replace(/\u0000/g, "").trim().replace(/\r\n/g, "").replace(/\n/g, "").replace(/\r/g, "");
 }
 
-type RfidPerson = { id: string; name: string };
+export function rfidsMatch(
+  stored: string | null | undefined,
+  scanned: string | null | undefined,
+): boolean {
+  const a = normalizeRfidInput(stored ?? "");
+  const b = normalizeRfidInput(scanned ?? "");
+  if (!a || !b) return false;
+  return a.toLowerCase() === b.toLowerCase();
+}
 
-async function lookupByRfid(
+export function findInListByRfid<T extends { rfid?: string | null }>(
+  list: T[],
+  scanned: string,
+): T | undefined {
+  return list.find((item) => rfidsMatch(item.rfid, scanned));
+}
+
+type RfidPerson = { id: string; name: string; rfid?: string | null };
+
+async function lookupByRfid<T extends RfidPerson>(
   table: "children" | "staff",
   rfid: string,
   companyId: string,
   season: string,
-  options?: { requireActiveStaff?: boolean },
-): Promise<RfidPerson | null> {
+  options?: { requireActiveStaff?: boolean; select?: string },
+): Promise<T | null> {
   const normalized = normalizeRfidInput(rfid);
   if (!normalized || !companyId || !season) return null;
 
-  const baseSelect = "id, name";
+  const select = options?.select ?? "id, name, rfid";
   const runQuery = async (match: "eq" | "ilike") => {
     let query = supabase
       .from(table)
-      .select(baseSelect)
+      .select(select)
       .eq("company_id", companyId)
       .eq("season", season)
       .limit(1);
@@ -30,12 +47,14 @@ async function lookupByRfid(
       query = query.neq("status", "inactive");
     } else if (options?.requireActiveStaff) {
       query = query.or("status.eq.active,status.is.null");
+    } else {
+      query = query.neq("status", "inactive");
     }
 
     query = match === "eq" ? query.eq("rfid", normalized) : query.ilike("rfid", normalized);
     const { data, error } = await query;
     if (error) return null;
-    return (data?.[0] as RfidPerson | undefined) ?? null;
+    return (data?.[0] as T | undefined) ?? null;
   };
 
   return (await runQuery("eq")) ?? (await runQuery("ilike"));
@@ -70,4 +89,48 @@ export async function lookupCamperOrStaffByRfid(
   if (staff) return { entity: staff, isStaff: true };
 
   return null;
+}
+
+export type OwlPayCamperRfidMatch = {
+  id: string;
+  name: string;
+  rfid: string | null;
+  photo_url: string | null;
+  owl_pay_balance: number | null;
+  person_id: string | null;
+};
+
+export type OwlPayStaffRfidMatch = {
+  id: string;
+  name: string;
+  rfid: string | null;
+  photo_url: string | null;
+};
+
+export async function lookupOwlPayCamperByRfid(
+  rfid: string,
+  companyId: string,
+  season: string,
+): Promise<OwlPayCamperRfidMatch | null> {
+  return lookupByRfid<OwlPayCamperRfidMatch>(
+    "children",
+    rfid,
+    companyId,
+    season,
+    { select: "id, name, rfid, photo_url, owl_pay_balance, person_id" },
+  );
+}
+
+export async function lookupOwlPayStaffByRfid(
+  rfid: string,
+  companyId: string,
+  season: string,
+): Promise<OwlPayStaffRfidMatch | null> {
+  return lookupByRfid<OwlPayStaffRfidMatch>(
+    "staff",
+    rfid,
+    companyId,
+    season,
+    { select: "id, name, rfid, photo_url" },
+  );
 }

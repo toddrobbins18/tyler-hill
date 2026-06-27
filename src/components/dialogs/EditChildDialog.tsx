@@ -13,6 +13,7 @@ import { childSchema } from "@/lib/validationSchemas";
 import { z } from "zod";
 import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
+import { normalizeRfidInput } from "@/lib/rfidUtils";
 import { Radio, CheckCircle2 } from "lucide-react";
 
 interface EditChildDialogProps {
@@ -136,7 +137,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
         emergency_contact: formData.get("emergency_contact") as string || null,
         allergies: formData.get("allergies") as string || null,
         medical_notes: formData.get("medical_notes") as string || null,
-        rfid: rfidValue || null,
+        rfid: normalizeRfidInput(rfidValue) || null,
       birthday_party_type: birthdayPartyType || null,
       birthday_cake_meal: birthdayCakeMeal || null,
       birthday_party_comments: formData.get("birthday_party_comments") as string || null,

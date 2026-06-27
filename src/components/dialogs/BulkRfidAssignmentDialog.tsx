@@ -12,6 +12,7 @@ import { Radio, Upload, Users, UserCheck, CheckCircle2, XCircle, AlertCircle } f
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { normalizeRfidInput } from "@/lib/rfidUtils";
 
 interface BulkRfidAssignmentDialogProps {
   type: "children" | "staff";
@@ -74,7 +75,8 @@ export function BulkRfidAssignmentDialog({ type, onSuccess }: BulkRfidAssignment
   };
 
   const handleAssignRfid = async () => {
-    if (!selectedPerson || !rfidInput.trim()) {
+    const normalizedRfid = normalizeRfidInput(rfidInput);
+    if (!selectedPerson || !normalizedRfid) {
       toast.error("Please select a person and scan a wristband");
       return;
     }
@@ -83,7 +85,7 @@ export function BulkRfidAssignmentDialog({ type, onSuccess }: BulkRfidAssignment
     try {
       const { error } = await supabase
         .from(tableName)
-        .update({ rfid: rfidInput.trim() })
+        .update({ rfid: normalizedRfid })
         .eq("id", selectedPerson.id);
 
       if (error) throw error;
@@ -124,7 +126,8 @@ export function BulkRfidAssignmentDialog({ type, onSuccess }: BulkRfidAssignment
         const parts = line.split(',').map(p => p.trim());
         if (parts.length < 2) continue;
 
-        const [identifier, rfid] = parts;
+        const [identifier, rfidRaw] = parts;
+        const rfid = normalizeRfidInput(rfidRaw);
         if (!identifier || !rfid) continue;
 
         // Try to find by name first, then by person_id

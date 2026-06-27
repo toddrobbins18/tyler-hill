@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { lookupStaffByRfid, normalizeRfidInput } from "@/lib/rfidUtils";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   AlertDialog,
@@ -255,9 +256,14 @@ export default function Staff() {
 
   // RFID Scanner handlers
   const handleRfidScan = async (rfidValue?: string) => {
-    const valueToScan = rfidValue || rfidInput.trim();
+    const valueToScan = normalizeRfidInput(rfidValue || rfidInput);
     if (!valueToScan) {
       toast.error("Please scan a wristband");
+      return;
+    }
+
+    if (!currentCompany?.id) {
+      toast.error("No camp selected");
       return;
     }
 
@@ -265,18 +271,11 @@ export default function Staff() {
     setIsScanning(true);
     
     try {
-      // Find staff by RFID - works for ALL companies
-      const { data: staffMember, error } = await supabase
-        .from('staff')
-        .select('id, name, rfid')
-        .eq('rfid', valueToScan)
-        .eq('company_id', currentCompany?.id)
-        .eq('season', currentSeason)
-        .single();
+      const staffMember = await lookupStaffByRfid(valueToScan, currentCompany.id, currentSeason);
 
-      console.log('[RFID Staff] Result:', { staffMember, error });
+      console.log('[RFID Staff] Result:', { staffMember });
 
-      if (error || !staffMember) {
+      if (!staffMember) {
         toast.error("Wristband not assigned to any staff", {
           description: `RFID: ${valueToScan.slice(0, 12)}...`,
           duration: 4000

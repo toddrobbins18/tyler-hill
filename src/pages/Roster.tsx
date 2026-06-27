@@ -13,6 +13,7 @@ import CSVUploader from "@/components/CSVUploader";
 import { toast } from "sonner";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { lookupChildByRfid, normalizeRfidInput } from "@/lib/rfidUtils";
 import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import {
@@ -246,9 +247,14 @@ export default function Roster() {
 
   // RFID Scanner handlers
   const handleRfidScan = async (rfidValue?: string) => {
-    const valueToScan = rfidValue || rfidInput.trim();
+    const valueToScan = normalizeRfidInput(rfidValue || rfidInput);
     if (!valueToScan) {
       toast.error("Please scan a wristband");
+      return;
+    }
+
+    if (!currentCompany?.id) {
+      toast.error("No camp selected");
       return;
     }
 
@@ -256,18 +262,11 @@ export default function Roster() {
     setIsScanning(true);
     
     try {
-      // Find child by RFID - works for ALL companies
-      const { data: child, error } = await supabase
-        .from('children')
-        .select('id, name, rfid')
-        .eq('rfid', valueToScan)
-        .eq('company_id', currentCompany?.id)
-        .eq('season', currentSeason)
-        .single();
+      const child = await lookupChildByRfid(valueToScan, currentCompany.id, currentSeason);
 
-      console.log('[RFID] Result:', { child, error });
+      console.log('[RFID] Result:', { child });
 
-      if (error || !child) {
+      if (!child) {
         toast.error("Wristband not assigned to any camper", {
           description: `RFID: ${valueToScan.slice(0, 12)}...`,
           duration: 4000

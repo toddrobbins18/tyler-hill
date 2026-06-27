@@ -13,6 +13,7 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { Radio, CheckCircle2 } from "lucide-react";
 import { sortDivisionsAlternatingGender, Division } from "@/lib/divisionUtils";
+import { normalizeRfidInput } from "@/lib/rfidUtils";
 
 interface EditStaffDialogProps {
   staffId: string;
@@ -232,7 +233,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
         leader_id: leaderId || null,
         staff_type: staffType || null,
         allergies: formData.get("allergies") as string || null,
-        rfid: rfidValue || null,
+        rfid: normalizeRfidInput(rfidValue) || null,
         tshirt_size: tshirtSize || null,
         division_id: divisionId || null,
       };

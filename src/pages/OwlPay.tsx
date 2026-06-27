@@ -17,6 +17,13 @@ import OwlPayEmailSettings from "@/components/owlpay/OwlPayEmailSettings";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useOwlPayItems } from "@/hooks/useOwlPayItems";
+import {
+  findInListByRfid,
+  lookupOwlPayCamperByRfid,
+  lookupOwlPayStaffByRfid,
+  normalizeRfidInput,
+  rfidsMatch,
+} from "@/lib/rfidUtils";
 
 interface StaffMember {
   id: string;
@@ -159,22 +166,31 @@ function OwlPayPage() {
     }
   };
 
-  const selectByRFID = async (rfid: string) => {
-    // Check campers first
-    const camperMatch = campers.find(c => c.rfid?.toLowerCase() === rfid.toLowerCase());
+  const selectByRFID = async (rfidRaw: string) => {
+    const rfid = normalizeRfidInput(rfidRaw);
+    if (!rfid || !currentCompany?.id || !selectedSeason) {
+      setScanStatus("error");
+      toast({ title: "RFID not found", description: "Invalid scan or camp not selected", variant: "destructive", duration: 3000 });
+      setTimeout(() => setScanStatus("idle"), 2000);
+      return;
+    }
+
+    const camperMatch =
+      (await lookupOwlPayCamperByRfid(rfid, currentCompany.id, selectedSeason)) ??
+      findInListByRfid(campers, rfid);
     if (camperMatch) {
       setScanStatus("success");
-      await handleCamperSelect(camperMatch);
+      await handleCamperSelect(camperMatch as OwlPayCamper);
       toast({ title: "✓ Camper Found", description: camperMatch.name, duration: 2000 });
       setTimeout(() => { setSearchTerm(""); setScanStatus("idle"); }, 1000);
       return;
     }
 
-    // Check staff
-    const staffMatch = staffMembers.find(s => s.rfid?.toLowerCase() === rfid.toLowerCase());
+    const staffMatch =
+      (await lookupOwlPayStaffByRfid(rfid, currentCompany.id, selectedSeason)) ??
+      findInListByRfid(staffMembers, rfid);
     if (staffMatch) {
       setScanStatus("success");
-      // Convert staff to camper-like object (staff pay normally, no free first scan)
       const staffAsCamper: OwlPayCamper = {
         id: staffMatch.id,
         name: staffMatch.name,
@@ -238,12 +254,12 @@ function OwlPayPage() {
 
   const filteredCampers = campers.filter(c =>
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (c.rfid && c.rfid.toLowerCase().includes(searchTerm.toLowerCase()))
+    rfidsMatch(c.rfid, searchTerm)
   );
 
   const filteredStaff = staffMembers.filter(s =>
     s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (s.rfid && s.rfid.toLowerCase().includes(searchTerm.toLowerCase()))
+    rfidsMatch(s.rfid, searchTerm)
   );
 
   const addToCart = (item: OwlPayItem) => {

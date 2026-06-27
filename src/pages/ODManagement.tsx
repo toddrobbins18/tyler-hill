@@ -28,6 +28,7 @@ import {
   staffIsScheduledOff,
   shouldRemoveDayOffRecord,
 } from "@/lib/odNightOffSchedule";
+import { lookupStaffByRfid, normalizeRfidInput } from "@/lib/rfidUtils";
 import {
   bunkMatchesOdGenderFilter,
   isOdGirlsBunk,
@@ -262,25 +263,27 @@ export default function ODManagement() {
 
   // RFID Scanner handler
   const handleRfidScan = async (rfidValue?: string) => {
-    const valueToScan = rfidValue || rfidInput.trim();
+    const valueToScan = normalizeRfidInput(rfidValue || rfidInput);
     if (!valueToScan) {
       toast({ title: "Please scan a wristband", variant: "destructive" });
+      return;
+    }
+
+    if (!currentCompany?.id) {
+      toast({ title: "No camp selected", variant: "destructive" });
       return;
     }
 
     setIsScanning(true);
 
     try {
-      // Find staff by RFID
-      const { data: staffMember, error } = await supabase
-        .from('staff')
-        .select('id, name, rfid')
-        .eq('rfid', valueToScan)
-        .eq('company_id', currentCompany?.id)
-        .eq('season', currentSeason)
-        .single();
+      const staffMember = await lookupStaffByRfid(
+        valueToScan,
+        currentCompany.id,
+        currentSeason,
+      );
 
-      if (error || !staffMember) {
+      if (!staffMember) {
         toast({
           title: "Wristband not recognized",
           description: `RFID: ${valueToScan.slice(0, 12)}...`,
