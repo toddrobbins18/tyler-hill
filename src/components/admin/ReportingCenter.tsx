@@ -12,7 +12,6 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { Download, FileText, Calendar, ArrowUpDown, ArrowUp, ArrowDown, Filter, X } from "lucide-react";
 import { exportToCSV, exportToPDF } from "@/lib/reportExports";
 import { format } from "date-fns";
-import { formatTime12Hour } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +20,14 @@ import BirthdayReportTable from "./BirthdayReportTable";
 import { fetchAwardsForSeason } from "@/lib/awardsQueries";
 import { fetchExpandedMedicationSchedule } from "@/lib/medicationReportSchedule";
 import { parseMedicationMealTimeLabels } from "@/lib/medicationMealTimeDisplay";
+import {
+  attachSportsEventSortTime,
+  buildDriverBySportsEventId,
+  compareSportsEventReportRows,
+  formatSportsEventMealOptions,
+  formatSportsEventReportTime,
+  getSportsEventRowSortTimeMinutes,
+} from "@/lib/sportsEventReportUtils";
 
 type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'conflicts' | 'medications' | 'allergies' | 're_enrollment' | 'appointments' | 'tshirt_sizes' | 'birthdays';
 
@@ -313,47 +320,57 @@ export default function ReportingCenter() {
           break;
         }
 
-        case 'sports_events':
-          const { data: sports } = await supabase
-            .from('sports_calendar')
-            .select(`
-              *,
-              division:divisions(id, name),
-              sports_calendar_divisions(division_id, division:divisions(id, name))
-            `)
-            .eq('company_id', currentCompany.id)
-            .eq('season', selectedSeason)
-            .gte('event_date', startDate || '1900-01-01')
-            .lte('event_date', endDate || '2100-12-31')
-            .order('event_date', { ascending: false });
-          
-          data = sports?.map((s: any) => {
-            const relatedDivisionIds = s.sports_calendar_divisions?.map((division: any) => division.division_id) || [];
-            const relatedDivisionNames = s.sports_calendar_divisions
-              ?.map((division: any) => division.division?.name)
-              .filter(Boolean) || [];
+        case 'sports_events': {
+          const [{ data: sports }, { data: sportsTrips }] = await Promise.all([
+            supabase
+              .from('sports_calendar')
+              .select(`
+                *,
+                division:divisions(id, name),
+                sports_calendar_divisions(division_id, division:divisions(id, name))
+              `)
+              .eq('company_id', currentCompany.id)
+              .eq('season', selectedSeason)
+              .gte('event_date', startDate || '1900-01-01')
+              .lte('event_date', endDate || '2100-12-31')
+              .order('event_date', { ascending: true }),
+            supabase
+              .from('trips')
+              .select('sports_event_id, driver')
+              .eq('company_id', currentCompany.id)
+              .eq('season', selectedSeason)
+              .not('sports_event_id', 'is', null),
+          ]);
 
-            const divisionIds = [s.division_id, ...relatedDivisionIds];
-            const divisionNames = [s.division?.name, ...relatedDivisionNames];
+          const driverByEventId = buildDriverBySportsEventId(sportsTrips);
 
-            const eventTime = s.start_time_field || s.time || s.depart_time;
+          data = (sports || [])
+            .map((s: any) => {
+              const relatedDivisionIds = s.sports_calendar_divisions?.map((division: any) => division.division_id) || [];
+              const relatedDivisionNames = s.sports_calendar_divisions
+                ?.map((division: any) => division.division?.name)
+                .filter(Boolean) || [];
 
-            return withDivisionMeta({
-              Date: s.event_date,
-              Title: s.title,
-              Sport: s.sport_type,
-              Team: s.team,
-              Opponent: s.opponent,
-              Division: Array.from(new Set(divisionNames.filter(Boolean))).join(', ') || 'All Divisions',
-              Location: s.location,
-              Time: formatTime12Hour(eventTime) || eventTime || 'TBD',
-            }, divisionIds, divisionNames);
-          }) || [];
-          
+              const divisionIds = [s.division_id, ...relatedDivisionIds];
+              const divisionNames = [s.division?.name, ...relatedDivisionNames];
+
+              const row = withDivisionMeta({
+                Date: s.event_date,
+                Time: formatSportsEventReportTime(s),
+                Event: s.title || 'N/A',
+                'Meal Options': formatSportsEventMealOptions(s.meal_options),
+                Driver: (s.id && driverByEventId.get(s.id)) || '-',
+              }, divisionIds, divisionNames);
+
+              return attachSportsEventSortTime(row, s);
+            })
+            .sort((a, b) => compareSportsEventReportRows(a, b, 'asc'));
+
           summaryData = {
             'Total Events': data.length,
           };
           break;
+        }
 
         case 'trips':
           const { data: trips } = await supabase
@@ -1246,8 +1263,34 @@ export default function ReportingCenter() {
   }, [filteredBirthdayData, filteredReportData, reportType, selectedDivisions.length, selectedSeason, summary]);
 
   const sortedData = useMemo(() => {
-    if (!sortColumn || filteredReportData.length === 0) return filteredReportData;
-    
+    if (filteredReportData.length === 0) return filteredReportData;
+
+    if (reportType === 'sports_events') {
+      const direction = sortColumn ? sortDirection : 'asc';
+
+      if (!sortColumn || sortColumn === 'Date') {
+        return [...filteredReportData].sort((a, b) =>
+          compareSportsEventReportRows(a, b, direction),
+        );
+      }
+
+      if (sortColumn === 'Time') {
+        return [...filteredReportData].sort((a, b) => {
+          const timeComparison =
+            getSportsEventRowSortTimeMinutes(a) - getSportsEventRowSortTimeMinutes(b);
+          if (timeComparison !== 0) {
+            return sortDirection === 'asc' ? timeComparison : -timeComparison;
+          }
+
+          const dateComparison =
+            new Date(`${a.Date}T00:00:00`).getTime() - new Date(`${b.Date}T00:00:00`).getTime();
+          return sortDirection === 'asc' ? dateComparison : -dateComparison;
+        });
+      }
+    }
+
+    if (!sortColumn) return filteredReportData;
+
     return [...filteredReportData].sort((a, b) => {
       const aVal = a[sortColumn];
       const bVal = b[sortColumn];
@@ -1278,11 +1321,11 @@ export default function ReportingCenter() {
       if (strA > strB) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [filteredReportData, sortColumn, sortDirection]);
+  }, [filteredReportData, reportType, sortColumn, sortDirection]);
 
   const handleExportCSV = () => {
     const filename = `${reportType}_report`;
-    exportToCSV(filteredReportData, filename);
+    exportToCSV(sortedData, filename);
     toast({ title: "CSV exported successfully" });
   };
 
@@ -1309,7 +1352,7 @@ export default function ReportingCenter() {
     const title = titleMap[reportType] || reportType.replace('_', ' ').toUpperCase();
     const dateRange = startDate && endDate ? `${startDate} to ${endDate}` : 'All Dates';
     
-    exportToPDF(filteredReportData, filename, title, currentCompany?.name, dateRange, filteredSummary);
+    exportToPDF(sortedData, filename, title, currentCompany?.name, dateRange, filteredSummary);
     toast({ title: "PDF exported successfully" });
   };
 
