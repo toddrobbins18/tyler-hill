@@ -13,6 +13,7 @@ import {
   STAFF_DAYS_OFF_CSV_TEMPLATE,
   type StaffDaysOffCsvUploadResult,
 } from "@/lib/staffDaysOffCsvImport";
+import { preprocessStaffDaysOffUploadRows } from "@/lib/odWeeklyDayOffPatterns";
 
 interface StaffDaysOffCSVUploaderProps {
   onUploadComplete?: () => void;
@@ -20,6 +21,7 @@ interface StaffDaysOffCSVUploaderProps {
 
 export default function StaffDaysOffCSVUploader({ onUploadComplete }: StaffDaysOffCSVUploaderProps) {
   const [uploading, setUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [result, setResult] = useState<StaffDaysOffCsvUploadResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { currentCompany } = useCompany();
@@ -35,6 +37,7 @@ export default function StaffDaysOffCSVUploader({ onUploadComplete }: StaffDaysO
     }
 
     setUploading(true);
+    setUploadStatus("Reading file...");
     setResult(null);
 
     try {
@@ -43,6 +46,11 @@ export default function StaffDaysOffCSVUploader({ onUploadComplete }: StaffDaysO
         toast.error("File is empty or has no data rows");
         return;
       }
+
+      setUploadStatus("Reading file...");
+      const preprocessed = preprocessStaffDaysOffUploadRows(rows, currentSeason);
+      const rowCount = preprocessed.expandedRowCount ?? preprocessed.rows.length;
+      setUploadStatus(`Saving ${rowCount.toLocaleString()} schedule entries...`);
 
       const uploadResult = await importStaffDaysOffSchedule(supabase, {
         companyId: currentCompany.id,
@@ -53,7 +61,11 @@ export default function StaffDaysOffCSVUploader({ onUploadComplete }: StaffDaysO
       setResult(uploadResult);
 
       if (uploadResult.success > 0) {
-        toast.success(`Imported ${uploadResult.success} day/night off row(s)`);
+        const patternNote =
+          uploadResult.patternStaffCount && uploadResult.patternStaffCount > 0
+            ? ` (${uploadResult.patternStaffCount} weekly pattern(s) → ${uploadResult.expandedRowCount ?? uploadResult.success} dates)`
+            : "";
+        toast.success(`Imported ${uploadResult.success} day/night off row(s)${patternNote}`);
         onUploadComplete?.();
       }
       if (uploadResult.failed > 0) {
@@ -64,6 +76,7 @@ export default function StaffDaysOffCSVUploader({ onUploadComplete }: StaffDaysO
       toast.error(error instanceof Error ? error.message : "Failed to upload file");
     } finally {
       setUploading(false);
+      setUploadStatus(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
@@ -107,23 +120,34 @@ export default function StaffDaysOffCSVUploader({ onUploadComplete }: StaffDaysO
               disabled={uploading}
             >
               <Upload className="h-4 w-4 mr-2" />
-              {uploading ? "Uploading..." : "Upload File"}
+              {uploading ? uploadStatus ?? "Uploading..." : "Upload File"}
             </Button>
           </div>
         </div>
+
+        {uploading && uploadStatus ? (
+          <p className="text-sm text-muted-foreground">{uploadStatus} This may take a minute for full-season weekly patterns.</p>
+        ) : null}
 
         <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md space-y-2">
           <p className="font-medium">File columns</p>
           <ul className="list-disc list-inside space-y-1">
             <li><strong>Person ID</strong> — staff CampMinder Person ID (required)</li>
-            <li><strong>Date</strong> — YYYY-MM-DD or M/D/YYYY (required)</li>
-            <li><strong>Day Off</strong> — yes/no for full day off</li>
-            <li><strong>Night Off</strong> — yes/no for night off only (or with day off)</li>
+            <li>
+              <strong>Weekly pattern format (Tyler Hill OD sheet):</strong> columns{" "}
+              <strong>PersonID</strong> + <strong>Day Off</strong> with{" "}
+              <strong>TUESDAY</strong>, <strong>WEDNESDAY</strong>, or <strong>THURSDAY</strong>.
+              Legend rows at the top are skipped automatically. The full season (Jun–Aug) is generated.
+            </li>
+            <li><strong>Date</strong> — YYYY-MM-DD or M/D/YYYY (dated format)</li>
+            <li><strong>Day Off</strong> — yes/no for full day off (dated format)</li>
+            <li><strong>Night Off</strong> — yes/no for night off only (dated format)</li>
             <li><strong>Notes</strong> — optional</li>
           </ul>
           <p>
-            Day off and night off are independent. Example: day off on Wednesday with night offs on
-            Friday, Monday, and Tuesday — one row per date.
+            Dated format: one row per date. Weekly pattern: one row per staff member — night offs and
+            on-duty days follow the Tyler Hill OD chart (e.g. Tuesday off → night off Mon/Tue/Thu/Fri,
+            on duty Wed/Sun).
           </p>
         </div>
       </div>

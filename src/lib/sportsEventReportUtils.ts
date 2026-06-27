@@ -115,23 +115,73 @@ export function attachSportsEventSortTime(row: SportsEventReportRow, event: Spor
 
 export function getSportsEventRowSortTimeMinutes(row: SportsEventReportRow): number {
   const minutes = (row as Record<string, unknown>)[SORT_TIME_KEY];
-  return typeof minutes === "number" ? minutes : Number.POSITIVE_INFINITY;
+  if (typeof minutes === "number") {
+    return minutes;
+  }
+
+  const parsedFromDisplay = normalizeSportsEventTimeToMinutes(row.Time === "TBD" ? null : row.Time);
+  return parsedFromDisplay ?? Number.POSITIVE_INFINITY;
+}
+
+export function getReportRowDateTimestamp(
+  row: Record<string, string | number | null | undefined>,
+  dateKey = "Date",
+): number {
+  const rawDate = row[dateKey];
+  if (rawDate == null || rawDate === "") {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const parsed = new Date(`${String(rawDate).slice(0, 10)}T00:00:00`).getTime();
+  return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed;
+}
+
+export function compareReportRowsByDateThenTime(
+  a: Record<string, string | number | null | undefined>,
+  b: Record<string, string | number | null | undefined>,
+  options: {
+    direction?: "asc" | "desc";
+    dateKey?: string;
+    timeKey?: string;
+  } = {},
+): number {
+  const { direction = "asc", dateKey = "Date", timeKey = "Time" } = options;
+
+  const dateComparison =
+    getReportRowDateTimestamp(a, dateKey) - getReportRowDateTimestamp(b, dateKey);
+  let comparison = dateComparison;
+
+  if (comparison === 0 && timeKey in a && timeKey in b) {
+    const timeA = normalizeSportsEventTimeToMinutes(
+      a[timeKey] == null || a[timeKey] === "TBD" ? null : String(a[timeKey]),
+    );
+    const timeB = normalizeSportsEventTimeToMinutes(
+      b[timeKey] == null || b[timeKey] === "TBD" ? null : String(b[timeKey]),
+    );
+    const minutesA = timeA ?? Number.POSITIVE_INFINITY;
+    const minutesB = timeB ?? Number.POSITIVE_INFINITY;
+    comparison = minutesA - minutesB;
+  }
+
+  return direction === "asc" ? comparison : -comparison;
 }
 
 export function compareSportsEventReportRows(
   a: SportsEventReportRow,
   b: SportsEventReportRow,
   direction: "asc" | "desc" = "asc",
+  tiebreakerColumn?: string | null,
 ): number {
-  const dateA = new Date(`${a.Date}T00:00:00`).getTime();
-  const dateB = new Date(`${b.Date}T00:00:00`).getTime();
-  let comparison = dateA - dateB;
-
-  if (comparison === 0) {
-    comparison = getSportsEventRowSortTimeMinutes(a) - getSportsEventRowSortTimeMinutes(b);
+  const chronological = compareReportRowsByDateThenTime(a, b, { direction });
+  if (chronological !== 0 || !tiebreakerColumn) {
+    return chronological;
   }
 
-  return direction === "asc" ? comparison : -comparison;
+  const aVal = String(a[tiebreakerColumn as keyof SportsEventReportRow] ?? "").toLowerCase();
+  const bVal = String(b[tiebreakerColumn as keyof SportsEventReportRow] ?? "").toLowerCase();
+  if (aVal < bVal) return -1;
+  if (aVal > bVal) return 1;
+  return 0;
 }
 
 export function sortSportsEventReportRows(

@@ -23,10 +23,10 @@ import { parseMedicationMealTimeLabels } from "@/lib/medicationMealTimeDisplay";
 import {
   attachSportsEventSortTime,
   buildDriverBySportsEventId,
+  compareReportRowsByDateThenTime,
   compareSportsEventReportRows,
   formatSportsEventMealOptions,
   formatSportsEventReportTime,
-  getSportsEventRowSortTimeMinutes,
 } from "@/lib/sportsEventReportUtils";
 
 type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'conflicts' | 'medications' | 'allergies' | 're_enrollment' | 'appointments' | 'tshirt_sizes' | 'birthdays';
@@ -382,7 +382,7 @@ export default function ReportingCenter() {
             .lte('date', endDate || '2100-12-31')
             .order('date', { ascending: false });
           
-          data = trips?.map(t => ({
+          data = (trips?.map(t => ({
             Date: t.date,
             Name: t.name,
             Type: t.type,
@@ -390,7 +390,9 @@ export default function ReportingCenter() {
             Departure: t.departure_time,
             Return: t.return_time,
             Status: t.status,
-          })) || [];
+          })) || []).sort((a, b) =>
+            compareReportRowsByDateThenTime(a, b, { timeKey: "Departure" }),
+          );
           
           summaryData = {
             'Total Trips': trips?.length || 0,
@@ -433,10 +435,10 @@ export default function ReportingCenter() {
               Type: activity.activity_type,
               Division: Array.from(new Set(divisionNames.filter(Boolean))).join(', ') || 'All Divisions',
               Location: activity.location,
-              Time: activity.time,
+              Time: formatSportsEventReportTime(activity),
               Staff: activity.chaperone,
             }, divisionIds, divisionNames);
-          });
+          }).sort((a, b) => compareReportRowsByDateThenTime(a, b));
           
           summaryData = {
             'Total Activities': data.length,
@@ -1266,27 +1268,37 @@ export default function ReportingCenter() {
     if (filteredReportData.length === 0) return filteredReportData;
 
     if (reportType === 'sports_events') {
-      const direction = sortColumn ? sortDirection : 'asc';
+      const direction =
+        sortColumn === 'Date' || sortColumn === 'Time' ? sortDirection : 'asc';
+      const tiebreakerColumn =
+        sortColumn && sortColumn !== 'Date' && sortColumn !== 'Time'
+          ? sortColumn
+          : null;
 
-      if (!sortColumn || sortColumn === 'Date') {
-        return [...filteredReportData].sort((a, b) =>
-          compareSportsEventReportRows(a, b, direction),
-        );
-      }
+      return [...filteredReportData].sort((a, b) =>
+        compareSportsEventReportRows(a, b, direction, tiebreakerColumn),
+      );
+    }
 
-      if (sortColumn === 'Time') {
-        return [...filteredReportData].sort((a, b) => {
-          const timeComparison =
-            getSportsEventRowSortTimeMinutes(a) - getSportsEventRowSortTimeMinutes(b);
-          if (timeComparison !== 0) {
-            return sortDirection === 'asc' ? timeComparison : -timeComparison;
-          }
+    if (
+      !sortColumn &&
+      filteredReportData[0] &&
+      'Date' in filteredReportData[0]
+    ) {
+      const timeKey =
+        'Time' in filteredReportData[0]
+          ? 'Time'
+          : 'Departure' in filteredReportData[0]
+            ? 'Departure'
+            : undefined;
 
-          const dateComparison =
-            new Date(`${a.Date}T00:00:00`).getTime() - new Date(`${b.Date}T00:00:00`).getTime();
-          return sortDirection === 'asc' ? dateComparison : -dateComparison;
-        });
-      }
+      return [...filteredReportData].sort((a, b) =>
+        compareReportRowsByDateThenTime(
+          a,
+          b,
+          timeKey ? { timeKey } : undefined,
+        ),
+      );
     }
 
     if (!sortColumn) return filteredReportData;
