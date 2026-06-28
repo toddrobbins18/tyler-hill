@@ -92,6 +92,23 @@ export function medicationSlotKey(med: Pick<MedicationLogRow, "child_id" | "medi
   return `${med.child_id}|${med.medication_name ?? ""}|${mealTimeKey(med.meal_time)}`;
 }
 
+/** Stable React/list row key — one UI row per log or expanded template day. */
+export function medicationRowKey(
+  med: Pick<MedicationLogRow, "id" | "date" | "_displayDate">,
+): string {
+  return `${med.id}-${med._displayDate ?? med.date}`;
+}
+
+export function sortMedicationsByScheduledTime<T extends { scheduled_time?: string | null }>(
+  meds: T[],
+): T[] {
+  return [...meds].sort((a, b) => {
+    if (!a.scheduled_time) return 1;
+    if (!b.scheduled_time) return -1;
+    return a.scheduled_time.localeCompare(b.scheduled_time);
+  });
+}
+
 function weekdayName(dateYmd: string): string {
   return format(parseISO(dateYmd), "EEEE");
 }

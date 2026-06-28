@@ -41,10 +41,15 @@ import {
   campProgramEndDate,
   childMatchesGenderFilter,
   findDaySpecificMedicationLog,
+  medicationRowKey,
   medicationSlotKey,
   mergeMedicationsForDate,
   type MedicationLogRow,
 } from "@/lib/medicationSchedule";
+import {
+  MedicationAdministrationPicker,
+  MedicationAdministrationPickerDialog,
+} from "@/components/health/MedicationAdministrationPicker";
 import {
   MEDICATION_MEAL_FILTER_OPTIONS,
   medicationMatchesListVisibility,
@@ -106,6 +111,12 @@ export default function Nurse() {
   const [showAdmissionForm, setShowAdmissionForm] = useState(false);
   const [admissionReason, setAdmissionReason] = useState("");
   const [admissionNotes, setAdmissionNotes] = useState("");
+  const [admissionMedSelection, setAdmissionMedSelection] = useState<Set<string>>(new Set());
+  const [medicationPicker, setMedicationPicker] = useState<{
+    child: { id: string; name: string; division?: { name?: string } | null };
+    medications: any[];
+  } | null>(null);
+  const [medicationPickerSubmitting, setMedicationPickerSubmitting] = useState(false);
   
   // Edit medication state
   const [editingMedication, setEditingMedication] = useState<any>(null);
@@ -500,7 +511,7 @@ export default function Nurse() {
     fetchMedications(selectedDate);
   };
 
-  const handleAdminister = async (med: any) => {
+  const handleAdminister = async (med: any, options?: { silent?: boolean }) => {
     const { data: { user } } = await supabase.auth.getUser();
     const { data: staffData } = await supabase
       .from("staff")
@@ -576,12 +587,14 @@ export default function Nurse() {
       }
     }
 
-    toast({ title: "Medication marked as administered" });
-    const slotKey = medicationSlotKey(med);
+    if (!options?.silent) {
+      toast({ title: "Medication marked as administered" });
+    }
+    const rowKey = medicationRowKey(med);
     const administeredAt = new Date().toISOString();
     setMedications((prev) =>
       prev.map((row) =>
-        medicationSlotKey(row) === slotKey
+        medicationRowKey(row) === rowKey
           ? { ...row, administered: true, administered_at: administeredAt }
           : row,
       ),
@@ -636,10 +649,10 @@ export default function Nurse() {
     }
 
     toast({ title: "Medication marked as not administered" });
-    const slotKey = medicationSlotKey(med);
+    const rowKey = medicationRowKey(med);
     setMedications((prev) =>
       prev.map((row) =>
-        medicationSlotKey(row) === slotKey
+        medicationRowKey(row) === rowKey
           ? { ...row, administered: false, administered_by: null, administered_at: null }
           : row,
       ),
@@ -717,33 +730,19 @@ export default function Nurse() {
       if (todayMeds.length === 0) {
         toast({
           title: "No Medications Pending",
-          description: `${child.name} has no medications to administer today`,
+          description: `${resolvedChild.name} has no medications to administer today`,
         });
-        setScannedChild(child);
+        setScannedChild(resolvedChild);
         setRfidInput("");
         setIsScanning(false);
         return;
       }
 
-      // Sort by scheduled_time and only take the FIRST medication
-      const sortedMeds = todayMeds.sort((a, b) => {
-        if (!a.scheduled_time) return 1;
-        if (!b.scheduled_time) return -1;
-        return a.scheduled_time.localeCompare(b.scheduled_time);
+      setMedicationPicker({
+        child: resolvedChild,
+        medications: todayMeds,
       });
-
-      const nextMed = sortedMeds[0];
-      const remainingCount = todayMeds.length - 1;
-      await handleAdminister(nextMed);
-
-      toast({
-        title: "✓ Medication Administered",
-        description: `${nextMed.medication_name} marked as given for ${child.name}${remainingCount > 0 ? ` (${remainingCount} more pending)` : ''}`,
-      });
-
-      setScannedChild(child);
       setRfidInput("");
-      setTimeout(() => setScannedChild(null), 3000);
 
     } catch (error) {
       console.error('RFID scan error:', error);
@@ -928,7 +927,13 @@ export default function Nurse() {
     fetchAdmissionNotes();
   };
 
-  const handleAdmit = async (entityId: string, entityType: 'child' | 'staff', reason: string, notes: string) => {
+  const handleAdmit = async (
+    entityId: string,
+    entityType: 'child' | 'staff',
+    reason: string,
+    notes: string,
+    options?: { silent?: boolean },
+  ) => {
     if (!currentCompany?.id) {
       toast({ title: "No camp selected", variant: "destructive" });
       return;
@@ -974,7 +979,9 @@ export default function Nurse() {
       return;
     }
 
-    toast({ title: `${entityType === 'child' ? 'Child' : 'Staff member'} admitted to Health Center` });
+    if (!options?.silent) {
+      toast({ title: `${entityType === 'child' ? 'Child' : 'Staff member'} admitted to Health Center` });
+    }
     fetchAdmissions();
   };
 
@@ -1067,6 +1074,7 @@ export default function Nurse() {
       } else {
         // Show admission form
         setHealthCenterScannedEntity({ ...entity, action: 'admit', entityType });
+        setAdmissionMedSelection(new Set());
         setShowAdmissionForm(true);
         setHealthCenterRfidInput("");
       }
@@ -1091,23 +1099,46 @@ export default function Nurse() {
 
   const handleConfirmAdmission = async () => {
     if (!healthCenterScannedEntity) return;
-    
+
+    const pendingAdmissionMeds =
+      healthCenterScannedEntity.entityType === 'child'
+        ? activeListMedications.filter(
+            (med) =>
+              med.child_id === healthCenterScannedEntity.id && !med.administered,
+          )
+        : [];
+    const selectedAdmissionMeds = pendingAdmissionMeds.filter((med) =>
+      admissionMedSelection.has(medicationRowKey(med)),
+    );
+
     await handleAdmit(
       healthCenterScannedEntity.id,
       healthCenterScannedEntity.entityType,
       admissionReason,
-      admissionNotes
+      admissionNotes,
+      { silent: true },
     );
-    
-    toast({
-      title: "✓ Admitted",
-      description: `${healthCenterScannedEntity.name} has been admitted to the Health Center`,
-    });
+
+    if (selectedAdmissionMeds.length > 0) {
+      for (const med of selectedAdmissionMeds) {
+        await handleAdminister(med, { silent: true });
+      }
+      toast({
+        title: "✓ Admitted",
+        description: `${healthCenterScannedEntity.name} admitted and ${selectedAdmissionMeds.length} medication(s) marked as given`,
+      });
+    } else {
+      toast({
+        title: "✓ Admitted",
+        description: `${healthCenterScannedEntity.name} has been admitted to the Health Center`,
+      });
+    }
     
     // Reset form
     setShowAdmissionForm(false);
     setAdmissionReason("");
     setAdmissionNotes("");
+    setAdmissionMedSelection(new Set());
     setTimeout(() => setHealthCenterScannedEntity(null), 3000);
   };
 
@@ -1116,6 +1147,24 @@ export default function Nurse() {
     setHealthCenterScannedEntity(null);
     setAdmissionReason("");
     setAdmissionNotes("");
+    setAdmissionMedSelection(new Set());
+  };
+
+  const handleMedicationPickerConfirm = async (selected: any[]) => {
+    if (selected.length === 0) return;
+    setMedicationPickerSubmitting(true);
+    try {
+      for (const med of selected) {
+        await handleAdminister(med, { silent: true });
+      }
+      toast({
+        title: "✓ Medication Administered",
+        description: `${selected.length} medication(s) marked as given for ${medicationPicker?.child.name ?? "camper"}`,
+      });
+      setMedicationPicker(null);
+    } finally {
+      setMedicationPickerSubmitting(false);
+    }
   };
 
   const getAdmissionDuration = (admittedAt: string, checkedOutAt?: string | null) => {
@@ -1635,7 +1684,7 @@ export default function Nurse() {
                     RFID Quick Check-In
                   </CardTitle>
                   <CardDescription>
-                    Scan camper's RFID bracelet to automatically administer their medications
+                    Scan camper's RFID bracelet to choose which medications to administer
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -1889,6 +1938,25 @@ export default function Nurse() {
                           rows={2}
                         />
                       </div>
+
+                      {healthCenterScannedEntity.entityType === 'child' && (
+                        <div className="space-y-2">
+                          <Label>Administer medications now (optional)</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Select only the medications you are giving during this visit. Nothing is marked until you admit.
+                          </p>
+                          <MedicationAdministrationPicker
+                            medications={activeListMedications.filter(
+                              (med) =>
+                                med.child_id === healthCenterScannedEntity.id &&
+                                !med.administered,
+                            )}
+                            divisionName={healthCenterScannedEntity.division?.name}
+                            selectedKeys={admissionMedSelection}
+                            onSelectedKeysChange={setAdmissionMedSelection}
+                          />
+                        </div>
+                      )}
 
                       <div className="flex gap-2 justify-end">
                         <Button variant="outline" onClick={handleCancelAdmission}>
@@ -2548,6 +2616,18 @@ export default function Nurse() {
         open={isEditDialogOpen}
         onOpenChange={setIsEditDialogOpen}
         onSuccess={() => fetchMedications(selectedDate)}
+      />
+
+      <MedicationAdministrationPickerDialog
+        open={!!medicationPicker}
+        onOpenChange={(open) => {
+          if (!open) setMedicationPicker(null);
+        }}
+        camperName={medicationPicker?.child.name ?? "Camper"}
+        medications={medicationPicker?.medications ?? []}
+        divisionName={medicationPicker?.child.division?.name}
+        confirming={medicationPickerSubmitting}
+        onConfirm={handleMedicationPickerConfirm}
       />
 
       <AlertDialog open={!!unadministerTarget} onOpenChange={(open) => !open && setUnadministerTarget(null)}>
