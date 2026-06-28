@@ -24,6 +24,7 @@ import {
   normalizeRfidInput,
   rfidsMatch,
 } from "@/lib/rfidUtils";
+import { isFreeDailyItemAvailableToday } from "@/lib/owlPayCheckout";
 
 interface StaffMember {
   id: string;
@@ -142,14 +143,8 @@ function OwlPayPage() {
   };
 
   const checkFreeDailyItemAvailable = async (camperId: string) => {
-    const today = new Date().toISOString().split('T')[0];
-    const { data } = await supabase
-      .from("owl_pay_daily_scans" as any)
-      .select("*")
-      .eq("child_id", camperId)
-      .eq("scan_date", today)
-      .maybeSingle();
-    return !data;
+    if (!currentCompany?.id) return false;
+    return isFreeDailyItemAvailableToday(supabase, currentCompany.id, camperId);
   };
 
   const handleCamperSelect = async (camper: OwlPayCamper) => {

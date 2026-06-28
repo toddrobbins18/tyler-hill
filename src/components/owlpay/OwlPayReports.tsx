@@ -91,35 +91,44 @@ const OwlPayReports = () => {
 
         const item = tx.owl_pay_items;
         const amount = Number(tx.amount);
-        if (item) {
-          const key = tx.item_id;
-          if (!itemMap.has(key)) {
-            itemMap.set(key, { id: key, name: item.name, category: item.category, quantity: 0, revenue: 0 });
+        const itemId = tx.item_id || tx.id;
+        const itemName = item?.name || (tx.is_free ? "Free daily item" : "Unknown item");
+        const itemCategory = item?.category || "other";
+
+        if (itemId) {
+          if (!itemMap.has(itemId)) {
+            itemMap.set(itemId, {
+              id: itemId,
+              name: itemName,
+              category: itemCategory,
+              quantity: 0,
+              revenue: 0,
+            });
           }
-          const d = itemMap.get(key)!;
+          const d = itemMap.get(itemId)!;
           d.quantity += 1;
           d.revenue += amount;
-
-          const dateKey = new Date(tx.created_at).toLocaleDateString();
-          if (!dateMap.has(dateKey)) dateMap.set(dateKey, { revenue: 0, count: 0 });
-          const dd = dateMap.get(dateKey)!;
-          dd.revenue += amount;
-          dd.count += 1;
-
-          purchases.push({
-            id: tx.id,
-            buyer_type: buyer === "staff" ? "staff" : "camper",
-            camper_name: tx.children?.name || tx.staff?.name || "Unknown",
-            item_name: item.name,
-            item_category: item.category,
-            amount,
-            is_free: tx.is_free,
-            purchased_at: tx.created_at,
-          });
-
-          totalRevenue += amount;
-          totalItems += 1;
         }
+
+        const dateKey = new Date(tx.created_at).toLocaleDateString();
+        if (!dateMap.has(dateKey)) dateMap.set(dateKey, { revenue: 0, count: 0 });
+        const dd = dateMap.get(dateKey)!;
+        dd.revenue += amount;
+        dd.count += 1;
+
+        purchases.push({
+          id: tx.id,
+          buyer_type: buyer === "staff" ? "staff" : "camper",
+          camper_name: tx.children?.name || tx.staff?.name || "Unknown",
+          item_name: itemName,
+          item_category: itemCategory,
+          amount,
+          is_free: tx.is_free,
+          purchased_at: tx.created_at,
+        });
+
+        totalRevenue += amount;
+        totalItems += 1;
       });
 
       const salesByItem = Array.from(itemMap.values()).sort((a, b) => b.quantity - a.quantity);

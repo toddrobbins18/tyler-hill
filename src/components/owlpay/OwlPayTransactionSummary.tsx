@@ -21,6 +21,10 @@ import {
   OWL_PAY_MAX_OVERDRAFT,
   wouldExceedOwlPayOverdraft,
 } from "@/lib/owlPayBalanceUtils";
+import {
+  completeOwlPayCheckout,
+  isFreeDailyItemAvailableToday,
+} from "@/lib/owlPayCheckout";
 import type { OwlPayCamper } from "./OwlPayCamperCard";
 import type { OwlPayCartItem } from "./OwlPayItemGrid";
 import OwlPaySuccessModal from "./OwlPaySuccessModal";
@@ -102,33 +106,55 @@ const OwlPayTransactionSummary = ({
     try {
       const { data: { user } } = await supabase.auth.getUser();
 
-      if (pricing.freeItemApplied && !isStaff) {
-        const { error: scanError } = await supabase.from("owl_pay_daily_scans" as any).insert({
-          child_id: camper.id,
-          company_id: currentCompany.id,
-        });
-        if (scanError) throw scanError;
+      let effectivePricing = pricing;
+      if (!isStaff && pricing.freeItemApplied) {
+        const stillFree = await isFreeDailyItemAvailableToday(
+          supabase,
+          currentCompany.id,
+          camper.id,
+        );
+        if (!stillFree) {
+          effectivePricing = calculateOwlPayCartPricing(cart, {
+            hasFreeDailyItemAvailable: false,
+            isStaff,
+          });
+        }
       }
 
-      const transactionInserts = buildOwlPayPurchaseRows(cart, pricing, {
+      const effectiveNewBalance = calculateOwlPayNewBalance(
+        camper.owl_pay_balance,
+        effectivePricing.total,
+        isStaff,
+      );
+
+      if (!isStaff && wouldExceedOwlPayOverdraft(camper.owl_pay_balance, effectivePricing.total)) {
+        toast({
+          title: "Over credit limit",
+          description: `Campers can go up to $${OWL_PAY_MAX_OVERDRAFT.toFixed(0)} negative.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const transactionInserts = buildOwlPayPurchaseRows(cart, effectivePricing, {
         child_id: isStaff ? null : camper.id,
         staff_id: isStaff ? camper.id : null,
         company_id: currentCompany.id,
         created_by: user?.id,
       });
 
-      const { error: txError } = await supabase
-        .from("owl_pay_transactions" as any)
-        .insert(transactionInserts);
-      if (txError) throw txError;
+      const checkoutResult = await completeOwlPayCheckout(supabase, {
+        companyId: currentCompany.id,
+        childId: isStaff ? null : camper.id,
+        staffId: isStaff ? camper.id : null,
+        createdBy: user?.id,
+        pricing: effectivePricing,
+        transactions: transactionInserts,
+      });
 
-      if (!isStaff && total !== 0) {
-        const { error: balError } = await supabase.rpc("increment_camper_balance", {
-          _child_id: camper.id,
-          _amount: -total,
-        } as any);
-        if (balError) throw balError;
-      }
+      const finalBalance = isStaff
+        ? effectiveNewBalance
+        : checkoutResult.new_balance ?? effectiveNewBalance;
 
       try {
         await supabase.functions.invoke("send-owlpay-notifications", {
@@ -137,21 +163,20 @@ const OwlPayTransactionSummary = ({
             transaction_type: "purchase",
             child_id: isStaff ? null : camper.id,
             staff_id: isStaff ? camper.id : null,
-            amount: total,
-            new_balance: isStaff ? null : newBalance,
+            amount: checkoutResult.charge_total,
+            new_balance: isStaff ? null : finalBalance,
           },
         });
       } catch (notifyError) {
         console.error("Owl Pay notification call failed:", notifyError);
       }
 
-      // Defer so the Complete Transaction click doesn't dismiss the dialog on open.
       window.setTimeout(() => {
         setSuccessData({
           show: true,
-          chargedAmount: total,
-          newBalance,
-          freeItemApplied: pricing.freeItemApplied,
+          chargedAmount: checkoutResult.charge_total,
+          newBalance: finalBalance,
+          freeItemApplied: checkoutResult.free_item_applied,
         });
       }, 150);
     } catch (error: any) {
