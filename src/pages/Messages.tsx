@@ -73,6 +73,11 @@ const TAG_COLORS: Record<string, string> = {
   admin_staff: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
 };
 
+function isCompanyEmailReady(config: { is_configured?: boolean | null; is_active?: boolean | null; email_ready?: boolean | null } | null | undefined): boolean {
+  if (config?.email_ready != null) return !!config.email_ready;
+  return !!config?.is_configured && config?.is_active !== false;
+}
+
 /** Profile label map keys are lowercase (see fetchMessageProfileLabels); normalize lookups. */
 function labelFromCache(cache: Record<string, string>, id: string | null | undefined): string | undefined {
   if (!id) return undefined;
@@ -332,11 +337,30 @@ export default function Messages() {
   };
 
   const fetchEmailConfig = async () => {
+    if (!currentCompany?.id) return;
     try {
+      const { data: rpcRows, error: rpcError } = await supabase.rpc(
+        "get_company_email_delivery_status",
+        { _company_id: currentCompany.id },
+      );
+
+      if (!rpcError && rpcRows && rpcRows.length > 0) {
+        setEmailConfig(rpcRows[0]);
+        return;
+      }
+
+      const missingRpc =
+        rpcError?.code === "PGRST202" ||
+        (typeof rpcError?.message === "string" && rpcError.message.includes("could not find the function"));
+
+      if (!missingRpc && rpcError) {
+        console.error("Error fetching email delivery status:", rpcError);
+      }
+
       const { data, error } = await supabase
         .from("company_email_config")
         .select("is_configured, is_active")
-        .eq("company_id", currentCompany?.id)
+        .eq("company_id", currentCompany.id)
         .maybeSingle();
 
       if (error && error.code !== "PGRST116") {
@@ -412,6 +436,7 @@ export default function Messages() {
   );
 
   const uniqueRecipients = getUniqueRecipients();
+  const emailReady = isCompanyEmailReady(emailConfig);
 
   const handleSend = async () => {
     if (!subject.trim() || !message.trim()) {
@@ -461,11 +486,36 @@ export default function Messages() {
         recipientCount: uniqueRecipients.length,
       });
 
-      const methodsUsed = [];
-      if (deliveryMethods.inApp) methodsUsed.push("in-app notification");
-      if (deliveryMethods.email) methodsUsed.push("email");
+      const deliveryResults: string[] = data?.delivery_methods ?? [];
+      const partialIssues: string[] = [];
 
-      toast.success(`${methodsUsed.join(" and ")} sent to ${uniqueRecipients.length} recipient(s)!`);
+      if (deliveryMethods.inApp && !deliveryResults.includes("in_app")) {
+        partialIssues.push("in-app delivery may not have completed");
+      }
+      if (deliveryMethods.email) {
+        if (deliveryResults.includes("email_not_configured")) {
+          partialIssues.push("email is not configured for this camp");
+        } else if (deliveryResults.includes("email_failed")) {
+          partialIssues.push("email delivery failed — check Admin → Email Configuration");
+        } else if (!deliveryResults.includes("email")) {
+          partialIssues.push("email was not sent");
+        }
+      }
+
+      if (partialIssues.length > 0) {
+        toast.warning(
+          `Sent to ${uniqueRecipients.length} recipient(s), but: ${partialIssues.join("; ")}.`,
+        );
+      } else {
+        const methodsUsed = [];
+        if (deliveryMethods.inApp) methodsUsed.push("in-app notification");
+        if (deliveryMethods.email) methodsUsed.push("email");
+        toast.success(`${methodsUsed.join(" and ")} sent to ${uniqueRecipients.length} recipient(s)!`);
+      }
+
+      if (data?.note) {
+        notificationsDebug("Compose: server note", { note: data.note });
+      }
       
       setSubject("");
       setMessage("");
@@ -655,10 +705,17 @@ export default function Messages() {
                     Multi-Channel Notifications
                   </h4>
                   <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                    Send notifications via in-app push alerts and/or email. In-app notifications are delivered instantly.
-                    <span className="block mt-1 text-amber-600 dark:text-amber-400">
-                      ⚠️ Email integration requires configuration (Microsoft 365 or Resend)
-                    </span>
+                    Send notifications via in-app alerts and/or email. In-app messages appear in the recipient&apos;s inbox immediately; staff using the mobile app also get a device alert when the app is open.
+                    {!emailReady && (
+                      <span className="block mt-1 text-amber-600 dark:text-amber-400">
+                        ⚠️ Email integration requires configuration (Microsoft 365) in Admin Panel → Email Configuration.
+                      </span>
+                    )}
+                    {emailReady && (
+                      <span className="block mt-1 text-green-700 dark:text-green-300">
+                        ✓ Email is configured for {currentCompany?.name}.
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>
@@ -683,7 +740,7 @@ export default function Messages() {
                   />
                   <label htmlFor="in-app" className="flex items-center gap-2 cursor-pointer">
                     <Bell className="h-4 w-4 text-blue-500" />
-                    <span>In-App Notification (Push)</span>
+                    <span>In-App Notification</span>
                     <Badge variant="secondary">Instant</Badge>
                   </label>
                 </div>
@@ -695,11 +752,12 @@ export default function Messages() {
                     onCheckedChange={(checked) =>
                       setDeliveryMethods(prev => ({ ...prev, email: !!checked }))
                     }
+                    disabled={!emailReady}
                   />
-                  <label htmlFor="email" className="flex items-center gap-2 cursor-pointer">
+                  <label htmlFor="email" className={`flex items-center gap-2 ${emailReady ? "cursor-pointer" : "cursor-not-allowed opacity-70"}`}>
                     <Mail className="h-4 w-4 text-green-500" />
                     <span>Email Notification</span>
-                    {emailConfig?.is_configured && emailConfig?.is_active ? (
+                    {emailReady ? (
                       <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
                         Ready
                       </Badge>
@@ -877,20 +935,6 @@ export default function Messages() {
                   </ScrollArea>
                 </CardContent>
               )}
-            </Card>
-
-            <Card className="bg-info/5 border-info/20">
-              <CardContent className="p-4">
-                <div className="flex gap-3">
-                  <Mail className="h-5 w-5 text-info flex-shrink-0 mt-0.5" />
-                  <div className="text-sm">
-                    <p className="font-medium mb-1 text-info">Email Integration Pending</p>
-                    <p className="text-xs text-muted-foreground">
-                      Email sending functionality will be enabled once Microsoft 365 integration is configured. For now, messages are logged but not sent.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
             </Card>
           </div>
         </div>

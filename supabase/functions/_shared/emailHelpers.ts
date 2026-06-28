@@ -310,10 +310,9 @@ export async function sendEmailNotifications(
     .from("company_email_config")
     .select("*")
     .eq("company_id", companyId)
-    .eq("is_active", true)
     .maybeSingle();
 
-  if (!emailConfig || !emailConfig.is_configured) {
+  if (!emailConfig?.is_configured || emailConfig?.is_active === false) {
     console.log("Email not configured for company, skipping M365 email.");
     return;
   }

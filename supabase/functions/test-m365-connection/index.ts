@@ -141,6 +141,7 @@ const handler = async (req: Request): Promise<Response> => {
       .update({
         last_tested_at: new Date().toISOString(),
         last_test_status: "success",
+        is_active: true,
       })
       .eq("id", emailConfig.id);
 

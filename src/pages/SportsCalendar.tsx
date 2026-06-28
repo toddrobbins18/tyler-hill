@@ -50,7 +50,7 @@ export default function SportsCalendar() {
   const [showDialog, setShowDialog] = useState(false);
   const [editingEvent, setEditingEvent] = useState<any>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [managingRoster, setManagingRoster] = useState<{ id: string; title: string } | null>(null);
+  const [managingRoster, setManagingRoster] = useState<{ id: string; title: string; readOnly?: boolean } | null>(null);
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [calendarView, setCalendarView] = useState<View>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -880,7 +880,7 @@ export default function SportsCalendar() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => setShowRosterPopup(event)}
+                            onClick={() => setManagingRoster({ id: event.id, title: event.title, readOnly: true })}
                             title="View Roster"
                           >
                             <Users className="h-4 w-4" />
@@ -888,7 +888,7 @@ export default function SportsCalendar() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => setManagingRoster({ id: event.id, title: event.title })}
+                            onClick={() => setManagingRoster({ id: event.id, title: event.title, readOnly: false })}
                             title="Manage Roster"
                           >
                             <UserCheck className="h-4 w-4" />
@@ -967,7 +967,18 @@ export default function SportsCalendar() {
               <div className="space-y-2">
                 <Button 
                   onClick={() => {
-                    setManagingRoster({ id: showRosterPopup.id, title: showRosterPopup.title });
+                    setManagingRoster({ id: showRosterPopup.id, title: showRosterPopup.title, readOnly: true });
+                    setShowRosterPopup(null);
+                  }}
+                  className="w-full"
+                >
+                  <Users className="h-4 w-4 mr-2" />
+                  View Roster
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    setManagingRoster({ id: showRosterPopup.id, title: showRosterPopup.title, readOnly: false });
                     setShowRosterPopup(null);
                   }}
                   className="w-full"
@@ -1376,6 +1387,7 @@ export default function SportsCalendar() {
           }}
           divisionProvidesCoach={events.find(e => e.id === managingRoster.id)?.division_provides_coach}
           divisionProvidesRef={events.find(e => e.id === managingRoster.id)?.division_provides_ref}
+          readOnly={managingRoster.readOnly}
         />
       )}
     </div>

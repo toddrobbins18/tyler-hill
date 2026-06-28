@@ -8,7 +8,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { usePermissions } from '@/hooks/usePermissions';
 import { isActiveRosterStatus, isBirthdayTodayCalendar } from '@/lib/birthdayCalendar';
-import { formatTime12Hour } from '@/lib/utils';
+import {
+  divisionNamesLabel,
+  formatPrintableTime,
+  mergeActivityDivisions,
+  mergeSportsDivisions,
+} from '@/lib/dailyWolfPrintableUtils';
 
 interface BirthdayRow {
   id: string;
@@ -24,23 +29,17 @@ interface MealData {
   allergens?: string;
 }
 
-interface DivisionGame {
-  id: string;
-  title: string;
-  time?: string;
-  location?: string;
-  opponent?: string;
-  sport_type: string;
-  divisions?: { name: string };
-}
-
 interface SportsEvent {
   id: string;
   title: string;
   time?: string;
+  start_time_field?: string;
+  depart_time?: string;
   location?: string;
   opponent?: string;
   description?: string;
+  sports_calendar_divisions?: { division?: { id?: string; name?: string } }[];
+  divisions?: { id?: string; name?: string }[];
 }
 
 interface SpecialEvent {
@@ -49,6 +48,9 @@ interface SpecialEvent {
   time_slot: string;
   location?: string;
   description?: string;
+  division?: { id?: string; name?: string } | null;
+  special_events_divisions?: { division?: { id?: string; name?: string } }[];
+  divisions?: { id?: string; name?: string }[];
 }
 
 interface DailyContent {
@@ -93,7 +95,6 @@ export default function DailyWolfPrintable() {
   const [birthdayChildren, setBirthdayChildren] = useState<BirthdayRow[]>([]);
   const [birthdayStaff, setBirthdayStaff] = useState<BirthdayRow[]>([]);
   const [meals, setMeals] = useState<MealData[]>([]);
-  const [divisionGames, setDivisionGames] = useState<DivisionGame[]>([]);
   const [sportsEvents, setSportsEvents] = useState<SportsEvent[]>([]);
   const [specialEvents, setSpecialEvents] = useState<SpecialEvent[]>([]);
   const [dailyContent, setDailyContent] = useState<DailyContent>({});
@@ -190,46 +191,39 @@ export default function DailyWolfPrintable() {
       const { data: mealsData } = await menuQuery;
       setMeals(mealsData || []);
 
-      // Fetch division games with division info
-      const { data: sportsData } = await supabase
+      // Athletics with division labels
+      const { data: allSportsData } = await supabase
         .from('sports_calendar')
         .select(`
-          *,
-          sports_calendar_divisions!inner(
-            division_id,
-            divisions(name)
-          )
+          id, title, time, start_time_field, depart_time, location, opponent, description,
+          sports_calendar_divisions(division_id, division:divisions(id, name))
         `)
         .eq('company_id', currentCompany.id)
         .eq('event_date', today)
         .eq('season', currentSeason)
         .order('time');
+      setSportsEvents(
+        (allSportsData || []).map((event) => ({
+          ...event,
+          divisions: mergeSportsDivisions(event),
+        })),
+      );
 
-      // Transform to flat structure with division name
-      const gamesWithDivisions = sportsData?.map(game => ({
-        ...game,
-        divisions: game.sports_calendar_divisions?.[0]?.divisions
-      })) || [];
-      setDivisionGames(gamesWithDivisions);
-
-      // Fetch all sports events for athletics section
-      const { data: allSportsData } = await supabase
-        .from('sports_calendar')
-        .select('id, title, time, start_time_field, depart_time, location, opponent, description')
-        .eq('company_id', currentCompany.id)
-        .eq('event_date', today)
-        .eq('season', currentSeason)
-        .order('time');
-      setSportsEvents(allSportsData || []);
-
-      // Special events: by date + company (Dashboard pattern); prefer current season, fall back to all for today
+      // Special events with division labels
       const { data: activitiesData } = await supabase
         .from('special_events_activities')
-        .select('id, title, time_slot, location, description, season')
+        .select(`
+          id, title, time_slot, location, description, season,
+          division:divisions(id, name),
+          special_events_divisions(division_id, division:divisions(id, name))
+        `)
         .eq('company_id', currentCompany.id)
         .eq('event_date', today)
         .order('time_slot');
-      const allTodayEvents = activitiesData || [];
+      const allTodayEvents = (activitiesData || []).map((event) => ({
+        ...event,
+        divisions: mergeActivityDivisions(event),
+      }));
       if (currentSeason) {
         const seasonMatched = allTodayEvents.filter(
           (e) => !e.season || e.season === currentSeason,
@@ -386,15 +380,25 @@ export default function DailyWolfPrintable() {
               >
                 {sportsEvents.length > 0 ? (
                   <ul className="divide-y divide-border">
-                    {sportsEvents.map((event) => (
+                    {sportsEvents.map((event) => {
+                      const divisionLabel = divisionNamesLabel(event.divisions ?? []);
+                      const eventTime = formatPrintableTime(
+                        event.start_time_field || event.time || event.depart_time,
+                      );
+                      return (
                       <li key={event.id} className="flex gap-3 py-2 first:pt-0 last:pb-0">
-                        <span className="shrink-0 w-16 text-xs font-bold text-primary">
-                          {formatTime12Hour(event.start_time_field || event.time || event.depart_time) || event.start_time_field || event.time || event.depart_time || 'TBD'}
+                        <span className="shrink-0 w-20 text-xs font-bold text-primary">
+                          {eventTime}
                         </span>
                         <span className="text-foreground">
                           {event.title}
                           {event.opponent && (
                             <span className="text-muted-foreground"> vs {event.opponent}</span>
+                          )}
+                          {divisionLabel && (
+                            <span className="block text-xs font-semibold text-primary/80 mt-0.5">
+                              {divisionLabel}
+                            </span>
                           )}
                           {event.location && (
                             <span className="block text-xs text-muted-foreground mt-0.5">
@@ -403,7 +407,8 @@ export default function DailyWolfPrintable() {
                           )}
                         </span>
                       </li>
-                    ))}
+                      );
+                    })}
                   </ul>
                 ) : (
                   <EmptyLine>No athletic events scheduled</EmptyLine>
@@ -416,13 +421,20 @@ export default function DailyWolfPrintable() {
               >
                 {specialEvents.length > 0 ? (
                   <ul className="divide-y divide-border">
-                    {specialEvents.map((event) => (
+                    {specialEvents.map((event) => {
+                      const divisionLabel = divisionNamesLabel(event.divisions ?? []);
+                      return (
                       <li key={event.id} className="py-2 first:pt-0 last:pb-0">
                         <p className="font-medium text-foreground">
                           <span className="text-primary text-xs font-bold uppercase mr-2">
-                            {event.time_slot || 'TBD'}
+                            {formatPrintableTime(event.time_slot)}
                           </span>
                           {event.title}
+                          {divisionLabel && (
+                            <span className="text-primary/80 text-xs font-semibold ml-2">
+                              ({divisionLabel})
+                            </span>
+                          )}
                           {event.location && (
                             <span className="text-muted-foreground"> @ {event.location}</span>
                           )}
@@ -433,7 +445,8 @@ export default function DailyWolfPrintable() {
                           </p>
                         )}
                       </li>
-                    ))}
+                      );
+                    })}
                   </ul>
                 ) : (
                   <EmptyLine>No special events scheduled</EmptyLine>

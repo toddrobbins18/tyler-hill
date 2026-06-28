@@ -128,15 +128,16 @@ const handler = async (req: Request): Promise<Response> => {
     const companyName = (senderProfile.companies as any)?.name || 'Unknown';
     console.log(`📧 Sending from company: ${companyName}`);
 
-    // Get company's M365 configuration
-    const { data: emailConfig, error: configError } = await supabase
+    // Get company's M365 configuration (is_active defaults true; only skip when explicitly false)
+    const { data: emailConfig } = await supabase
       .from('company_email_config')
       .select('*')
       .eq('company_id', senderProfile.company_id)
-      .eq('is_active', true)
       .maybeSingle();
 
-    if (!emailConfig || !emailConfig.is_configured) {
+    const emailConfigured = !!emailConfig?.is_configured && emailConfig?.is_active !== false;
+
+    if (!emailConfigured) {
       console.warn("⚠️ Email not configured for this company");
       // Continue - will skip email sending but still send in-app
     }
@@ -261,7 +262,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Send email notifications if selected
     if (deliveryMethods.email) {
-      if (!emailConfig || !emailConfig.is_configured) {
+      if (!emailConfigured || !emailConfig) {
         console.warn("⚠️ Email sending requested but not configured for this company");
         deliveryMethodsUsed.push("email_not_configured");
       } else {

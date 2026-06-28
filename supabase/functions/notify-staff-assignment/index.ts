@@ -149,10 +149,9 @@ serve(async (req: Request): Promise<Response> => {
         .from("company_email_config")
         .select("*")
         .eq("company_id", companyId)
-        .eq("is_active", true)
         .maybeSingle();
 
-      if (emailConfig?.is_configured) {
+      if (emailConfig?.is_configured && emailConfig?.is_active !== false) {
         try {
           const { data: decryptedSecret, error: decryptError } = await supabase.rpc(
             "decrypt_secret",

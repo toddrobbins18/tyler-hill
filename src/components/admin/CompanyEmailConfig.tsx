@@ -95,6 +95,7 @@ export default function CompanyEmailConfig() {
         m365_sender_email: formData.m365_sender_email,
         m365_sender_name: formData.m365_sender_name,
         is_configured: true,
+        is_active: true,
         configured_by: user?.id,
         configured_at: new Date().toISOString(),
         ...(encryptedSecret && { m365_client_secret_encrypted: encryptedSecret }),

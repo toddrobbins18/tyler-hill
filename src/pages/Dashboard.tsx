@@ -60,6 +60,7 @@ export default function Dashboard() {
   const [healthCenterAdmissions, setHealthCenterAdmissions] = useState<any[]>([]);
   const [dailyWolfContent, setDailyWolfContent] = useState<DailyWolfContent | null>(null);
   const [todaysMenuItems, setTodaysMenuItems] = useState<any[]>([]);
+  const [todaysSpecialMeals, setTodaysSpecialMeals] = useState<any[]>([]);
 
   useEffect(() => {
     if (currentCompany?.id) {
@@ -100,6 +101,11 @@ export default function Dashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, fetchDashboardData)
       .subscribe();
 
+    const specialMealsChannel = supabase
+      .channel('dashboard-special-meals')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'special_meals' }, fetchDashboardData)
+      .subscribe();
+
     const specialEventsChannel = supabase
       .channel('dashboard-special-events')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'special_events_activities' }, fetchDashboardData)
@@ -136,6 +142,7 @@ export default function Dashboard() {
       supabase.removeChannel(tripsChannel);
       supabase.removeChannel(activitiesFieldTripsChannel);
       supabase.removeChannel(menuChannel);
+      supabase.removeChannel(specialMealsChannel);
       supabase.removeChannel(specialEventsChannel);
       supabase.removeChannel(sportsChannel);
       supabase.removeChannel(healthCenterChannel);
@@ -296,6 +303,30 @@ export default function Dashboard() {
       .eq('date', today)
       .eq('company_id', currentCompany.id);
     const menu = menuResult.data;
+
+    let specialMealsToday: any[] = [];
+    if (isTylerHillCamp(currentCompany.slug)) {
+      const { data: specialMealsData } = await supabase
+        .from('special_meals')
+        .select('*')
+        .eq('company_id', currentCompany.id)
+        .eq('date', today)
+        .or(`season.eq.${currentSeason},season.is.null`);
+
+      const mealOrder: Record<string, number> = {
+        breakfast: 1,
+        lunch: 2,
+        snack: 3,
+        dinner: 4,
+      };
+      specialMealsToday = (specialMealsData || []).sort((a, b) => {
+        const orderDiff =
+          (mealOrder[(a.meal_type || '').toLowerCase()] ?? 99) -
+          (mealOrder[(b.meal_type || '').toLowerCase()] ?? 99);
+        if (orderDiff !== 0) return orderDiff;
+        return (a.items || '').localeCompare(b.items || '');
+      });
+    }
 
     // Fetch special events for today with division filtering
     let specialEventsData: any[] = [];
@@ -533,6 +564,8 @@ export default function Dashboard() {
     } else {
       setTodaysMenuItems([]);
     }
+
+    setTodaysSpecialMeals(specialMealsToday);
   };
 
   const formatDashboardMealTypeLabel = (mealType: string) => {
@@ -689,6 +722,45 @@ export default function Dashboard() {
             )}
           </CardContent>
         </Card>
+
+        {isTylerHill && (
+          <Card className={`shadow-card ${glassCardClass}`}>
+            <CardHeader className={widgetHeaderClass}>
+              <div className="flex min-w-0 items-center gap-2">
+                <div className={`${widgetIconWrapClass} bg-amber-500/10`}>
+                  <Utensils className="h-4 w-4 text-amber-600" />
+                </div>
+                <CardTitle className={widgetTitleClass}>Special Meals</CardTitle>
+              </div>
+              <Button variant="link" className={widgetLinkClass} onClick={() => navigate("/special-meals")}>
+                View schedule
+              </Button>
+            </CardHeader>
+            <CardContent className={`${widgetContentClass} space-y-2`}>
+              {todaysSpecialMeals.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No special meals scheduled for today</p>
+              ) : (
+                <div className={`grid gap-2 ${todaysSpecialMeals.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+                  {todaysSpecialMeals.map((item) => (
+                    <div
+                      key={item.id}
+                      className="cursor-pointer rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5 transition-colors hover:bg-amber-500/10"
+                      onClick={() => navigate("/special-meals")}
+                    >
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                        {formatDashboardMealTypeLabel(item.meal_type)}
+                      </p>
+                      <p className="mt-0.5 whitespace-pre-wrap text-sm font-medium">{item.items}</p>
+                      {item.allergens && (
+                        <p className="mt-1 text-xs text-muted-foreground">Allergens: {item.allergens}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Timber Lake Camp: today's activities & upcoming trips */}
         {showTigerTimes && (

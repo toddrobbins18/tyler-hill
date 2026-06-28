@@ -83,11 +83,10 @@ serve(async (req) => {
       .from("company_email_config")
       .select("*")
       .eq("company_id", company_id)
-      .eq("is_active", true)
       .maybeSingle();
 
     const sendEmailViaM365 = async (recipientEmail: string, subject: string, content: string) => {
-      if (!emailConfig || !emailConfig.is_configured || !recipientEmail) return false;
+      if (!emailConfig?.is_configured || emailConfig?.is_active === false || !recipientEmail) return false;
 
       const { data: decryptedSecret, error: decryptError } = await supabase.rpc("decrypt_secret", {
         encrypted: emailConfig.m365_client_secret_encrypted,

@@ -24,6 +24,8 @@ interface ManageSportsRosterDialogProps {
   onOpenChange: (open: boolean) => void;
   divisionProvidesCoach?: boolean;
   divisionProvidesRef?: boolean;
+  /** When true, show only roster members (no checkboxes or save). */
+  readOnly?: boolean;
 }
 
 export default function ManageSportsRosterDialog({
@@ -33,6 +35,7 @@ export default function ManageSportsRosterDialog({
   onOpenChange,
   divisionProvidesCoach = false,
   divisionProvidesRef = false,
+  readOnly = false,
 }: ManageSportsRosterDialogProps) {
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
@@ -59,63 +62,92 @@ export default function ManageSportsRosterDialog({
 
   useEffect(() => {
     if (open) {
+      setActiveTab("campers");
       fetchData();
     }
-  }, [open, eventId, currentSeason]);
+  }, [open, eventId, currentSeason, readOnly]);
 
   const fetchData = async () => {
     setLoading(true);
     
     if (!currentCompany?.id) return;
-    
-    // Fetch all active children
-      const { data: childrenData } = await supabase
-        .from("children")
-        .select("*")
-        .neq("status", "inactive")
-        .eq("company_id", currentCompany.id)
-        .eq("season", currentSeason)
-        .order("name");
 
-    // Fetch all active staff
-      const { data: staffData } = await supabase
-        .from("staff")
-        .select("*")
-        .neq("status", "inactive")
-        .eq("company_id", currentCompany.id)
-        .eq("season", currentSeason)
-        .order("name");
-
-    // Fetch existing roster
     const { data: rosterData } = await supabase
       .from("sports_event_roster")
       .select("child_id")
       .eq("event_id", eventId);
 
-    // Fetch staff assignments
     const { data: staffAssignments } = await supabase
       .from("sports_event_staff")
       .select("*")
       .eq("event_id", eventId);
 
-    // Fetch roster templates
-    const { data: templatesData } = await supabase
-      .from("roster_templates")
-      .select(`
-        *,
-        roster_template_children(child_id)
-      `)
-      .eq("company_id", currentCompany.id)
-      .order("created_at", { ascending: false });
-
-    setChildren(childrenData || []);
-    setStaff(staffData || []);
     const rosterSet = new Set(rosterData?.map(r => r.child_id) || []);
+    const coachIds = staffAssignments?.filter(s => s.role === "coach").map(s => s.staff_id) || [];
+    const refIds = staffAssignments?.filter(s => s.role === "ref").map(s => s.staff_id) || [];
+
     setRoster(rosterSet);
     setOriginalRoster(new Set(rosterSet));
-    setAssignedCoaches(staffAssignments?.filter(s => s.role === "coach").map(s => s.staff_id) || []);
-    setAssignedRefs(staffAssignments?.filter(s => s.role === "ref").map(s => s.staff_id) || []);
-    setTemplates(templatesData || []);
+    setAssignedCoaches(coachIds);
+    setAssignedRefs(refIds);
+
+    if (readOnly) {
+      const rosterIds = Array.from(rosterSet);
+      const assignedStaffIds = [...coachIds, ...refIds];
+
+      const [{ data: childrenData }, { data: staffData }] = await Promise.all([
+        rosterIds.length > 0
+          ? supabase
+              .from("children")
+              .select("*")
+              .in("id", rosterIds)
+              .eq("company_id", currentCompany.id)
+              .order("name")
+          : Promise.resolve({ data: [] as any[] }),
+        assignedStaffIds.length > 0
+          ? supabase
+              .from("staff")
+              .select("*")
+              .in("id", assignedStaffIds)
+              .eq("company_id", currentCompany.id)
+              .order("name")
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+
+      setChildren(childrenData || []);
+      setStaff(staffData || []);
+      setTemplates([]);
+    } else {
+      const [{ data: childrenData }, { data: staffData }, { data: templatesData }] = await Promise.all([
+        supabase
+          .from("children")
+          .select("*")
+          .neq("status", "inactive")
+          .eq("company_id", currentCompany.id)
+          .eq("season", currentSeason)
+          .order("name"),
+        supabase
+          .from("staff")
+          .select("*")
+          .neq("status", "inactive")
+          .eq("company_id", currentCompany.id)
+          .eq("season", currentSeason)
+          .order("name"),
+        supabase
+          .from("roster_templates")
+          .select(`
+            *,
+            roster_template_children(child_id)
+          `)
+          .eq("company_id", currentCompany.id)
+          .order("created_at", { ascending: false }),
+      ]);
+
+      setChildren(childrenData || []);
+      setStaff(staffData || []);
+      setTemplates(templatesData || []);
+    }
+
     setLoading(false);
   };
 
@@ -388,7 +420,7 @@ Please review this conflict and take appropriate action.`;
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              Manage Roster: {eventTitle}
+              {readOnly ? "View" : "Manage"} Roster: {eventTitle}
             </DialogTitle>
           </DialogHeader>
 
@@ -443,10 +475,10 @@ Please review this conflict and take appropriate action.`;
           })()}
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="campers">Select Campers</TabsTrigger>
+            <TabsList className={`grid w-full ${readOnly ? "grid-cols-2" : "grid-cols-3"}`}>
+              <TabsTrigger value="campers">{readOnly ? "Campers" : "Select Campers"}</TabsTrigger>
               <TabsTrigger value="staff">Staff Assignments</TabsTrigger>
-              <TabsTrigger value="templates">Saved Templates</TabsTrigger>
+              {!readOnly && <TabsTrigger value="templates">Saved Templates</TabsTrigger>}
             </TabsList>
 
             <TabsContent value="campers" className="flex-1 overflow-hidden flex flex-col space-y-4">
@@ -476,7 +508,9 @@ Please review this conflict and take appropriate action.`;
               </div>
 
               <div className="text-sm text-muted-foreground">
-                {roster.size} of {filteredAndSortedChildren.length} campers selected
+                {readOnly
+                  ? `${filteredAndSortedChildren.length} camper${filteredAndSortedChildren.length === 1 ? "" : "s"} on roster`
+                  : `${roster.size} of ${filteredAndSortedChildren.length} campers selected`}
               </div>
 
               {loading ? (
@@ -490,14 +524,16 @@ Please review this conflict and take appropriate action.`;
                       key={child.id}
                       className="flex items-center gap-3 p-3 hover:bg-muted rounded-lg transition-colors"
                     >
-                      <Checkbox
-                        id={child.id}
-                        checked={roster.has(child.id)}
-                        onCheckedChange={() => handleToggleChild(child.id)}
-                      />
+                      {!readOnly && (
+                        <Checkbox
+                          id={child.id}
+                          checked={roster.has(child.id)}
+                          onCheckedChange={() => handleToggleChild(child.id)}
+                        />
+                      )}
                       <label
-                        htmlFor={child.id}
-                        className="flex-1 cursor-pointer flex items-center justify-between"
+                        htmlFor={readOnly ? undefined : child.id}
+                        className={`flex-1 ${readOnly ? "" : "cursor-pointer"} flex items-center justify-between`}
                       >
                         <div className="flex items-center gap-2">
                           <span className="font-medium">{child.name}</span>
@@ -517,12 +553,13 @@ Please review this conflict and take appropriate action.`;
                   ))}
                   {filteredAndSortedChildren.length === 0 && (
                     <div className="text-center py-8 text-muted-foreground">
-                      No campers found
+                      {readOnly ? "No campers on this roster" : "No campers found"}
                     </div>
                   )}
                 </div>
               )}
 
+              {!readOnly && (
               <div className="flex gap-2">
                 <Button
                   variant="outline"
@@ -533,6 +570,7 @@ Please review this conflict and take appropriate action.`;
                   Save as Template
                 </Button>
               </div>
+              )}
             </TabsContent>
 
             <TabsContent value="staff" className="flex-1 overflow-hidden flex flex-col space-y-6">
@@ -546,7 +584,7 @@ Please review this conflict and take appropriate action.`;
                     )}
                   </div>
                   
-                  {!divisionProvidesCoach && (
+                  {!divisionProvidesCoach && !readOnly && (
                     <>
                       <Select
                         value=""
@@ -598,6 +636,29 @@ Please review this conflict and take appropriate action.`;
                       </div>
                     </>
                   )}
+
+                  {!divisionProvidesCoach && readOnly && (
+                    <div className="space-y-2">
+                      {assignedCoaches.map(coachId => {
+                        const coach = staff.find(s => s.id === coachId);
+                        return (
+                          <div key={coachId} className="flex items-center justify-between p-2 bg-muted rounded">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">{coach?.name || "Unknown"}</span>
+                              {coach?.allergies && (
+                                <Badge variant="destructive" className="text-xs">
+                                  ⚠️ Allergies: {coach.allergies}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {assignedCoaches.length === 0 && (
+                        <p className="text-sm text-muted-foreground">No coaches assigned</p>
+                      )}
+                    </div>
+                  )}
                   
                   {divisionProvidesCoach && (
                     <p className="text-sm text-muted-foreground">
@@ -615,7 +676,7 @@ Please review this conflict and take appropriate action.`;
                     )}
                   </div>
                   
-                  {!divisionProvidesRef && (
+                  {!divisionProvidesRef && !readOnly && (
                     <>
                       <Select
                         value=""
@@ -666,6 +727,29 @@ Please review this conflict and take appropriate action.`;
                         )}
                       </div>
                     </>
+                  )}
+
+                  {!divisionProvidesRef && readOnly && (
+                    <div className="space-y-2">
+                      {assignedRefs.map(refId => {
+                        const ref = staff.find(s => s.id === refId);
+                        return (
+                          <div key={refId} className="flex items-center justify-between p-2 bg-muted rounded">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">{ref?.name || "Unknown"}</span>
+                              {ref?.allergies && (
+                                <Badge variant="destructive" className="text-xs">
+                                  ⚠️ Allergies: {ref.allergies}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {assignedRefs.length === 0 && (
+                        <p className="text-sm text-muted-foreground">No referees assigned</p>
+                      )}
+                    </div>
                   )}
                   
                   {divisionProvidesRef && (
@@ -730,11 +814,13 @@ Please review this conflict and take appropriate action.`;
               onClick={() => onOpenChange(false)}
               disabled={saving}
             >
-              Cancel
+              {readOnly ? "Close" : "Cancel"}
             </Button>
-            <Button onClick={handleSave} disabled={saving || loading}>
-              {saving ? "Saving..." : "Save Roster"}
-            </Button>
+            {!readOnly && (
+              <Button onClick={handleSave} disabled={saving || loading}>
+                {saving ? "Saving..." : "Save Roster"}
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>
