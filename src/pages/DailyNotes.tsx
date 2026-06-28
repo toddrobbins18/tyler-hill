@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSeasonContext } from '@/contexts/SeasonContext';
@@ -33,7 +32,6 @@ interface ScheduleEvent {
 }
 
 export default function DailyNotes() {
-  const navigate = useNavigate();
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
   const [birthdayChildren, setBirthdayChildren] = useState<BirthdayRow[]>([]);
@@ -43,16 +41,9 @@ export default function DailyNotes() {
   const [loading, setLoading] = useState(true);
   const { getDivisionFilter, loading: permissionsLoading, userDivisions } = usePermissions();
 
-  // Redirect Timber Lake West to their separate Daily Wolf page
-  useEffect(() => {
-    if (currentCompany?.slug === 'timber-lake-west') {
-      navigate('/daily-wolf-printable');
-    }
-  }, [currentCompany?.slug, navigate]);
-
   useEffect(() => {
     // Wait for permissions to load before fetching
-    if (!currentCompany?.id || currentCompany?.slug === 'timber-lake-west' || permissionsLoading) return;
+    if (!currentCompany?.id || permissionsLoading) return;
     fetchAllData();
 
     // Set up realtime subscriptions
@@ -211,12 +202,13 @@ export default function DailyNotes() {
   };
 
   const today = format(new Date(), 'EEEE, MMMM d, yyyy');
-  const campName = currentCompany?.slug === 'tyler-hill-camp' ? 'Tyler Hill' : 'Timber Lake';
+  const campName =
+    currentCompany?.slug === 'tyler-hill-camp'
+      ? 'Tyler Hill'
+      : currentCompany?.slug === 'timber-lake-west'
+        ? 'Timber Lake West'
+        : 'Timber Lake Camp';
   const campSubtitle = currentCompany?.slug === 'tyler-hill-camp' ? 'HOME OF THE BEARS' : '';
-
-  if (currentCompany?.slug === 'timber-lake-west') {
-    return null; // Will redirect via useEffect
-  }
 
   return (
     <div className="container mx-auto p-4">

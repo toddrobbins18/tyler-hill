@@ -44,9 +44,7 @@ const getMenuItems = (company?: MenuCompany) => {
       menuId: "special-events",
     },
     { title: "Staff", url: "/staff", icon: UserCog, menuId: "staff" },
-    ...(isWest
-      ? []
-      : [{ title: "Tutoring & Therapy", url: "/tutoring-therapy", icon: BookOpen, menuId: "tutoring-therapy" } as const]),
+    { title: "Tutoring & Therapy", url: "/tutoring-therapy", icon: BookOpen, menuId: "tutoring-therapy" },
   ];
 
   // Add common items for all companies
@@ -66,23 +64,20 @@ const getMenuItems = (company?: MenuCompany) => {
     );
   }
 
-  // Special Meals only for Tyler Hill Camp
+  baseItems.push(
+    { title: "Special Meals", url: "/special-meals", icon: Utensils, menuId: "special-meals" },
+  );
+
   if (isTylerHillCamp(companySlug)) {
-    baseItems.push(
-      { title: "Special Meals", url: "/special-meals", icon: Utensils, menuId: "special-meals" },
-      { title: "Owl Pay", url: "/owl-pay", icon: CreditCard, menuId: "owl-pay" }
-    );
+    baseItems.push({ title: "Owl Pay", url: "/owl-pay", icon: CreditCard, menuId: "owl-pay" });
   }
 
-  // Add Daily Notes/News for all camps EXCEPT Timber Lake Camp
-  if (!shouldShowTigerTimes(company)) {
-    baseItems.push({
-      title: isTylerHillCamp(companySlug) ? "Daily News" : "Daily Notes",
-      url: "/notes",
-      icon: FileText,
-      menuId: "notes"
-    });
-  }
+  baseItems.push({
+    title: isTylerHillCamp(companySlug) ? "Daily News" : "Daily Notes",
+    url: "/notes",
+    icon: FileText,
+    menuId: "notes",
+  });
 
   // Add Daily Wolf items for Timber Lake West
   if (isWest) {
@@ -130,29 +125,12 @@ const getMenuItems = (company?: MenuCompany) => {
   // Add Nurse for Timber Lake West (limited features) and all other companies
   baseItems.push({ title: "Nurse", url: "/nurse", icon: Pill, menuId: "nurse" });
 
-  // Add these items for all companies (Timber Lake West omits Sports Academy — matches mobile)
   baseItems.push(
     { title: "Awards", url: "/awards", icon: Award, menuId: "awards" },
     { title: "Incident Reports", url: "/incidents", icon: AlertTriangle, menuId: "incidents" },
+    { title: "Sports Academy", url: "/sports-academy", icon: Trophy, menuId: "sports-academy" },
+    { title: "Roster Templates", url: "/roster-templates", icon: ListChecks, menuId: "roster-templates" },
   );
-  if (!isWest) {
-    baseItems.push({
-      title: "Sports Academy",
-      url: "/sports-academy",
-      icon: Trophy,
-      menuId: "sports-academy",
-    });
-  }
-
-  // Roster Templates: Tyler Hill + Timber Lake Camp (page is TH-only; hide from TLW sidebar)
-  if (!isWest) {
-    baseItems.push({
-      title: "Roster Templates",
-      url: "/roster-templates",
-      icon: ListChecks,
-      menuId: "roster-templates",
-    });
-  }
 
   return baseItems.sort((a, b) => a.title.localeCompare(b.title));
 };

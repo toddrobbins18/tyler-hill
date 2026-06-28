@@ -30,30 +30,24 @@ const getCompanyMenuItems = (company?: MenuCompany) => {
     { id: "rainy-day", label: "Rainy Day Schedule", icon: "🌧️" },
     { id: "special-events", label: isWest ? "Special Events" : "Special Events & Evening Activities", icon: "🎉" },
     { id: "transportation", label: "Transportation", icon: "🚌" },
-    ...(isWest ? [] : ([{ id: "tutoring-therapy", label: "Tutoring & Therapy", icon: "📖" }] as const)),
+    { id: "tutoring-therapy", label: "Tutoring & Therapy", icon: "📖" },
     { id: "od-management", label: "OD Management", icon: "✅" },
     { id: "appointments", label: "Appointments", icon: "🩺" },
     { id: "reports", label: "Reports", icon: "📈" },
     { id: "nurse", label: "Nurse", icon: "💊" },
     { id: "awards", label: "Awards", icon: "🏆" },
     { id: "incidents", label: "Incident Reports", icon: "⚠️" },
-    ...(isWest
-      ? []
-      : ([
-          { id: "sports-academy", label: "Sports Academy", icon: "⚽" },
-          { id: "roster-templates", label: "Roster Templates", icon: "🗂️" },
-        ] as const)),
+    { id: "sports-academy", label: "Sports Academy", icon: "⚽" },
+    { id: "roster-templates", label: "Roster Templates", icon: "🗂️" },
     { id: "sports-calendar", label: isWest ? "Athletics" : "Sports Calendar", icon: "🏅" },
+    { id: "special-meals", label: "Special Meals", icon: "🍽️" },
   ];
 
-  // Daily Notes/News - all camps EXCEPT timber-lake-camp (matches AppSidebar)
-  if (!isCamp) {
-    baseItems.push({
-      id: "notes",
-      label: isTylerHillCamp(companySlug) ? "Daily News" : "Daily Notes",
-      icon: "📝"
-    });
-  }
+  baseItems.push({
+    id: "notes",
+    label: isTylerHillCamp(companySlug) ? "Daily News" : "Daily Notes",
+    icon: "📝",
+  });
 
   // Daily Wolf - ONLY for timber-lake-west (matches AppSidebar)
   if (isWest) {
@@ -78,12 +72,8 @@ const getCompanyMenuItems = (company?: MenuCompany) => {
     );
   }
 
-  // Special Meals - ONLY for tyler-hill-camp (matches AppSidebar)
   if (isTylerHillCamp(companySlug)) {
-    baseItems.push(
-      { id: "special-meals", label: "Special Meals", icon: "🍽️" },
-      { id: "owl-pay", label: "Owl Pay", icon: "🦉" }
-    );
+    baseItems.push({ id: "owl-pay", label: "Owl Pay", icon: "🦉" });
   }
 
   // Admin items (all companies)
