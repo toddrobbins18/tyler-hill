@@ -19,6 +19,7 @@ DECLARE
   min_balance constant numeric := -25;
   tx jsonb;
   applied_free boolean := false;
+  camp_today date := (now() AT TIME ZONE 'America/New_York')::date;
 BEGIN
   IF _company_id IS NULL THEN
     RAISE EXCEPTION 'company_id is required';
@@ -39,7 +40,7 @@ BEGIN
 
     BEGIN
       INSERT INTO public.owl_pay_daily_scans (company_id, child_id, scan_date)
-      VALUES (_company_id, _child_id, CURRENT_DATE);
+      VALUES (_company_id, _child_id, camp_today);
       applied_free := true;
     EXCEPTION
       WHEN unique_violation THEN

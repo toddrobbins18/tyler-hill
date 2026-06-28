@@ -1,4 +1,36 @@
--- Atomic Owl Pay checkout (run in SQL editor if migration not deployed yet).
+-- Enforce one free Owl Pay snack/drink per camper per camp day.
+-- Uses America/New_York so evening camp operations do not roll into the next UTC date.
+
+ALTER TABLE public.owl_pay_daily_scans
+  ALTER COLUMN scan_date SET DEFAULT ((now() AT TIME ZONE 'America/New_York')::date);
+
+WITH ranked AS (
+  SELECT
+    id,
+    row_number() OVER (
+      PARTITION BY company_id, child_id, scan_date
+      ORDER BY created_at NULLS LAST, id
+    ) AS rn
+  FROM public.owl_pay_daily_scans
+)
+DELETE FROM public.owl_pay_daily_scans d
+USING ranked r
+WHERE d.id = r.id
+  AND r.rn > 1;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'owl_pay_daily_scans_company_child_date_unique'
+      AND conrelid = 'public.owl_pay_daily_scans'::regclass
+  ) THEN
+    ALTER TABLE public.owl_pay_daily_scans
+      ADD CONSTRAINT owl_pay_daily_scans_company_child_date_unique
+      UNIQUE (company_id, child_id, scan_date);
+  END IF;
+END $$;
 
 CREATE OR REPLACE FUNCTION public.complete_owl_pay_purchase(
   _company_id uuid,
@@ -97,9 +129,6 @@ BEGIN
     'charge_total', COALESCE(_charge_total, 0),
     'free_item_applied', applied_free
   );
-EXCEPTION
-  WHEN others THEN
-    RAISE;
 END;
 $$;
 

@@ -17,12 +17,23 @@ export function sumOwlPayChargeAmount(rows: OwlPayPurchaseRow[]): number {
   return rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
 }
 
+function getOwlPayCampDateYmd(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = (type: string) => parts.find((part) => part.type === type)?.value;
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
 export async function isFreeDailyItemAvailableToday(
   supabase: SupabaseClient,
   companyId: string,
   childId: string,
 ): Promise<boolean> {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getOwlPayCampDateYmd();
   const { data, error } = await supabase
     .from("owl_pay_daily_scans")
     .select("id")
