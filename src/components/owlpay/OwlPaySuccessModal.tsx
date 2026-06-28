@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { CheckCircle, Sparkles } from "lucide-react";
 import { useSignedPhotoUrl } from "@/hooks/useSignedPhotoUrl";
+import { formatOwlPayBalanceHint, getOwlPayBalanceTone } from "@/lib/owlPayBalanceUtils";
 
 interface OwlPaySuccessModalProps {
   open: boolean;
@@ -30,7 +31,14 @@ const OwlPaySuccessModal = ({
     }
   }, [open]);
 
-  const balanceColor = newBalance < 5 ? "text-destructive" : newBalance < 15 ? "text-yellow-600" : "text-green-600";
+  const balanceTone = getOwlPayBalanceTone(newBalance);
+  const balanceColor =
+    balanceTone === "negative" || balanceTone === "low"
+      ? "text-destructive"
+      : balanceTone === "medium"
+        ? "text-yellow-600"
+        : "text-green-600";
+  const balanceHint = formatOwlPayBalanceHint(newBalance);
   const photoSrc = signedUrl || camperPhoto;
 
   return (
@@ -75,11 +83,10 @@ const OwlPaySuccessModal = ({
           <div className="w-full rounded-xl p-4 bg-muted/50">
             <div className="text-sm text-muted-foreground mb-1">Remaining Balance</div>
             <div className={`text-4xl font-bold ${balanceColor}`}>${newBalance.toFixed(2)}</div>
-            {newBalance < 15 && newBalance >= 5 && (
-              <div className="text-sm text-yellow-600 mt-1">⚠️ Balance is getting low</div>
-            )}
-            {newBalance < 5 && (
-              <div className="text-sm text-destructive mt-1">⚠️ Low balance - please add funds</div>
+            {balanceHint && (
+              <div className={`text-sm mt-1 ${newBalance < 0 ? "text-destructive" : "text-yellow-600"}`}>
+                ⚠️ {balanceHint}
+              </div>
             )}
           </div>
           <Button className="w-full" onClick={onClose}>

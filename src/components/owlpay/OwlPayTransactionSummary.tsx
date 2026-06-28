@@ -14,6 +14,13 @@ import {
   buildOwlPayPurchaseRows,
   calculateOwlPayCartPricing,
 } from "@/lib/owlPayFreeItem";
+import {
+  calculateOwlPayNewBalance,
+  formatOwlPayBalanceHint,
+  getOwlPayBalanceTone,
+  OWL_PAY_MAX_OVERDRAFT,
+  wouldExceedOwlPayOverdraft,
+} from "@/lib/owlPayBalanceUtils";
 import type { OwlPayCamper } from "./OwlPayCamperCard";
 import type { OwlPayCartItem } from "./OwlPayItemGrid";
 import OwlPaySuccessModal from "./OwlPaySuccessModal";
@@ -55,7 +62,9 @@ const OwlPayTransactionSummary = ({
     [cart, hasFreeDailyItemAvailable, isStaff]
   );
   const { subtotal, freeDiscount, total } = pricing;
-  const newBalance = isStaff ? camper.owl_pay_balance + total : camper.owl_pay_balance - total;
+  const newBalance = calculateOwlPayNewBalance(camper.owl_pay_balance, total, isStaff);
+  const exceedsOverdraft = !isStaff && wouldExceedOwlPayOverdraft(camper.owl_pay_balance, total);
+  const balanceTone = getOwlPayBalanceTone(newBalance);
   const animatedBalance = useCountAnimation(newBalance, 500);
 
   const updateQuantity = (itemId: string, change: number) => {
@@ -80,8 +89,12 @@ const OwlPayTransactionSummary = ({
       return;
     }
 
-    if (!isStaff && newBalance < 0) {
-      toast({ title: "Insufficient funds", variant: "destructive" });
+    if (!isStaff && exceedsOverdraft) {
+      toast({
+        title: "Over credit limit",
+        description: `Campers can go up to $${OWL_PAY_MAX_OVERDRAFT.toFixed(0)} negative.`,
+        variant: "destructive",
+      });
       return;
     }
 
@@ -238,7 +251,17 @@ const OwlPayTransactionSummary = ({
                 </div>
                 <div className="flex justify-between p-2 rounded-lg bg-muted/50">
                   <span className="text-sm">{isStaff ? "Tab Total:" : "New Balance:"}</span>
-                  <span className={`font-bold ${isStaff ? "text-primary" : newBalance < 5 ? "text-destructive" : newBalance < 15 ? "text-yellow-600" : "text-green-600"}`}>
+                  <span className={`font-bold ${
+                    isStaff
+                      ? "text-primary"
+                      : balanceTone === "negative"
+                        ? "text-destructive"
+                        : balanceTone === "low"
+                          ? "text-destructive"
+                          : balanceTone === "medium"
+                            ? "text-yellow-600"
+                            : "text-green-600"
+                  }`}>
                     ${animatedBalance.toFixed(2)}
                   </span>
                 </div>
@@ -259,14 +282,21 @@ const OwlPayTransactionSummary = ({
               className="w-full owlpay-gradient-header text-white shadow-xl text-lg active:scale-95 transition-transform"
               size="lg"
               onClick={handleComplete}
-              disabled={processing || (!isStaff && newBalance < 0)}
+              disabled={processing || exceedsOverdraft}
             >
               {processing ? "Processing..." : "💳 Complete Transaction"}
             </Button>
           )}
 
-          {!isStaff && newBalance < 0 && cart.length > 0 && (
-            <p className="text-sm text-destructive text-center">⚠️ Insufficient funds</p>
+          {!isStaff && exceedsOverdraft && cart.length > 0 && (
+            <p className="text-sm text-destructive text-center">
+              ⚠️ Exceeds ${OWL_PAY_MAX_OVERDRAFT.toFixed(0)} credit limit
+            </p>
+          )}
+          {!isStaff && !exceedsOverdraft && formatOwlPayBalanceHint(newBalance) && cart.length > 0 && (
+            <p className={`text-sm text-center ${newBalance < 0 ? "text-destructive" : "text-yellow-600"}`}>
+              ⚠️ {formatOwlPayBalanceHint(newBalance)}
+            </p>
           )}
         </CardContent>
       </Card>

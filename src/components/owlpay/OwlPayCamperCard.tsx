@@ -2,6 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { User } from "lucide-react";
 import { useSignedPhotoUrl } from "@/hooks/useSignedPhotoUrl";
+import { getOwlPayBalanceTone } from "@/lib/owlPayBalanceUtils";
 
 export interface OwlPayCamper {
   id: string;
@@ -20,11 +21,13 @@ interface OwlPayCamperCardProps {
 
 const OwlPayCamperCard = ({ camper, isSelected, onSelect }: OwlPayCamperCardProps) => {
   const { signedUrl } = useSignedPhotoUrl(camper.photo_url);
-  const balanceColor = camper.owl_pay_balance < 5
-    ? "text-destructive"
-    : camper.owl_pay_balance < 15
-      ? "text-yellow-600"
-      : "text-green-600";
+  const balanceTone = getOwlPayBalanceTone(camper.owl_pay_balance);
+  const balanceColor =
+    balanceTone === "negative" || balanceTone === "low"
+      ? "text-destructive"
+      : balanceTone === "medium"
+        ? "text-yellow-600"
+        : "text-green-600";
 
   return (
     <Card

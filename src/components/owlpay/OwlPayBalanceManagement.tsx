@@ -9,6 +9,7 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useToast } from "@/hooks/use-toast";
 import { Search, DollarSign } from "lucide-react";
+import { getOwlPayBalanceTone } from "@/lib/owlPayBalanceUtils";
 
 interface CamperBalance {
   id: string;
@@ -246,7 +247,10 @@ const OwlPayBalanceManagement = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredCampers.map((camper) => (
+                {filteredCampers.map((camper) => {
+                  const balance = Number(camper.owl_pay_balance);
+                  const tone = getOwlPayBalanceTone(balance);
+                  return (
                   <TableRow key={camper.id}>
                     <TableCell className="font-medium">{camper.name}</TableCell>
                     <TableCell>
@@ -255,18 +259,19 @@ const OwlPayBalanceManagement = () => {
                     <TableCell>
                       <Badge
                         className={
-                          camper.owl_pay_balance < 5
+                          tone === "negative" || tone === "low"
                             ? "bg-destructive text-destructive-foreground"
-                            : camper.owl_pay_balance < 15
+                            : tone === "medium"
                               ? "bg-yellow-500 text-white"
                               : "bg-green-500 text-white"
                         }
                       >
-                        ${Number(camper.owl_pay_balance).toFixed(2)}
+                        ${balance.toFixed(2)}
                       </Badge>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           ) : (
