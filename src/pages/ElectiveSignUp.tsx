@@ -15,15 +15,17 @@ import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { Plus, Trash2, Users, ClipboardList, BarChart3, Clock, History, Search, Settings2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { startOfWeek, format } from "date-fns";
+import { startOfWeek, format, parseISO } from "date-fns";
 import {
   filterElectivesForPeriod,
-  TIMBER_LAKE_ELECTIVE_DAYS,
   TIMBER_LAKE_ELECTIVE_PERIODS,
+  getDefaultElectiveCalendarDate,
+  electiveSlotFromCalendarDate,
+  shiftElectiveCalendarDate,
+  normalizeElectiveCalendarDate,
 } from "@/lib/timberLakeElectiveSchedule";
 
 const PERIODS = [...TIMBER_LAKE_ELECTIVE_PERIODS];
-const DAYS = [...TIMBER_LAKE_ELECTIVE_DAYS];
 
 export default function ElectiveSignUp() {
   const { currentCompany } = useCompany();
@@ -35,11 +37,16 @@ export default function ElectiveSignUp() {
   const [children, setChildren] = useState<any[]>([]);
   const [electives, setElectives] = useState<any[]>([]);
   const [signups, setSignups] = useState<any[]>([]);
+  const [slotCountsByElective, setSlotCountsByElective] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
+  const isTlc = currentCompany?.name.toLowerCase().includes("timber lake camp") ?? false;
+
   // Filters
-  const currentWeekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd");
-  const [weekStart, setWeekStart] = useState(currentWeekStart);
+  const [selectedDate, setSelectedDate] = useState(() => getDefaultElectiveCalendarDate());
+  const [weekStart, setWeekStart] = useState(() =>
+    format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd"),
+  );
   const [selectedDay, setSelectedDay] = useState("Monday");
   const [selectedPeriod, setSelectedPeriod] = useState("period-1");
   const [selectedDivision, setSelectedDivision] = useState<string | null>(null);
@@ -61,10 +68,17 @@ export default function ElectiveSignUp() {
   const [editingCapacities, setEditingCapacities] = useState<Record<string, number | "">>({});
 
   useEffect(() => {
+    if (!isTlc) return;
+    const slot = electiveSlotFromCalendarDate(parseISO(selectedDate));
+    setWeekStart(slot.weekStartDate);
+    setSelectedDay(slot.dayOfWeek);
+  }, [isTlc, selectedDate]);
+
+  useEffect(() => {
     if (currentCompany?.id && !permissionsLoading) {
       fetchData();
     }
-  }, [currentCompany, currentSeason, weekStart, selectedDay, selectedPeriod, permissionsLoading, userDivisions]);
+  }, [currentCompany, currentSeason, weekStart, selectedDay, selectedPeriod, permissionsLoading, userDivisions, isTlc, selectedDate]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -76,7 +90,7 @@ export default function ElectiveSignUp() {
       divisionsQuery = divisionsQuery.in("id", divisionFilter);
     }
 
-    const [divisionsRes, electivesRes, signupsRes, allChildrenRes] = await Promise.all([
+    const [divisionsRes, electivesRes, signupsRes, allChildrenRes, slotCountsRes] = await Promise.all([
       divisionsQuery,
       supabase.from("electives").select("*").eq("company_id", companyId).eq("is_active", true).order("name"),
       supabase.from("elective_signups").select("*, children(name, division_id), electives(name)")
@@ -89,6 +103,12 @@ export default function ElectiveSignUp() {
         .eq("season", currentSeason)
         .neq("status", "inactive")
         .order("name"),
+      (supabase as any).rpc("get_elective_slot_counts", {
+        p_company_id: companyId,
+        p_week_start: weekStart,
+        p_day_of_week: selectedDay,
+        p_period: selectedPeriod,
+      }),
     ]);
 
     if (divisionsRes.data) setDivisions(sortDivisionsAlternatingGender(divisionsRes.data));
@@ -103,6 +123,15 @@ export default function ElectiveSignUp() {
     }
     if (signupsRes.data) setSignups(signupsRes.data);
     if (allChildrenRes.data) setAllChildren(allChildrenRes.data);
+    if (slotCountsRes.data) {
+      const counts: Record<string, number> = {};
+      (slotCountsRes.data as unknown as { elective_id: string; signup_count: number }[]).forEach((row) => {
+        counts[row.elective_id] = Number(row.signup_count);
+      });
+      setSlotCountsByElective(counts);
+    } else {
+      setSlotCountsByElective({});
+    }
     setLoading(false);
   };
 
@@ -137,6 +166,20 @@ export default function ElectiveSignUp() {
       .eq("period", selectedPeriod);
 
     if (electiveId) {
+      const rawCap = electives.find((e) => e.id === electiveId)?.capacity;
+      const capNum =
+        rawCap != null && rawCap !== ""
+          ? typeof rawCap === "number"
+            ? rawCap
+            : parseInt(String(rawCap), 10)
+          : NaN;
+      const count = signupCountByElective[electiveId] || 0;
+      const already = getChildSignup(childId)?.elective_id === electiveId;
+      if (!Number.isNaN(capNum) && count >= capNum && !already) {
+        toast({ title: "This elective is at capacity.", variant: "destructive" });
+        return;
+      }
+
       const { error } = await supabase.from("elective_signups").insert({
         company_id: companyId,
         child_id: childId,
@@ -147,20 +190,38 @@ export default function ElectiveSignUp() {
         season: currentSeason,
       });
       if (error) {
-        toast({ title: "Error assigning elective", variant: "destructive" });
+        toast({
+          title: error.message.includes("capacity") ? "This elective is at capacity." : "Error assigning elective",
+          variant: "destructive",
+        });
         return;
       }
     }
 
     // Refresh signups
-    const { data } = await supabase
-      .from("elective_signups")
-      .select("*, children(name, division_id), electives(name)")
-      .eq("company_id", companyId)
-      .eq("week_start_date", weekStart)
-      .eq("day_of_week", selectedDay)
-      .eq("period", selectedPeriod);
-    if (data) setSignups(data);
+    const [signupsRefresh, slotCountsRefresh] = await Promise.all([
+      supabase
+        .from("elective_signups")
+        .select("*, children(name, division_id), electives(name)")
+        .eq("company_id", companyId)
+        .eq("week_start_date", weekStart)
+        .eq("day_of_week", selectedDay)
+        .eq("period", selectedPeriod),
+      (supabase as any).rpc("get_elective_slot_counts", {
+        p_company_id: companyId,
+        p_week_start: weekStart,
+        p_day_of_week: selectedDay,
+        p_period: selectedPeriod,
+      }),
+    ]);
+    if (signupsRefresh.data) setSignups(signupsRefresh.data);
+    if (slotCountsRefresh.data) {
+      const counts: Record<string, number> = {};
+      (slotCountsRefresh.data as unknown as { elective_id: string; signup_count: number }[]).forEach((row) => {
+        counts[row.elective_id] = Number(row.signup_count);
+      });
+      setSlotCountsByElective(counts);
+    }
   };
 
   const handleAddElective = async () => {
@@ -192,14 +253,19 @@ export default function ElectiveSignUp() {
     fetchData();
   };
 
-  // Count signups per elective for the current period/day/week
+  // Count signups per elective for the current period/day/week (camp-wide)
   const signupCountByElective = useMemo(() => {
+    if (Object.keys(slotCountsByElective).length > 0) {
+      return slotCountsByElective;
+    }
     const counts: Record<string, number> = {};
     signups.forEach((s) => {
-      counts[s.elective_id] = (counts[s.elective_id] || 0) + 1;
+      if (s.elective_id) {
+        counts[s.elective_id] = (counts[s.elective_id] || 0) + 1;
+      }
     });
     return counts;
-  }, [signups]);
+  }, [signups, slotCountsByElective]);
 
   const handleDeleteElective = async (id: string) => {
     const { error } = await supabase.from("electives").update({ is_active: false }).eq("id", id);
@@ -336,20 +402,44 @@ export default function ElectiveSignUp() {
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label>Week Starting</Label>
-              <Input type="date" value={weekStart} onChange={(e) => setWeekStart(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Day</Label>
-              <Select value={selectedDay} onValueChange={setSelectedDay}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {DAYS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className={`grid grid-cols-1 ${isTlc ? "md:grid-cols-2" : "md:grid-cols-3"} gap-4`}>
+            {isTlc ? (
+              <div className="space-y-2">
+                <Label>Date</Label>
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="outline" size="icon" onClick={() => setSelectedDate(shiftElectiveCalendarDate(selectedDate, -1))}>
+                    ‹
+                  </Button>
+                  <Input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(normalizeElectiveCalendarDate(e.target.value))}
+                    className="flex-1"
+                  />
+                  <Button type="button" variant="outline" size="icon" onClick={() => setSelectedDate(shiftElectiveCalendarDate(selectedDate, 1))}>
+                    ›
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label>Week Starting</Label>
+                  <Input type="date" value={weekStart} onChange={(e) => setWeekStart(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Day</Label>
+                  <Select value={selectedDay} onValueChange={setSelectedDay}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((d) => (
+                        <SelectItem key={d} value={d}>{d}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
             <div className="space-y-2">
               <Label>Period</Label>
               <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>

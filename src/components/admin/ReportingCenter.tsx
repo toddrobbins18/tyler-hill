@@ -28,8 +28,12 @@ import {
   formatSportsEventMealOptions,
   formatSportsEventReportTime,
 } from "@/lib/sportsEventReportUtils";
+import {
+  formatSpecialEventReportTime,
+  formatSpecialEventTypeLabel,
+} from "@/lib/specialEventReportUtils";
 
-type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'conflicts' | 'medications' | 'allergies' | 're_enrollment' | 'appointments' | 'tshirt_sizes' | 'birthdays';
+type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'special_events_activities' | 'conflicts' | 'medications' | 'allergies' | 're_enrollment' | 'appointments' | 'tshirt_sizes' | 'birthdays';
 
 type DivisionAwareRow = Record<string, any> & {
   __divisionIds?: string[];
@@ -444,6 +448,74 @@ export default function ReportingCenter() {
             'Total Activities': data.length,
           };
           break;
+
+        case 'special_events_activities': {
+          const [eventsResult, eventDivisionLinksResult] = await Promise.all([
+            supabase
+              .from('special_events_activities')
+              .select('*, division:divisions(id, name)')
+              .eq('company_id', currentCompany.id)
+              .gte('event_date', startDate || '1900-01-01')
+              .lte('event_date', endDate || '2100-12-31')
+              .order('event_date', { ascending: true })
+              .order('start_time', { ascending: true }),
+            supabase
+              .from('special_events_divisions')
+              .select('event_id, division_id, divisions(id, name)')
+              .eq('company_id', currentCompany.id),
+          ]);
+
+          const eventDivisionMap = new Map<string, { ids: string[]; names: string[] }>();
+
+          (eventDivisionLinksResult.data || []).forEach((link: any) => {
+            const entry = eventDivisionMap.get(link.event_id) || { ids: [], names: [] };
+            entry.ids.push(link.division_id);
+            if (link.divisions?.name) entry.names.push(link.divisions.name);
+            eventDivisionMap.set(link.event_id, entry);
+          });
+
+          const seasonFiltered = (eventsResult.data || []).filter(
+            (event) => event.season === selectedSeason || event.season === null,
+          );
+
+          data = seasonFiltered
+            .map((event: any) => {
+              const linkedDivisions = eventDivisionMap.get(event.id) || { ids: [], names: [] };
+              const divisionIds = [event.division_id, ...linkedDivisions.ids];
+              const divisionNames = [event.division?.name, ...linkedDivisions.names];
+              const uniqueDivisionNames = Array.from(new Set(divisionNames.filter(Boolean)));
+
+              return withDivisionMeta(
+                {
+                  Date: event.event_date,
+                  Title: event.emoji ? `${event.emoji} ${event.title}` : event.title,
+                  'Event Type': formatSpecialEventTypeLabel(event.event_type),
+                  'Sub Category': event.sub_category || '-',
+                  Division: uniqueDivisionNames.length > 0 ? uniqueDivisionNames.join(', ') : 'All Divisions',
+                  Time: formatSpecialEventReportTime(event),
+                  Location: event.location || '-',
+                  Staff: event.chaperone || '-',
+                  Description: event.description || '',
+                },
+                divisionIds,
+                divisionNames,
+              );
+            })
+            .filter((row) => {
+              if (!allowedDivisionIds) return true;
+              const ids = (row as DivisionAwareRow).__divisionIds || [];
+              if (ids.length === 0) return true;
+              return ids.some((id) => allowedDivisionIds.includes(id));
+            })
+            .sort((a, b) => compareReportRowsByDateThenTime(a, b, { timeKey: 'Time' }));
+
+          summaryData = {
+            'Total Events': data.length,
+            'Evening Activities': data.filter((row) => row['Event Type'] === 'Evening Activity').length,
+            'Special Events': data.filter((row) => row['Event Type'] === 'Special Event').length,
+          };
+          break;
+        }
 
         case 'conflicts':
           const { data: conflicts } = await supabase
@@ -1118,6 +1190,12 @@ export default function ReportingCenter() {
         return {
           'Total Activities': filteredReportData.length,
         };
+      case 'special_events_activities':
+        return {
+          'Total Events': filteredReportData.length,
+          'Evening Activities': filteredReportData.filter((row) => row['Event Type'] === 'Evening Activity').length,
+          'Special Events': filteredReportData.filter((row) => row['Event Type'] === 'Special Event').length,
+        };
       case 'conflicts':
         return {
           'Total Conflicts': filteredReportData.length,
@@ -1352,6 +1430,7 @@ export default function ReportingCenter() {
       sports_events: 'SPORTS EVENTS',
       trips: 'TRIPS',
       activities: 'ACTIVITIES & FIELD TRIPS',
+      special_events_activities: 'SPECIAL EVENTS & EVENING ACTIVITIES',
       conflicts: 'SCHEDULE CONFLICTS',
       medications: 'MEDICATION SCHEDULE',
       allergies: 'ALLERGY REPORT',
@@ -1378,6 +1457,7 @@ export default function ReportingCenter() {
       { value: 'camper_reports', label: 'Camper Reports' },
       { value: 'awards', label: 'Awards' },
       { value: 'sports_events', label: 'Sports Events' },
+      { value: 'special_events_activities', label: 'Special Events & Evening Activities' },
       { value: 'conflicts', label: 'Schedule Conflicts' },
       { value: 'medications', label: 'Medication Schedule' },
       { value: 'allergies', label: 'Allergy Report' },

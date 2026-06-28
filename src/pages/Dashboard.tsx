@@ -23,6 +23,10 @@ import { isActiveRosterStatus, isBirthdayTodayCalendar, parseBirthdayCalendarPar
 import { isTimberLakeCamp, isTimberLakeWestCompany, isTylerHillCamp, shouldShowTigerTimes } from "@/lib/camps";
 import { formatTime12Hour } from "@/lib/utils";
 import { dedupeMenuItemsForDisplay } from "@/lib/csvRosterSync";
+import {
+  formatDashboardSpecialEventSubtitle,
+  mergeActivityDivisions,
+} from "@/lib/dailyWolfPrintableUtils";
 
 interface DailyWolfContent {
   officer_of_day: string;
@@ -333,12 +337,19 @@ export default function Dashboard() {
     try {
       let specialQuery = supabase
         .from('special_events_activities')
-        .select('*')
+        .select(`
+          *,
+          division:divisions(id, name),
+          special_events_divisions(division_id, division:divisions(id, name))
+        `)
         .eq('event_date', today)
         .eq('company_id', currentCompany.id);
       
       const result = await specialQuery;
-      let events = result.data || [];
+      let events = (result.data || []).map((event: any) => ({
+        ...event,
+        divisions: mergeActivityDivisions(event),
+      }));
       
       // Filter by division if user has restricted access and events have division_id
       if (!hasFullAccess && divisionFilter && divisionFilter.length > 0) {
@@ -863,7 +874,7 @@ export default function Dashboard() {
                     <div key={event.id} className="flex cursor-pointer items-start gap-2 rounded-lg bg-muted/50 p-2 transition-colors hover:bg-muted" onClick={() => navigate("/special-events")}>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium">{event.title}</p>
-                        <span className="text-xs text-muted-foreground">{formatTime12Hour(event.time_slot) || event.time_slot || "All day"}</span>
+                        <span className="text-xs text-muted-foreground">{formatDashboardSpecialEventSubtitle(event)}</span>
                       </div>
                     </div>
                   ))}
@@ -895,7 +906,7 @@ export default function Dashboard() {
                     <div key={event.id} className="flex cursor-pointer items-start gap-2 rounded-lg bg-muted/50 p-2 transition-colors hover:bg-muted" onClick={() => navigate("/special-events")}>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium">{event.title}</p>
-                        <span className="text-xs text-muted-foreground">{formatTime12Hour(event.time_slot) || event.time_slot || "All day"}</span>
+                        <span className="text-xs text-muted-foreground">{formatDashboardSpecialEventSubtitle(event)}</span>
                       </div>
                       <Badge variant="outline" className="shrink-0 text-xs">{event.type}</Badge>
                     </div>
@@ -1028,7 +1039,7 @@ export default function Dashboard() {
                   <div key={event.id} className="flex cursor-pointer items-start gap-2 rounded-lg bg-muted/50 p-2 transition-colors hover:bg-muted" onClick={() => navigate("/special-events")}>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium">{event.title}</p>
-                      <span className="text-xs text-muted-foreground">{formatTime12Hour(event.time_slot) || event.time_slot || "All day"}</span>
+                      <span className="text-xs text-muted-foreground">{formatDashboardSpecialEventSubtitle(event)}</span>
                     </div>
                     <Badge variant="outline" className="shrink-0 text-xs">{event.type}</Badge>
                   </div>

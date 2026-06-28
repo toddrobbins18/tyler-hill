@@ -1,3 +1,5 @@
+import { addDays, format, parseISO, startOfWeek } from "date-fns";
+
 /** Timber Lake Camp elective sign-up days (no Wednesday — camp schedule). */
 export const TIMBER_LAKE_ELECTIVE_DAYS = [
   "Monday",
@@ -39,4 +41,55 @@ export function filterElectivesForPeriod<T extends { name: string }>(
     return electives;
   }
   return electives.filter((e) => !e.name.toLowerCase().includes("water ski"));
+}
+
+export function isTimberLakeElectiveDay(dayOfWeek: string): boolean {
+  return (TIMBER_LAKE_ELECTIVE_DAYS as readonly string[]).includes(dayOfWeek);
+}
+
+export function electiveSlotFromCalendarDate(date: Date): {
+  calendarDate: string;
+  weekStartDate: string;
+  dayOfWeek: string;
+} {
+  const weekStartDate = format(startOfWeek(date, { weekStartsOn: 1 }), "yyyy-MM-dd");
+  const dayOfWeek = format(date, "EEEE");
+  const calendarDate = format(date, "yyyy-MM-dd");
+  return { calendarDate, weekStartDate, dayOfWeek };
+}
+
+/** Today if it is an elective day, otherwise the next elective day within a week. */
+export function getDefaultElectiveCalendarDate(reference = new Date()): string {
+  let d = reference;
+  for (let i = 0; i < 8; i++) {
+    if (isTimberLakeElectiveDay(format(d, "EEEE"))) {
+      return format(d, "yyyy-MM-dd");
+    }
+    d = addDays(d, 1);
+  }
+  return format(reference, "yyyy-MM-dd");
+}
+
+export function shiftElectiveCalendarDate(ymd: string, direction: -1 | 1): string {
+  let d = parseISO(ymd);
+  do {
+    d = addDays(d, direction);
+  } while (!isTimberLakeElectiveDay(format(d, "EEEE")));
+  return format(d, "yyyy-MM-dd");
+}
+
+/** If the picked date is not an elective day (e.g. Wednesday), move forward to the next valid day. */
+export function normalizeElectiveCalendarDate(ymd: string): string {
+  const d = parseISO(ymd);
+  if (isTimberLakeElectiveDay(format(d, "EEEE"))) {
+    return ymd;
+  }
+  let cur = d;
+  for (let i = 0; i < 7; i++) {
+    cur = addDays(cur, 1);
+    if (isTimberLakeElectiveDay(format(cur, "EEEE"))) {
+      return format(cur, "yyyy-MM-dd");
+    }
+  }
+  return ymd;
 }
