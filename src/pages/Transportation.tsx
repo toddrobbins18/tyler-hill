@@ -71,12 +71,17 @@ export default function Transportation() {
         { event: '*', schema: 'public', table: 'sports_event_staff' },
         () => fetchTrips()
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sports_calendar' },
+        () => fetchTrips()
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [currentCompany?.id, currentSeason]);
 
   const fetchTrips = async () => {
     if (!currentCompany?.id) {

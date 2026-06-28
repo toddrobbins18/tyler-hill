@@ -20,6 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, addDays } from 'date-fns';
 import { formatTime12Hour } from "@/lib/utils";
+import { syncLinkedTripsFromFieldTrip } from "@/lib/syncLinkedTripFromFieldTrip";
 import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -249,6 +250,33 @@ export default function ActivitiesFieldTrips() {
             }))
           );
       }
+
+      if (currentCompany?.id && formData.home_away !== "home") {
+        const { error: tripSyncError } = await syncLinkedTripsFromFieldTrip(
+          supabase,
+          {
+            company_id: currentCompany.id,
+            season: currentSeason,
+            previous_title: editingEvent.title,
+            previous_date: editingEvent.event_date,
+          },
+          {
+            title: formData.title,
+            event_date: formData.event_date,
+            end_date: formData.end_date,
+            is_multi_day: formData.is_multi_day,
+            depart_from_camp: formData.depart_from_camp,
+            location: formData.location,
+            activity_type: formData.activity_type,
+            capacity: formData.capacity ? parseInt(formData.capacity) : null,
+            chaperone: formData.chaperone,
+          },
+        );
+        if (tripSyncError) {
+          console.error("Error syncing linked transportation trip:", tripSyncError);
+        }
+      }
+
       const staffNames = formData.chaperone ? formData.chaperone.split(",").map(s => s.trim()).filter(Boolean) : [];
       if (staffNames.length > 0) {
         notifyStaffAssignment({

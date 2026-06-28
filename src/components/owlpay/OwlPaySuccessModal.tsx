@@ -1,4 +1,5 @@
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { useEffect, useRef } from "react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { CheckCircle, Sparkles } from "lucide-react";
@@ -20,6 +21,14 @@ const OwlPaySuccessModal = ({
   chargedAmount, newBalance, freeItemApplied,
 }: OwlPaySuccessModalProps) => {
   const { signedUrl } = useSignedPhotoUrl(camperPhoto);
+  const ignoreCloseUntilRef = useRef(0);
+
+  // Prevent the "Complete Transaction" click from immediately closing the dialog.
+  useEffect(() => {
+    if (open) {
+      ignoreCloseUntilRef.current = Date.now() + 600;
+    }
+  }, [open]);
 
   const balanceColor = newBalance < 5 ? "text-destructive" : newBalance < 15 ? "text-yellow-600" : "text-green-600";
   const photoSrc = signedUrl || camperPhoto;
@@ -28,14 +37,19 @@ const OwlPaySuccessModal = ({
     <Dialog
       open={open}
       onOpenChange={(isOpen) => {
+        if (!isOpen && Date.now() < ignoreCloseUntilRef.current) return;
         if (!isOpen) onClose();
       }}
     >
       <DialogContent
-        className="sm:max-w-md text-center"
+        className="sm:max-w-md text-center [&>button]:hidden"
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => {
+          if (Date.now() < ignoreCloseUntilRef.current) e.preventDefault();
+        }}
       >
+        <DialogTitle className="sr-only">Transaction complete</DialogTitle>
         <div className="flex flex-col items-center py-4 space-y-4">
           <CheckCircle className="h-14 w-14 text-green-500" />
           <Avatar className="h-20 w-20 border-4 border-green-500/30 shadow-xl">

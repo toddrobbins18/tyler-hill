@@ -132,12 +132,15 @@ const OwlPayTransactionSummary = ({
         console.error("Owl Pay notification call failed:", notifyError);
       }
 
-      setSuccessData({
-        show: true,
-        chargedAmount: total,
-        newBalance,
-        freeItemApplied: pricing.freeItemApplied,
-      });
+      // Defer so the Complete Transaction click doesn't dismiss the dialog on open.
+      window.setTimeout(() => {
+        setSuccessData({
+          show: true,
+          chargedAmount: total,
+          newBalance,
+          freeItemApplied: pricing.freeItemApplied,
+        });
+      }, 150);
     } catch (error: any) {
       console.error("Transaction error:", error);
       toast({ title: "Transaction failed", description: error.message, variant: "destructive" });

@@ -25,6 +25,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
+import { syncLinkedTripsFromSportsEvent } from "@/lib/syncLinkedTripFromSportsEvent";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useSpecialistSportScope } from "@/hooks/useSpecialistSportScope";
 
@@ -275,7 +276,26 @@ export default function SportsCalendar() {
           await supabase.from("sports_calendar_divisions").insert(junctionData);
         }
 
-        toast({ title: "Event updated successfully" });
+        const { error: tripSyncError } = await syncLinkedTripsFromSportsEvent(
+          supabase,
+          editingEvent.id,
+          {
+            title: formData.title,
+            event_date: formData.event_date,
+            depart_time: formData.depart_time,
+            location: formData.location,
+            sport_type: formData.sport_type,
+            custom_sport_type: formData.custom_sport_type,
+          },
+        );
+        if (tripSyncError) {
+          console.error("Error syncing linked transportation trip:", tripSyncError);
+        }
+
+        toast({
+          title: "Event updated successfully",
+          description: tripSyncError ? undefined : "Linked transportation trip updated",
+        });
         
         // Close dialog immediately for better UX
         setShowDialog(false);
