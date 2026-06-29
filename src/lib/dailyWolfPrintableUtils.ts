@@ -60,7 +60,7 @@ function formatTimeSlotForDisplay(raw: string): string {
   return formatted && !isPlaceholderTime(formatted) ? formatted : "";
 }
 
-/** Dashboard special-events subtitle: 12-hour time when set, otherwise assigned division(s). */
+/** Dashboard special-events subtitle: 12-hour time and assigned division(s) when present. */
 export function formatDashboardSpecialEventSubtitle(event: {
   time_slot?: string | null;
   time?: string | null;
@@ -68,10 +68,12 @@ export function formatDashboardSpecialEventSubtitle(event: {
   division?: NamedDivision | null;
   special_events_divisions?: { division?: NamedDivision | null }[] | null;
 }): string {
+  const parts: string[] = [];
+
   const rawTime = (event.time_slot || event.time || "").trim();
   if (rawTime && !isPlaceholderTime(rawTime)) {
     const displayTime = formatTimeSlotForDisplay(rawTime);
-    if (displayTime) return displayTime;
+    if (displayTime) parts.push(displayTime);
   }
 
   const divisions =
@@ -79,5 +81,8 @@ export function formatDashboardSpecialEventSubtitle(event: {
       ? event.divisions
       : mergeActivityDivisions(event);
   const label = divisionNamesLabel(divisions);
-  return label || "All divisions";
+  if (label) parts.push(label);
+
+  if (parts.length === 0) return "All divisions";
+  return parts.join(" • ");
 }
