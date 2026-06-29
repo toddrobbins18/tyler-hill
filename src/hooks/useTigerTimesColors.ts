@@ -3,10 +3,18 @@ import { useState, useEffect } from "react";
 const TIGER_TIMES_DEFAULTS: Record<string, string> = {
   "Laundry": "#3b82f6",
   "Phone Calls": "#ef4444",
-  "Outside Events": "#eab308",
+  "Movie / Entertainment": "#eab308",
   "Staff Days Off": "#7dd3fc",
   "OD Notes": "#ff69b4",
 };
+
+function mergeTigerTimesColors(stored: Record<string, string>): Record<string, string> {
+  const merged = { ...TIGER_TIMES_DEFAULTS, ...stored };
+  if (stored["Outside Events"] && !stored["Movie / Entertainment"]) {
+    merged["Movie / Entertainment"] = stored["Outside Events"];
+  }
+  return merged;
+}
 
 export function useTigerTimesColors() {
   const [colors, setColors] = useState<Record<string, string>>(TIGER_TIMES_DEFAULTS);
@@ -16,7 +24,7 @@ export function useTigerTimesColors() {
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        setColors({ ...TIGER_TIMES_DEFAULTS, ...parsed });
+        setColors(mergeTigerTimesColors(parsed));
       } catch {
         // ignore
       }
@@ -26,7 +34,7 @@ export function useTigerTimesColors() {
     const handler = () => {
       const s = localStorage.getItem("calendar-colors-tiger-times");
       if (s) {
-        try { setColors({ ...TIGER_TIMES_DEFAULTS, ...JSON.parse(s) }); } catch {}
+        try { setColors(mergeTigerTimesColors(JSON.parse(s))); } catch {}
       } else {
         setColors(TIGER_TIMES_DEFAULTS);
       }

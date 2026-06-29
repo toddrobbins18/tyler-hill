@@ -100,6 +100,7 @@ export default function MasterCalendar() {
       "Bocian/Melter Bowl": "#39ff14",
       "TT: Laundry": "#3b82f6",
       "TT: Phone Calls": "#ef4444",
+      "TT: Movie / Entertainment": "#eab308",
       "TT: Outside Events": "#eab308",
       "TT: Staff Days Off": "#93c5fd",
       "TT: OD Notes": "#ec4899",

@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CalendarIcon, Clock, MapPin, Users, ChevronLeft, ChevronRight, Filter, Loader2, FileText, Camera, Shirt, Phone, Globe, CalendarOff } from "lucide-react";
+import { CalendarIcon, Clock, MapPin, Users, ChevronLeft, ChevronRight, Filter, Loader2, FileText, Camera, Shirt, Phone, Film, CalendarOff } from "lucide-react";
 import { cn, formatTime12Hour } from "@/lib/utils";
 import { useTigerTimesColors } from "@/hooks/useTigerTimesColors";
 import DivisionScheduleUploader from "@/components/admin/DivisionScheduleUploader";
@@ -437,13 +437,13 @@ export default function DailySchedule() {
                 </CardContent>
               </Card>
 
-              <Card style={{ borderTopWidth: '3px', borderTopColor: ttColors["Outside Events"] }}>
+              <Card style={{ borderTopWidth: '3px', borderTopColor: ttColors["Movie / Entertainment"] ?? ttColors["Outside Events"] }}>
                 <CardHeader className="pb-2">
                   <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-lg" style={{ backgroundColor: ttColors["Outside Events"] + '1a' }}>
-                      <Globe className="h-4 w-4" style={{ color: ttColors["Outside Events"] }} />
+                    <div className="p-2 rounded-lg" style={{ backgroundColor: (ttColors["Movie / Entertainment"] ?? ttColors["Outside Events"]) + '1a' }}>
+                      <Film className="h-4 w-4" style={{ color: ttColors["Movie / Entertainment"] ?? ttColors["Outside Events"] }} />
                     </div>
-                    <CardTitle className="text-base">🌐 Outside Events</CardTitle>
+                    <CardTitle className="text-base">🎬 Movie / Entertainment</CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent>

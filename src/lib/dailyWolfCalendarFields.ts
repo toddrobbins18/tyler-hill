@@ -8,7 +8,7 @@ export type DailyContentCalendarField = {
 export const TIGER_TIMES_CALENDAR_FIELDS: DailyContentCalendarField[] = [
   { field: "laundry_info", label: "Laundry", colorKey: "TT: Laundry" },
   { field: "phone_calls_info", label: "Phone Calls", colorKey: "TT: Phone Calls" },
-  { field: "outside_event", label: "Outside Events", colorKey: "TT: Outside Events" },
+  { field: "outside_event", label: "Movie / Entertainment", colorKey: "TT: Movie / Entertainment" },
   { field: "staff_days_off", label: "Staff Days Off", colorKey: "TT: Staff Days Off" },
   { field: "od_notes", label: "OD Notes", colorKey: "TT: OD Notes" },
 ];

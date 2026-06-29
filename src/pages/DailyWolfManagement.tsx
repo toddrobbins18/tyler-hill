@@ -61,7 +61,7 @@ export default function DailyWolfManagement() {
   const tigerTimesDefaultColors: Record<string, string> = {
     "Laundry": "#3b82f6",
     "Phone Calls": "#ef4444",
-    "Outside Events": "#eab308",
+    "Movie / Entertainment": "#eab308",
     "Staff Days Off": "#7dd3fc",
     "OD Notes": "#ff69b4",
   };
@@ -382,17 +382,17 @@ export default function DailyWolfManagement() {
             </CardContent>
           </Card>
 
-          <Card style={{ borderTopWidth: '3px', borderTopColor: tigerTimesColors["Outside Events"] }}>
+          <Card style={{ borderTopWidth: '3px', borderTopColor: tigerTimesColors["Movie / Entertainment"] ?? tigerTimesColors["Outside Events"] }}>
             <CardHeader>
-              <CardTitle>🌐 Outside Event</CardTitle>
-              <CardDescription>External events and activities</CardDescription>
+              <CardTitle>🎬 Movie / Entertainment</CardTitle>
+              <CardDescription>Tonight&apos;s movie, outdoor screening, or other evening entertainment</CardDescription>
             </CardHeader>
             <CardContent>
               <Textarea
                 value={content.outside_event}
                 onChange={(e) => handleFieldChange('outside_event', e.target.value)}
                 onBlur={(e) => handleFieldBlur('outside_event', e.target.value)}
-                placeholder="Enter outside event details"
+                placeholder="Enter movie or entertainment details for tonight"
                 rows={4}
                 disabled={saving}
               />

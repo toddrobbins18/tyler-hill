@@ -1,4 +1,4 @@
-import { Users, Truck, FileText, Award, Utensils, Calendar as CalendarIcon, CalendarDays, MapPin, Cake, Trophy, Activity, Quote, Phone, Shirt, User, Camera, Globe, CalendarOff, Palmtree } from "lucide-react";
+import { Users, Truck, FileText, Award, Utensils, Calendar as CalendarIcon, CalendarDays, MapPin, Cake, Trophy, Activity, Quote, Phone, Shirt, User, Camera, Film, CalendarOff, Palmtree } from "lucide-react";
 import { useTigerTimesColors } from "@/hooks/useTigerTimesColors";
 import { StatCard } from "@/components/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1159,12 +1159,12 @@ export default function Dashboard() {
             style={{ borderTopWidth: "3px", borderTopColor: ttColors["Phone Calls"] }}
           />
           <CompactInfoCard
-            title="Outside Events"
+            title="Movie / Entertainment"
             value={dailyWolfContent?.outside_event || "No info"}
-            icon={Globe}
+            icon={Film}
             iconClassName="text-foreground"
             iconWrapClassName="bg-muted"
-            style={{ borderTopWidth: "3px", borderTopColor: ttColors["Outside Events"] }}
+            style={{ borderTopWidth: "3px", borderTopColor: ttColors["Movie / Entertainment"] ?? ttColors["Outside Events"] }}
           />
           <CompactInfoCard
             title="Staff Days Off"
