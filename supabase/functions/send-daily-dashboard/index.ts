@@ -2,13 +2,13 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendEmailNotifications } from "../_shared/emailHelpers.ts";
 import {
-  buildSpecialEventsEmailSection,
-  escapeHtml,
-} from "../_shared/dailyDashboardFormat.ts";
-import {
   buildDailyWolfBulletinHtml,
   fetchDailyWolfBulletinData,
 } from "../_shared/dailyWolfBulletinEmail.ts";
+import {
+  buildTylerHillBulletinHtml,
+  fetchTylerHillBulletinData,
+} from "../_shared/tylerHillBulletinEmail.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -83,46 +83,16 @@ serve(async (req) => {
 
         content = buildDailyWolfBulletinHtml(todayYMD, bulletinData, bulletinConfig);
       } else if (isTylerHill) {
-        subject = `Daily Dashboard - ${todayYMD}`;
+        subject = `Tyler Hill Daily News - ${todayYMD}`;
 
-        const { data: noteRow } = await supabase
-          .from('daily_notes')
-          .select('content')
-          .eq('company_id', companyId)
-          .eq('date', todayYMD)
-          .maybeSingle();
+        const bulletinData = await fetchTylerHillBulletinData(
+          supabase,
+          companyId,
+          todayYMD,
+          season,
+        );
 
-        const { data: events } = await supabase
-          .from('special_events_activities')
-          .select(`
-            title,
-            time_slot,
-            start_time,
-            end_time,
-            event_type,
-            division:divisions(id, name),
-            special_events_divisions(division_id, division:divisions(id, name))
-          `)
-          .eq('company_id', companyId)
-          .eq('event_date', todayYMD);
-
-        if (!noteRow && (!events || events.length === 0)) {
-          console.log(`No dashboard content found for ${company.name} on ${todayYMD}`);
-          continue;
-        }
-
-        content = `<h2>Tyler Hill Daily Dashboard - ${todayYMD}</h2>`;
-
-        if (noteRow?.content) {
-          content += `<h3>Daily Notes</h3><p>${escapeHtml(noteRow.content).replace(/\n/g, "<br>")}</p>`;
-        }
-
-        if (events && events.length > 0) {
-          content += buildSpecialEventsEmailSection(
-            "Special Events & Activities",
-            events,
-          );
-        }
+        content = buildTylerHillBulletinHtml(todayYMD, bulletinData);
       } else {
         content = `<h2>Daily Dashboard for ${company.name}</h2><p>Please log in to the portal to view today's schedule.</p>`;
       }
