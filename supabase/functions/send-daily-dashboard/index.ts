@@ -100,7 +100,6 @@ serve(async (req) => {
           .select(`
             title,
             time_slot,
-            time,
             start_time,
             end_time,
             event_type,

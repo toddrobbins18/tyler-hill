@@ -226,8 +226,8 @@ export function AppSidebar() {
                 onValueChange={switchCompany}
                 disabled={companyLoading}
               >
-                <SelectTrigger className="w-full">
-                  <Building2 className="mr-2 h-4 w-4" />
+                <SelectTrigger className="w-full bg-background text-foreground">
+                  <Building2 className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
                   <SelectValue placeholder="Select company..." />
                 </SelectTrigger>
                 <SelectContent className="bg-popover text-popover-foreground border z-50">

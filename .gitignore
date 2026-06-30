@@ -17,6 +17,9 @@ dist-ssr
 .env.*
 !.env.example
 
+# Temporary local test scripts (do not commit)
+scripts/test-daily-dashboard-email.mjs
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
