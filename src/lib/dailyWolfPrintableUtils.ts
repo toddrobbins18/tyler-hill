@@ -60,18 +60,40 @@ function formatTimeSlotForDisplay(raw: string): string {
   return formatted && !isPlaceholderTime(formatted) ? formatted : "";
 }
 
+function resolveEventTimeRaw(event: {
+  time_slot?: string | null;
+  time?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+}): string {
+  const slot = (event.time_slot || "").trim();
+  if (slot && !isPlaceholderTime(slot)) return slot;
+
+  const start = (event.start_time || "").trim();
+  const end = (event.end_time || "").trim();
+  if (start && end) return `${start} - ${end}`;
+  if (start) return start;
+  if (end) return end;
+
+  const legacy = (event.time || "").trim();
+  if (legacy && !isPlaceholderTime(legacy)) return legacy;
+  return "";
+}
+
 /** Dashboard special-events subtitle: 12-hour time and assigned division(s) when present. */
 export function formatDashboardSpecialEventSubtitle(event: {
   time_slot?: string | null;
   time?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
   divisions?: NamedDivision[];
   division?: NamedDivision | null;
   special_events_divisions?: { division?: NamedDivision | null }[] | null;
 }): string {
   const parts: string[] = [];
 
-  const rawTime = (event.time_slot || event.time || "").trim();
-  if (rawTime && !isPlaceholderTime(rawTime)) {
+  const rawTime = resolveEventTimeRaw(event);
+  if (rawTime) {
     const displayTime = formatTimeSlotForDisplay(rawTime);
     if (displayTime) parts.push(displayTime);
   }

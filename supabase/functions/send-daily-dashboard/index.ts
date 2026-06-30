@@ -1,6 +1,10 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendEmailNotifications } from "../_shared/emailHelpers.ts";
+import {
+  buildSpecialEventsEmailSection,
+  escapeHtml,
+} from "../_shared/dailyDashboardFormat.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -90,10 +94,19 @@ serve(async (req) => {
           .eq('date', todayYMD)
           .maybeSingle();
 
-        // Get special events
+        // Get special events with divisions (match Nest dashboard)
         const { data: events } = await supabase
           .from('special_events_activities')
-          .select('title, time_slot, event_type')
+          .select(`
+            title,
+            time_slot,
+            time,
+            start_time,
+            end_time,
+            event_type,
+            division:divisions(id, name),
+            special_events_divisions(division_id, division:divisions(id, name))
+          `)
           .eq('company_id', companyId)
           .eq('event_date', todayYMD);
 
@@ -105,15 +118,14 @@ serve(async (req) => {
         content = `<h2>Tyler Hill Daily Dashboard - ${todayYMD}</h2>`;
 
         if (noteRow?.content) {
-          content += `<h3>Daily Notes</h3><p>${noteRow.content}</p>`;
+          content += `<h3>Daily Notes</h3><p>${escapeHtml(noteRow.content).replace(/\n/g, "<br>")}</p>`;
         }
 
         if (events && events.length > 0) {
-          content += `<h3>Today's Events</h3><ul>`;
-          for (const ev of events) {
-            content += `<li><strong>${ev.time_slot || 'TBD'}:</strong> ${ev.title} (${ev.event_type})</li>`;
-          }
-          content += `</ul>`;
+          content += buildSpecialEventsEmailSection(
+            "Special Events & Activities",
+            events,
+          );
         }
       } else {
         // Default generic dashboard
