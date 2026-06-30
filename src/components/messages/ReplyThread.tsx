@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, Send, Reply, MessageSquare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
+import MessageBody from "@/components/messages/MessageBody";
 
 interface ReplyMessage {
   id: string;
@@ -155,7 +156,10 @@ export default function ReplyThread({ originalMessage, onBack }: ReplyThreadProp
         <ScrollArea className="flex-1">
           {/* Original message */}
           <div className="p-3 bg-muted rounded-lg mb-4">
-            <p className="text-sm whitespace-pre-wrap">{originalMessage.content}</p>
+            <MessageBody
+              content={originalMessage.content}
+              senderId={originalMessage.sender_id}
+            />
           </div>
 
           {/* Replies */}

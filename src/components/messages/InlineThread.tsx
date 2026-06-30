@@ -8,6 +8,7 @@ import { Send, Users, Reply } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { fetchMessageProfileLabels, inboxFromDisplayName } from "@/lib/messageProfiles";
+import MessageBody from "@/components/messages/MessageBody";
 
 interface ThreadMessage {
   id: string;
@@ -188,7 +189,11 @@ export default function InlineThread({ message, viewMode, campCompanyId, onNavig
         <ScrollArea className="flex-1">
           {/* Original message */}
           <div className="p-3 bg-muted rounded-lg mb-4">
-            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+            <MessageBody
+              content={message.content}
+              senderId={message.sender_id}
+              notificationType={message.notification_type}
+            />
           </div>
 
           {/* Group link */}

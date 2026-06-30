@@ -270,32 +270,25 @@ export async function sendEmailNotifications(
     return;
   }
   
-  const messages = recipients.map(recipient => {
-    const message: any = {
-      recipient_id: recipient.id,
-      sender_id: senderId || null,
-      subject: subject,
-      content: content,
-      read: false,
-    };
+  const messages = recipients.map(recipient => ({
+    recipient_id: recipient.id,
+    sender_id: senderId || null,
+    subject,
+    content,
+    read: false,
+    notification_type: senderId ? 'notification' : 'automated',
+    sender_display_name: senderId ? null : 'Camp notification',
+  }));
 
-    if (!senderId) {
-      message.sender_display_name = 'Camp notification';
+  const BATCH_SIZE = 50;
+  for (let i = 0; i < messages.length; i += BATCH_SIZE) {
+    const batch = messages.slice(i, i + BATCH_SIZE);
+    const insertResult = await supabase.from('messages').insert(batch);
+    const insertError = insertResult?.error;
+    if (insertError) {
+      console.error('Error sending messages:', insertError);
+      throw new Error(insertError.message || 'Failed to insert in-app messages');
     }
-    
-    // Add company_id if provided
-    if (companyId) {
-      message.company_id = companyId;
-    }
-    
-    return message;
-  });
-  
-  const { error } = await supabase.from('messages').insert(messages);
-  
-  if (error) {
-    console.error('Error sending messages:', error);
-    throw error;
   }
   
   console.log(`Successfully sent ${messages.length} in-app messages`);
@@ -317,9 +310,11 @@ export async function sendEmailNotifications(
     return;
   }
 
-  const { data: decryptedSecret, error: decryptError } = await supabase.rpc("decrypt_secret", {
+  const decryptResult = await supabase.rpc('decrypt_secret', {
     encrypted: emailConfig.m365_client_secret_encrypted,
   });
+  const decryptedSecret = decryptResult?.data;
+  const decryptError = decryptResult?.error;
 
   if (decryptError || !decryptedSecret) {
     console.error("Failed to decrypt M365 secret", decryptError);

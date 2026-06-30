@@ -122,8 +122,12 @@ serve(async (req) => {
 
       // Send the email to all profiles
       console.log(`Sending ${subject} to ${profiles.length} users in ${company.name}`);
-      await sendEmailNotifications(supabase, profiles, subject, content, companyId);
-      emailsSent += profiles.length;
+      try {
+        await sendEmailNotifications(supabase, profiles, subject, content, companyId);
+        emailsSent += profiles.length;
+      } catch (companyError: any) {
+        console.error(`Failed sending daily dashboard for ${company.name}:`, companyError);
+      }
     }
 
     return new Response(
@@ -133,8 +137,9 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error('Error in send-daily-dashboard:', error);
+    const message = error?.message ?? String(error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: message }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }

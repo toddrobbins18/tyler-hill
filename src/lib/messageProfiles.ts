@@ -94,8 +94,6 @@ export function inboxFromDisplayName(msg: {
   if (resolved && resolved !== "Unknown" && resolved !== "Unknown sender") return resolved;
   const snap = msg.sender_display_name?.trim();
   if (snap) return snap;
-  if (msg.sender_id) return "Unknown sender";
-  const t = (msg.notification_type || "").toLowerCase();
-  if (t === "system" || t === "automated") return "Automated notification";
+  if (!msg.sender_id) return "Automated notification";
   return "Unknown sender";
 }

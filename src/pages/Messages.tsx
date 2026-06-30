@@ -16,6 +16,7 @@ import GroupList from "@/components/messages/GroupList";
 import InlineThread from "@/components/messages/InlineThread";
 import { notificationsDebug } from "@/lib/notificationDebug";
 import { fetchMessageProfileLabels, inboxFromDisplayName } from "@/lib/messageProfiles";
+import { messageContentPreview } from "@/lib/messageContentUtils";
 
 interface TagGroup {
   tag: string;
@@ -648,7 +649,7 @@ export default function Messages() {
                               </p>
                             ) : (
                               <p className="text-sm text-muted-foreground truncate">
-                                {msg.content.substring(0, 100)}...
+                                {messageContentPreview(msg.content, 100)}
                               </p>
                             )}
                             <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
