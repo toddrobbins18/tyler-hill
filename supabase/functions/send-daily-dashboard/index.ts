@@ -5,10 +5,26 @@ import {
   buildSpecialEventsEmailSection,
   escapeHtml,
 } from "../_shared/dailyDashboardFormat.ts";
+import {
+  buildDailyWolfBulletinHtml,
+  fetchDailyWolfBulletinData,
+} from "../_shared/dailyWolfBulletinEmail.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+const DAILY_WOLF_CONFIG = {
+  mastheadTitle: "THE DAILY WOLF",
+  campSubtitle: "Timber Lake West",
+  defaultNotes: "Have a great day at Timber Lake West!",
+};
+
+const TIGER_TIMES_CONFIG = {
+  mastheadTitle: "TIGER TIMES",
+  campSubtitle: "Timber Lake Camp",
+  defaultNotes: "Have a great day at Timber Lake Camp!",
 };
 
 serve(async (req) => {
@@ -24,12 +40,10 @@ serve(async (req) => {
 
     console.log('Sending daily dashboard emails...');
 
-    // Use current eastern time to get the correct "today"
     const easternTime = new Date(new Date().toLocaleString("en-US", {timeZone: "America/New_York"}));
     const todayYMD = easternTime.toISOString().split('T')[0];
     const season = easternTime.getFullYear().toString();
 
-    // 1. Fetch all companies
     const { data: companies, error: companiesError } = await supabase
       .from('companies')
       .select('*')
@@ -45,8 +59,6 @@ serve(async (req) => {
       const isTimberLakeWest = company.slug === 'timber-lake-west';
       const isTimberLakeCamp = company.slug === 'timber-lake-camp';
 
-      // 2. Fetch recipients (all active staff/admins for this company)
-      // Here we get everyone in `profiles` for this company with an email
       const { data: profiles } = await supabase
         .from('profiles')
         .select('id, full_name, email')
@@ -59,34 +71,20 @@ serve(async (req) => {
       let content = ``;
 
       if (isTimberLakeWest || isTimberLakeCamp) {
-        // Daily Wolf / Tiger Times
+        const bulletinConfig = isTimberLakeWest ? DAILY_WOLF_CONFIG : TIGER_TIMES_CONFIG;
         subject = isTimberLakeWest ? `Daily Wolf - ${todayYMD}` : `Tiger Times - ${todayYMD}`;
-        
-        const { data: wolfContent } = await supabase
-          .from('daily_wolf_content')
-          .select('*')
-          .eq('company_id', companyId)
-          .eq('date', todayYMD)
-          .maybeSingle();
 
-        if (!wolfContent) {
-          console.log(`No daily content found for ${company.name} on ${todayYMD}`);
-          continue; // Skip if no content
-        }
+        const bulletinData = await fetchDailyWolfBulletinData(
+          supabase,
+          companyId,
+          todayYMD,
+          season,
+        );
 
-        content = `
-          <h2>${subject}</h2>
-          ${wolfContent.thought_of_day ? `<p><strong>Thought of the Day:</strong><br/>${wolfContent.thought_of_day}</p>` : ''}
-          ${wolfContent.lunch_menu ? `<p><strong>Lunch:</strong><br/>${wolfContent.lunch_menu}</p>` : ''}
-          ${wolfContent.dinner_menu ? `<p><strong>Dinner:</strong><br/>${wolfContent.dinner_menu}</p>` : ''}
-          ${wolfContent.evening_activity ? `<p><strong>Evening Activity:</strong><br/>${wolfContent.evening_activity}</p>` : ''}
-          ${wolfContent.birthday_campers ? `<p><strong>Birthdays:</strong><br/>${wolfContent.birthday_campers}</p>` : ''}
-        `;
+        content = buildDailyWolfBulletinHtml(todayYMD, bulletinData, bulletinConfig);
       } else if (isTylerHill) {
-        // Tyler Hill Daily Dashboard
         subject = `Daily Dashboard - ${todayYMD}`;
 
-        // Get daily notes
         const { data: noteRow } = await supabase
           .from('daily_notes')
           .select('content')
@@ -94,7 +92,6 @@ serve(async (req) => {
           .eq('date', todayYMD)
           .maybeSingle();
 
-        // Get special events with divisions (match Nest dashboard)
         const { data: events } = await supabase
           .from('special_events_activities')
           .select(`
@@ -127,11 +124,9 @@ serve(async (req) => {
           );
         }
       } else {
-        // Default generic dashboard
         content = `<h2>Daily Dashboard for ${company.name}</h2><p>Please log in to the portal to view today's schedule.</p>`;
       }
 
-      // Send the email to all profiles
       console.log(`Sending ${subject} to ${profiles.length} users in ${company.name}`);
       try {
         await sendEmailNotifications(supabase, profiles, subject, content, companyId);
