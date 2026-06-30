@@ -1,11 +1,15 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { Printer, Cake, UtensilsCrossed, Trophy, Sparkles, Quote } from 'lucide-react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Printer, Cake, UtensilsCrossed, Trophy, Sparkles, Quote, CalendarIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Calendar } from '@/components/ui/calendar';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useSeasonContext } from '@/contexts/SeasonContext';
 import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/integrations/supabase/client';
-import { format } from 'date-fns';
+import { format, isToday } from 'date-fns';
+import { cn } from '@/lib/utils';
 import { usePermissions } from '@/hooks/usePermissions';
 import { isActiveRosterStatus, isBirthdayTodayCalendar } from '@/lib/birthdayCalendar';
 import {
@@ -99,47 +103,19 @@ export default function DailyWolfPrintable() {
   const [specialEvents, setSpecialEvents] = useState<SpecialEvent[]>([]);
   const [dailyContent, setDailyContent] = useState<DailyContent>({});
   const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
-
-  useEffect(() => {
-    if (!currentCompany?.id) return;
-    fetchAllData();
-
-    // Set up realtime subscriptions
-    const channels = [
-      supabase.channel('children-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'children' }, fetchAllData)
-        .subscribe(),
-      supabase.channel('meals-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, fetchAllData)
-        .subscribe(),
-      supabase.channel('sports-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'sports_calendar' }, fetchAllData)
-        .subscribe(),
-      supabase.channel('activities-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'special_events_activities' }, fetchAllData)
-        .subscribe(),
-      supabase.channel('content-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_wolf_content' }, fetchAllData)
-        .subscribe(),
-      supabase.channel('daily-wolf-staff-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'staff' }, fetchAllData)
-        .subscribe(),
-    ];
-
-    return () => {
-      channels.forEach(channel => supabase.removeChannel(channel));
-    };
-  }, [currentCompany?.id, currentSeason]);
-
   const { getDivisionFilter } = usePermissions();
 
-  const fetchAllData = async () => {
+  const fetchAllData = useCallback(async () => {
+    if (!currentCompany?.id) return;
+
     try {
       setLoading(true);
-      const today = format(new Date(), 'yyyy-MM-dd');
-      const todayDate = new Date();
+      const dateStr = format(selectedDate, 'yyyy-MM-dd');
+      const month = selectedDate.getMonth() + 1;
+      const day = selectedDate.getDate();
       const divisionFilter = getDivisionFilter();
 
       // Fetch birthday children with division filtering
@@ -157,12 +133,10 @@ export default function DailyWolfPrintable() {
 
       const { data: childrenRaw } = await childrenQuery;
 
-      const m = todayDate.getMonth() + 1;
-      const d = todayDate.getDate();
       const todaysBirthdays =
         (childrenRaw || [])
           .filter((child) => isActiveRosterStatus(child.status))
-          .filter((child) => isBirthdayTodayCalendar(child.date_of_birth, m, d)) || [];
+          .filter((child) => isBirthdayTodayCalendar(child.date_of_birth, month, day)) || [];
       setBirthdayChildren(todaysBirthdays);
 
       const { data: staffRaw } = await supabase
@@ -175,7 +149,7 @@ export default function DailyWolfPrintable() {
       const staffToday =
         (staffRaw || [])
           .filter((staff) => isActiveRosterStatus(staff.status))
-          .filter((staff) => isBirthdayTodayCalendar(staff.date_of_birth, m, d)) || [];
+          .filter((staff) => isBirthdayTodayCalendar(staff.date_of_birth, month, day)) || [];
       setBirthdayStaff(staffToday);
 
       // Menu: match Menu page — include rows for this season or season=null (legacy inserts omit season)
@@ -183,7 +157,7 @@ export default function DailyWolfPrintable() {
         .from('menu_items')
         .select('*')
         .eq('company_id', currentCompany.id)
-        .eq('date', today)
+        .eq('date', dateStr)
         .order('meal_type');
       if (currentSeason) {
         menuQuery = menuQuery.or(`season.eq.${currentSeason},season.is.null`);
@@ -199,7 +173,7 @@ export default function DailyWolfPrintable() {
           sports_calendar_divisions(division_id, division:divisions(id, name))
         `)
         .eq('company_id', currentCompany.id)
-        .eq('event_date', today)
+        .eq('event_date', dateStr)
         .eq('season', currentSeason)
         .order('time');
       setSportsEvents(
@@ -218,7 +192,7 @@ export default function DailyWolfPrintable() {
           special_events_divisions(division_id, division:divisions(id, name))
         `)
         .eq('company_id', currentCompany.id)
-        .eq('event_date', today)
+        .eq('event_date', dateStr)
         .order('time_slot');
       const allTodayEvents = (activitiesData || []).map((event) => ({
         ...event,
@@ -238,7 +212,7 @@ export default function DailyWolfPrintable() {
         .from('daily_wolf_content')
         .select('quote_of_the_day, notes, officer_of_day, laundry_info, phone_calls_info')
         .eq('company_id', currentCompany.id)
-        .eq('date', today)
+        .eq('date', dateStr)
         .eq('season', currentSeason)
         .maybeSingle();
       setDailyContent(contentData || {});
@@ -248,13 +222,44 @@ export default function DailyWolfPrintable() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentCompany?.id, currentSeason, selectedDate, getDivisionFilter]);
+
+  useEffect(() => {
+    if (!currentCompany?.id) return;
+    fetchAllData();
+
+    const channels = [
+      supabase.channel('daily-wolf-printable-children')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'children' }, fetchAllData)
+        .subscribe(),
+      supabase.channel('daily-wolf-printable-meals')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, fetchAllData)
+        .subscribe(),
+      supabase.channel('daily-wolf-printable-sports')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'sports_calendar' }, fetchAllData)
+        .subscribe(),
+      supabase.channel('daily-wolf-printable-activities')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'special_events_activities' }, fetchAllData)
+        .subscribe(),
+      supabase.channel('daily-wolf-printable-content')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_wolf_content' }, fetchAllData)
+        .subscribe(),
+      supabase.channel('daily-wolf-printable-staff')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'staff' }, fetchAllData)
+        .subscribe(),
+    ];
+
+    return () => {
+      channels.forEach(channel => supabase.removeChannel(channel));
+    };
+  }, [currentCompany?.id, fetchAllData]);
 
   const handlePrint = () => {
     window.print();
   };
 
-  const today = format(new Date(), 'EEEE, MMMM d, yyyy');
+  const bulletinDateLabel = format(selectedDate, 'EEEE, MMMM d, yyyy');
+  const viewingToday = isToday(selectedDate);
   const birthdayNames = [...birthdayChildren, ...birthdayStaff].map((p) => p.name);
   const hasBirthdays = birthdayNames.length > 0;
 
@@ -280,12 +285,53 @@ export default function DailyWolfPrintable() {
         }
       `}</style>
 
-      <div className="flex justify-between items-center mb-6 no-print">
-        <h1 className="text-3xl font-bold">Daily Wolf Printable</h1>
-        <Button onClick={handlePrint} variant="outline">
-          <Printer className="h-4 w-4 mr-2" />
-          Print
-        </Button>
+      <div className="mb-6 space-y-4 no-print">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold">Daily Wolf Printable</h1>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Choose a date to preview and print the bulletin ahead of time.
+            </p>
+          </div>
+          <Button onClick={handlePrint} variant="outline" disabled={loading}>
+            <Printer className="h-4 w-4 mr-2" />
+            Print
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <Label htmlFor="daily-wolf-print-date">Bulletin date</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  id="daily-wolf-print-date"
+                  variant="outline"
+                  className={cn(
+                    'w-[280px] justify-start text-left font-normal mt-2',
+                    !selectedDate && 'text-muted-foreground',
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {format(selectedDate, 'PPP')}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(date) => date && setSelectedDate(date)}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+          {!viewingToday && (
+            <Button variant="ghost" className="mt-2" onClick={() => setSelectedDate(new Date())}>
+              Jump to today
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="print-content rounded-xl border border-border bg-card shadow-lg overflow-hidden print:shadow-none print:rounded-none">
@@ -297,11 +343,11 @@ export default function DailyWolfPrintable() {
           <p className="mt-2 text-sm font-semibold uppercase tracking-widest text-muted-foreground">
             Timber Lake West
           </p>
-          <p className="mt-3 text-base font-medium text-foreground">{today}</p>
+          <p className="mt-3 text-base font-medium text-foreground">{bulletinDateLabel}</p>
         </header>
 
         {loading ? (
-          <div className="text-center py-16 text-muted-foreground">Loading today&apos;s bulletin…</div>
+          <div className="text-center py-16 text-muted-foreground">Loading bulletin…</div>
         ) : (
           <div className="p-4 md:p-6 space-y-5">
             {/* Birthdays */}
