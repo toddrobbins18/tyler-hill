@@ -79,6 +79,7 @@ Deno.serve(async (req) => {
         company_id: med.company_id,
         season,
         administered: false,
+        refused: false,
         alert_sent: false,
         is_recurring: false,
         frequency: med.frequency,

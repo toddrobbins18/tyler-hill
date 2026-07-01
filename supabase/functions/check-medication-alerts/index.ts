@@ -33,6 +33,7 @@ const MED_SELECT = `
   days_of_week,
   end_date,
   administered,
+  refused,
   alert_sent,
   child:children (
     id,
@@ -94,7 +95,7 @@ serve(async (req) => {
       const merged = mergeMedicationsForDate(dateRows, recurringRows, today, season);
 
       const pending = merged.filter(
-        (med) => !med.administered && !isAsNeededMedication(med) && !medicationAlreadyAlerted(med, dateRows),
+        (med) => !med.administered && !med.refused && !isAsNeededMedication(med) && !medicationAlreadyAlerted(med, dateRows),
       );
 
       const dueMeds = pending.filter((med) => medicationAlertIsDue(now, med.scheduled_time));
@@ -167,6 +168,7 @@ serve(async (req) => {
               company_id: company.id,
               season,
               administered: false,
+              refused: false,
               alert_sent: true,
             });
           }

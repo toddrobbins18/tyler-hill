@@ -129,6 +129,7 @@ export function medicationMatchesMealFilter(
 
 type MedicationListVisibilityMed = {
   administered?: boolean;
+  refused?: boolean | null;
   is_recurring?: boolean | null;
   frequency?: string | null;
   meal_time?: string[] | string | null;
@@ -155,6 +156,7 @@ export function medicationMatchesListVisibility(
     isSearching && (childName.includes(searchLower) || medName.includes(searchLower));
 
   if (med.administered === true) return matchesSearch;
+  if (med.refused === true) return matchesSearch;
 
   const hasMeal = medicationHasMealTime(med.meal_time, options.divisionName);
   if (!hasMeal) return matchesSearch;

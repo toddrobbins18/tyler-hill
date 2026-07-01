@@ -13,6 +13,7 @@ export type MedicationLogRow = {
   meal_time?: string[] | string | null;
   scheduled_time?: string | null;
   administered?: boolean | null;
+  refused?: boolean | null;
   alert_sent?: boolean | null;
   company_id?: string | null;
   dosage?: string | null;
@@ -173,6 +174,9 @@ function preferMedicationRow(a: MedicationLogRow, b: MedicationLogRow): boolean 
   if (Boolean(a.administered) !== Boolean(b.administered)) {
     return Boolean(a.administered);
   }
+  if (Boolean(a.refused) !== Boolean(b.refused)) {
+    return Boolean(a.refused);
+  }
   if (Boolean(a.is_recurring) !== Boolean(b.is_recurring)) {
     return !a.is_recurring;
   }
@@ -214,11 +218,12 @@ export function mergeMedicationsForDate(
     if (existingKeys.has(key)) continue;
 
     const dayLog = dedupedDateRows.find((row) => medicationSlotKey(row) === key);
-    if (dayLog?.administered === true) continue;
+    if (dayLog?.administered === true || dayLog?.refused === true) continue;
 
     result.push({
       ...template,
       administered: false,
+      refused: false,
       alert_sent: dayLog?.alert_sent ?? false,
       _fromRecurringTemplate: true,
       _templateId: template.id,

@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList, Hospital, Clock, UserCheck, Search, ArrowUpDown, Users, Loader2, Scan, Pencil, CalendarDays } from "lucide-react";
+import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList, Hospital, Clock, UserCheck, Search, ArrowUpDown, Users, Loader2, Scan, Pencil, CalendarDays, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -100,6 +100,7 @@ export default function Nurse() {
   >({});
   const [newAdmissionNote, setNewAdmissionNote] = useState<Record<string, string>>({});
   const [unadministerTarget, setUnadministerTarget] = useState<any | null>(null);
+  const [refuseTarget, setRefuseTarget] = useState<any | null>(null);
   const [rfidInput, setRfidInput] = useState("");
   const [scannedChild, setScannedChild] = useState<any>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -539,6 +540,9 @@ export default function Nurse() {
             administered: true,
             administered_by: staffData?.id ?? null,
             administered_at: new Date().toISOString(),
+            refused: false,
+            refused_by: null,
+            refused_at: null,
           })
           .eq("id", existingDayLog.id);
 
@@ -564,6 +568,7 @@ export default function Nurse() {
           administered: true,
           administered_by: staffData?.id ?? null,
           administered_at: new Date().toISOString(),
+          refused: false,
         });
 
         if (error) {
@@ -578,6 +583,9 @@ export default function Nurse() {
           administered: true,
           administered_by: staffData?.id ?? null,
           administered_at: new Date().toISOString(),
+          refused: false,
+          refused_by: null,
+          refused_at: null,
         })
         .eq("id", med.id);
 
@@ -595,7 +603,118 @@ export default function Nurse() {
     setMedications((prev) =>
       prev.map((row) =>
         medicationRowKey(row) === rowKey
-          ? { ...row, administered: true, administered_at: administeredAt }
+          ? {
+              ...row,
+              administered: true,
+              administered_at: administeredAt,
+              refused: false,
+              refused_by: null,
+              refused_at: null,
+            }
+          : row,
+      ),
+    );
+    fetchMedications(selectedDate);
+  };
+
+  const handleRefuseMedication = async (med: any) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: staffData } = await supabase
+      .from("staff")
+      .select("id")
+      .eq("email", user?.email)
+      .maybeSingle();
+
+    const dateStr = format(selectedDate, "yyyy-MM-dd");
+    const refusedAt = new Date().toISOString();
+    setRefuseTarget(null);
+
+    const refusalUpdate = {
+      administered: false,
+      administered_by: null,
+      administered_at: null,
+      refused: true,
+      refused_by: staffData?.id ?? null,
+      refused_at: refusedAt,
+      alert_sent: true,
+    };
+
+    if (med._fromRecurringTemplate) {
+      const { data: dayLogs, error: lookupError } = await supabase
+        .from("medication_logs")
+        .select("id, child_id, medication_name, meal_time")
+        .eq("child_id", med.child_id)
+        .eq("date", dateStr)
+        .eq("company_id", currentCompany?.id)
+        .eq("season", currentSeason);
+
+      if (lookupError) {
+        toast({ title: "Error updating medication", variant: "destructive" });
+        return;
+      }
+
+      const existingDayLog = findDaySpecificMedicationLog(dayLogs || [], med);
+
+      if (existingDayLog) {
+        const { error } = await supabase
+          .from("medication_logs")
+          .update(refusalUpdate)
+          .eq("id", existingDayLog.id);
+
+        if (error) {
+          toast({ title: "Error updating medication", variant: "destructive" });
+          return;
+        }
+      } else {
+        const { error } = await supabase.from("medication_logs").insert({
+          child_id: med.child_id,
+          date: dateStr,
+          medication_name: med.medication_name,
+          dosage: med.dosage,
+          meal_time: med.meal_time,
+          scheduled_time: med.scheduled_time,
+          notes: med.notes,
+          is_recurring: false,
+          frequency: med.frequency,
+          days_of_week: med.days_of_week,
+          end_date: med.end_date,
+          company_id: currentCompany?.id,
+          season: currentSeason,
+          ...refusalUpdate,
+        });
+
+        if (error) {
+          toast({ title: "Error updating medication", variant: "destructive" });
+          return;
+        }
+      }
+    } else {
+      const { error } = await supabase
+        .from("medication_logs")
+        .update(refusalUpdate)
+        .eq("id", med.id);
+
+      if (error) {
+        toast({ title: "Error updating medication", variant: "destructive" });
+        return;
+      }
+    }
+
+    toast({ title: "Medication refusal recorded" });
+    const rowKey = medicationRowKey(med);
+    setMedications((prev) =>
+      prev.map((row) =>
+        medicationRowKey(row) === rowKey
+          ? {
+              ...row,
+              administered: false,
+              administered_by: null,
+              administered_at: null,
+              refused: true,
+              refused_by: staffData?.id ?? null,
+              refused_at: refusedAt,
+              alert_sent: true,
+            }
           : row,
       ),
     );
@@ -640,6 +759,9 @@ export default function Nurse() {
         administered: false,
         administered_by: null,
         administered_at: null,
+        refused: false,
+        refused_by: null,
+        refused_at: null,
       })
       .eq("id", targetId);
 
@@ -653,7 +775,15 @@ export default function Nurse() {
     setMedications((prev) =>
       prev.map((row) =>
         medicationRowKey(row) === rowKey
-          ? { ...row, administered: false, administered_by: null, administered_at: null }
+          ? {
+              ...row,
+              administered: false,
+              administered_by: null,
+              administered_at: null,
+              refused: false,
+              refused_by: null,
+              refused_at: null,
+            }
           : row,
       ),
     );
@@ -661,6 +791,7 @@ export default function Nurse() {
   };
 
   const handleMedicationCheckChange = (med: any, checked: boolean) => {
+    if (med.refused) return;
     if (checked) {
       if (!med.administered) void handleAdminister(med);
       return;
@@ -724,7 +855,7 @@ export default function Nurse() {
 
       // Find all unadministered medications for this child today
       const todayMeds = activeListMedications.filter(
-        med => med.child_id === child.id && !med.administered
+        med => med.child_id === child.id && !med.administered && !med.refused
       );
 
       if (todayMeds.length === 0) {
@@ -1104,7 +1235,7 @@ export default function Nurse() {
       healthCenterScannedEntity.entityType === 'child'
         ? activeListMedications.filter(
             (med) =>
-              med.child_id === healthCenterScannedEntity.id && !med.administered,
+              med.child_id === healthCenterScannedEntity.id && !med.administered && !med.refused,
           )
         : [];
     const selectedAdmissionMeds = pendingAdmissionMeds.filter((med) =>
@@ -1261,10 +1392,10 @@ export default function Nurse() {
       }
       case 'status': {
         const pendingA = activeListMedications.some(
-          (med) => med.child_id === a.id && !med.administered,
+          (med) => med.child_id === a.id && !med.administered && !med.refused,
         );
         const pendingB = activeListMedications.some(
-          (med) => med.child_id === b.id && !med.administered,
+          (med) => med.child_id === b.id && !med.administered && !med.refused,
         );
         if (pendingA !== pendingB) return pendingA ? -1 : 1;
         return a.name.localeCompare(b.name);
@@ -1337,6 +1468,66 @@ export default function Nurse() {
       <MedicationMealTimeBadges mealTime={med.meal_time} divisionName={divisionName} />
     </div>
   );
+
+  const renderMedicationStatusBadge = (med: (typeof medications)[0]) => {
+    if (med.refused) {
+      return (
+        <Badge variant="outline" className="flex items-center gap-1 text-xs text-destructive border-destructive/40">
+          <X className="h-3 w-3" />
+          Refused
+        </Badge>
+      );
+    }
+
+    if (med.administered) {
+      return (
+        <Badge variant="outline" className="flex items-center gap-1 text-xs">
+          <CheckCircle2 className="h-3 w-3" />
+          Given
+        </Badge>
+      );
+    }
+
+    return null;
+  };
+
+  const renderMedicationActionButtons = (med: (typeof medications)[0]) => {
+    if (!canManageMedications) return null;
+
+    return (
+      <div className="flex gap-1">
+        {!med.administered && !med.refused && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setRefuseTarget(med)}
+            className="text-destructive hover:text-destructive"
+            title="Mark as refused"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            setEditingMedication(med);
+            setIsEditDialogOpen(true);
+          }}
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => handleDelete(med._fromRecurringTemplate ? med._templateId : med.id)}
+          className="text-destructive hover:text-destructive"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-8">
@@ -1467,6 +1658,7 @@ export default function Nurse() {
                                   {!isPastDate && (
                                     <Checkbox
                                       checked={med.administered}
+                                      disabled={med.refused}
                                       onCheckedChange={(checked) =>
                                         handleMedicationCheckChange(med, checked === true)
                                       }
@@ -1475,12 +1667,7 @@ export default function Nurse() {
                                   <div className="flex-1">
                                     <div className="flex flex-wrap items-center gap-2">
                                       <span className="font-medium">{med.medication_name}</span>
-                                      {med.administered && (
-                                        <Badge variant="outline" className="flex items-center gap-1 text-xs">
-                                          <CheckCircle2 className="h-3 w-3" />
-                                          Given
-                                        </Badge>
-                                      )}
+                                      {renderMedicationStatusBadge(med)}
                                       {renderMedicationMetaBadges(med, child.division?.name)}
                                     </div>
                                     <p className="text-sm text-muted-foreground mt-1">{med.dosage}</p>
@@ -1488,28 +1675,7 @@ export default function Nurse() {
                                       <p className="text-sm text-muted-foreground mt-1">{med.notes}</p>
                                     )}
                                   </div>
-                                  {canManageMedications && (
-                                    <div className="flex gap-1">
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => {
-                                          setEditingMedication(med);
-                                          setIsEditDialogOpen(true);
-                                        }}
-                                      >
-                                        <Pencil className="h-4 w-4" />
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => handleDelete(med._fromRecurringTemplate ? med._templateId : med.id)}
-                                        className="text-destructive hover:text-destructive"
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
-                                    </div>
-                                  )}
+                                  {renderMedicationActionButtons(med)}
                                 </div>
                                 
                                 {isPastDate && (
@@ -1596,6 +1762,7 @@ export default function Nurse() {
                               <div key={`${med.id}-${med._displayDate ?? med.date}`} className="flex items-start gap-3 p-3 bg-muted/50 rounded">
                                 <Checkbox
                                   checked={med.administered}
+                                  disabled={med.refused}
                                   onCheckedChange={(checked) =>
                                     handleMedicationCheckChange(med, checked === true)
                                   }
@@ -1603,12 +1770,7 @@ export default function Nurse() {
                                 <div className="flex-1">
                                   <div className="flex flex-wrap items-center gap-2">
                                     <span className="font-medium">{med.medication_name}</span>
-                                    {med.administered && (
-                                      <Badge variant="outline" className="flex items-center gap-1 text-xs">
-                                        <CheckCircle2 className="h-3 w-3" />
-                                        Given
-                                      </Badge>
-                                    )}
+                                    {renderMedicationStatusBadge(med)}
                                     {renderMedicationMetaBadges(med, child.division?.name)}
                                   </div>
                                   <p className="text-sm text-muted-foreground mt-1">{med.dosage}</p>
@@ -1626,30 +1788,7 @@ export default function Nurse() {
                                     <p className="text-xs text-muted-foreground mt-1">{med.notes}</p>
                                   )}
                                 </div>
-                                <div className="flex gap-1">
-                                  {canManageMedications && (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => {
-                                        setEditingMedication(med);
-                                        setIsEditDialogOpen(true);
-                                      }}
-                                    >
-                                      <Pencil className="h-4 w-4" />
-                                    </Button>
-                                  )}
-                                  {canManageMedications && (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => handleDelete(med._fromRecurringTemplate ? med._templateId : med.id)}
-                                      className="text-destructive hover:text-destructive"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  )}
-                                </div>
+                                {renderMedicationActionButtons(med)}
                               </div>
                             ))}
                           </div>
@@ -1765,12 +1904,7 @@ export default function Nurse() {
                             <span className="text-sm text-muted-foreground">
                               {med.medication_name} - {med.dosage}
                             </span>
-                            {med.administered && (
-                              <Badge variant="outline" className="flex items-center gap-1 text-xs">
-                                <CheckCircle2 className="h-3 w-3" />
-                                Given
-                              </Badge>
-                            )}
+                            {renderMedicationStatusBadge(med)}
                             {renderMedicationMetaBadges(med, med.children?.division?.name)}
                           </div>
                           {/* Show start/end date info */}
@@ -1785,31 +1919,19 @@ export default function Nurse() {
                           )}
                         </div>
                         <div className="flex items-center gap-2">
-                          {canManageMedications && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setEditingMedication(med);
-                                setIsEditDialogOpen(true);
-                              }}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {canManageMedications && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDelete(med._fromRecurringTemplate ? med._templateId : med.id)}
-                              className="text-destructive hover:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
+                          {renderMedicationActionButtons(med)}
                         </div>
                       </div>
-                      {med.administered ? (
+                      {med.refused ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled
+                          className="w-full mt-2"
+                        >
+                          Refusal Confirmed
+                        </Button>
+                      ) : med.administered ? (
                         <Button
                           size="sm"
                           variant="outline"
@@ -1949,7 +2071,8 @@ export default function Nurse() {
                             medications={activeListMedications.filter(
                               (med) =>
                                 med.child_id === healthCenterScannedEntity.id &&
-                                !med.administered,
+                                !med.administered &&
+                                !med.refused,
                             )}
                             divisionName={healthCenterScannedEntity.division?.name}
                             selectedKeys={admissionMedSelection}
@@ -2645,6 +2768,28 @@ export default function Nurse() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => unadministerTarget && handleUnadminister(unadministerTarget)}>
               Yes, undo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!refuseTarget} onOpenChange={(open) => !open && setRefuseTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm medication refusal?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {refuseTarget?.children?.name || refuseTarget?.child?.name || "This camper"} will be marked as having refused{" "}
+              {refuseTarget?.medication_name ? `"${refuseTarget.medication_name}"` : "this medication"}. This will remove it
+              from the pending medication list and stop missed-medication alerts for this dose.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => refuseTarget && handleRefuseMedication(refuseTarget)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Confirm refusal
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

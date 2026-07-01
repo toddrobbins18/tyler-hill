@@ -1832,6 +1832,9 @@ export type Database = {
           meal_time: string[] | null
           medication_name: string
           notes: string | null
+          refused: boolean
+          refused_at: string | null
+          refused_by: string | null
           scheduled_time: string | null
           season: string | null
           updated_at: string | null
@@ -1856,6 +1859,9 @@ export type Database = {
           meal_time?: string[] | null
           medication_name: string
           notes?: string | null
+          refused?: boolean
+          refused_at?: string | null
+          refused_by?: string | null
           scheduled_time?: string | null
           season?: string | null
           updated_at?: string | null
@@ -1880,6 +1886,9 @@ export type Database = {
           meal_time?: string[] | null
           medication_name?: string
           notes?: string | null
+          refused?: boolean
+          refused_at?: string | null
+          refused_by?: string | null
           scheduled_time?: string | null
           season?: string | null
           updated_at?: string | null
@@ -1897,6 +1906,13 @@ export type Database = {
             columns: ["child_id"]
             isOneToOne: false
             referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medication_logs_refused_by_fkey"
+            columns: ["refused_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
             referencedColumns: ["id"]
           },
           {
