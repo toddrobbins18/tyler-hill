@@ -18,7 +18,6 @@ export type DailyWolfBulletinData = {
   meals: Array<{
     meal_type: string;
     items?: string | null;
-    description?: string | null;
     allergens?: string | null;
   }>;
   sportsEvents: Array<{
@@ -175,14 +174,17 @@ export async function fetchDailyWolfBulletinData(
 
   let menuQuery = supabase
     .from("menu_items")
-    .select("meal_type, items, description, allergens")
+    .select("meal_type, items, allergens")
     .eq("company_id", companyId)
     .eq("date", todayYMD)
     .order("meal_type");
   if (season) {
     menuQuery = menuQuery.or(`season.eq.${season},season.is.null`);
   }
-  const { data: mealsData } = await menuQuery;
+  const { data: mealsData, error: mealsError } = await menuQuery;
+  if (mealsError) {
+    console.error("Error fetching menu_items for daily bulletin:", mealsError);
+  }
 
   const { data: allSportsData } = await supabase
     .from("sports_calendar")
@@ -268,7 +270,7 @@ export function buildDailyWolfBulletinHtml(
   const menuCells = MEAL_ORDER.map((mealType) => {
     const meal = mealByType(mealType);
     const label = mealType.charAt(0).toUpperCase() + mealType.slice(1);
-    const text = (meal?.items || meal?.description)?.trim() || "";
+    const text = meal?.items?.trim() || "";
     const allergenLine = meal?.allergens
       ? `<p style="margin:4px 0 0;font-size:11px;font-style:italic;color:#666;">Allergens: ${escapeHtml(meal.allergens)}</p>`
       : "";

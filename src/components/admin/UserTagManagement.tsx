@@ -42,6 +42,26 @@ const TAG_LABELS = {
   head_of_boys_side: "Head of Boys Side",
 };
 
+function resolveDisplayName(
+  fullName: string | null | undefined,
+  email: string | null | undefined,
+  staffNameByEmail: Map<string, string>,
+): string {
+  const trimmed = fullName?.trim();
+  if (trimmed) return trimmed;
+
+  const emailKey = email?.trim().toLowerCase();
+  if (emailKey && staffNameByEmail.has(emailKey)) {
+    return staffNameByEmail.get(emailKey)!;
+  }
+
+  if (email?.includes("@")) {
+    return email.split("@")[0];
+  }
+
+  return "Unknown";
+}
+
 export default function UserTagManagement() {
   const [users, setUsers] = useState<UserWithTags[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,9 +90,22 @@ export default function UserTagManagement() {
       return;
     }
 
+    const { data: staffRows } = await supabase
+      .from("staff")
+      .select("email, name")
+      .eq("company_id", currentCompany?.id)
+      .not("email", "is", null);
+
+    const staffNameByEmail = new Map(
+      (staffRows || [])
+        .filter((row) => row.email?.trim())
+        .map((row) => [row.email!.trim().toLowerCase(), row.name]),
+    );
+
     const { data: userTags, error: tagsError } = await supabase
       .from("user_tags")
-      .select("user_id, tag");
+      .select("user_id, tag")
+      .eq("company_id", currentCompany?.id);
 
     if (tagsError) {
       toast.error("Failed to load tags");
@@ -83,7 +116,7 @@ export default function UserTagManagement() {
     const usersWithTags: UserWithTags[] = profiles.map((profile) => ({
       id: profile.id,
       email: profile.email || "",
-      full_name: profile.full_name || "Unknown",
+      full_name: resolveDisplayName(profile.full_name, profile.email, staffNameByEmail),
       tags: userTags
         .filter((tag) => tag.user_id === profile.id)
         .map((tag) => tag.tag),
@@ -123,7 +156,7 @@ export default function UserTagManagement() {
     const { error } = await supabase
       .from("user_tags")
       .delete()
-      .match({ user_id: userId, tag: tag as any });
+      .match({ user_id: userId, tag: tag as any, company_id: currentCompany!.id });
 
     if (error) {
       toast.error("Failed to remove tag");
