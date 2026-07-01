@@ -1,12 +1,14 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getRecipientsForEmailType, sendEmailNotifications } from "../_shared/emailHelpers.ts";
+import { getRecipientsForEmailTypeWithFilters, sendEmailNotifications } from "../_shared/emailHelpers.ts";
 import {
   easternSeasonYear,
   easternTodayYMD,
   findDaySpecificMedicationLog,
+  formatScheduledTimeForAlert,
   isAsNeededMedication,
   mergeMedicationsForDate,
+  medicationAlertIsDue,
   medicationAlreadyAlerted,
   type MedicationLogRow,
 } from "../_shared/medicationAlertUtils.ts";
@@ -15,38 +17,6 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-const MISSED_MED_TIMEZONE = "America/New_York";
-
-function minutesSinceMidnightInTimezone(now: Date, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(now);
-  const hour = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0", 10);
-  const minute = parseInt(parts.find((p) => p.type === "minute")?.value ?? "0", 10);
-  return hour * 60 + minute;
-}
-
-function scheduledTimeToMinutes(scheduled: string | null | undefined): number | null {
-  if (!scheduled || typeof scheduled !== "string") return null;
-  const trimmed = scheduled.trim();
-  const match = /^(\d{1,2}):(\d{2})$/.exec(trimmed);
-  if (!match) return null;
-  const h = parseInt(match[1], 10);
-  const m = parseInt(match[2], 10);
-  if (h > 23 || m > 59) return null;
-  return h * 60 + m;
-}
-
-function medicationAlertIsDue(now: Date, scheduledTime: string | null | undefined): boolean {
-  const slotMin = scheduledTimeToMinutes(scheduledTime);
-  if (slotMin === null) return true;
-  const nowMin = minutesSinceMidnightInTimezone(now, MISSED_MED_TIMEZONE);
-  return nowMin >= slotMin;
-}
 
 const MED_SELECT = `
   id,
@@ -67,7 +37,8 @@ const MED_SELECT = `
   child:children (
     id,
     name,
-    division:divisions ( name )
+    division_id,
+    division:divisions ( id, name )
   )
 `;
 
@@ -134,12 +105,6 @@ serve(async (req) => {
 
       console.log(`Company ${company.name}: ${dueMeds.length} missed medication(s) due for alert`);
 
-      const recipients = await getRecipientsForEmailType(supabase, "missed_medication", company.id);
-      if (!recipients.length) {
-        console.log(`No recipients configured for missed medication alerts in ${company.name}`);
-        continue;
-      }
-
       const medsByChild = dueMeds.reduce((acc: Record<string, { child: any; medications: MedicationLogRow[] }>, med) => {
         const childId = (med as any).child?.id;
         if (!childId) return acc;
@@ -151,9 +116,20 @@ serve(async (req) => {
       }, {});
 
       for (const { child, medications } of Object.values(medsByChild)) {
-        const medList = medications
-          .map((m) => `- ${m.medication_name} (${m.dosage || "N/A"}) at ${m.scheduled_time || "TBD"}`)
-          .join("\n");
+        const divisionId = child.division_id || child.division?.id;
+        const recipients = await getRecipientsForEmailTypeWithFilters(
+          supabase,
+          "missed_medication",
+          company.id,
+          divisionId ? { divisionIds: [divisionId] } : undefined,
+        );
+
+        if (!recipients.length) {
+          console.log(
+            `No recipients for missed medication alert (${child.name}, division ${divisionId || "unknown"}) in ${company.name}`,
+          );
+          continue;
+        }
 
         const subject = `Missed Medication Alert: ${child.name}`;
         const content = `
@@ -161,7 +137,7 @@ serve(async (req) => {
 <strong>Division:</strong> ${child.division?.name || "N/A"}<br/>
 <strong>Date:</strong> ${today}</p>
 <p><strong>Missed Medications:</strong></p>
-<ul>${medications.map((m) => `<li>${m.medication_name} (${m.dosage || "N/A"}) at ${m.scheduled_time || "TBD"}</li>`).join("")}</ul>
+<ul>${medications.map((m) => `<li>${m.medication_name} (${m.dosage || "N/A"}) at ${formatScheduledTimeForAlert(m.scheduled_time)}</li>`).join("")}</ul>
 <p>Please ensure these medications are administered as soon as possible.</p>
         `.trim();
 

@@ -145,38 +145,34 @@ export async function getRecipientsForEmailTypeWithFilters(
   // 2. Process each tag with appropriate filtering
   for (const tag of tags) {
     if (tag === 'division_leader' && filters?.divisionIds?.length) {
-      // DIVISION-FILTERED: Only leaders with access to specified divisions
+      // DIVISION-FILTERED: users tagged division_leader with access to the child's division
       console.log(`Filtering division_leader tag by divisions:`, filters.divisionIds);
-      
-      const { data: leaders } = await supabase
-        .from('user_roles')
+
+      const { data: taggedLeaders } = await supabase
+        .from('user_tags')
         .select('user_id')
-        .eq('role', 'division_leader')
+        .eq('tag', 'division_leader')
         .eq('company_id', companyId);
-      
-      if (leaders?.length) {
-        for (const leader of leaders) {
-          // Check if leader has permission for any of the event divisions
-          const { data: permissions } = await supabase
-            .from('division_permissions')
-            .select('division_id')
-            .eq('user_id', leader.user_id)
-            .eq('can_access', true)
-            .in('division_id', filters.divisionIds);
-          
-          if (permissions?.length > 0) {
-            // Get profile for this leader
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('id, email, full_name')
-              .eq('id', leader.user_id)
-              .eq('company_id', companyId)
-              .maybeSingle();
-            
-            if (profile) {
-              allRecipients.push(profile);
-            }
-          }
+
+      for (const leader of taggedLeaders || []) {
+        const { data: permissions } = await supabase
+          .from('division_permissions')
+          .select('division_id')
+          .eq('user_id', leader.user_id)
+          .eq('can_access', true)
+          .in('division_id', filters.divisionIds);
+
+        if (!permissions?.length) continue;
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, email, full_name')
+          .eq('id', leader.user_id)
+          .eq('company_id', companyId)
+          .maybeSingle();
+
+        if (profile) {
+          allRecipients.push(profile);
         }
       }
     } 

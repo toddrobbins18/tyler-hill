@@ -35,6 +35,54 @@ export function easternSeasonYear(): string {
   return eastern.getFullYear().toString();
 }
 
+const MISSED_MED_TIMEZONE = "America/New_York";
+
+/** Parse HH:MM or HH:MM:SS (Postgres TIME) into minutes since midnight. */
+export function scheduledTimeToMinutes(scheduled: string | null | undefined): number | null {
+  if (!scheduled || typeof scheduled !== "string") return null;
+  const trimmed = scheduled.trim();
+  const match = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(trimmed);
+  if (!match) return null;
+  const h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  if (h > 23 || m > 59) return null;
+  return h * 60 + m;
+}
+
+function minutesSinceMidnightInTimezone(now: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const hour = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0", 10);
+  const minute = parseInt(parts.find((p) => p.type === "minute")?.value ?? "0", 10);
+  return hour * 60 + minute;
+}
+
+/** True when current Eastern time is at or after the medication's scheduled slot. */
+export function medicationAlertIsDue(
+  now: Date,
+  scheduledTime: string | null | undefined,
+  timeZone = MISSED_MED_TIMEZONE,
+): boolean {
+  const slotMin = scheduledTimeToMinutes(scheduledTime);
+  if (slotMin === null) return true;
+  const nowMin = minutesSinceMidnightInTimezone(now, timeZone);
+  return nowMin >= slotMin;
+}
+
+export function formatScheduledTimeForAlert(scheduled: string | null | undefined): string {
+  const slotMin = scheduledTimeToMinutes(scheduled);
+  if (slotMin === null) return scheduled?.trim() || "TBD";
+  const h24 = Math.floor(slotMin / 60);
+  const m = slotMin % 60;
+  const ampm = h24 >= 12 ? "PM" : "AM";
+  const h12 = h24 % 12 || 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${ampm} ET`;
+}
+
 function parseSeasonYear(season: string): number {
   const match = String(season).match(/(\d{4})/);
   if (match) return Number(match[1]);
