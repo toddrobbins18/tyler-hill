@@ -1,5 +1,6 @@
 import {
   escapeHtml,
+  formatBulletinDisplayDate,
   formatDashboardSpecialEventSubtitle,
   mergeActivityDivisions,
 } from "./dailyDashboardFormat.ts";
@@ -71,18 +72,6 @@ function formatTime12Hour(time24: string): string {
   const ampm = hour >= 12 ? "PM" : "AM";
   const hour12 = hour % 12 || 12;
   return `${hour12}:${parts[1]} ${ampm}`;
-}
-
-function formatDisplayDate(todayYMD: string): string {
-  const [y, m, d] = todayYMD.split("-").map(Number);
-  const date = new Date(y, m - 1, d);
-  return date.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "America/New_York",
-  });
 }
 
 function nl2br(text: string): string {
@@ -308,7 +297,7 @@ export function buildTylerHillBulletinHtml(
   todayYMD: string,
   data: TylerHillBulletinData,
 ): string {
-  const displayDate = formatDisplayDate(todayYMD);
+  const displayDate = formatBulletinDisplayDate(todayYMD);
   const mealByType = (type: string) =>
     data.meals.find((m) => (m.meal_type || "").toLowerCase() === type);
 

@@ -1,5 +1,37 @@
 type NamedDivision = { id?: string; name?: string | null };
 
+const EASTERN_TIMEZONE = "America/New_York";
+
+/** Today's date as YYYY-MM-DD in US Eastern (for bulletin sends at 4 AM ET). */
+export function easternTodayYMD(now = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: EASTERN_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
+export function easternSeasonYear(now = new Date()): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: EASTERN_TIMEZONE,
+    year: "numeric",
+  }).format(now);
+}
+
+/** Long-form calendar label for a YYYY-MM-DD string (avoids UTC midnight off-by-one). */
+export function formatBulletinDisplayDate(dateYMD: string): string {
+  const [y, m, d] = dateYMD.split("-").map(Number);
+  const anchor = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  return anchor.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: EASTERN_TIMEZONE,
+  });
+}
+
 const PLACEHOLDER_TIME_VALUES = new Set(["", "tbd", "all day", "n/a"]);
 
 function isPlaceholderTime(raw?: string | null): boolean {

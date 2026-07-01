@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendEmailNotifications } from "../_shared/emailHelpers.ts";
+import { easternSeasonYear, easternTodayYMD } from "../_shared/dailyDashboardFormat.ts";
 import {
   buildDailyWolfBulletinHtml,
   fetchDailyWolfBulletinData,
@@ -40,9 +41,8 @@ serve(async (req) => {
 
     console.log('Sending daily dashboard emails...');
 
-    const easternTime = new Date(new Date().toLocaleString("en-US", {timeZone: "America/New_York"}));
-    const todayYMD = easternTime.toISOString().split('T')[0];
-    const season = easternTime.getFullYear().toString();
+    const todayYMD = easternTodayYMD();
+    const season = easternSeasonYear();
 
     const { data: companies, error: companiesError } = await supabase
       .from('companies')

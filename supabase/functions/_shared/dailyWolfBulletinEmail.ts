@@ -1,5 +1,6 @@
 import {
   escapeHtml,
+  formatBulletinDisplayDate,
   mergeActivityDivisions,
 } from "./dailyDashboardFormat.ts";
 
@@ -110,18 +111,6 @@ function mergeSportsDivisions(event: {
 
 function divisionNamesLabel(divisions: NamedDivision[]): string {
   return divisions.map((d) => d.name).filter(Boolean).join(", ");
-}
-
-function formatDisplayDate(todayYMD: string): string {
-  const [y, m, d] = todayYMD.split("-").map(Number);
-  const date = new Date(y, m - 1, d);
-  return date.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "America/New_York",
-  });
 }
 
 function nl2br(text: string): string {
@@ -259,7 +248,7 @@ export function buildDailyWolfBulletinHtml(
   data: DailyWolfBulletinData,
   config: DailyWolfBulletinConfig,
 ): string {
-  const displayDate = formatDisplayDate(todayYMD);
+  const displayDate = formatBulletinDisplayDate(todayYMD);
   const mealByType = (type: string) =>
     data.meals.find((m) => (m.meal_type || "").toLowerCase() === type);
 
