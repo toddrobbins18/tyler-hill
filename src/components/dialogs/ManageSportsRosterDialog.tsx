@@ -28,6 +28,38 @@ interface ManageSportsRosterDialogProps {
   readOnly?: boolean;
 }
 
+const ROSTER_PAGE_SIZE = 1000;
+
+async function fetchAllSeasonRows<T>(
+  table: "children" | "staff",
+  companyId: string,
+  season: string,
+): Promise<T[]> {
+  const rows: T[] = [];
+  let from = 0;
+
+  for (;;) {
+    const to = from + ROSTER_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from(table)
+      .select("*")
+      .neq("status", "inactive")
+      .eq("company_id", companyId)
+      .eq("season", season)
+      .order("name")
+      .range(from, to);
+
+    if (error) throw error;
+
+    const batch = (data || []) as T[];
+    rows.push(...batch);
+    if (batch.length < ROSTER_PAGE_SIZE) break;
+    from += ROSTER_PAGE_SIZE;
+  }
+
+  return rows;
+}
+
 export default function ManageSportsRosterDialog({
   eventId,
   eventTitle,
@@ -118,34 +150,30 @@ export default function ManageSportsRosterDialog({
       setStaff(staffData || []);
       setTemplates([]);
     } else {
-      const [{ data: childrenData }, { data: staffData }, { data: templatesData }] = await Promise.all([
-        supabase
-          .from("children")
-          .select("*")
-          .neq("status", "inactive")
-          .eq("company_id", currentCompany.id)
-          .eq("season", currentSeason)
-          .order("name"),
-        supabase
-          .from("staff")
-          .select("*")
-          .neq("status", "inactive")
-          .eq("company_id", currentCompany.id)
-          .eq("season", currentSeason)
-          .order("name"),
-        supabase
-          .from("roster_templates")
-          .select(`
-            *,
-            roster_template_children(child_id)
-          `)
-          .eq("company_id", currentCompany.id)
-          .order("created_at", { ascending: false }),
-      ]);
+      try {
+        const [childrenData, staffData, templatesResult] = await Promise.all([
+          fetchAllSeasonRows<any>("children", currentCompany.id, currentSeason),
+          fetchAllSeasonRows<any>("staff", currentCompany.id, currentSeason),
+          supabase
+            .from("roster_templates")
+            .select(`
+              *,
+              roster_template_children(child_id)
+            `)
+            .eq("company_id", currentCompany.id)
+            .order("created_at", { ascending: false }),
+        ]);
 
-      setChildren(childrenData || []);
-      setStaff(staffData || []);
-      setTemplates(templatesData || []);
+        setChildren(childrenData);
+        setStaff(staffData);
+        setTemplates(templatesResult.data || []);
+      } catch (error) {
+        console.error("Error loading roster picker data:", error);
+        toast.error("Failed to load campers for roster");
+        setChildren([]);
+        setStaff([]);
+        setTemplates([]);
+      }
     }
 
     setLoading(false);
