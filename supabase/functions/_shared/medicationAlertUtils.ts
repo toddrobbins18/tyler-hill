@@ -38,6 +38,13 @@ export function easternSeasonYear(): string {
 
 const MISSED_MED_TIMEZONE = "America/New_York";
 
+/**
+ * Grace period (minutes) after a medication's scheduled time before it counts as
+ * "missed" and triggers an alert email. Gives nurses time to administer and check
+ * it off first, avoiding premature alerts. Adjust to change the delay.
+ */
+export const MISSED_MED_GRACE_MINUTES = 30;
+
 /** Parse HH:MM or HH:MM:SS (Postgres TIME) into minutes since midnight. */
 export function scheduledTimeToMinutes(scheduled: string | null | undefined): number | null {
   if (!scheduled || typeof scheduled !== "string") return null;
@@ -67,11 +74,12 @@ export function medicationAlertIsDue(
   now: Date,
   scheduledTime: string | null | undefined,
   timeZone = MISSED_MED_TIMEZONE,
+  graceMinutes = MISSED_MED_GRACE_MINUTES,
 ): boolean {
   const slotMin = scheduledTimeToMinutes(scheduledTime);
   if (slotMin === null) return true;
   const nowMin = minutesSinceMidnightInTimezone(now, timeZone);
-  return nowMin >= slotMin;
+  return nowMin >= slotMin + graceMinutes;
 }
 
 export function formatScheduledTimeForAlert(scheduled: string | null | undefined): string {

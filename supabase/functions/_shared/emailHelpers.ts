@@ -144,7 +144,15 @@ export async function getRecipientsForEmailTypeWithFilters(
   
   // 2. Process each tag with appropriate filtering
   for (const tag of tags) {
-    if (tag === 'division_leader' && filters?.divisionIds?.length) {
+    if (tag === 'division_leader') {
+      // Division leaders are ALWAYS scoped to their own division(s). Without a
+      // division context we must NOT email every division leader, or they would
+      // receive alerts for campers outside their division. Skip instead.
+      if (!filters?.divisionIds?.length) {
+        console.log('Skipping division_leader tag: no division context provided');
+        continue;
+      }
+
       // DIVISION-FILTERED: users tagged division_leader with access to the child's division
       console.log(`Filtering division_leader tag by divisions:`, filters.divisionIds);
 
@@ -176,7 +184,14 @@ export async function getRecipientsForEmailTypeWithFilters(
         }
       }
     } 
-    else if (tag === 'specialist' && filters?.sportType) {
+    else if (tag === 'specialist') {
+      // Specialists are ALWAYS scoped to their assigned sport(s). Without a sport
+      // context, skip rather than emailing every specialist.
+      if (!filters?.sportType) {
+        console.log('Skipping specialist tag: no sport context provided');
+        continue;
+      }
+
       // SPORT-FILTERED: Only specialists assigned to this sport
       console.log(`Filtering specialist tag by sport:`, filters.sportType);
       

@@ -20,7 +20,6 @@ export default function IncidentReports() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingIncident, setEditingIncident] = useState<any>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
   const { toast } = useToast();
   const { selectedSeason } = useSeason();
   const { currentCompany } = useCompany();
@@ -98,35 +97,6 @@ export default function IncidentReports() {
     fetchIncidents();
   };
 
-  const handleDeleteAll = async () => {
-    try {
-      const { error: childrenError } = await supabase
-        .from("incident_children")
-        .delete()
-        .neq("id", "00000000-0000-0000-0000-000000000000");
-      
-      if (childrenError) throw childrenError;
-      
-      const { error: reportsError } = await supabase
-        .from("incident_reports")
-        .delete()
-        .neq("id", "00000000-0000-0000-0000-000000000000");
-      
-      if (reportsError) throw reportsError;
-      
-      toast({ title: "All incident reports deleted successfully" });
-      setShowDeleteAllDialog(false);
-      fetchIncidents();
-    } catch (error: any) {
-      toast({ 
-        title: "Error deleting incident reports", 
-        description: error.message,
-        variant: "destructive" 
-      });
-      console.error(error);
-    }
-  };
-
   const getSeverityColor = (severity: string) => {
     switch (severity?.toLowerCase()) {
       case 'critical': return 'destructive';
@@ -145,29 +115,6 @@ export default function IncidentReports() {
           <p className="text-muted-foreground">Track and manage incident reports</p>
         </div>
         <div className="flex gap-2">
-          {incidents.length > 0 && (
-            <AlertDialog open={showDeleteAllDialog} onOpenChange={setShowDeleteAllDialog}>
-              <Button 
-                variant="destructive" 
-                onClick={() => setShowDeleteAllDialog(true)}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete All
-              </Button>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete All Incident Reports</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will permanently delete all {incidents.length} incident reports and their relationships. This action cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDeleteAll}>Delete All</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
           <CSVUploader tableName="incident_reports" onUploadComplete={fetchIncidents} />
           <Button onClick={() => setShowAddDialog(true)}>
             <Plus className="h-4 w-4 mr-2" />

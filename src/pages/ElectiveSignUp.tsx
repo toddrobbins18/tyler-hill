@@ -155,16 +155,8 @@ export default function ElectiveSignUp() {
   const handleAssignElective = async (childId: string, electiveId: string | null) => {
     const companyId = currentCompany!.id;
 
-    // Remove existing signup for this child/week/day/period
-    await supabase
-      .from("elective_signups")
-      .delete()
-      .eq("company_id", companyId)
-      .eq("child_id", childId)
-      .eq("week_start_date", weekStart)
-      .eq("day_of_week", selectedDay)
-      .eq("period", selectedPeriod);
-
+    // Validate capacity BEFORE deleting the current signup, otherwise a blocked
+    // assignment would erase the camper's existing elective and leave nothing.
     if (electiveId) {
       const rawCap = electives.find((e) => e.id === electiveId)?.capacity;
       const capNum =
@@ -179,7 +171,19 @@ export default function ElectiveSignUp() {
         toast({ title: "This elective is at capacity.", variant: "destructive" });
         return;
       }
+    }
 
+    // Remove existing signup for this child/week/day/period
+    await supabase
+      .from("elective_signups")
+      .delete()
+      .eq("company_id", companyId)
+      .eq("child_id", childId)
+      .eq("week_start_date", weekStart)
+      .eq("day_of_week", selectedDay)
+      .eq("period", selectedPeriod);
+
+    if (electiveId) {
       const { error } = await supabase.from("elective_signups").insert({
         company_id: companyId,
         child_id: childId,
@@ -194,6 +198,8 @@ export default function ElectiveSignUp() {
           title: error.message.includes("capacity") ? "This elective is at capacity." : "Error assigning elective",
           variant: "destructive",
         });
+        // Re-sync so the UI reflects the true state (the delete above already ran).
+        await fetchData();
         return;
       }
     }
