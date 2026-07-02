@@ -28,7 +28,18 @@ interface Child {
   id: string;
   name: string;
   division_id: string | null;
-  division?: { name: string; gender: string } | null;
+  division?: { id: string; name: string; gender: string; sort_order?: number | null } | null;
+}
+
+const CAMPERS_PAGE_SIZE = 1000;
+
+function normalizeDivisionNameForFilter(name: string | null | undefined): string {
+  return String(name || "")
+    .replace(/\bSuper\s+Senior\b/gi, "Super")
+    .replace(/\bTN\d+\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 }
 
 export default function RosterTemplates() {
@@ -64,19 +75,12 @@ export default function RosterTemplates() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [templatesResult, childrenResult, divisionsResult] = await Promise.all([
+      const [templatesResult, divisionsResult] = await Promise.all([
         supabase
           .from("roster_templates")
           .select(`*, roster_template_children(child_id)`)
           .eq("company_id", currentCompany?.id)
           .order("created_at", { ascending: false }),
-        supabase
-          .from("children")
-          .select(`id, name, division_id, division:divisions(name, gender)`)
-          .eq("company_id", currentCompany?.id)
-          .eq("season", currentSeason)
-          .neq("status", "inactive")
-          .order("name"),
         supabase
           .from("divisions")
           .select("*")
@@ -84,8 +88,29 @@ export default function RosterTemplates() {
           .eq("is_active", true)
       ]);
 
+      const childRows: Child[] = [];
+      let from = 0;
+      for (;;) {
+        const to = from + CAMPERS_PAGE_SIZE - 1;
+        const { data, error } = await supabase
+          .from("children")
+          .select(`id, name, division_id, division:divisions(id, name, gender, sort_order)`)
+          .eq("company_id", currentCompany?.id)
+          .eq("season", currentSeason)
+          .neq("status", "inactive")
+          .order("name")
+          .range(from, to);
+
+        if (error) throw error;
+
+        const batch = (data || []) as Child[];
+        childRows.push(...batch);
+        if (batch.length < CAMPERS_PAGE_SIZE) break;
+        from += CAMPERS_PAGE_SIZE;
+      }
+
       setTemplates(templatesResult.data || []);
-      setChildren(childrenResult.data || []);
+      setChildren(childRows);
       setDivisions(sortDivisionsAlternatingGender(divisionsResult.data || []));
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -95,14 +120,26 @@ export default function RosterTemplates() {
     }
   };
 
+  const selectedDivision = divisions.find((division) => division.id === filterDivision);
+  const selectedDivisionKey = normalizeDivisionNameForFilter(selectedDivision?.name);
+
   const filteredChildren = children.filter(child => {
     if (searchTerm && !child.name.toLowerCase().includes(searchTerm.toLowerCase())) {
       return false;
     }
-    if (filterDivision !== "all" && child.division_id !== filterDivision) {
+    if (
+      filterDivision !== "all" &&
+      child.division_id !== filterDivision &&
+      normalizeDivisionNameForFilter(child.division?.name) !== selectedDivisionKey
+    ) {
       return false;
     }
     return true;
+  }).sort((a, b) => {
+    const divisionOrder =
+      (a.division?.sort_order ?? 999) - (b.division?.sort_order ?? 999);
+    if (divisionOrder !== 0) return divisionOrder;
+    return a.name.localeCompare(b.name);
   });
 
   const resetForm = () => {
