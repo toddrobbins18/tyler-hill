@@ -90,9 +90,17 @@ Deno.serve(async (req) => {
     }
 
     if (medicationsToCreate.length > 0) {
-      const { error: insertError } = await supabase
+      let { error: insertError } = await supabase
         .from("medication_logs")
         .insert(medicationsToCreate);
+
+      if (insertError?.code === "42703" && /refused/i.test(insertError.message ?? "")) {
+        ({ error: insertError } = await supabase
+          .from("medication_logs")
+          .insert(
+            medicationsToCreate.map(({ refused, ...row }) => row),
+          ));
+      }
 
       if (insertError) {
         console.error("Error inserting medications:", insertError);

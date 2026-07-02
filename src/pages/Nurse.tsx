@@ -55,6 +55,11 @@ import {
   medicationMatchesListVisibility,
 } from "@/lib/medicationMealTimeDisplay";
 import { MedicationMealTimeBadges } from "@/components/nurse/MedicationMealTimeBadges";
+import {
+  insertMedicationLog,
+  medicationWriteErrorDescription,
+  updateMedicationLog,
+} from "@/lib/medicationLogWrites";
 
 // Helper to check if we should show limited features for Timber Lake
 const useTimberLakeMode = () => {
@@ -346,7 +351,7 @@ export default function Nurse() {
 
     const dateStr = date ? format(date, "yyyy-MM-dd") : localDateYmd();
     const baseSelect =
-      "*, children(name, gender, division_id, division:divisions(name, gender, sort_order)), staff(name)";
+      "*, children(name, gender, division_id, division:divisions(name, gender, sort_order)), staff!medication_logs_administered_by_fkey(name)";
 
     const [dateResult, recurringResult] = await Promise.all([
       supabase
@@ -366,7 +371,12 @@ export default function Nurse() {
     ]);
 
     if (dateResult.error || recurringResult.error) {
-      toast({ title: "Error fetching medications", variant: "destructive" });
+      const error = dateResult.error ?? recurringResult.error;
+      toast({
+        title: "Error fetching medications",
+        description: error?.message,
+        variant: "destructive",
+      });
       return;
     }
 
@@ -512,6 +522,14 @@ export default function Nurse() {
     fetchMedications(selectedDate);
   };
 
+  const showMedicationWriteError = (error: { message?: string } | null) => {
+    toast({
+      title: "Error updating medication",
+      description: medicationWriteErrorDescription(error),
+      variant: "destructive",
+    });
+  };
+
   const handleAdminister = async (med: any, options?: { silent?: boolean }) => {
     const { data: { user } } = await supabase.auth.getUser();
     const { data: staffData } = await supabase
@@ -521,6 +539,14 @@ export default function Nurse() {
       .maybeSingle();
 
     const dateStr = format(selectedDate, "yyyy-MM-dd");
+    const administeredUpdate = {
+      administered: true,
+      administered_by: staffData?.id ?? null,
+      administered_at: new Date().toISOString(),
+      refused: false,
+      refused_by: null,
+      refused_at: null,
+    };
 
     if (med._fromRecurringTemplate) {
       const { data: dayLogs } = await supabase
@@ -534,24 +560,14 @@ export default function Nurse() {
       const existingDayLog = findDaySpecificMedicationLog(dayLogs || [], med);
 
       if (existingDayLog) {
-        const { error } = await supabase
-          .from("medication_logs")
-          .update({
-            administered: true,
-            administered_by: staffData?.id ?? null,
-            administered_at: new Date().toISOString(),
-            refused: false,
-            refused_by: null,
-            refused_at: null,
-          })
-          .eq("id", existingDayLog.id);
+        const { error } = await updateMedicationLog(supabase, existingDayLog.id, administeredUpdate);
 
         if (error) {
-          toast({ title: "Error updating medication", variant: "destructive" });
+          showMedicationWriteError(error);
           return;
         }
       } else {
-        const { error } = await supabase.from("medication_logs").insert({
+        const { error } = await insertMedicationLog(supabase, {
           child_id: med.child_id,
           date: dateStr,
           medication_name: med.medication_name,
@@ -565,32 +581,19 @@ export default function Nurse() {
           end_date: med.end_date,
           company_id: currentCompany?.id,
           season: currentSeason,
-          administered: true,
-          administered_by: staffData?.id ?? null,
-          administered_at: new Date().toISOString(),
-          refused: false,
+          ...administeredUpdate,
         });
 
         if (error) {
-          toast({ title: "Error updating medication", variant: "destructive" });
+          showMedicationWriteError(error);
           return;
         }
       }
     } else {
-      const { error } = await supabase
-        .from("medication_logs")
-        .update({
-          administered: true,
-          administered_by: staffData?.id ?? null,
-          administered_at: new Date().toISOString(),
-          refused: false,
-          refused_by: null,
-          refused_at: null,
-        })
-        .eq("id", med.id);
+      const { error } = await updateMedicationLog(supabase, med.id, administeredUpdate);
 
       if (error) {
-        toast({ title: "Error updating medication", variant: "destructive" });
+        showMedicationWriteError(error);
         return;
       }
     }
@@ -656,17 +659,14 @@ export default function Nurse() {
       const existingDayLog = findDaySpecificMedicationLog(dayLogs || [], med);
 
       if (existingDayLog) {
-        const { error } = await supabase
-          .from("medication_logs")
-          .update(refusalUpdate)
-          .eq("id", existingDayLog.id);
+        const { error } = await updateMedicationLog(supabase, existingDayLog.id, refusalUpdate);
 
         if (error) {
-          toast({ title: "Error updating medication", variant: "destructive" });
+          showMedicationWriteError(error);
           return;
         }
       } else {
-        const { error } = await supabase.from("medication_logs").insert({
+        const { error } = await insertMedicationLog(supabase, {
           child_id: med.child_id,
           date: dateStr,
           medication_name: med.medication_name,
@@ -684,18 +684,15 @@ export default function Nurse() {
         });
 
         if (error) {
-          toast({ title: "Error updating medication", variant: "destructive" });
+          showMedicationWriteError(error);
           return;
         }
       }
     } else {
-      const { error } = await supabase
-        .from("medication_logs")
-        .update(refusalUpdate)
-        .eq("id", med.id);
+      const { error } = await updateMedicationLog(supabase, med.id, refusalUpdate);
 
       if (error) {
-        toast({ title: "Error updating medication", variant: "destructive" });
+        showMedicationWriteError(error);
         return;
       }
     }
@@ -753,20 +750,17 @@ export default function Nurse() {
       targetId = match.id;
     }
 
-    const { error } = await supabase
-      .from("medication_logs")
-      .update({
-        administered: false,
-        administered_by: null,
-        administered_at: null,
-        refused: false,
-        refused_by: null,
-        refused_at: null,
-      })
-      .eq("id", targetId);
+    const { error } = await updateMedicationLog(supabase, targetId, {
+      administered: false,
+      administered_by: null,
+      administered_at: null,
+      refused: false,
+      refused_by: null,
+      refused_at: null,
+    });
 
     if (error) {
-      toast({ title: "Error updating medication", variant: "destructive" });
+      showMedicationWriteError(error);
       return;
     }
 
