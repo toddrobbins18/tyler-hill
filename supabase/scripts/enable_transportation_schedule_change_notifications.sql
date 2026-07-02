@@ -1,0 +1,8 @@
+-- Run in Supabase SQL Editor to enable transportation schedule-change alerts.
+-- Safe to re-run. Same as migration 20260702120000_transportation_schedule_change_notifications.sql
+--
+-- After running, deploy the updated edge function:
+--   supabase functions deploy notify-transportation-events --project-ref qjbkvnzeejbqxbcbskdu
+--
+-- Ensure Vault has SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, and transportation staff
+-- have the "transportation" user tag in Admin → User Tag Management.

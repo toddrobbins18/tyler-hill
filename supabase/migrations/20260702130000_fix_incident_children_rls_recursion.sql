@@ -1,44 +1,14 @@
--- Fix incident report create/read RLS (admin/staff/health_center, multi-camp admins, DL view via incident_children).
--- Tyler Hill prod was missing later incident policy migrations; 20260627000000 only replaced SELECT
--- and still keyed on profiles.company_id, which breaks multi-camp admins and incident_children rows.
+-- Fix "infinite recursion detected in policy for relation incident_children" (42P17).
+--
+-- Root cause: incident_reports_select queried incident_children, and
+-- incident_children_select queried incident_reports. Each table's RLS policy
+-- triggered the other's, looping forever.
+--
+-- Fix: move the cross-table checks into SECURITY DEFINER helper functions. These
+-- run as the function owner (table owner) and bypass RLS on the inner query, so
+-- the policies no longer re-trigger each other.
 
-CREATE OR REPLACE FUNCTION public.user_has_role_for_company(
-  _user_id uuid,
-  _company_id uuid,
-  _roles app_role[]
-)
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT public.is_super_admin(_user_id)
-    OR EXISTS (
-      SELECT 1
-      FROM public.user_roles ur
-      WHERE ur.user_id = _user_id
-        AND ur.company_id = _company_id
-        AND ur.role = ANY(_roles)
-    );
-$$;
-
-CREATE OR REPLACE FUNCTION public.user_can_manage_incidents(_user_id uuid, _company_id uuid)
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT public.user_has_role_for_company(
-    _user_id,
-    _company_id,
-    ARRAY['admin', 'staff', 'health_center']::app_role[]
-  );
-$$;
-
--- Cross-table checks live in SECURITY DEFINER helpers so incident_reports and
--- incident_children policies never trigger each other (avoids 42P17 recursion).
+-- Does the current user have access to any child linked to this incident (junction)?
 CREATE OR REPLACE FUNCTION public.incident_has_accessible_child(_incident_id uuid)
 RETURNS boolean
 LANGUAGE sql
@@ -54,6 +24,7 @@ AS $$
   );
 $$;
 
+-- Can the current user manage the parent incident for an incident_children row?
 CREATE OR REPLACE FUNCTION public.can_manage_incident_children(_incident_id uuid)
 RETURNS boolean
 LANGUAGE sql
@@ -70,6 +41,7 @@ AS $$
   );
 $$;
 
+-- Can the current user view a specific incident_children row?
 CREATE OR REPLACE FUNCTION public.can_view_incident_children(_incident_id uuid, _child_id uuid)
 RETURNS boolean
 LANGUAGE sql
@@ -96,30 +68,8 @@ AS $$
   );
 $$;
 
-DO $$
-DECLARE
-  p record;
-BEGIN
-  FOR p IN
-    SELECT policyname
-    FROM pg_policies
-    WHERE schemaname = 'public' AND tablename = 'incident_reports'
-  LOOP
-    EXECUTE format('DROP POLICY IF EXISTS %I ON public.incident_reports;', p.policyname);
-  END LOOP;
-
-  FOR p IN
-    SELECT policyname
-    FROM pg_policies
-    WHERE schemaname = 'public' AND tablename = 'incident_children'
-  LOOP
-    EXECUTE format('DROP POLICY IF EXISTS %I ON public.incident_children;', p.policyname);
-  END LOOP;
-END $$;
-
-ALTER TABLE public.incident_reports ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.incident_children ENABLE ROW LEVEL SECURITY;
-
+-- Recreate incident_reports SELECT without a direct subquery on incident_children.
+DROP POLICY IF EXISTS "incident_reports_select" ON public.incident_reports;
 CREATE POLICY "incident_reports_select"
 ON public.incident_reports
 FOR SELECT TO authenticated
@@ -136,10 +86,7 @@ USING (
           ARRAY['division_leader', 'viewer']::app_role[]
         )
         AND (
-          (
-            child_id IS NOT NULL
-            AND public.can_access_child(child_id)
-          )
+          (child_id IS NOT NULL AND public.can_access_child(child_id))
           OR public.incident_has_accessible_child(incident_reports.id)
         )
       )
@@ -147,46 +94,8 @@ USING (
   )
 );
 
-CREATE POLICY "incident_reports_insert"
-ON public.incident_reports
-FOR INSERT TO authenticated
-WITH CHECK (
-  public.is_super_admin(auth.uid())
-  OR (
-    company_id IS NOT NULL
-    AND public.user_can_manage_incidents(auth.uid(), company_id)
-  )
-);
-
-CREATE POLICY "incident_reports_update"
-ON public.incident_reports
-FOR UPDATE TO authenticated
-USING (
-  public.is_super_admin(auth.uid())
-  OR (
-    company_id IS NOT NULL
-    AND public.user_can_manage_incidents(auth.uid(), company_id)
-  )
-)
-WITH CHECK (
-  public.is_super_admin(auth.uid())
-  OR (
-    company_id IS NOT NULL
-    AND public.user_can_manage_incidents(auth.uid(), company_id)
-  )
-);
-
-CREATE POLICY "incident_reports_delete"
-ON public.incident_reports
-FOR DELETE TO authenticated
-USING (
-  public.is_super_admin(auth.uid())
-  OR (
-    company_id IS NOT NULL
-    AND public.user_can_manage_incidents(auth.uid(), company_id)
-  )
-);
-
+-- Recreate incident_children policies without direct subqueries on incident_reports.
+DROP POLICY IF EXISTS "incident_children_select" ON public.incident_children;
 CREATE POLICY "incident_children_select"
 ON public.incident_children
 FOR SELECT TO authenticated
@@ -195,6 +104,7 @@ USING (
   OR public.can_view_incident_children(incident_children.incident_id, incident_children.child_id)
 );
 
+DROP POLICY IF EXISTS "incident_children_insert" ON public.incident_children;
 CREATE POLICY "incident_children_insert"
 ON public.incident_children
 FOR INSERT TO authenticated
@@ -203,6 +113,7 @@ WITH CHECK (
   OR public.can_manage_incident_children(incident_children.incident_id)
 );
 
+DROP POLICY IF EXISTS "incident_children_update" ON public.incident_children;
 CREATE POLICY "incident_children_update"
 ON public.incident_children
 FOR UPDATE TO authenticated
@@ -215,6 +126,7 @@ WITH CHECK (
   OR public.can_manage_incident_children(incident_children.incident_id)
 );
 
+DROP POLICY IF EXISTS "incident_children_delete" ON public.incident_children;
 CREATE POLICY "incident_children_delete"
 ON public.incident_children
 FOR DELETE TO authenticated

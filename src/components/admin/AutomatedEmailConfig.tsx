@@ -37,7 +37,7 @@ const EMAIL_TYPE_LABELS: Record<string, { label: string; description: string }> 
   },
   transportation_events: {
     label: "Transportation Events",
-    description: "When transportation events are scheduled or updated"
+    description: "When field trips or sports calendar items change date/time/location — transportation tag only"
   },
   health_center_admission: {
     label: "Health Center Admissions",

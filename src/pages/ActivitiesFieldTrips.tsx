@@ -255,6 +255,7 @@ export default function ActivitiesFieldTrips() {
         const { error: tripSyncError } = await syncLinkedTripsFromFieldTrip(
           supabase,
           {
+            field_trip_id: editingEvent.id,
             company_id: currentCompany.id,
             season: currentSeason,
             previous_title: editingEvent.title,
@@ -335,6 +336,7 @@ export default function ActivitiesFieldTrips() {
           status: "pending",
           season: currentSeason,
           company_id: currentCompany?.id,
+          field_trip_id: newActivity.id,
         };
 
         const { error: tripError } = await supabase
