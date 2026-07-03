@@ -83,9 +83,12 @@ function sectionHeading(title: string): string {
 }
 
 function formatOutlookDate(eventDate: string): string {
+  // Anchor at noon UTC so converting to Eastern never rolls back to the
+  // previous day. Building at local midnight (new Date(y, m-1, d)) on a UTC
+  // server and then formatting in Eastern shifted every date one day early.
   const [y, m, d] = eventDate.split("-").map(Number);
-  const date = new Date(y, m - 1, d);
-  return date.toLocaleDateString("en-US", {
+  const anchor = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  return anchor.toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",
