@@ -7,6 +7,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+async function profileNameForUserId(
+  supabase: ReturnType<typeof createClient>,
+  userId: string | null | undefined,
+): Promise<string> {
+  if (!userId) return "N/A";
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name")
+    .eq("id", userId)
+    .maybeSingle();
+  return profile?.full_name?.trim() || "N/A";
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -21,23 +34,22 @@ serve(async (req) => {
     const { admission_id, event_type } = await req.json();
     console.log(`Processing health center notification: ${admission_id}, type: ${event_type}`);
 
-    // Get admission details
+    // Explicit FK on children — table has two child_id foreign keys.
+    // admitted_by/checked_out_by reference auth.users, not profiles; resolve names separately.
     const { data: admission, error: admissionError } = await supabase
       .from('health_center_admissions')
       .select(`
         *,
-        child:children (
+        child:children!fk_health_center_admissions_child_id (
           id,
           name,
           division:divisions (
             name
           )
         ),
-        admitted_by_staff:profiles!health_center_admissions_admitted_by_fkey (
-          full_name
-        ),
-        checked_out_by_staff:profiles!health_center_admissions_checked_out_by_fkey (
-          full_name
+        staff:staff!health_center_admissions_staff_id_fkey (
+          id,
+          name
         )
       `)
       .eq('id', admission_id)
@@ -48,10 +60,12 @@ serve(async (req) => {
       throw admissionError;
     }
 
-    // Determine email type based on event
+    const [admittedByName, checkedOutByName] = await Promise.all([
+      profileNameForUserId(supabase, admission.admitted_by),
+      profileNameForUserId(supabase, admission.checked_out_by),
+    ]);
+
     const emailType = event_type === 'checkout' ? 'health_center_checkout' : 'health_center_admission';
-    
-    // Get recipients based on configuration
     const recipients = await getRecipientsForEmailType(supabase, emailType, admission.company_id);
 
     if (!recipients.length) {
@@ -62,18 +76,20 @@ serve(async (req) => {
       );
     }
 
-    // Create notification content
+    const personName = admission.child?.name || admission.staff?.name || 'Unknown';
+    const divisionName = admission.child?.division?.name || (admission.staff ? 'Staff' : 'N/A');
+    const personLabel = admission.staff ? 'Staff Member' : 'Child';
     const isCheckout = event_type === 'checkout';
-    const subject = isCheckout 
-      ? `Health Center: ${admission.child?.name} Checked Out`
-      : `Health Center: ${admission.child?.name} Admitted`;
+    const subject = isCheckout
+      ? `Health Center: ${personName} Checked Out`
+      : `Health Center: ${personName} Admitted`;
 
     const content = isCheckout ? `
-**Child:** ${admission.child?.name}
-**Division:** ${admission.child?.division?.name || 'N/A'}
+**${personLabel}:** ${personName}
+**Division:** ${divisionName}
 
 **Checked Out:** ${new Date(admission.checked_out_at).toLocaleString()}
-**Checked Out By:** ${admission.checked_out_by_staff?.full_name || 'N/A'}
+**Checked Out By:** ${checkedOutByName}
 
 **Original Admission:**
 - **Admitted:** ${new Date(admission.admitted_at).toLocaleString()}
@@ -81,34 +97,35 @@ serve(async (req) => {
 
 ${admission.notes ? `**Notes:** ${admission.notes}` : ''}
     `.trim() : `
-**Child:** ${admission.child?.name}
-**Division:** ${admission.child?.division?.name || 'N/A'}
+**${personLabel}:** ${personName}
+**Division:** ${divisionName}
 
 **Admitted:** ${new Date(admission.admitted_at).toLocaleString()}
-**Admitted By:** ${admission.admitted_by_staff?.full_name || 'N/A'}
+**Admitted By:** ${admittedByName}
 
 **Reason:** ${admission.reason || 'N/A'}
 
 ${admission.notes ? `**Notes:** ${admission.notes}` : ''}
     `.trim();
 
-    // Send notifications
     await sendEmailNotifications(supabase, recipients, subject, content, admission.company_id);
 
-    // Log notification
-    await supabase.from('notification_logs').insert({
+    const { error: logError } = await supabase.from('notification_logs').insert({
       event_type: emailType,
       event_id: admission_id,
       recipient_count: recipients.length,
       notification_version: 1,
     });
+    if (logError) {
+      console.warn('Could not write notification_logs (non-fatal):', logError);
+    }
 
     console.log(`Successfully sent health center notifications to ${recipients.length} recipients`);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        recipients_notified: recipients.length 
+      JSON.stringify({
+        success: true,
+        recipients_notified: recipients.length
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
