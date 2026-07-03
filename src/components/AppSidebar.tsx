@@ -129,6 +129,7 @@ const getMenuItems = (company?: MenuCompany) => {
     { title: "Awards", url: "/awards", icon: Award, menuId: "awards" },
     { title: "Incident Reports", url: "/incidents", icon: AlertTriangle, menuId: "incidents" },
     { title: "Sports Academy", url: "/sports-academy", icon: Trophy, menuId: "sports-academy" },
+    { title: "Sports Academy Calendar", url: "/sports-academy-calendar", icon: Calendar, menuId: "sports-academy-calendar" },
     { title: "Roster Templates", url: "/roster-templates", icon: ListChecks, menuId: "roster-templates" },
   );
 

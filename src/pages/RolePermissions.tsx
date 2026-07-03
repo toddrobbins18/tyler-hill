@@ -38,6 +38,7 @@ const getCompanyMenuItems = (company?: MenuCompany) => {
     { id: "awards", label: "Awards", icon: "🏆" },
     { id: "incidents", label: "Incident Reports", icon: "⚠️" },
     { id: "sports-academy", label: "Sports Academy", icon: "⚽" },
+    { id: "sports-academy-calendar", label: "Sports Academy Calendar", icon: "📅" },
     { id: "roster-templates", label: "Roster Templates", icon: "🗂️" },
     { id: "sports-calendar", label: isWest ? "Athletics" : "Sports Calendar", icon: "🏅" },
     { id: "special-meals", label: "Special Meals", icon: "🍽️" },

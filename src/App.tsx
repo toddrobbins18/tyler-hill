@@ -42,6 +42,7 @@ import Awards from "./pages/Awards";
 import IncidentReports from "./pages/IncidentReports";
 import Nurse from "./pages/Nurse";
 import SportsAcademy from "./pages/SportsAcademy";
+import SportsAcademyCalendar from "./pages/SportsAcademyCalendar";
 import Reports from "./pages/Reports";
 import RosterTemplates from "./pages/RosterTemplates";
 import ODManagement from "./pages/ODManagement";
@@ -156,6 +157,7 @@ function AppContent() {
                                 <Route path="/incidents" element={<IncidentReports />} />
                                 <Route path="/nurse" element={<Nurse />} />
                                 <Route path="/sports-academy" element={<SportsAcademy />} />
+                                <Route path="/sports-academy-calendar" element={<SportsAcademyCalendar />} />
                                 <Route path="/reports" element={<Reports />} />
                                 <Route path="/roster-templates" element={<RosterTemplates />} />
                                 <Route path="/od-management" element={<ODManagement />} />
