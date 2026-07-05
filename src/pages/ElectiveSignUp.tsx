@@ -12,6 +12,7 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
+import { camperMatchesDivisionFilter } from "@/lib/divisionFilterUtils";
 import { Plus, Trash2, Users, ClipboardList, BarChart3, Clock, History, Search, Settings2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -27,10 +28,37 @@ import {
 
 const PERIODS = [...TIMBER_LAKE_ELECTIVE_PERIODS];
 
+function divisionNameForId(divisionId: string | null | undefined, divisions: { id: string; name?: string | null }[]) {
+  if (!divisionId) return null;
+  return divisions.find((d) => d.id === divisionId)?.name ?? null;
+}
+
+function resolveSignupChildName(
+  signup: { child_id: string; children?: { name?: string | null } | null },
+  allChildren: { id: string; name?: string | null }[],
+) {
+  const embedded = signup.children?.name;
+  if (embedded) return embedded;
+  return allChildren.find((c) => c.id === signup.child_id)?.name || "Unknown";
+}
+
+function signupMatchesDivisionFilter(
+  signup: { child_id: string; children?: { division_id?: string | null } | null },
+  selectedDivisionId: string,
+  divisions: { id: string; name?: string | null }[],
+  allChildren: { id: string; division_id?: string | null }[],
+) {
+  const selectedName = divisionNameForId(selectedDivisionId, divisions);
+  const child = allChildren.find((c) => c.id === signup.child_id);
+  const camperDivId = signup.children?.division_id ?? child?.division_id;
+  const camperDivName = divisionNameForId(camperDivId, divisions);
+  return camperMatchesDivisionFilter(camperDivId, camperDivName, selectedDivisionId, selectedName);
+}
+
 export default function ElectiveSignUp() {
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
-  const { getDivisionFilter, loading: permissionsLoading, userDivisions } = usePermissions();
+  const { getDivisionFilter, loading: permissionsLoading, userDivisionsKey } = usePermissions();
   const { toast } = useToast();
 
   const [divisions, setDivisions] = useState<any[]>([]);
@@ -77,7 +105,7 @@ export default function ElectiveSignUp() {
     if (currentCompany?.id && !permissionsLoading) {
       fetchData();
     }
-  }, [currentCompany, currentSeason, weekStart, selectedDay, selectedPeriod, permissionsLoading, userDivisions, isTlc, selectedDate]);
+  }, [currentCompany, currentSeason, weekStart, selectedDay, selectedPeriod, permissionsLoading, userDivisionsKey, isTlc, selectedDate]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -134,21 +162,28 @@ export default function ElectiveSignUp() {
     setLoading(false);
   };
 
-  const fetchChildrenForDivision = async (divisionId: string) => {
-    const { data } = await supabase
-      .from("children")
-      .select("id, name, division_id")
-      .eq("company_id", currentCompany!.id)
-      .eq("division_id", divisionId)
-      .eq("season", currentSeason)
-      .neq("status", "inactive")
-      .order("name");
-    setChildren(data || []);
+  const filterChildrenForDivision = (divisionId: string, camperPool = allChildren) => {
+    const selectedDivisionRecord = divisions.find((d) => d.id === divisionId);
+    const filtered = camperPool.filter((child) =>
+      camperMatchesDivisionFilter(
+        child.division_id,
+        divisionNameForId(child.division_id, divisions),
+        divisionId,
+        selectedDivisionRecord?.name,
+      ),
+    );
+    setChildren(filtered);
   };
+
+  useEffect(() => {
+    if (selectedDivision) {
+      filterChildrenForDivision(selectedDivision);
+    }
+  }, [allChildren, divisions, selectedDivision]);
 
   const handleDivisionSelect = (divisionId: string) => {
     setSelectedDivision(divisionId);
-    fetchChildrenForDivision(divisionId);
+    filterChildrenForDivision(divisionId);
   };
 
   const handleAssignElective = async (childId: string, electiveId: string | null) => {
@@ -303,17 +338,31 @@ export default function ElectiveSignUp() {
     setHistoryLoading(false);
   };
 
+  const visibleSignups = useMemo(() => {
+    const divisionFilter = getDivisionFilter();
+    if (divisionFilter === null) return signups;
+    const accessibleIds = new Set(allChildren.map((c) => c.id));
+    return signups.filter((s) => accessibleIds.has(s.child_id));
+  }, [signups, allChildren, userDivisionsKey]);
+
   const filteredHistoryChildren = useMemo(() => {
     let filtered = allChildren;
     if (historyDivision !== "all") {
-      filtered = filtered.filter((c) => c.division_id === historyDivision);
+      filtered = filtered.filter((c) =>
+        camperMatchesDivisionFilter(
+          c.division_id,
+          divisionNameForId(c.division_id, divisions),
+          historyDivision,
+          divisionNameForId(historyDivision, divisions),
+        ),
+      );
     }
     if (historySearch.trim()) {
       const q = historySearch.toLowerCase();
       filtered = filtered.filter((c) => c.name.toLowerCase().includes(q));
     }
     return filtered;
-  }, [allChildren, historyDivision, historySearch]);
+  }, [allChildren, historyDivision, historySearch, divisions]);
 
   const historyChildName = allChildren.find((c) => c.id === historyChildId)?.name;
 
@@ -322,20 +371,22 @@ export default function ElectiveSignUp() {
   // Rosters: group signups by elective
   const rostersByElective = useMemo(() => {
     const grouped: Record<string, { name: string; campers: any[] }> = {};
-    signups.forEach((s) => {
+    visibleSignups.forEach((s) => {
       const eName = (s.electives as any)?.name || "Unknown";
       const eId = s.elective_id;
       if (!grouped[eId]) grouped[eId] = { name: eName, campers: [] };
       grouped[eId].campers.push(s);
     });
     return Object.entries(grouped).sort(([, a], [, b]) => a.name.localeCompare(b.name));
-  }, [signups]);
+  }, [visibleSignups]);
 
   // Analytics: elective popularity
   const analyticsData = useMemo(() => {
-    let filtered = signups;
+    let filtered = visibleSignups;
     if (analyticsDivision !== "all") {
-      filtered = signups.filter((s) => (s.children as any)?.division_id === analyticsDivision);
+      filtered = visibleSignups.filter((s) =>
+        signupMatchesDivisionFilter(s, analyticsDivision, divisions, allChildren),
+      );
     }
     const counts: Record<string, number> = {};
     filtered.forEach((s) => {
@@ -345,7 +396,7 @@ export default function ElectiveSignUp() {
     return Object.entries(counts)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
-  }, [signups, analyticsDivision]);
+  }, [visibleSignups, analyticsDivision, divisions, allChildren]);
 
   return (
     <div className="space-y-6">
@@ -576,7 +627,7 @@ export default function ElectiveSignUp() {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                           {data.campers.map((c: any) => (
                             <div key={c.id} className="p-2.5 rounded-md border bg-card text-sm">
-                              {(c.children as any)?.name || "Unknown"}
+                              {resolveSignupChildName(c, allChildren)}
                             </div>
                           ))}
                         </div>
