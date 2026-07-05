@@ -47,6 +47,10 @@ const EMAIL_TYPE_LABELS: Record<string, { label: string; description: string }> 
     label: "Health Center Checkouts",
     description: "Division leaders see only their divisions"
   },
+  health_center_overnight_log: {
+    label: "Health Center Overnight Log",
+    description: "Daily 4:00 AM summary for directors — who is still in the Health Center overnight (name, check-in time, reason, notes)"
+  },
   sports_event_home: {
     label: "Sports Events (Home)",
     description: "Division leaders see only their divisions, specialists see only their sports"

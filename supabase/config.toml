@@ -81,3 +81,6 @@ verify_jwt = false
 [functions.send-daily-dashboard]
 verify_jwt = false
 
+[functions.send-daily-health-center-log]
+verify_jwt = false
+
