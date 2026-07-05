@@ -333,7 +333,21 @@ Please review this conflict and take appropriate action.`;
 
       // Notify Health Center & Dining Hall
       const isInitialSubmission = originalRoster.size === 0 && roster.size > 0;
-      const isUpdate = originalRoster.size > 0 && roster.size !== originalRoster.size;
+      
+      // Check if roster actually changed (not just size)
+      let rosterChanged = false;
+      if (originalRoster.size !== roster.size) {
+        rosterChanged = true;
+      } else {
+        for (const id of roster) {
+          if (!originalRoster.has(id)) {
+            rosterChanged = true;
+            break;
+          }
+        }
+      }
+      
+      const isUpdate = originalRoster.size > 0 && rosterChanged;
       
       if (isInitialSubmission || isUpdate) {
         supabase.functions.invoke('send-roster-notification', {

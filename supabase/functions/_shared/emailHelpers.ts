@@ -219,18 +219,32 @@ export async function getRecipientsForEmailTypeWithFilters(
       // UNFILTERED TAG: Get all users with this tag (nurses, directors, etc.)
       console.log(`Getting all users with tag:`, tag);
       
-      const { data: userTags } = await supabase
-        .from('user_tags')
-        .select('user_id')
-        .eq('tag', tag)
-        .eq('company_id', companyId);
+      // Also check user_roles, mapping 'nurse' tag to 'health_center' role
+      const roleToCheck = tag === 'nurse' ? 'health_center' : tag;
       
-      if (userTags?.length) {
-        const userIds = userTags.map((t: any) => t.user_id);
+      const [tagsResponse, rolesResponse] = await Promise.all([
+        supabase
+          .from('user_tags')
+          .select('user_id')
+          .eq('tag', tag)
+          .eq('company_id', companyId),
+        supabase
+          .from('user_roles')
+          .select('user_id')
+          .eq('role', roleToCheck)
+          .eq('company_id', companyId)
+      ]);
+      
+      const userIds = new Set([
+        ...(tagsResponse.data?.map((t: any) => t.user_id) || []),
+        ...(rolesResponse.data?.map((r: any) => r.user_id) || [])
+      ]);
+      
+      if (userIds.size > 0) {
         const { data: profiles } = await supabase
           .from('profiles')
           .select('id, email, full_name')
-          .in('id', userIds)
+          .in('id', Array.from(userIds))
           .eq('company_id', companyId);
         
         if (profiles) {
