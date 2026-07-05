@@ -139,6 +139,7 @@ export default function Nurse() {
     dosage: "",
     meal_times: [] as string[],
     notes: "",
+    is_as_needed: false,
     is_recurring: false,
     frequency: "daily",
     days_of_week: [] as string[],
@@ -400,6 +401,54 @@ export default function Nurse() {
       return;
     }
 
+    const medStartDate = defaultMedicationStartDate(currentSeason);
+
+    if (formData.is_as_needed) {
+      const { error } = await supabase.from("medication_logs").insert({
+        child_id: selectedChild,
+        date: medStartDate,
+        medication_name: formData.medication_name,
+        dosage: formData.dosage,
+        meal_time: null,
+        scheduled_time: null,
+        notes: formData.notes,
+        is_recurring: false,
+        frequency: null,
+        days_of_week: [],
+        end_date: null,
+        company_id: currentCompany?.id,
+        season: currentSeason,
+      });
+
+      if (error) {
+        console.error("Medication insert error:", error);
+        toast({
+          title: "Error adding medication",
+          description: error.message,
+          variant: "destructive",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      toast({ title: "As-needed medication added to camper profile" });
+      setFormData({
+        medication_name: "",
+        dosage: "",
+        meal_times: [],
+        notes: "",
+        is_as_needed: false,
+        is_recurring: false,
+        frequency: "daily",
+        days_of_week: [],
+        end_date: "",
+      });
+      setSelectedChild("");
+      setIsSubmitting(false);
+      fetchMedications(selectedDate);
+      return;
+    }
+
     const standardMeals = formData.meal_times.filter((m) => m !== "Bedtime");
     const hasBedtime = formData.meal_times.includes("Bedtime");
     const childRow = children.find((c) => c.id === selectedChild);
@@ -431,8 +480,6 @@ export default function Nurse() {
       setIsSubmitting(false);
       return;
     }
-
-    const medStartDate = defaultMedicationStartDate(currentSeason);
 
     const inserts = [
       ...standardMeals.map((mealTime) => ({
@@ -494,6 +541,7 @@ export default function Nurse() {
       dosage: "", 
       meal_times: [], 
       notes: "",
+      is_as_needed: false,
       is_recurring: false,
       frequency: "daily",
       days_of_week: [],
@@ -2518,7 +2566,7 @@ export default function Nurse() {
                 <Pill className="h-5 w-5 text-primary" />
                 <CardTitle>Add Medication</CardTitle>
               </div>
-              <CardDescription>Schedule medication for a child</CardDescription>
+              <CardDescription>Schedule medication for a child, or add as-needed (PRN) meds to the camper profile</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -2562,8 +2610,32 @@ export default function Nurse() {
                 </div>
 
                 <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="is_as_needed"
+                      checked={formData.is_as_needed}
+                      onCheckedChange={(checked) => {
+                        setFormData({
+                          ...formData,
+                          is_as_needed: checked as boolean,
+                          ...(checked
+                            ? { meal_times: [], is_recurring: false, frequency: "daily", days_of_week: [], end_date: "" }
+                            : {}),
+                        });
+                      }}
+                    />
+                    <Label htmlFor="is_as_needed" className="font-normal cursor-pointer">
+                      As needed (PRN)
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Profile only — not on the daily medication log or missed-dose alerts.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
                   <Label>Meal Time</Label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className={`grid grid-cols-2 gap-2 ${formData.is_as_needed ? "opacity-50 pointer-events-none" : ""}`}>
                     {[...STANDARD_MEAL_LABEL_ORDER, "Bedtime"].map((mealTime) => (
                       <div key={mealTime} className="flex items-center space-x-2">
                         <Checkbox
@@ -2594,7 +2666,7 @@ export default function Nurse() {
                       </div>
                     ))}
                   </div>
-                  {formData.meal_times.includes("Bedtime") && (
+                  {formData.meal_times.includes("Bedtime") && !formData.is_as_needed && (
                     <div className="space-y-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
                       {!selectedChild ? (
                         <p className="text-muted-foreground">Select a camper to see their bedtime (from roster division, US Eastern).</p>
@@ -2643,7 +2715,7 @@ export default function Nurse() {
                   />
                 </div>
 
-                <div className="flex items-center space-x-2">
+                <div className={`flex items-center space-x-2 ${formData.is_as_needed ? "opacity-50 pointer-events-none" : ""}`}>
                   <Checkbox
                     id="is_recurring"
                     checked={formData.is_recurring}
@@ -2654,7 +2726,7 @@ export default function Nurse() {
                   </Label>
                 </div>
 
-                {formData.is_recurring && (
+                {formData.is_recurring && !formData.is_as_needed && (
                   <>
                     <div className="space-y-2">
                       <Label>Frequency</Label>

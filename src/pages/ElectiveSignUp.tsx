@@ -15,7 +15,7 @@ import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { Plus, Trash2, Users, ClipboardList, BarChart3, Clock, History, Search, Settings2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { startOfWeek, format, parseISO } from "date-fns";
+import { startOfWeek, format, parseISO, addDays } from "date-fns";
 import {
   filterElectivesForPeriod,
   TIMBER_LAKE_ELECTIVE_PERIODS,
@@ -68,11 +68,10 @@ export default function ElectiveSignUp() {
   const [editingCapacities, setEditingCapacities] = useState<Record<string, number | "">>({});
 
   useEffect(() => {
-    if (!isTlc) return;
     const slot = electiveSlotFromCalendarDate(parseISO(selectedDate));
     setWeekStart(slot.weekStartDate);
     setSelectedDay(slot.dayOfWeek);
-  }, [isTlc, selectedDate]);
+  }, [selectedDate]);
 
   useEffect(() => {
     if (currentCompany?.id && !permissionsLoading) {
@@ -408,8 +407,7 @@ export default function ElectiveSignUp() {
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className={`grid grid-cols-1 ${isTlc ? "md:grid-cols-2" : "md:grid-cols-3"} gap-4`}>
-            {isTlc ? (
+          <div className={`grid grid-cols-1 md:grid-cols-2 gap-4`}>
               <div className="space-y-2">
                 <Label>Date</Label>
                 <div className="flex items-center gap-2">
@@ -427,25 +425,6 @@ export default function ElectiveSignUp() {
                   </Button>
                 </div>
               </div>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <Label>Week Starting</Label>
-                  <Input type="date" value={weekStart} onChange={(e) => setWeekStart(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Day</Label>
-                  <Select value={selectedDay} onValueChange={setSelectedDay}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((d) => (
-                        <SelectItem key={d} value={d}>{d}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            )}
             <div className="space-y-2">
               <Label>Period</Label>
               <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
@@ -461,7 +440,7 @@ export default function ElectiveSignUp() {
           {periodLabel && (
             <p className="text-sm text-muted-foreground mt-3 flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5" />
-              {selectedDay} — {periodLabel.label} ({periodLabel.time})
+              {format(parseISO(selectedDate), "EEEE, MMM d, yyyy")} — {periodLabel.label} ({periodLabel.time})
             </p>
           )}
         </CardContent>
@@ -711,20 +690,22 @@ export default function ElectiveSignUp() {
                   <p className="text-muted-foreground text-center py-8">No elective history found for this camper</p>
                 ) : (
                   <div className="space-y-1">
-                    <div className="grid grid-cols-4 gap-4 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground border-b">
-                      <span>Week</span>
-                      <span>Day</span>
+                    <div className="grid grid-cols-[1fr_1fr_1.5fr] gap-4 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground border-b">
+                      <span>Date</span>
                       <span>Period</span>
                       <span>Elective</span>
                     </div>
                     {historyResults.map((r) => {
                       const pInfo = PERIODS.find((p) => p.id === r.period);
+                      const daysMap: Record<string, number> = { Monday: 0, Tuesday: 1, Wednesday: 2, Thursday: 3, Friday: 4, Saturday: 5, Sunday: 6 };
+                      const exactDate = format(addDays(parseISO(r.week_start_date), daysMap[r.day_of_week] || 0), "MMM d, yyyy");
                       return (
-                        <div key={r.id} className="grid grid-cols-4 gap-4 px-3 py-2.5 text-sm rounded-md hover:bg-muted/30 border-b last:border-b-0">
-                          <span>{r.week_start_date}</span>
-                          <span>{r.day_of_week}</span>
+                        <div key={r.id} className="grid grid-cols-[1fr_1fr_1.5fr] gap-4 px-3 py-2.5 text-sm rounded-md hover:bg-muted/30 border-b last:border-b-0 items-center">
+                          <span>{r.day_of_week}, {exactDate}</span>
                           <span>{pInfo?.label || r.period}</span>
-                          <Badge variant="secondary">{(r.electives as any)?.name || "Unknown"}</Badge>
+                          <div>
+                            <Badge variant="secondary">{(r.electives as any)?.name || "Unknown"}</Badge>
+                          </div>
                         </div>
                       );
                     })}
