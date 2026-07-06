@@ -1,6 +1,6 @@
--- Allow athletics staff (specialist role, e.g. soccer director) to manage roster templates
--- and sports event rosters. Previous policies only allowed admin/staff.
--- See migration 20260706120000_fix_roster_templates_rls_multi_camp.sql for company-scoped policies.
+-- Fix roster template RLS for Timber Lake and multi-camp users.
+-- Previous policies required company_id = profiles.company_id, which fails when an admin
+-- switches camps or when athletics staff roles live in user_roles for a different company.
 
 CREATE OR REPLACE FUNCTION public.user_can_manage_athletics_data(
   _user_id uuid,
@@ -118,7 +118,7 @@ WITH CHECK (
   AND public.user_can_manage_athletics_data(auth.uid(), company_id)
 );
 
--- sports_event_roster (event roster saves from athletics dialog)
+-- sports_event_roster (same multi-camp pattern)
 DROP POLICY IF EXISTS "Users can view sports rosters from their company" ON public.sports_event_roster;
 DROP POLICY IF EXISTS "Athletics staff can manage sports rosters for their company" ON public.sports_event_roster;
 DROP POLICY IF EXISTS "Admins can manage sports rosters for their company" ON public.sports_event_roster;
@@ -148,7 +148,7 @@ WITH CHECK (
   AND public.user_can_manage_athletics_data(auth.uid(), company_id)
 );
 
--- sports_event_staff (coach/ref assignments on events)
+-- sports_event_staff
 DROP POLICY IF EXISTS "Users can view sports event staff from their company" ON public.sports_event_staff;
 DROP POLICY IF EXISTS "Athletics staff can manage sports event staff for their company" ON public.sports_event_staff;
 DROP POLICY IF EXISTS "Admins can manage sports event staff for their company" ON public.sports_event_staff;

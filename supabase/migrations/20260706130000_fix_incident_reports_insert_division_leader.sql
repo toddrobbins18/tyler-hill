@@ -1,44 +1,5 @@
--- Apply in Supabase SQL Editor to fix mobile/web "Failed to add incident" for
--- division leaders and specialists.
--- Same as migration 20260706130000_fix_incident_reports_insert_division_leader.sql
---
--- If INSERT still fails for admin/staff on a switched camp, run
--- fix_incident_reports_insert_rls.sql first (multi-camp base policies).
-
-CREATE OR REPLACE FUNCTION public.user_has_role_for_company(
-  _user_id uuid,
-  _company_id uuid,
-  _roles app_role[]
-)
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT public.is_super_admin(_user_id)
-    OR EXISTS (
-      SELECT 1
-      FROM public.user_roles ur
-      WHERE ur.user_id = _user_id
-        AND ur.company_id = _company_id
-        AND ur.role = ANY(_roles)
-    );
-$$;
-
-CREATE OR REPLACE FUNCTION public.user_can_manage_incidents(_user_id uuid, _company_id uuid)
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT public.user_has_role_for_company(
-    _user_id,
-    _company_id,
-    ARRAY['admin', 'staff', 'health_center']::app_role[]
-  );
-$$;
+-- Allow division leaders and specialists to create incident reports from the mobile app
+-- (and web). INSERT previously required user_can_manage_incidents (admin/staff/health_center only).
 
 CREATE OR REPLACE FUNCTION public.user_can_create_incident_reports(
   _user_id uuid,
