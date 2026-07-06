@@ -24,6 +24,7 @@ import {
 import { CSVUploader } from "@/components/CSVUploader";
 import { Calendar } from "@/components/ui/calendar";
 import { format, isBefore, startOfDay, isToday } from "date-fns";
+import { safeFormatDate, safeFormatDateYmd, safeParseDate } from "@/lib/safeFormatDate";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
@@ -1341,8 +1342,9 @@ export default function Nurse() {
   };
 
   const getAdmissionDuration = (admittedAt: string, checkedOutAt?: string | null) => {
-    const start = new Date(admittedAt);
-    const end = checkedOutAt ? new Date(checkedOutAt) : new Date();
+    const start = safeParseDate(admittedAt);
+    const end = checkedOutAt ? safeParseDate(checkedOutAt) : new Date();
+    if (!start || !end) return "—";
     const diffMs = end.getTime() - start.getTime();
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
@@ -1736,7 +1738,7 @@ export default function Nurse() {
                                     />
                                     {med.late_notes_timestamp && (
                                       <p className="text-xs text-muted-foreground">
-                                        Last updated: {format(new Date(med.late_notes_timestamp), 'MMM d, yyyy h:mm a')}
+                                        Last updated: {safeFormatDate(med.late_notes_timestamp, 'MMM d, yyyy h:mm a')}
                                       </p>
                                     )}
                                   </div>
@@ -1821,8 +1823,8 @@ export default function Nurse() {
                                     <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
                                       <CalendarDays className="h-3 w-3" />
                                       <span>
-                                        {med.date && `Started: ${format(new Date(med.date + 'T00:00:00'), 'MMM d')}`}
-                                        {med.end_date && ` • Ends: ${format(new Date(med.end_date + 'T00:00:00'), 'MMM d')}`}
+                                        {med.date && `Started: ${safeFormatDateYmd(med.date, 'MMM d')}`}
+                                        {med.end_date && ` • Ends: ${safeFormatDateYmd(med.end_date, 'MMM d')}`}
                                       </span>
                                     </div>
                                   )}
@@ -1954,8 +1956,8 @@ export default function Nurse() {
                             <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
                               <CalendarDays className="h-3 w-3" />
                               <span>
-                                {med.date && `Started: ${format(new Date(med.date + 'T00:00:00'), 'MMM d')}`}
-                                {med.end_date && ` • Ends: ${format(new Date(med.end_date + 'T00:00:00'), 'MMM d')}`}
+                                {med.date && `Started: ${safeFormatDateYmd(med.date, 'MMM d')}`}
+                                {med.end_date && ` • Ends: ${safeFormatDateYmd(med.end_date, 'MMM d')}`}
                               </span>
                             </div>
                           )}
@@ -2240,7 +2242,7 @@ export default function Nurse() {
                               )}
                               <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                                 <Clock className="h-4 w-4" />
-                                <span>Admitted {format(new Date(admission.admitted_at), 'MMM d, h:mm a')}</span>
+                                <span>Admitted {safeFormatDate(admission.admitted_at, 'MMM d, h:mm a')}</span>
                                 <Badge variant="outline" className="ml-2">
                                   {getAdmissionDuration(admission.admitted_at)}
                                 </Badge>
@@ -2260,7 +2262,7 @@ export default function Nurse() {
                                   >
                                     {note.note}
                                     <span className="block text-xs text-muted-foreground mt-1">
-                                      {format(new Date(note.created_at), "MMM d, h:mm a")}
+                                      {safeFormatDate(note.created_at, "MMM d, h:mm a")}
                                     </span>
                                   </p>
                                 ))}
@@ -2451,7 +2453,7 @@ export default function Nurse() {
                                     {entityAdmissions.length} {entityAdmissions.length === 1 ? 'admission' : 'admissions'}
                                   </Badge>
                                   <p className="text-xs text-muted-foreground">
-                                    Last: {format(new Date(entityAdmissions[0].admitted_at), "MMM d, h:mm a")}
+                                    Last: {safeFormatDate(entityAdmissions[0].admitted_at, "MMM d, h:mm a")}
                                   </p>
                                 </div>
                                 <Button variant="ghost" size="sm">
@@ -2478,7 +2480,10 @@ export default function Nurse() {
                                           Admission #{entityAdmissions.length - index}
                                         </p>
                                         <p className="text-xs text-muted-foreground">
-                                          {format(new Date(admission.admitted_at), "MMM d, yyyy • h:mm a")} - {format(new Date(admission.checked_out_at), "h:mm a")}
+                                          {safeFormatDate(admission.admitted_at, "MMM d, yyyy • h:mm a")}
+                                          {admission.checked_out_at
+                                            ? ` - ${safeFormatDate(admission.checked_out_at, "h:mm a")}`
+                                            : ""}
                                         </p>
                                       </div>
                                       <Badge variant="outline">
@@ -2507,7 +2512,7 @@ export default function Nurse() {
                                         >
                                           {note.note}
                                           <span className="block text-xs text-muted-foreground mt-1">
-                                            {format(new Date(note.created_at), "MMM d, yyyy h:mm a")}
+                                            {safeFormatDate(note.created_at, "MMM d, yyyy h:mm a")}
                                           </span>
                                         </p>
                                       ))}

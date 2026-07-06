@@ -114,7 +114,15 @@ export function sortMedicationsByScheduledTime<T extends { scheduled_time?: stri
 }
 
 function weekdayName(dateYmd: string): string {
-  return format(parseISO(dateYmd), "EEEE");
+  try {
+    const parsed = parseISO(dateYmd);
+    if (!Number.isNaN(parsed.getTime())) {
+      return format(parsed, "EEEE");
+    }
+  } catch {
+    /* fall through */
+  }
+  return "";
 }
 
 /** Whether a recurring template should appear on the given calendar day. */
