@@ -105,6 +105,40 @@ export async function getRecipientsForUserPreferences(
   return eligibleRecipients;
 }
 
+const MISSED_MED_EXCLUDED_LEADERSHIP_TAGS = [
+  'director',
+  'head_of_girls_side',
+  'head_of_boys_side',
+  'admin_staff',
+] as const;
+
+/** Camp admins/directors must not receive every division's missed-med alerts. */
+async function userIsExcludedFromMissedMedAlerts(
+  supabase: any,
+  userId: string,
+  companyId: string,
+): Promise<boolean> {
+  const [{ data: roles }, { data: leadershipTags }] = await Promise.all([
+    supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .eq('company_id', companyId),
+    supabase
+      .from('user_tags')
+      .select('tag')
+      .eq('user_id', userId)
+      .eq('company_id', companyId)
+      .in('tag', [...MISSED_MED_EXCLUDED_LEADERSHIP_TAGS]),
+  ]);
+
+  const roleList = (roles || []).map((r: { role: string }) => r.role);
+  if (roleList.some((role) => role === 'admin' || role === 'super_admin')) {
+    return true;
+  }
+  return (leadershipTags || []).length > 0;
+}
+
 /**
  * Get recipients with optional division and sport filtering
  * @param divisionIds - Filter division_leader tag to only these divisions
@@ -139,7 +173,12 @@ export async function getRecipientsForEmailTypeWithFilters(
     return [];
   }
   
-  const tags = config.recipient_tags;
+  // Missed med alerts are always division-scoped division leaders only — never
+  // director/admin/nurse tags (prevents camp-wide staff like Victoria from getting every alert).
+  const tags =
+    emailType === 'missed_medication'
+      ? ['division_leader']
+      : config.recipient_tags;
   let allRecipients: any[] = [];
   
   // 2. Process each tag with appropriate filtering
@@ -163,6 +202,20 @@ export async function getRecipientsForEmailTypeWithFilters(
         .eq('company_id', companyId);
 
       for (const leader of taggedLeaders || []) {
+        if (emailType === 'missed_medication') {
+          const excluded = await userIsExcludedFromMissedMedAlerts(
+            supabase,
+            leader.user_id,
+            companyId,
+          );
+          if (excluded) {
+            console.log(
+              `Skipping missed med for camp leadership user ${leader.user_id}`,
+            );
+            continue;
+          }
+        }
+
         const { data: permissions } = await supabase
           .from('division_permissions')
           .select('division_id')
