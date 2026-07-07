@@ -20,15 +20,27 @@ export type OwlPayReportTransaction = {
 
 export type OwlPayReportStats = {
   totalRevenue: number;
+  /** Paid (non-free) item lines */
   totalItems: number;
   freeItems: number;
+  /** All purchase lines, paid + free */
+  totalPurchaseLines: number;
   mostPopular: string;
   avgTransaction: number;
 };
 
+export type OwlPayReportDailyRow = {
+  ymd: string;
+  date: string;
+  revenue: number;
+  paidItems: number;
+  freeItems: number;
+  totalLines: number;
+};
+
 export type OwlPayReportData = {
   salesByItem: { id: string; name: string; category: string; quantity: number; revenue: number }[];
-  salesOverTime: { date: string; revenue: number; count: number }[];
+  salesOverTime: OwlPayReportDailyRow[];
   purchases: {
     id: string;
     buyer_type: "camper" | "staff";
@@ -38,13 +50,14 @@ export type OwlPayReportData = {
     amount: number;
     is_free: boolean;
     purchased_at: string;
+    camp_date: string;
   }[];
   stats: OwlPayReportStats;
 };
 
 /** Match the live/production query shape that is known to work. */
 const TX_SELECT =
-  "id, created_at, amount, is_free, transaction_type, item_id, child_id, staff_id, owl_pay_items(*), children(name), staff(name)";
+  "id, created_at, amount, is_free, transaction_type, item_id, child_id, staff_id, owl_pay_items(*), children(name), staff!owl_pay_transactions_staff_id_fkey(name)";
 
 function asOne<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) return value[0] ?? null;
@@ -86,10 +99,56 @@ function formatYmd(y: number, m: number, d: number): string {
   return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
+/** User-facing camp calendar date, e.g. 05-07-2026 */
+export function formatCampYmdDisplay(ymd: string): string {
+  if (!ymd) return "";
+  const { y, m, d } = parseYmd(ymd);
+  return `${String(d).padStart(2, "0")}-${String(m).padStart(2, "0")}-${y}`;
+}
+
 function addDaysToYmd(ymd: string, days: number): string {
   const { y, m, d } = parseYmd(ymd);
   const dt = new Date(Date.UTC(y, m - 1, d + days, 12, 0, 0));
   return getCampYmd(dt);
+}
+
+export function listCampDaysInRange(fromYmd: string, toYmd: string): string[] {
+  const days: string[] = [];
+  let cur = fromYmd;
+  while (cur <= toYmd) {
+    days.push(cur);
+    cur = addDaysToYmd(cur, 1);
+  }
+  return days;
+}
+
+export function getCampYmdFromIso(iso: string): string {
+  const parsed = parseOwlPayTimestamp(iso);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return getCampYmd(parsed);
+}
+
+export function formatCampYmdLabel(ymd: string): string {
+  const { y, m, d } = parseYmd(ymd);
+  return new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).toLocaleDateString("en-US", {
+    timeZone: OWL_PAY_CAMP_TIMEZONE,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+/** Parse API timestamps as UTC when no offset is present (avoids browser-local misreads). */
+export function parseOwlPayTimestamp(value: string): Date {
+  const trimmed = value.trim();
+  if (!trimmed) return new Date(Number.NaN);
+
+  const hasExplicitZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed);
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(trimmed) && !hasExplicitZone) {
+    return new Date(trimmed.replace(" ", "T") + "Z");
+  }
+
+  return new Date(trimmed);
 }
 
 /** DST-aware offset for a camp calendar day, e.g. "-04:00". */
@@ -103,7 +162,7 @@ function getCampUtcOffsetIso(ymd: string): string {
     .formatToParts(probe)
     .find((part) => part.type === "timeZoneName")?.value;
 
-  const match = tzName?.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+  const match = tzName?.match(/(?:GMT|UTC)([+-])(\d{1,2})(?::(\d{2}))?/);
   if (!match) return "-04:00";
   const sign = match[1];
   const hours = match[2].padStart(2, "0");
@@ -129,7 +188,9 @@ export function isTransactionInCampDateRange(
   toYmd: string,
 ): boolean {
   if (!createdAt) return false;
-  const txYmd = getCampYmd(new Date(createdAt));
+  const parsed = parseOwlPayTimestamp(createdAt);
+  if (Number.isNaN(parsed.getTime())) return false;
+  const txYmd = getCampYmd(parsed);
   return txYmd >= fromYmd && txYmd <= toYmd;
 }
 
@@ -149,19 +210,19 @@ export function getOwlPayQuickRangeYmd(range: "today" | "week" | "month" | "all"
   return { fromYmd: "2020-01-01", toYmd: today };
 }
 
-/** Widen DB query window by one camp day on each side; filter precisely in aggregate. */
+/** Exact camp-calendar UTC bounds for the selected report range. */
 export function getOwlPayReportFetchBounds(fromYmd: string, toYmd: string): {
   startISO: string;
   endInclusiveISO: string;
 } {
   return {
-    startISO: campYmdToUtcStart(addDaysToYmd(fromYmd, -1)).toISOString(),
-    endInclusiveISO: campYmdToUtcEnd(addDaysToYmd(toYmd, 1)).toISOString(),
+    startISO: campYmdToUtcStart(fromYmd).toISOString(),
+    endInclusiveISO: campYmdToUtcEnd(toYmd).toISOString(),
   };
 }
 
 export function formatCampReportDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
+  return parseOwlPayTimestamp(iso).toLocaleDateString("en-US", {
     timeZone: OWL_PAY_CAMP_TIMEZONE,
     month: "short",
     day: "numeric",
@@ -170,14 +231,37 @@ export function formatCampReportDate(iso: string): string {
 }
 
 export function formatCampReportDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", {
+  const parsed = parseOwlPayTimestamp(iso);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return `${formatCampYmdDisplay(getCampYmd(parsed))} ${formatCampReportTime(iso)}`;
+}
+
+export function formatCampReportTime(iso: string): string {
+  const parsed = parseOwlPayTimestamp(iso);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleString("en-GB", {
     timeZone: OWL_PAY_CAMP_TIMEZONE,
-    month: "short",
-    day: "numeric",
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
   });
+}
+
+/** Camp datetime for CSV export, e.g. 06-07-2026 23:04:59 */
+export function formatCampReportDateTimeCsv(iso: string): string {
+  const parsed = parseOwlPayTimestamp(iso);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const campYmd = getCampYmd(parsed);
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: OWL_PAY_CAMP_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(parsed);
+  const pick = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "00";
+  return `${formatCampYmdDisplay(campYmd)} ${pick("hour")}:${pick("minute")}:${pick("second")}`;
 }
 
 function classifyPurchaseBuyer(tx: OwlPayReportTransaction): "camper" | "staff" | "unknown" {
@@ -237,7 +321,7 @@ export function aggregateOwlPayReports(
     string,
     { id: string; name: string; category: string; quantity: number; revenue: number }
   >();
-  const dateMap = new Map<string, { revenue: number; count: number }>();
+  const dateMap = new Map<string, { revenue: number; paidItems: number; freeItems: number; totalLines: number }>();
   const purchases: OwlPayReportData["purchases"] = [];
   let totalRevenue = 0;
   let totalItems = 0;
@@ -258,6 +342,7 @@ export function aggregateOwlPayReports(
     const itemName = item?.name || (isFree ? "Free daily item" : "Unknown item");
     const itemCategory = item?.category || "other";
     const groupKey = tx.item_id || (isFree ? "__free_daily__" : `unknown-${tx.id}`);
+    const campDate = getCampYmdFromIso(tx.created_at);
 
     if (!itemMap.has(groupKey)) {
       itemMap.set(groupKey, {
@@ -280,12 +365,18 @@ export function aggregateOwlPayReports(
       freeItems += 1;
     }
 
-    const dateKey = formatCampReportDate(tx.created_at);
-    if (!dateMap.has(dateKey)) dateMap.set(dateKey, { revenue: 0, count: 0 });
-    const dayRow = dateMap.get(dateKey)!;
-    if (!isFree) {
-      dayRow.revenue += amount;
-      dayRow.count += 1;
+    if (campDate) {
+      if (!dateMap.has(campDate)) {
+        dateMap.set(campDate, { revenue: 0, paidItems: 0, freeItems: 0, totalLines: 0 });
+      }
+      const dayRow = dateMap.get(campDate)!;
+      dayRow.totalLines += 1;
+      if (isFree) {
+        dayRow.freeItems += 1;
+      } else {
+        dayRow.revenue += amount;
+        dayRow.paidItems += 1;
+      }
     }
 
     purchases.push({
@@ -297,15 +388,24 @@ export function aggregateOwlPayReports(
       amount,
       is_free: isFree,
       purchased_at: tx.created_at,
+      camp_date: campDate,
     });
   });
 
   const salesByItem = Array.from(itemMap.values())
     .filter((row) => row.quantity > 0)
     .sort((a, b) => b.quantity - a.quantity);
-  const salesOverTime = Array.from(dateMap.entries())
-    .map(([date, d]) => ({ date, revenue: d.revenue, count: d.count }))
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const salesOverTime = listCampDaysInRange(fromYmd, toYmd).map((ymd) => {
+    const d = dateMap.get(ymd) ?? { revenue: 0, paidItems: 0, freeItems: 0, totalLines: 0 };
+    return {
+      ymd,
+      date: formatCampYmdDisplay(ymd),
+      revenue: d.revenue,
+      paidItems: d.paidItems,
+      freeItems: d.freeItems,
+      totalLines: d.totalLines,
+    };
+  });
 
   return {
     salesByItem,
@@ -315,6 +415,7 @@ export function aggregateOwlPayReports(
       totalRevenue,
       totalItems,
       freeItems,
+      totalPurchaseLines: purchases.length,
       mostPopular: salesByItem[0]?.name || "N/A",
       avgTransaction: paidTransactions > 0 ? totalRevenue / paidTransactions : 0,
     },
@@ -326,7 +427,7 @@ export function getOwlPayReportUtcBounds(fromYmd: string, toYmd: string) {
   const bounds = getOwlPayReportFetchBounds(fromYmd, toYmd);
   return {
     startISO: bounds.startISO,
-    endExclusiveISO: campYmdToUtcEnd(addDaysToYmd(toYmd, 1)).toISOString(),
+    endExclusiveISO: campYmdToUtcStart(addDaysToYmd(toYmd, 1)).toISOString(),
   };
 }
 

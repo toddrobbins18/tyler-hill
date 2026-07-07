@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { DateRange } from "react-day-picker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +12,6 @@ import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Line, LineChart, Area
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarIcon, DollarSign, Package, TrendingUp, Receipt, Download } from "lucide-react";
-import { format } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,7 +21,11 @@ import {
   aggregateOwlPayReports,
   fetchAllOwlPayPurchaseTransactions,
   formatCampReportDateTime,
+  formatCampReportDateTimeCsv,
+  formatCampReportTime,
+  formatCampYmdDisplay,
   getCampYmd,
+  getCampYmdFromIso,
   getOwlPayQuickRangeYmd,
   getOwlPayReportFetchBounds,
   type OwlPayReportAudience,
@@ -44,6 +48,23 @@ function downloadCsvLines(filename: string, lines: (string | number | boolean)[]
   URL.revokeObjectURL(a.href);
 }
 
+/** Calendar picker date ↔ camp report YMD (use wall date, not timezone shift). */
+function ymdToPickerDate(ymd: string): Date {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function pickerDateToYmd(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function pickerDateToDisplay(date: Date): string {
+  return formatCampYmdDisplay(pickerDateToYmd(date));
+}
+
 const OwlPayReports = () => {
   const { currentCompany } = useCompany();
   const queryClient = useQueryClient();
@@ -51,12 +72,13 @@ const OwlPayReports = () => {
   const todayYmd = getCampYmd();
   const [fromYmd, setFromYmd] = useState(todayYmd);
   const [toYmd, setToYmd] = useState(todayYmd);
-  const [tempDateRange, setTempDateRange] = useState<{ from?: Date; to?: Date }>({});
+  const [tempDateRange, setTempDateRange] = useState<DateRange | undefined>();
+  const [rangeOpen, setRangeOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [reportAudience, setReportAudience] = useState<OwlPayReportAudience>("all");
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["owl-pay-reports", "v2", fromYmd, toYmd, currentCompany?.id, reportAudience],
+    queryKey: ["owl-pay-reports", "v4", fromYmd, toYmd, currentCompany?.id, reportAudience],
     enabled: !!currentCompany?.id,
     staleTime: 0,
     refetchOnMount: "always",
@@ -108,20 +130,31 @@ const OwlPayReports = () => {
     const summaryRows: (string | number | boolean)[][] = [
       ["Report", "Owl Pay"],
       ["Company", currentCompany.name ?? ""],
-      ["Date range (camp time)", `${fromYmd} to ${toYmd}`],
+      ["Date range (camp time / US Eastern)", `${formatCampYmdDisplay(fromYmd)} to ${formatCampYmdDisplay(toYmd)}`],
       ["Audience", reportAudience],
       ["Total revenue (paid items)", data.stats.totalRevenue.toFixed(2)],
-      ["Items sold (paid)", data.stats.totalItems],
+      ["Paid items sold", data.stats.totalItems],
       ["Free daily items", data.stats.freeItems],
+      ["Total purchase lines (paid + free)", data.stats.totalPurchaseLines],
       ["Avg paid transaction", data.stats.avgTransaction.toFixed(2)],
       ["Most popular item", data.stats.mostPopular],
       [],
-      ["Sales by item — Item", "Category", "Qty sold", "Revenue"],
+      ["Daily summary — Camp date", "Revenue (paid)", "Paid items", "Free items", "Total lines"],
+      ...data.salesOverTime.map((d) => [
+        formatCampYmdDisplay(d.ymd),
+        d.revenue.toFixed(2),
+        d.paidItems,
+        d.freeItems,
+        d.totalLines,
+      ]),
+      [],
+      ["Sales by item — Item", "Category", "Qty sold (paid)", "Revenue"],
       ...data.salesByItem.map((i) => [i.name, i.category, i.quantity, i.revenue.toFixed(2)]),
       [],
-      ["Purchases — Date/time (camp)", "Buyer type", "Name", "Item", "Category", "Amount", "Free"],
+      ["Purchases — Camp date", "Date/time (camp)", "Buyer type", "Name", "Item", "Category", "Amount", "Free"],
       ...data.purchases.map((p) => [
-        formatCampReportDateTime(p.purchased_at),
+        formatCampYmdDisplay(p.camp_date || getCampYmdFromIso(p.purchased_at)),
+        formatCampReportDateTimeCsv(p.purchased_at),
         p.buyer_type,
         p.camper_name,
         p.item_name,
@@ -167,39 +200,69 @@ const OwlPayReports = () => {
               <Button variant="outline" size="sm" onClick={() => setQuickRange("month")}>This Month</Button>
               <Button variant="outline" size="sm" onClick={() => setQuickRange("all")}>All Time</Button>
             </div>
-            <Popover>
+            <Popover
+              open={rangeOpen}
+              onOpenChange={(open) => {
+                setRangeOpen(open);
+                if (open) {
+                  setTempDateRange({
+                    from: ymdToPickerDate(fromYmd),
+                    to: ymdToPickerDate(toYmd),
+                  });
+                }
+              }}
+            >
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm"><CalendarIcon className="mr-2 h-4 w-4" />Custom Range</Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="end">
-                <div className="p-4 space-y-4">
-                  <div>
-                    <p className="text-sm font-medium mb-2">From</p>
-                    <Calendar
-                      mode="single"
-                      selected={tempDateRange.from}
-                      onSelect={(date) => setTempDateRange({ ...tempDateRange, from: date })}
-                    />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium mb-2">To</p>
-                    <Calendar
-                      mode="single"
-                      selected={tempDateRange.to}
-                      onSelect={(date) => setTempDateRange({ ...tempDateRange, to: date })}
-                    />
-                  </div>
+                <div className="p-4 space-y-3">
+                  <p className="text-sm font-medium text-center">Select date range</p>
+                  <p className="text-xs text-muted-foreground text-center">
+                    1. Click the first day · 2. Click the last day · Same day twice = one day
+                  </p>
+                  <Calendar
+                    mode="range"
+                    numberOfMonths={1}
+                    defaultMonth={ymdToPickerDate(fromYmd)}
+                    selected={tempDateRange}
+                    onSelect={setTempDateRange}
+                    classNames={{
+                      day_today: "font-semibold underline underline-offset-4 aria-selected:no-underline",
+                    }}
+                  />
+                  <p className="text-sm text-center min-h-[1.25rem]">
+                    {tempDateRange?.from ? (
+                      tempDateRange.to ? (
+                        <span>
+                          <strong>{pickerDateToDisplay(tempDateRange.from)}</strong>
+                          {" → "}
+                          <strong>{pickerDateToDisplay(tempDateRange.to)}</strong>
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          Start: <strong>{pickerDateToDisplay(tempDateRange.from)}</strong> — now pick end date
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-muted-foreground">No dates selected</span>
+                    )}
+                  </p>
                   <Button
                     className="w-full"
                     onClick={() => {
-                      if (tempDateRange.from && tempDateRange.to) {
-                        setFromYmd(format(tempDateRange.from, "yyyy-MM-dd"));
-                        setToYmd(format(tempDateRange.to, "yyyy-MM-dd"));
-                      }
+                      if (!tempDateRange?.from) return;
+                      const start = tempDateRange.from;
+                      const end = tempDateRange.to ?? tempDateRange.from;
+                      const from = start <= end ? start : end;
+                      const to = start <= end ? end : start;
+                      setFromYmd(pickerDateToYmd(from));
+                      setToYmd(pickerDateToYmd(to));
+                      setRangeOpen(false);
                     }}
-                    disabled={!tempDateRange.from || !tempDateRange.to}
+                    disabled={!tempDateRange?.from}
                   >
-                    Apply
+                    Apply range
                   </Button>
                 </div>
               </PopoverContent>
@@ -217,7 +280,14 @@ const OwlPayReports = () => {
               Export CSV
             </Button>
           </div>
-          <Badge variant="outline">{fromYmd} - {toYmd} (camp time)</Badge>
+          <Badge variant="outline">
+            {formatCampYmdDisplay(fromYmd)} - {formatCampYmdDisplay(toYmd)} (camp time)
+          </Badge>
+          {fromYmd === toYmd && fromYmd === getCampYmd() && (data?.purchases?.length || 0) === 0 && !isLoading && (
+            <p className="text-xs text-muted-foreground">
+              Today uses US Eastern camp time. Purchases from last night may appear under yesterday&apos;s date.
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -229,12 +299,12 @@ const OwlPayReports = () => {
         </Card>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Revenue</p>
+                <p className="text-xs text-muted-foreground">Revenue (paid)</p>
                 <p className="text-xl font-bold">${data?.stats.totalRevenue.toFixed(2) || "0.00"}</p>
               </div>
               <DollarSign className="h-6 w-6 text-primary opacity-50" />
@@ -245,11 +315,8 @@ const OwlPayReports = () => {
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Items Sold</p>
+                <p className="text-xs text-muted-foreground">Paid Items</p>
                 <p className="text-xl font-bold">{data?.stats.totalItems || 0}</p>
-                {(data?.stats.freeItems || 0) > 0 && (
-                  <p className="text-[11px] text-muted-foreground">{data?.stats.freeItems} free daily</p>
-                )}
               </div>
               <Package className="h-6 w-6 text-green-500 opacity-50" />
             </div>
@@ -259,10 +326,11 @@ const OwlPayReports = () => {
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Most Popular</p>
-                <p className="text-sm font-bold truncate">{data?.stats.mostPopular || "N/A"}</p>
+                <p className="text-xs text-muted-foreground">Total Lines</p>
+                <p className="text-xl font-bold">{data?.stats.totalPurchaseLines || 0}</p>
+                <p className="text-[11px] text-muted-foreground">paid + free</p>
               </div>
-              <TrendingUp className="h-6 w-6 text-yellow-500 opacity-50" />
+              <Receipt className="h-6 w-6 text-muted-foreground opacity-50" />
             </div>
           </CardContent>
         </Card>
@@ -270,14 +338,60 @@ const OwlPayReports = () => {
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Avg Transaction</p>
-                <p className="text-xl font-bold">${data?.stats.avgTransaction.toFixed(2) || "0.00"}</p>
+                <p className="text-xs text-muted-foreground">Free Daily</p>
+                <p className="text-xl font-bold">{data?.stats.freeItems || 0}</p>
               </div>
-              <Receipt className="h-6 w-6 text-muted-foreground opacity-50" />
+              <Package className="h-6 w-6 text-blue-500 opacity-50" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Most Popular</p>
+                <p className="text-sm font-bold truncate">{data?.stats.mostPopular || "N/A"}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  avg paid ${data?.stats.avgTransaction.toFixed(2) || "0.00"}
+                </p>
+              </div>
+              <TrendingUp className="h-6 w-6 text-yellow-500 opacity-50" />
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {(data?.salesOverTime?.length || 0) > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Daily breakdown (camp time)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Camp date</TableHead>
+                  <TableHead className="text-right">Revenue</TableHead>
+                  <TableHead className="text-right">Paid items</TableHead>
+                  <TableHead className="text-right">Free items</TableHead>
+                  <TableHead className="text-right">Total lines</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data?.salesOverTime.map((day) => (
+                  <TableRow key={day.ymd}>
+                    <TableCell className="font-medium">{day.date}</TableCell>
+                    <TableCell className="text-right">${day.revenue.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">{day.paidItems}</TableCell>
+                    <TableCell className="text-right">{day.freeItems}</TableCell>
+                    <TableCell className="text-right">{day.totalLines}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs defaultValue="by-item">
         <TabsList>
@@ -371,7 +485,7 @@ const OwlPayReports = () => {
                         <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                         <YAxis />
                         <ChartTooltip content={<ChartTooltipContent />} />
-                        <Area type="monotone" dataKey="count" stroke="hsl(var(--chart-2))" fill="hsl(var(--chart-2) / 0.2)" strokeWidth={2} />
+                        <Area type="monotone" dataKey="totalLines" stroke="hsl(var(--chart-2))" fill="hsl(var(--chart-2) / 0.2)" strokeWidth={2} />
                       </AreaChart>
                     </ResponsiveContainer>
                   </ChartContainer>
@@ -397,7 +511,8 @@ const OwlPayReports = () => {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Date</TableHead>
+                        <TableHead>Camp date</TableHead>
+                        <TableHead>Time</TableHead>
                         {reportAudience === "all" && <TableHead>Type</TableHead>}
                         <TableHead>Name</TableHead>
                         <TableHead>Item</TableHead>
@@ -407,7 +522,8 @@ const OwlPayReports = () => {
                     <TableBody>
                       {filteredPurchases.map((p) => (
                         <TableRow key={p.id}>
-                          <TableCell>{formatCampReportDateTime(p.purchased_at)}</TableCell>
+                          <TableCell>{formatCampYmdDisplay(p.camp_date)}</TableCell>
+                          <TableCell>{formatCampReportTime(p.purchased_at)}</TableCell>
                           {reportAudience === "all" && (
                             <TableCell><Badge variant="outline" className="capitalize">{p.buyer_type}</Badge></TableCell>
                           )}
