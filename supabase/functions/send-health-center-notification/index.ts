@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getRecipientsForEmailType, sendEmailNotifications } from "../_shared/emailHelpers.ts";
+import { formatEasternDateTime } from "../_shared/dailyDashboardFormat.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -88,11 +89,11 @@ serve(async (req) => {
 **${personLabel}:** ${personName}
 **Division:** ${divisionName}
 
-**Checked Out:** ${new Date(admission.checked_out_at).toLocaleString()}
+**Checked Out:** ${formatEasternDateTime(admission.checked_out_at)}
 **Checked Out By:** ${checkedOutByName}
 
 **Original Admission:**
-- **Admitted:** ${new Date(admission.admitted_at).toLocaleString()}
+- **Admitted:** ${formatEasternDateTime(admission.admitted_at)}
 - **Reason:** ${admission.reason || 'N/A'}
 
 ${admission.notes ? `**Notes:** ${admission.notes}` : ''}
@@ -100,7 +101,7 @@ ${admission.notes ? `**Notes:** ${admission.notes}` : ''}
 **${personLabel}:** ${personName}
 **Division:** ${divisionName}
 
-**Admitted:** ${new Date(admission.admitted_at).toLocaleString()}
+**Admitted:** ${formatEasternDateTime(admission.admitted_at)}
 **Admitted By:** ${admittedByName}
 
 **Reason:** ${admission.reason || 'N/A'}

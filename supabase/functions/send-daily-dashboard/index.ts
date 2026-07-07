@@ -71,6 +71,7 @@ serve(async (req) => {
       let content = ``;
 
       if (isTimberLakeWest || isTimberLakeCamp) {
+        // Timber Lake West gets Daily Wolf; Timber Lake Camp gets Tiger Times
         const bulletinConfig = isTimberLakeWest ? DAILY_WOLF_CONFIG : TIGER_TIMES_CONFIG;
         subject = isTimberLakeWest ? `Daily Wolf - ${todayYMD}` : `Tiger Times - ${todayYMD}`;
 

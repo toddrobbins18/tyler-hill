@@ -24,7 +24,7 @@ import {
 import { CSVUploader } from "@/components/CSVUploader";
 import { Calendar } from "@/components/ui/calendar";
 import { format, isBefore, startOfDay, isToday } from "date-fns";
-import { safeFormatDate, safeFormatDateYmd, safeParseDate } from "@/lib/safeFormatDate";
+import { safeFormatDate, safeFormatDateYmd, safeParseDate, formatCampDateTime, formatCampTime } from "@/lib/safeFormatDate";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
@@ -2242,7 +2242,7 @@ export default function Nurse() {
                               )}
                               <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                                 <Clock className="h-4 w-4" />
-                                <span>Admitted {safeFormatDate(admission.admitted_at, 'MMM d, h:mm a')}</span>
+                                <span>Admitted {formatCampDateTime(admission.admitted_at)}</span>
                                 <Badge variant="outline" className="ml-2">
                                   {getAdmissionDuration(admission.admitted_at)}
                                 </Badge>
@@ -2453,7 +2453,7 @@ export default function Nurse() {
                                     {entityAdmissions.length} {entityAdmissions.length === 1 ? 'admission' : 'admissions'}
                                   </Badge>
                                   <p className="text-xs text-muted-foreground">
-                                    Last: {safeFormatDate(entityAdmissions[0].admitted_at, "MMM d, h:mm a")}
+                                    Last: {formatCampDateTime(entityAdmissions[0].admitted_at)}
                                   </p>
                                 </div>
                                 <Button variant="ghost" size="sm">
@@ -2480,9 +2480,9 @@ export default function Nurse() {
                                           Admission #{entityAdmissions.length - index}
                                         </p>
                                         <p className="text-xs text-muted-foreground">
-                                          {safeFormatDate(admission.admitted_at, "MMM d, yyyy • h:mm a")}
+                                          {formatCampDateTime(admission.admitted_at)}
                                           {admission.checked_out_at
-                                            ? ` - ${safeFormatDate(admission.checked_out_at, "h:mm a")}`
+                                            ? ` - ${formatCampTime(admission.checked_out_at)}`
                                             : ""}
                                         </p>
                                       </div>

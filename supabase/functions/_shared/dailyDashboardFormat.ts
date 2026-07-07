@@ -19,6 +19,27 @@ export function easternSeasonYear(now = new Date()): string {
   }).format(now);
 }
 
+/** Camp-local timestamp for emails and notifications (America/New_York). */
+export function formatEasternDateTime(
+  iso: string | null | undefined,
+  fallback = "N/A",
+): string {
+  if (!iso) return fallback;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return fallback;
+  return d.toLocaleString("en-US", {
+    timeZone: EASTERN_TIMEZONE,
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZoneName: "short",
+  });
+}
+
 /** Long-form calendar label for a YYYY-MM-DD string (avoids UTC midnight off-by-one). */
 export function formatBulletinDisplayDate(dateYMD: string): string {
   const [y, m, d] = dateYMD.split("-").map(Number);

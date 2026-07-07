@@ -6,6 +6,7 @@ import {
   easternTodayYMD,
   escapeHtml,
   formatBulletinDisplayDate,
+  formatEasternDateTime,
 } from "../_shared/dailyDashboardFormat.ts";
 
 const corsHeaders = {
@@ -14,7 +15,6 @@ const corsHeaders = {
 };
 
 const EMAIL_TYPE = "health_center_overnight_log";
-const EASTERN_TIMEZONE = "America/New_York";
 
 type AdmissionRow = {
   id: string;
@@ -29,18 +29,6 @@ type AdmissionRow = {
     name: string;
   } | null;
 };
-
-function formatEasternDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", {
-    timeZone: EASTERN_TIMEZONE,
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 function personLabel(admission: AdmissionRow): string {
   if (admission.staff?.name) return admission.staff.name;
