@@ -1128,12 +1128,26 @@ async function syncOwlPayBalancesFromCampminder(
       }
 
       // Reconciliation guard (season-scoped):
-      // Build expected balances from the *current season's CampMinder payload*,
-      // not from historical local ledger rows (which may contain prior seasons).
+      // Expected balance = CampMinder deposits (current season payload) minus Owl Pay purchases.
+      // Do NOT set balance to deposits alone — that wipes POS deductions after each sync.
+      const OWL_PAY_MIN_BALANCE = -25;
       const sumByPerson = new Map<string, number>();
       for (const { personId, contribution } of seasonTxById.values()) {
         const prev = sumByPerson.get(personId) || 0;
         sumByPerson.set(personId, prev + Number(contribution || 0));
+      }
+
+      const spendByChild = new Map<string, number>();
+      const { data: spendTotals, error: spendErr } = await supabase.rpc(
+        'get_owl_pay_purchase_totals',
+        { _company_id: companyId },
+      );
+      if (spendErr) {
+        console.error('[Financials] Error loading Owl Pay purchase totals for reconciliation:', spendErr);
+      } else {
+        for (const row of spendTotals || []) {
+          spendByChild.set(String(row.child_id), Number(row.total_spent || 0));
+        }
       }
 
       const { data: seasonCampers, error: campersErr } = await supabase
@@ -1147,7 +1161,9 @@ async function syncOwlPayBalancesFromCampminder(
       } else {
         const updates = (seasonCampers || [])
           .map((c: any) => {
-            const expected = Number(sumByPerson.get(String(c.person_id || '')) || 0);
+            const cmDeposits = Number(sumByPerson.get(String(c.person_id || '')) || 0);
+            const spent = spendByChild.get(String(c.id)) || 0;
+            const expected = Math.max(cmDeposits - spent, OWL_PAY_MIN_BALANCE);
             const current = Number(c.owl_pay_balance || 0);
             return { id: c.id, expected, current };
           })
@@ -1165,7 +1181,7 @@ async function syncOwlPayBalancesFromCampminder(
 
         if (updates.length > 0) {
           console.log(
-            `[Financials] Reconciled ${updates.length} camper balances from current season CampMinder payload`,
+            `[Financials] Reconciled ${updates.length} camper balances (CM deposits minus Owl Pay purchases)`,
           );
         }
       }
