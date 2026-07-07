@@ -11,26 +11,21 @@ import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Line, LineChart, Area
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarIcon, DollarSign, Package, TrendingUp, Receipt, Download } from "lucide-react";
-import { format, startOfDay, endOfDay, startOfWeek, startOfMonth } from "date-fns";
+import { format } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useToast } from "@/hooks/use-toast";
-
-type ReportAudience = "all" | "campers" | "staff";
-
-function classifyPurchaseBuyer(tx: any): "camper" | "staff" | "unknown" {
-  if (tx.staff_id) return "staff";
-  if (tx.child_id) return "camper";
-  return "unknown";
-}
-
-function matchesAudience(buyer: "camper" | "staff" | "unknown", audience: ReportAudience): boolean {
-  if (audience === "all") return buyer === "camper" || buyer === "staff";
-  if (audience === "campers") return buyer === "camper";
-  return buyer === "staff";
-}
+import {
+  aggregateOwlPayReports,
+  fetchAllOwlPayPurchaseTransactions,
+  formatCampReportDateTime,
+  getCampYmd,
+  getOwlPayQuickRangeYmd,
+  getOwlPayReportFetchBounds,
+  type OwlPayReportAudience,
+} from "@/lib/owlPayReports";
 
 function toCsvCell(v: unknown): string {
   const s = String(v ?? "");
@@ -53,118 +48,53 @@ const OwlPayReports = () => {
   const { currentCompany } = useCompany();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
-    from: startOfDay(new Date()),
-    to: endOfDay(new Date()),
-  });
+  const todayYmd = getCampYmd();
+  const [fromYmd, setFromYmd] = useState(todayYmd);
+  const [toYmd, setToYmd] = useState(todayYmd);
   const [tempDateRange, setTempDateRange] = useState<{ from?: Date; to?: Date }>({});
   const [searchTerm, setSearchTerm] = useState("");
-  const [reportAudience, setReportAudience] = useState<ReportAudience>("all");
+  const [reportAudience, setReportAudience] = useState<OwlPayReportAudience>("all");
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["owl-pay-reports", dateRange.from.toISOString(), dateRange.to.toISOString(), currentCompany?.id, reportAudience],
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["owl-pay-reports", "v2", fromYmd, toYmd, currentCompany?.id, reportAudience],
     enabled: !!currentCompany?.id,
+    staleTime: 0,
+    refetchOnMount: "always",
     queryFn: async () => {
-      const start = startOfDay(dateRange.from).toISOString();
-      const end = endOfDay(dateRange.to).toISOString();
-
-      const { data: transactions, error } = await supabase
-        .from("owl_pay_transactions" as any)
-        .select("id, created_at, amount, is_free, transaction_type, child_id, staff_id, owl_pay_items(*), children(name), staff(name)")
-        .eq("company_id", currentCompany!.id)
-        .eq("transaction_type", "purchase")
-        .gte("created_at", start)
-        .lte("created_at", end)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-
-      const itemMap = new Map<string, { id: string; name: string; category: string; quantity: number; revenue: number }>();
-      const dateMap = new Map<string, { revenue: number; count: number }>();
-      const purchases: any[] = [];
-      let totalRevenue = 0;
-      let totalItems = 0;
-
-      (transactions as any[])?.forEach((tx: any) => {
-        const buyer = classifyPurchaseBuyer(tx);
-        if (!matchesAudience(buyer, reportAudience)) return;
-
-        const item = tx.owl_pay_items;
-        const amount = Number(tx.amount);
-        const itemId = tx.item_id || tx.id;
-        const itemName = item?.name || (tx.is_free ? "Free daily item" : "Unknown item");
-        const itemCategory = item?.category || "other";
-
-        if (itemId) {
-          if (!itemMap.has(itemId)) {
-            itemMap.set(itemId, {
-              id: itemId,
-              name: itemName,
-              category: itemCategory,
-              quantity: 0,
-              revenue: 0,
-            });
-          }
-          const d = itemMap.get(itemId)!;
-          d.quantity += 1;
-          d.revenue += amount;
-        }
-
-        const dateKey = new Date(tx.created_at).toLocaleDateString();
-        if (!dateMap.has(dateKey)) dateMap.set(dateKey, { revenue: 0, count: 0 });
-        const dd = dateMap.get(dateKey)!;
-        dd.revenue += amount;
-        dd.count += 1;
-
-        purchases.push({
-          id: tx.id,
-          buyer_type: buyer === "staff" ? "staff" : "camper",
-          camper_name: tx.children?.name || tx.staff?.name || "Unknown",
-          item_name: itemName,
-          item_category: itemCategory,
-          amount,
-          is_free: tx.is_free,
-          purchased_at: tx.created_at,
+      const { startISO, endInclusiveISO } = getOwlPayReportFetchBounds(fromYmd, toYmd);
+      const transactions = await fetchAllOwlPayPurchaseTransactions(
+        supabase,
+        currentCompany!.id,
+        startISO,
+        endInclusiveISO,
+      );
+      const aggregated = aggregateOwlPayReports(transactions, reportAudience, fromYmd, toYmd);
+      if (import.meta.env.DEV) {
+        console.info("[OwlPay Reports]", {
+          fromYmd,
+          toYmd,
+          startISO,
+          endInclusiveISO,
+          fetched: transactions.length,
+          purchases: aggregated.purchases.length,
+          paidItems: aggregated.stats.totalItems,
+          revenue: aggregated.stats.totalRevenue,
         });
-
-        totalRevenue += amount;
-        totalItems += 1;
-      });
-
-      const salesByItem = Array.from(itemMap.values()).sort((a, b) => b.quantity - a.quantity);
-      const salesOverTime = Array.from(dateMap.entries())
-        .map(([date, d]) => ({ date, revenue: d.revenue, count: d.count }))
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-      return {
-        salesByItem,
-        salesOverTime,
-        purchases,
-        stats: {
-          totalRevenue,
-          totalItems,
-          mostPopular: salesByItem[0]?.name || "N/A",
-          avgTransaction: totalItems > 0 ? totalRevenue / totalItems : 0,
-        },
-      };
+      }
+      return aggregated;
     },
   });
 
-  const setQuickRange = (range: string) => {
-    const now = new Date();
-    let from: Date;
-    switch (range) {
-      case "today": from = startOfDay(now); break;
-      case "week": from = startOfWeek(now); break;
-      case "month": from = startOfMonth(now); break;
-      case "all": from = new Date(2020, 0, 1); break;
-      default: from = startOfDay(now);
-    }
-    setDateRange({ from, to: endOfDay(now) });
+  const setQuickRange = (range: "today" | "week" | "month" | "all") => {
+    const { fromYmd: from, toYmd: to } = getOwlPayQuickRangeYmd(range);
+    setFromYmd(from);
+    setToYmd(to);
   };
 
   const filteredPurchases = data?.purchases?.filter(
-    (p: any) => p.camper_name.toLowerCase().includes(searchTerm.toLowerCase()) || p.item_name.toLowerCase().includes(searchTerm.toLowerCase())
+    (p) =>
+      p.camper_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.item_name.toLowerCase().includes(searchTerm.toLowerCase()),
   ) || [];
 
   const exportReportsCsv = () => {
@@ -172,27 +102,26 @@ const OwlPayReports = () => {
       toast({ title: "Nothing to export", variant: "destructive" });
       return;
     }
-    const fromLabel = format(dateRange.from, "yyyy-MM-dd");
-    const toLabel = format(dateRange.to, "yyyy-MM-dd");
     const audienceLabel = reportAudience === "all" ? "all-buyers" : reportAudience;
-    const filename = `owlpay-report_${currentCompany.slug ?? "camp"}_${fromLabel}_${toLabel}_${audienceLabel}.csv`;
+    const filename = `owlpay-report_${currentCompany.slug ?? "camp"}_${fromYmd}_${toYmd}_${audienceLabel}.csv`;
 
     const summaryRows: (string | number | boolean)[][] = [
       ["Report", "Owl Pay"],
       ["Company", currentCompany.name ?? ""],
-      ["Date range", `${fromLabel} to ${toLabel}`],
+      ["Date range (camp time)", `${fromYmd} to ${toYmd}`],
       ["Audience", reportAudience],
-      ["Total revenue", data.stats.totalRevenue.toFixed(2)],
-      ["Items sold", data.stats.totalItems],
-      ["Avg transaction", data.stats.avgTransaction.toFixed(2)],
+      ["Total revenue (paid items)", data.stats.totalRevenue.toFixed(2)],
+      ["Items sold (paid)", data.stats.totalItems],
+      ["Free daily items", data.stats.freeItems],
+      ["Avg paid transaction", data.stats.avgTransaction.toFixed(2)],
       ["Most popular item", data.stats.mostPopular],
       [],
       ["Sales by item — Item", "Category", "Qty sold", "Revenue"],
       ...data.salesByItem.map((i) => [i.name, i.category, i.quantity, i.revenue.toFixed(2)]),
       [],
-      ["Purchases — Date/time (UTC)", "Buyer type", "Name", "Item", "Category", "Amount", "Free"],
-      ...data.purchases.map((p: any) => [
-        format(new Date(p.purchased_at), "yyyy-MM-dd HH:mm:ss"),
+      ["Purchases — Date/time (camp)", "Buyer type", "Name", "Item", "Category", "Amount", "Free"],
+      ...data.purchases.map((p) => [
+        formatCampReportDateTime(p.purchased_at),
         p.buyer_type,
         p.camper_name,
         p.item_name,
@@ -213,12 +142,12 @@ const OwlPayReports = () => {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "owl_pay_transactions", filter: `company_id=eq.${currentCompany.id}` },
-        () => queryClient.invalidateQueries({ queryKey: ["owl-pay-reports"] })
+        () => queryClient.invalidateQueries({ queryKey: ["owl-pay-reports"] }),
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "owl_pay_items", filter: `company_id=eq.${currentCompany.id}` },
-        () => queryClient.invalidateQueries({ queryKey: ["owl-pay-reports"] })
+        () => queryClient.invalidateQueries({ queryKey: ["owl-pay-reports"] }),
       )
       .subscribe();
 
@@ -229,7 +158,6 @@ const OwlPayReports = () => {
 
   return (
     <div className="space-y-4">
-      {/* Date Controls */}
       <Card>
         <CardContent className="pt-4 space-y-3">
           <div className="flex flex-wrap gap-2 items-center justify-between">
@@ -245,11 +173,34 @@ const OwlPayReports = () => {
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="end">
                 <div className="p-4 space-y-4">
-                  <div><p className="text-sm font-medium mb-2">From</p>
-                    <Calendar mode="single" selected={tempDateRange.from} onSelect={(date) => setTempDateRange({ ...tempDateRange, from: date })} /></div>
-                  <div><p className="text-sm font-medium mb-2">To</p>
-                    <Calendar mode="single" selected={tempDateRange.to} onSelect={(date) => setTempDateRange({ ...tempDateRange, to: date })} /></div>
-                  <Button className="w-full" onClick={() => { if (tempDateRange.from && tempDateRange.to) setDateRange({ from: startOfDay(tempDateRange.from), to: endOfDay(tempDateRange.to) }); }} disabled={!tempDateRange.from || !tempDateRange.to}>Apply</Button>
+                  <div>
+                    <p className="text-sm font-medium mb-2">From</p>
+                    <Calendar
+                      mode="single"
+                      selected={tempDateRange.from}
+                      onSelect={(date) => setTempDateRange({ ...tempDateRange, from: date })}
+                    />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium mb-2">To</p>
+                    <Calendar
+                      mode="single"
+                      selected={tempDateRange.to}
+                      onSelect={(date) => setTempDateRange({ ...tempDateRange, to: date })}
+                    />
+                  </div>
+                  <Button
+                    className="w-full"
+                    onClick={() => {
+                      if (tempDateRange.from && tempDateRange.to) {
+                        setFromYmd(format(tempDateRange.from, "yyyy-MM-dd"));
+                        setToYmd(format(tempDateRange.to, "yyyy-MM-dd"));
+                      }
+                    }}
+                    disabled={!tempDateRange.from || !tempDateRange.to}
+                  >
+                    Apply
+                  </Button>
                 </div>
               </PopoverContent>
             </Popover>
@@ -266,19 +217,68 @@ const OwlPayReports = () => {
               Export CSV
             </Button>
           </div>
-          <Badge variant="outline">{format(dateRange.from, "MMM dd, yyyy")} - {format(dateRange.to, "MMM dd, yyyy")}</Badge>
+          <Badge variant="outline">{fromYmd} - {toYmd} (camp time)</Badge>
         </CardContent>
       </Card>
 
-      {/* Summary Cards */}
+      {isError && (
+        <Card>
+          <CardContent className="py-4 text-destructive text-sm">
+            Failed to load report data: {(error as Error)?.message || "Unknown error"}
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card><CardContent className="pt-4"><div className="flex items-center justify-between"><div><p className="text-xs text-muted-foreground">Revenue</p><p className="text-xl font-bold">${data?.stats.totalRevenue.toFixed(2) || "0.00"}</p></div><DollarSign className="h-6 w-6 text-primary opacity-50" /></div></CardContent></Card>
-        <Card><CardContent className="pt-4"><div className="flex items-center justify-between"><div><p className="text-xs text-muted-foreground">Items Sold</p><p className="text-xl font-bold">{data?.stats.totalItems || 0}</p></div><Package className="h-6 w-6 text-green-500 opacity-50" /></div></CardContent></Card>
-        <Card><CardContent className="pt-4"><div className="flex items-center justify-between"><div><p className="text-xs text-muted-foreground">Most Popular</p><p className="text-sm font-bold truncate">{data?.stats.mostPopular || "N/A"}</p></div><TrendingUp className="h-6 w-6 text-yellow-500 opacity-50" /></div></CardContent></Card>
-        <Card><CardContent className="pt-4"><div className="flex items-center justify-between"><div><p className="text-xs text-muted-foreground">Avg Transaction</p><p className="text-xl font-bold">${data?.stats.avgTransaction.toFixed(2) || "0.00"}</p></div><Receipt className="h-6 w-6 text-muted-foreground opacity-50" /></div></CardContent></Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Revenue</p>
+                <p className="text-xl font-bold">${data?.stats.totalRevenue.toFixed(2) || "0.00"}</p>
+              </div>
+              <DollarSign className="h-6 w-6 text-primary opacity-50" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Items Sold</p>
+                <p className="text-xl font-bold">{data?.stats.totalItems || 0}</p>
+                {(data?.stats.freeItems || 0) > 0 && (
+                  <p className="text-[11px] text-muted-foreground">{data?.stats.freeItems} free daily</p>
+                )}
+              </div>
+              <Package className="h-6 w-6 text-green-500 opacity-50" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Most Popular</p>
+                <p className="text-sm font-bold truncate">{data?.stats.mostPopular || "N/A"}</p>
+              </div>
+              <TrendingUp className="h-6 w-6 text-yellow-500 opacity-50" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Avg Transaction</p>
+                <p className="text-xl font-bold">${data?.stats.avgTransaction.toFixed(2) || "0.00"}</p>
+              </div>
+              <Receipt className="h-6 w-6 text-muted-foreground opacity-50" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Report Tabs */}
       <Tabs defaultValue="by-item">
         <TabsList>
           <TabsTrigger value="by-item">By Item</TabsTrigger>
@@ -287,8 +287,16 @@ const OwlPayReports = () => {
         </TabsList>
 
         <TabsContent value="by-item">
-          {(data?.salesByItem?.length || 0) === 0 ? (
-            <Card><CardContent className="py-8 text-center text-muted-foreground">No sales data for this period.</CardContent></Card>
+          {!isLoading && (data?.salesByItem?.length || 0) === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground space-y-2">
+                <p>No paid sales for this period.</p>
+                <p className="text-xs">
+                  Try <strong>This Month</strong> or <strong>All Time</strong> for earlier sales.
+                  Free daily items still appear in the Purchases tab.
+                </p>
+              </CardContent>
+            </Card>
           ) : (
             <div className="space-y-4">
               <Card>
@@ -296,7 +304,7 @@ const OwlPayReports = () => {
                 <CardContent>
                   <ChartContainer config={{ quantity: { label: "Qty Sold", color: "hsl(var(--primary))" } }} className="h-[300px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={data?.salesByItem?.map(i => ({ name: i.name.substring(0, 12), quantity: i.quantity }))}>
+                      <BarChart data={data?.salesByItem?.map((i) => ({ name: i.name.substring(0, 12), quantity: i.quantity }))}>
                         <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} tick={{ fontSize: 11 }} />
                         <YAxis />
                         <ChartTooltip content={<ChartTooltipContent />} />
@@ -309,10 +317,22 @@ const OwlPayReports = () => {
               <Card>
                 <CardContent className="pt-4">
                   <Table>
-                    <TableHeader><TableRow><TableHead>Item</TableHead><TableHead>Category</TableHead><TableHead className="text-right">Qty</TableHead><TableHead className="text-right">Revenue</TableHead></TableRow></TableHeader>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Item</TableHead>
+                        <TableHead>Category</TableHead>
+                        <TableHead className="text-right">Qty</TableHead>
+                        <TableHead className="text-right">Revenue</TableHead>
+                      </TableRow>
+                    </TableHeader>
                     <TableBody>
                       {data?.salesByItem?.map((item) => (
-                        <TableRow key={item.id}><TableCell className="font-medium">{item.name}</TableCell><TableCell className="capitalize">{item.category}</TableCell><TableCell className="text-right">{item.quantity}</TableCell><TableCell className="text-right">${item.revenue.toFixed(2)}</TableCell></TableRow>
+                        <TableRow key={item.id}>
+                          <TableCell className="font-medium">{item.name}</TableCell>
+                          <TableCell className="capitalize">{item.category}</TableCell>
+                          <TableCell className="text-right">{item.quantity}</TableCell>
+                          <TableCell className="text-right">${item.revenue.toFixed(2)}</TableCell>
+                        </TableRow>
                       ))}
                     </TableBody>
                   </Table>
@@ -375,17 +395,27 @@ const OwlPayReports = () => {
               ) : (
                 <ScrollArea className="h-[400px]">
                   <Table>
-                    <TableHeader><TableRow><TableHead>Date</TableHead>{reportAudience === "all" && <TableHead>Type</TableHead>}<TableHead>Name</TableHead><TableHead>Item</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        {reportAudience === "all" && <TableHead>Type</TableHead>}
+                        <TableHead>Name</TableHead>
+                        <TableHead>Item</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                      </TableRow>
+                    </TableHeader>
                     <TableBody>
-                      {filteredPurchases.map((p: any) => (
+                      {filteredPurchases.map((p) => (
                         <TableRow key={p.id}>
-                          <TableCell>{format(new Date(p.purchased_at), "MMM dd, h:mm a")}</TableCell>
+                          <TableCell>{formatCampReportDateTime(p.purchased_at)}</TableCell>
                           {reportAudience === "all" && (
                             <TableCell><Badge variant="outline" className="capitalize">{p.buyer_type}</Badge></TableCell>
                           )}
                           <TableCell className="font-medium">{p.camper_name}</TableCell>
                           <TableCell>{p.item_name}</TableCell>
-                          <TableCell className="text-right">{p.is_free ? <span className="text-muted-foreground">Free</span> : `$${p.amount.toFixed(2)}`}</TableCell>
+                          <TableCell className="text-right">
+                            {p.is_free ? <span className="text-muted-foreground">Free</span> : `$${p.amount.toFixed(2)}`}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
