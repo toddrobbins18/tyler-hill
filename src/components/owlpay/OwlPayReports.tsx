@@ -27,6 +27,8 @@ import {
   getCampYmd,
   getCampYmdFromIso,
   getOwlPayQuickRangeYmd,
+  getOwlPayDailyRowsForChart,
+  getOwlPayDailyRowsForDisplay,
   getOwlPayReportFetchBounds,
   type OwlPayReportAudience,
 } from "@/lib/owlPayReports";
@@ -119,6 +121,9 @@ const OwlPayReports = () => {
       p.item_name.toLowerCase().includes(searchTerm.toLowerCase()),
   ) || [];
 
+  const dailyRowsForDisplay = data ? getOwlPayDailyRowsForDisplay(data.salesOverTime) : [];
+  const dailyRowsForChart = data ? getOwlPayDailyRowsForChart(data.salesOverTime) : [];
+
   const exportReportsCsv = () => {
     if (!data || !currentCompany?.id) {
       toast({ title: "Nothing to export", variant: "destructive" });
@@ -140,7 +145,7 @@ const OwlPayReports = () => {
       ["Most popular item", data.stats.mostPopular],
       [],
       ["Daily summary — Camp date", "Revenue (paid)", "Paid items", "Free items", "Total lines"],
-      ...data.salesOverTime.map((d) => [
+      ...dailyRowsForDisplay.map((d) => [
         formatCampYmdDisplay(d.ymd),
         d.revenue.toFixed(2),
         d.paidItems,
@@ -361,7 +366,7 @@ const OwlPayReports = () => {
         </Card>
       </div>
 
-      {(data?.salesOverTime?.length || 0) > 0 && (
+      {(dailyRowsForDisplay.length || 0) > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Daily breakdown (camp time)</CardTitle>
@@ -378,7 +383,7 @@ const OwlPayReports = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data?.salesOverTime.map((day) => (
+                {dailyRowsForDisplay.map((day) => (
                   <TableRow key={day.ymd}>
                     <TableCell className="font-medium">{day.date}</TableCell>
                     <TableCell className="text-right">${day.revenue.toFixed(2)}</TableCell>
@@ -457,7 +462,7 @@ const OwlPayReports = () => {
         </TabsContent>
 
         <TabsContent value="over-time">
-          {(data?.salesOverTime?.length || 0) === 0 ? (
+          {(dailyRowsForChart.length || 0) === 0 ? (
             <Card><CardContent className="py-8 text-center text-muted-foreground">No data for this period.</CardContent></Card>
           ) : (
             <div className="space-y-4">
@@ -466,7 +471,7 @@ const OwlPayReports = () => {
                 <CardContent>
                   <ChartContainer config={{ revenue: { label: "Revenue", color: "hsl(var(--primary))" } }} className="h-[300px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={data?.salesOverTime}>
+                      <LineChart data={dailyRowsForChart}>
                         <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                         <YAxis />
                         <ChartTooltip content={<ChartTooltipContent />} />
@@ -481,7 +486,7 @@ const OwlPayReports = () => {
                 <CardContent>
                   <ChartContainer config={{ count: { label: "Transactions", color: "hsl(var(--chart-2))" } }} className="h-[300px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={data?.salesOverTime}>
+                      <AreaChart data={dailyRowsForChart}>
                         <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                         <YAxis />
                         <ChartTooltip content={<ChartTooltipContent />} />

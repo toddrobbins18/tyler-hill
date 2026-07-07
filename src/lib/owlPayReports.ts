@@ -122,6 +122,16 @@ export function listCampDaysInRange(fromYmd: string, toYmd: string): string[] {
   return days;
 }
 
+/** Newest camp dates first for tables/CSV (includes empty days in range). */
+export function getOwlPayDailyRowsForDisplay(rows: OwlPayReportDailyRow[]): OwlPayReportDailyRow[] {
+  return [...rows].sort((a, b) => b.ymd.localeCompare(a.ymd));
+}
+
+/** Chart axis: activity days only, oldest → newest. */
+export function getOwlPayDailyRowsForChart(rows: OwlPayReportDailyRow[]): OwlPayReportDailyRow[] {
+  return rows.filter((d) => d.totalLines > 0).sort((a, b) => a.ymd.localeCompare(b.ymd));
+}
+
 export function getCampYmdFromIso(iso: string): string {
   const parsed = parseOwlPayTimestamp(iso);
   if (Number.isNaN(parsed.getTime())) return "";
