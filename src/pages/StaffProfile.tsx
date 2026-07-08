@@ -130,8 +130,9 @@ export default function StaffProfile() {
     setAssignedLeaders(leaderAssignmentData || []);
 
     if (!evalsError && evalsData) {
-      const averageRating = evalsData.length
-        ? evalsData.reduce((sum, e) => sum + (Number(e.rating) || 0), 0) / evalsData.length
+      const completeEvals = evalsData.filter(e => e.status === 'complete');
+      const averageRating = completeEvals.length
+        ? completeEvals.reduce((sum, e) => sum + (Number(e.rating) || 0), 0) / completeEvals.length
         : 0;
 
       setStaff({
@@ -545,6 +546,11 @@ export default function StaffProfile() {
                           <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
                             Round {evaluation.evaluation_round || 1}
                           </Badge>
+                          {evaluation.status === 'incomplete' && (
+                            <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20">
+                              Incomplete
+                            </Badge>
+                          )}
                           {evaluation.category && (
                             <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
                               {evaluation.category}
@@ -557,6 +563,15 @@ export default function StaffProfile() {
                         </div>
                         {evaluation.evaluator && (
                           <p className="text-sm text-muted-foreground">Evaluated by {evaluation.evaluator}</p>
+                        )}
+                        {evaluation.status === 'incomplete' && (
+                          <p className="text-xs text-warning mt-1">
+                            {!evaluation.dl_submitted_at && !evaluation.head_specialist_submitted_at 
+                              ? "Waiting on both evaluators"
+                              : !evaluation.dl_submitted_at 
+                                ? "Waiting on Division Leader" 
+                                : "Waiting on Head Specialist"}
+                          </p>
                         )}
                       </div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">

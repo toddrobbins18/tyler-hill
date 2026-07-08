@@ -102,7 +102,7 @@ export default function Staff() {
     if (staffIds.length > 0) {
       const { data: evalRows, error: evalError } = await supabase
         .from("staff_evaluations")
-        .select("staff_id, rating, date, comments")
+        .select("staff_id, rating, date, comments, status, dl_submitted_by, head_specialist_submitted_by")
         .eq("company_id", currentCompany.id)
         .eq("season", currentSeason)
         .in("staff_id", staffIds);
@@ -139,6 +139,8 @@ export default function Staff() {
         evaluationsCount: sortedEvals.length,
         recentEvaluation: sortedEvals[0]?.comments || "No evaluations yet",
         lastEvaluationDate: sortedEvals[0]?.date || null,
+        latestEvaluationStatus: sortedEvals[0]?.status || "complete",
+        latestEvaluation: sortedEvals[0] || null,
       };
     });
 
@@ -548,11 +550,28 @@ export default function Staff() {
                     <TrendingUp className="h-4 w-4 text-success mt-0.5" />
                     <div>
                       <p className="text-sm font-medium">Recent Evaluation</p>
-                      <p className="text-xs text-muted-foreground">{staffMember.recentEvaluation}</p>
-                      {staffMember.lastEvaluationDate && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {new Date(staffMember.lastEvaluationDate).toLocaleDateString('en-US')}
-                        </p>
+                      {staffMember.latestEvaluationStatus === "incomplete" ? (
+                        <div className="mt-1 space-y-1">
+                          <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20">
+                            Incomplete
+                          </Badge>
+                          <p className="text-xs text-warning">
+                            {!staffMember.latestEvaluation?.dl_submitted_at && !staffMember.latestEvaluation?.head_specialist_submitted_at 
+                              ? "Waiting on both evaluators"
+                              : !staffMember.latestEvaluation?.dl_submitted_at 
+                                ? "Waiting on Division Leader" 
+                                : "Waiting on Head Specialist"}
+                          </p>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="text-xs text-muted-foreground">{staffMember.recentEvaluation}</p>
+                          {staffMember.lastEvaluationDate && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {new Date(staffMember.lastEvaluationDate).toLocaleDateString('en-US')}
+                            </p>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>

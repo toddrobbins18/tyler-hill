@@ -11,6 +11,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/hooks/usePermissions";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 interface EvaluateStaffDialogProps {
@@ -58,14 +60,50 @@ export function EvaluateStaffDialog({
   const { toast } = useToast();
   const { currentCompany } = useCompany();
   const { selectedSeason } = useSeason();
+  const { user } = useAuth();
+  const { userRole, isSuperAdmin } = usePermissions();
+  const [existingEvaluation, setExistingEvaluation] = useState<any>(null);
 
   useEffect(() => {
     if (open && staffType) {
-      fetchQuestions();
+      fetchEvaluationData();
     }
-  }, [open, staffType, currentCompany.id]);
+  }, [open, staffType, currentCompany.id, evaluationRound]);
 
-  const fetchQuestions = async () => {
+  const fetchEvaluationData = async () => {
+    if (!staffId || !currentCompany?.id || !selectedSeason) return;
+
+    // Fetch existing incomplete evaluation for this round
+    const { data: evalData } = await supabase
+      .from("staff_evaluations")
+      .select("*")
+      .eq("staff_id", staffId)
+      .eq("company_id", currentCompany.id)
+      .eq("season", selectedSeason)
+      .eq("evaluation_round", evaluationRound)
+      .maybeSingle();
+
+    setExistingEvaluation(evalData);
+
+    // If there's an existing evaluation, fetch its responses
+    let existingResponses: Record<string, QuestionResponse> = {};
+    if (evalData) {
+      const { data: respData } = await supabase
+        .from("evaluation_responses")
+        .select("*")
+        .eq("evaluation_id", evalData.id);
+
+      if (respData) {
+        respData.forEach(r => {
+          existingResponses[r.question_id] = {
+            questionId: r.question_id,
+            rating: r.response_value,
+            textResponse: r.response_text || "",
+          };
+        });
+      }
+    }
+
     const staffTypes: string[] = [];
     if (staffType === "both") {
       staffTypes.push("general_counselor", "specialist");
@@ -73,7 +111,7 @@ export function EvaluateStaffDialog({
       staffTypes.push(staffType);
     }
 
-    const { data, error } = await supabase
+    const { data: questionsData, error } = await supabase
       .from("evaluation_questions")
       .select("*")
       .eq("company_id", currentCompany.id)
@@ -92,12 +130,28 @@ export function EvaluateStaffDialog({
       return;
     }
 
-    setQuestions(data || []);
+    // Filter questions based on role if it's a specialist
+    let filteredQuestions = questionsData || [];
+    if (staffType === "specialist" || staffType === "both") {
+      if (!isSuperAdmin && userRole !== "admin") {
+        if (userRole === "division_leader") {
+          filteredQuestions = filteredQuestions.filter(q => 
+            q.evaluated_by === "Division Leader" || q.evaluated_by === "Both"
+          );
+        } else if (userRole === "specialist") {
+          filteredQuestions = filteredQuestions.filter(q => 
+            q.evaluated_by === "Head Specialist" || q.evaluated_by === "Both"
+          );
+        }
+      }
+    }
+
+    setQuestions(filteredQuestions);
     
     // Initialize responses
     const initialResponses: Record<string, QuestionResponse> = {};
-    data?.forEach((q) => {
-      initialResponses[q.id] = {
+    filteredQuestions.forEach((q) => {
+      initialResponses[q.id] = existingResponses[q.id] || {
         questionId: q.id,
         rating: null,
         textResponse: "",
@@ -131,39 +185,103 @@ export function EvaluateStaffDialog({
 
     setLoading(true);
 
+    // Determine if this is a split evaluation and what the new status should be
+    let newStatus = "complete";
+    let isSplitEval = staffType === "specialist" || staffType === "both";
+    let updateFields: any = {};
+
+    if (isSplitEval) {
+      if (isSuperAdmin || userRole === "admin") {
+        newStatus = "complete";
+      } else {
+        if (userRole === "division_leader") {
+          updateFields.dl_submitted_at = new Date().toISOString();
+          updateFields.dl_submitted_by = user?.id;
+          
+          if (existingEvaluation?.head_specialist_submitted_at) {
+            newStatus = "complete";
+          } else {
+            newStatus = "incomplete";
+          }
+        } else if (userRole === "specialist") {
+          updateFields.head_specialist_submitted_at = new Date().toISOString();
+          updateFields.head_specialist_submitted_by = user?.id;
+          
+          if (existingEvaluation?.dl_submitted_at) {
+            newStatus = "complete";
+          } else {
+            newStatus = "incomplete";
+          }
+        }
+      }
+    }
+
     // Calculate average rating
     const ratings = Object.values(responses).map(r => r.rating).filter(r => r !== null) as number[];
-    const averageRating = ratings.reduce((sum, r) => sum + r, 0) / ratings.length;
+    const averageRating = ratings.length > 0 ? ratings.reduce((sum, r) => sum + r, 0) / ratings.length : null;
 
-    // Create evaluation record
-    const { data: evaluation, error: evalError } = await supabase
-      .from("staff_evaluations")
-      .insert({
-        staff_id: staffId,
-        date,
-        evaluator,
-        comments: overallComments,
-        rating: averageRating,
-        evaluation_round: evaluationRound,
-        company_id: currentCompany.id,
-        season: selectedSeason,
-      })
-      .select()
-      .single();
+    let evaluationId = existingEvaluation?.id;
 
-    if (evalError || !evaluation) {
-      toast({
-        title: "Error",
-        description: "Failed to create evaluation",
-        variant: "destructive",
-      });
-      setLoading(false);
-      return;
+    if (evaluationId) {
+      // Update existing evaluation
+      const { error: evalError } = await supabase
+        .from("staff_evaluations")
+        .update({
+          evaluator: existingEvaluation.evaluator && !existingEvaluation.evaluator.includes(evaluator) 
+            ? `${existingEvaluation.evaluator}, ${evaluator}` 
+            : evaluator,
+          comments: existingEvaluation.comments 
+            ? `${existingEvaluation.comments}\n\n${userRole === 'division_leader' ? 'DL Comments:' : 'Specialist Comments:'} ${overallComments}` 
+            : overallComments,
+          rating: averageRating, // This might overwrite the other person's rating, but we can compute overall average later or just store current
+          status: newStatus,
+          ...updateFields
+        })
+        .eq("id", evaluationId);
+
+      if (evalError) {
+        toast({
+          title: "Error",
+          description: "Failed to update evaluation",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+    } else {
+      // Create new evaluation record
+      const { data: evaluation, error: evalError } = await supabase
+        .from("staff_evaluations")
+        .insert({
+          staff_id: staffId,
+          date,
+          evaluator,
+          comments: overallComments,
+          rating: averageRating,
+          evaluation_round: evaluationRound,
+          company_id: currentCompany.id,
+          season: selectedSeason,
+          status: newStatus,
+          ...updateFields
+        })
+        .select()
+        .single();
+
+      if (evalError || !evaluation) {
+        toast({
+          title: "Error",
+          description: "Failed to create evaluation",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+      evaluationId = evaluation.id;
     }
 
     // Create response records
     const responseRecords = Object.values(responses).map(r => ({
-      evaluation_id: evaluation.id,
+      evaluation_id: evaluationId,
       question_id: r.questionId,
       response_value: r.rating,
       response_text: r.textResponse || null,
@@ -171,7 +289,7 @@ export function EvaluateStaffDialog({
 
     const { error: responseError } = await supabase
       .from("evaluation_responses")
-      .insert(responseRecords);
+      .upsert(responseRecords, { onConflict: 'evaluation_id, question_id' });
 
     if (responseError) {
       toast({
@@ -185,7 +303,9 @@ export function EvaluateStaffDialog({
 
     toast({
       title: "Success",
-      description: `Evaluation completed with average rating of ${averageRating.toFixed(1)}/5`,
+      description: newStatus === "complete" 
+        ? `Evaluation completed with average rating of ${averageRating?.toFixed(1)}/5`
+        : `Your section was saved. Waiting on the other evaluator to complete.`,
     });
 
     setLoading(false);
