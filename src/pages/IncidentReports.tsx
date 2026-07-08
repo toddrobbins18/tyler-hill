@@ -14,7 +14,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useCompany } from "@/contexts/CompanyContext";
 
 export default function IncidentReports() {
-  const { getDivisionFilter, loading: permissionsLoading, userDivisions } = usePermissions();
+  const { loading: permissionsLoading, userDivisions } = usePermissions();
   const [incidents, setIncidents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -63,19 +63,10 @@ export default function IncidentReports() {
       setLoading(false);
       return;
     }
-    
-    // Filter incidents by division
-    const divisionFilter = getDivisionFilter();
-    if (data && divisionFilter !== null && divisionFilter.length > 0) {
-      const filtered = data.filter(incident => {
-        return incident.incident_children?.some((ic: any) => 
-          ic.children?.division_id && divisionFilter.includes(ic.children.division_id)
-        );
-      });
-      setIncidents(filtered);
-    } else {
-      setIncidents(data || []);
-    }
+
+    // RLS already scopes incidents (admin = all camp, DL/viewer = their campers).
+    // Do not client-filter — division_permissions alone is narrower than can_access_child().
+    setIncidents(data || []);
     setLoading(false);
   };
 

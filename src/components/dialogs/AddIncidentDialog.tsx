@@ -84,7 +84,14 @@ export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: Add
 
     const { data: incident, error: incidentError } = await supabase
       .from("incident_reports")
-      .insert({ ...formData, tags, company_id: currentCompany.id, season: currentSeason })
+      .insert({
+        ...formData,
+        tags,
+        company_id: currentCompany.id,
+        season: currentSeason,
+        // Required for division-leader RLS: SELECT policy needs child_id before incident_children links exist
+        child_id: selectedChildren[0],
+      })
       .select()
       .single();
 
