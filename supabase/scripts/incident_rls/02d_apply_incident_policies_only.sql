@@ -45,16 +45,25 @@ ON public.incident_reports
 FOR UPDATE TO authenticated
 USING (
   public.is_super_admin(auth.uid())
-  OR (
-    company_id IS NOT NULL
-    AND public.user_can_manage_incidents(auth.uid(), company_id)
-  )
+  OR public.can_edit_incident_report(incident_reports.id)
 )
 WITH CHECK (
   public.is_super_admin(auth.uid())
   OR (
     company_id IS NOT NULL
     AND public.user_can_manage_incidents(auth.uid(), company_id)
+  )
+  OR (
+    company_id IS NOT NULL
+    AND public.user_matches_role_at_company(
+      auth.uid(),
+      company_id,
+      ARRAY['division_leader', 'viewer']::public.app_role[]
+    )
+    AND (
+      (child_id IS NOT NULL AND public.can_access_child(child_id))
+      OR public.incident_has_accessible_child(incident_reports.id)
+    )
   )
 );
 

@@ -14,7 +14,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useCompany } from "@/contexts/CompanyContext";
 
 export default function IncidentReports() {
-  const { loading: permissionsLoading, userDivisions } = usePermissions();
+  const { loading: permissionsLoading, userDivisions, userRole, isSuperAdmin } = usePermissions();
   const [incidents, setIncidents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -42,6 +42,13 @@ export default function IncidentReports() {
       supabase.removeChannel(channel);
     };
   }, [selectedSeason, currentCompany?.id, permissionsLoading, userDivisions]);
+
+  const canEditIncidents =
+    isSuperAdmin ||
+    userRole === "admin" ||
+    userRole === "division_leader" ||
+    userRole === "viewer";
+  const canDeleteIncidents = isSuperAdmin || userRole === "admin";
 
   const fetchIncidents = async () => {
     const { data, error } = await supabase
@@ -106,7 +113,9 @@ export default function IncidentReports() {
           <p className="text-muted-foreground">Track and manage incident reports</p>
         </div>
         <div className="flex gap-2">
-          <CSVUploader tableName="incident_reports" onUploadComplete={fetchIncidents} />
+          {canDeleteIncidents && (
+            <CSVUploader tableName="incident_reports" onUploadComplete={fetchIncidents} />
+          )}
           <Button onClick={() => setShowAddDialog(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Add Incident
@@ -135,20 +144,24 @@ export default function IncidentReports() {
                     <CardDescription>{new Date(incident.date + 'T00:00:00').toLocaleDateString()}</CardDescription>
                   </div>
                   <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setEditingIncident(incident)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setDeletingId(incident.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {canEditIncidents && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setEditingIncident(incident)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {canDeleteIncidents && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setDeletingId(incident.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardHeader>

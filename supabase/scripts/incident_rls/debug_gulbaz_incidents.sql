@@ -33,7 +33,14 @@ SELECT
   public.user_can_manage_incidents(
     '8ca3e242-bd72-4f42-aa8f-5c9fa29a20e4'::uuid,
     '0d0b7f4f-327e-4497-83ff-3aa501ffc295'::uuid
-  ) AS can_manage;
+  ) AS can_manage_delete_only;
+
+-- 3b) Can edit a recent Tyler Hill incident (run 02e if false for DL)
+SELECT ir.id, ir.type, public.can_edit_incident_report(ir.id) AS can_edit
+FROM public.incident_reports ir
+WHERE ir.company_id = '0d0b7f4f-327e-4497-83ff-3aa501ffc295'::uuid
+ORDER BY ir.created_at DESC NULLS LAST
+LIMIT 5;
 
 -- 4) Division permissions (needed to link campers after insert)
 SELECT d.name AS division_name, dp.can_access
@@ -43,4 +50,5 @@ WHERE dp.user_id = '8ca3e242-bd72-4f42-aa8f-5c9fa29a20e4'::uuid
 ORDER BY d.name;
 
 -- If can_create=true but app still fails → run 02d_apply_incident_policies_only.sql
+-- If edit fails for DL → run 02e_allow_dl_edit_incidents.sql
 -- If can_create=false → fix user_roles / division_leader row for Tyler Hill
