@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
+import { isEligibleSupervisor } from "@/lib/staffSupervisorUtils";
 import { Users, Wand2, Search, UserCheck } from "lucide-react";
 
 interface StaffMember {
@@ -110,15 +111,14 @@ export function BulkLeaderAssignmentDialog({ onSuccess }: BulkLeaderAssignmentDi
   const potentialLeaders = useMemo(() => {
     const leaderIds = new Set(assignments.map(a => a.leader_id));
     return allStaff.filter(s =>
-      s.role?.match(/division leader|director|lead |head |asst\. |assistant /i) ||
-      leaderIds.has(s.id)
+      isEligibleSupervisor(s) || leaderIds.has(s.id)
     ).sort((a, b) => a.name.localeCompare(b.name));
   }, [allStaff, assignments]);
 
   // Division leaders specifically
   const divisionLeaders = useMemo(() => {
     return allStaff.filter(s =>
-      s.role?.match(/^division leader$/i) || s.role?.match(/^assistant division leader$/i)
+      isEligibleSupervisor(s)
     );
   }, [allStaff]);
 
@@ -127,7 +127,7 @@ export function BulkLeaderAssignmentDialog({ onSuccess }: BulkLeaderAssignmentDi
     return divisions.map(div => {
       const staffInDiv = allStaff.filter(s => s.division_id === div.id);
       const dlInDiv = staffInDiv.filter(s =>
-        s.role?.match(/division leader/i)
+        isEligibleSupervisor(s)
       );
       const gcsInDiv = staffInDiv.filter(s =>
         s.staff_type === "general_counselor" || s.staff_type === "both"
