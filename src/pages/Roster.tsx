@@ -112,6 +112,9 @@ export default function Roster() {
         from += CAMPERS_PAGE_SIZE;
       }
 
+      // Ensure exact alphabetical order by name
+      rows.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
       setChildren(rows);
     } catch (err) {
       console.error('Roster fetch error:', err);

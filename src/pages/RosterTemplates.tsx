@@ -78,7 +78,7 @@ export default function RosterTemplates() {
       const [templatesResult, divisionsResult] = await Promise.all([
         supabase
           .from("roster_templates")
-          .select(`*, roster_template_children(child_id)`)
+          .select(`*, roster_template_children(child_id, sort_order)`)
           .eq("company_id", currentCompany?.id)
           .order("created_at", { ascending: false }),
         supabase
@@ -109,7 +109,14 @@ export default function RosterTemplates() {
         from += CAMPERS_PAGE_SIZE;
       }
 
-      setTemplates(templatesResult.data || []);
+      // Sort children by sort_order
+      const processedTemplates = (templatesResult.data || []).map(template => ({
+        ...template,
+        roster_template_children: (template.roster_template_children || []).sort((a: any, b: any) => 
+          (a.sort_order ?? 999) - (b.sort_order ?? 999)
+        )
+      }));
+      setTemplates(processedTemplates);
       setChildren(childRows);
       setDivisions(sortDivisionsAlternatingGender(divisionsResult.data || []));
     } catch (error) {
@@ -177,11 +184,18 @@ export default function RosterTemplates() {
         throw templateError;
       }
 
-      const templateChildren = Array.from(selectedChildren).map(childId => ({
-        template_id: template.id,
-        child_id: childId,
-        company_id: currentCompany?.id,
-      }));
+      const templateChildren = Array.from(selectedChildren)
+        .map(childId => {
+          const child = children.find(c => c.id === childId);
+          return { childId, name: child?.name || "" };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(({ childId }, index) => ({
+          template_id: template.id,
+          child_id: childId,
+          company_id: currentCompany?.id,
+          sort_order: index
+        }));
 
       await supabase.from("roster_template_children").insert(templateChildren);
 
@@ -227,11 +241,18 @@ export default function RosterTemplates() {
         .delete()
         .eq("template_id", editingTemplate.id);
 
-      const templateChildren = Array.from(selectedChildren).map(childId => ({
-        template_id: editingTemplate.id,
-        child_id: childId,
-        company_id: currentCompany?.id,
-      }));
+      const templateChildren = Array.from(selectedChildren)
+        .map(childId => {
+          const child = children.find(c => c.id === childId);
+          return { childId, name: child?.name || "" };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(({ childId }, index) => ({
+          template_id: editingTemplate.id,
+          child_id: childId,
+          company_id: currentCompany?.id,
+          sort_order: index
+        }));
 
       await supabase.from("roster_template_children").insert(templateChildren);
 
@@ -278,10 +299,11 @@ export default function RosterTemplates() {
       if (error || !newTemplate) throw error;
 
       if (template.roster_template_children.length > 0) {
-        const childrenData = template.roster_template_children.map(c => ({
+        const childrenData = template.roster_template_children.map((c, index) => ({
           template_id: newTemplate.id,
           child_id: c.child_id,
           company_id: currentCompany?.id,
+          sort_order: index
         }));
         await supabase.from("roster_template_children").insert(childrenData);
       }

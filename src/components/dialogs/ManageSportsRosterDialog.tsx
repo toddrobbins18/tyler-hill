@@ -158,15 +158,28 @@ export default function ManageSportsRosterDialog({
             .from("roster_templates")
             .select(`
               *,
-              roster_template_children(child_id)
+              roster_template_children(child_id, sort_order)
             `)
             .eq("company_id", currentCompany.id)
             .order("created_at", { ascending: false }),
         ]);
 
-        setChildren(childrenData);
+        // Sort children alphabetically by name
+        const sortedChildren = [...(childrenData || [])].sort((a, b) => 
+          (a.name || "").localeCompare(b.name || "")
+        );
+
+        // Sort template children by sort_order
+        const processedTemplates = (templatesResult.data || []).map(template => ({
+          ...template,
+          roster_template_children: (template.roster_template_children || []).sort((a: any, b: any) => 
+            (a.sort_order ?? 999) - (b.sort_order ?? 999)
+          )
+        }));
+
+        setChildren(sortedChildren);
         setStaff(staffData);
-        setTemplates(templatesResult.data || []);
+        setTemplates(processedTemplates);
       } catch (error) {
         console.error("Error loading roster picker data:", error);
         toast.error("Failed to load campers for roster");
@@ -313,11 +326,21 @@ Please review this conflict and take appropriate action.`;
 
       await supabase.from("sports_event_roster").delete().eq("event_id", eventId);
       if (roster.size > 0) {
-        const rosterEntries = Array.from(roster).map(childId => ({
+        // Sort roster alphabetically by camper name before saving
+        const sortedRosterIds = Array.from(roster)
+          .map(childId => {
+            const child = children.find(c => c.id === childId);
+            return { childId, name: child?.name || "" };
+          })
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map(item => item.childId);
+
+        const rosterEntries = sortedRosterIds.map((childId, index) => ({
           event_id: eventId,
           child_id: childId,
           confirmed: true,
           company_id: currentCompany?.id,
+          sort_order: index
         }));
         await supabase.from("sports_event_roster").insert(rosterEntries);
       }
