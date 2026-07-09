@@ -106,41 +106,64 @@ serve(async (req) => {
 
       console.log(`Company ${company.name}: ${dueMeds.length} missed medication(s) due for alert`);
 
-      const medsByChild = dueMeds.reduce((acc: Record<string, { child: any; medications: MedicationLogRow[] }>, med) => {
-        const childId = (med as any).child?.id;
-        if (!childId) return acc;
-        if (!acc[childId]) {
-          acc[childId] = { child: (med as any).child, medications: [] };
+      const medsByDivisionAndTime = dueMeds.reduce((acc: Record<string, { divisionId: string; divisionName: string; timeString: string; medications: MedicationLogRow[] }>, med) => {
+        const child = (med as any).child;
+        if (!child) return acc;
+        
+        const divisionId = child.division_id || child.division?.id || "unknown";
+        const divisionName = child.division?.name || "Unknown Division";
+        const timeString = formatScheduledTimeForAlert(med.scheduled_time);
+        
+        const key = `${divisionId}_${timeString}`;
+        
+        if (!acc[key]) {
+          acc[key] = { divisionId, divisionName, timeString, medications: [] };
         }
-        acc[childId].medications.push(med);
+        acc[key].medications.push(med);
         return acc;
       }, {});
 
-      for (const { child, medications } of Object.values(medsByChild)) {
-        const divisionId = child.division_id || child.division?.id;
+      for (const { divisionId, divisionName, timeString, medications } of Object.values(medsByDivisionAndTime)) {
         const recipients = await getRecipientsForEmailTypeWithFilters(
           supabase,
           "missed_medication",
           company.id,
-          divisionId ? { divisionIds: [divisionId] } : undefined,
+          divisionId !== "unknown" ? { divisionIds: [divisionId] } : undefined,
         );
 
         if (!recipients.length) {
           console.log(
-            `No recipients for missed medication alert (${child.name}, division ${divisionId || "unknown"}) in ${company.name}`,
+            `No recipients for missed medication alert (division ${divisionId || "unknown"}) in ${company.name}`,
           );
           continue;
         }
 
-        const subject = `Missed Medication Alert: ${child.name}`;
-        const content = `
-<p><strong>Child:</strong> ${child.name}<br/>
-<strong>Division:</strong> ${child.division?.name || "N/A"}<br/>
+        const subject = `Missed Medication Alert: ${divisionName} - ${timeString}`;
+        
+        // Group medications by child within this division and time
+        const medsByChild = medications.reduce((acc: Record<string, { child: any; meds: MedicationLogRow[] }>, med) => {
+          const child = (med as any).child;
+          if (!acc[child.id]) {
+            acc[child.id] = { child, meds: [] };
+          }
+          acc[child.id].meds.push(med);
+          return acc;
+        }, {});
+
+        let content = `
+<p><strong>Division:</strong> ${divisionName}<br/>
+<strong>Time:</strong> ${timeString}<br/>
 <strong>Date:</strong> ${today}</p>
 <p><strong>Missed Medications:</strong></p>
-<ul>${medications.map((m) => `<li>${m.medication_name} (${m.dosage || "N/A"}) at ${formatScheduledTimeForAlert(m.scheduled_time)}</li>`).join("")}</ul>
-<p>Please ensure these medications are administered as soon as possible.</p>
-        `.trim();
+`;
+
+        for (const { child, meds } of Object.values(medsByChild)) {
+          content += `<p><strong>${child.name}</strong></p><ul>`;
+          content += meds.map((m) => `<li>${m.medication_name} (${m.dosage || "N/A"})</li>`).join("");
+          content += `</ul>`;
+        }
+
+        content += `<p>Please ensure these medications are administered as soon as possible.</p>`;
 
         await sendEmailNotifications(supabase, recipients, subject, content, company.id);
 
