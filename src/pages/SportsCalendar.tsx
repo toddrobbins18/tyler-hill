@@ -139,9 +139,14 @@ export default function SportsCalendar() {
       return;
     }
     
-    // Fetch events and roster counts in parallel
-    const [eventsResult, rosterResult] = await Promise.all([
-      supabase
+    // Fetch events with pagination to avoid 1000 row limit
+    let allEvents: any[] = [];
+    let eventFrom = 0;
+    const eventPageSize = 1000;
+    let eventsError = null;
+    
+    while (true) {
+      const { data, error } = await supabase
         .from("sports_calendar")
         .select(`
           *,
@@ -150,28 +155,66 @@ export default function SportsCalendar() {
         `)
         .eq("company_id", currentCompany.id)
         .eq("season", currentSeason)
-        .order("event_date", { ascending: true }),
-      supabase
-        .from("sports_event_roster")
-        .select("event_id")
-        .eq("company_id", currentCompany.id)
-    ]);
+        .order("event_date", { ascending: true })
+        .range(eventFrom, eventFrom + eventPageSize - 1);
+        
+      if (error) {
+        eventsError = error;
+        break;
+      }
+      
+      const batch = data || [];
+      allEvents.push(...batch);
+      if (batch.length < eventPageSize) break;
+      eventFrom += eventPageSize;
+    }
 
-    if (eventsResult.error) {
+    if (eventsError) {
       toast({ title: "Error fetching events", variant: "destructive" });
       setLoading(false);
       return;
     }
 
-    // Build roster counts
-    const counts: Record<string, number> = {};
-    (rosterResult.data || []).forEach((item) => {
-      counts[item.event_id] = (counts[item.event_id] || 0) + 1;
+    // Fetch all roster rows with pagination to avoid 1000 row limit
+    let allRosterRows: any[] = [];
+    let from = 0;
+    const pageSize = 1000;
+    while (true) {
+      const { data, error } = await supabase
+        .from("sports_event_roster")
+        .select("event_id, child_id")
+        .eq("company_id", currentCompany.id)
+        .range(from, from + pageSize - 1);
+      
+      if (error) {
+        console.error("Error fetching roster:", error);
+        break;
+      }
+      const batch = data || [];
+      allRosterRows.push(...batch);
+      if (batch.length < pageSize) break;
+      from += pageSize;
+    }
+
+    // Build roster counts (count distinct children, not just rows, though rows should be distinct)
+    const counts: Record<string, Set<string>> = {};
+    allRosterRows.forEach((item) => {
+      if (!counts[item.event_id]) {
+        counts[item.event_id] = new Set();
+      }
+      if (item.child_id) {
+        counts[item.event_id].add(item.child_id);
+      }
     });
-    setRosterCounts(counts);
+    
+    const finalCounts: Record<string, number> = {};
+    Object.keys(counts).forEach(eventId => {
+      finalCounts[eventId] = counts[eventId].size;
+    });
+    setRosterCounts(finalCounts);
 
     // Filter events by user's accessible divisions
-    let filteredEvents = eventsResult.data || [];
+    let filteredEvents = allEvents;
     const divisionFilter = getDivisionFilter();
     if (divisionFilter !== null && divisionFilter.length > 0) {
       filteredEvents = filteredEvents.filter(event => {

@@ -385,20 +385,20 @@ export default function MasterCalendar() {
   const filterByChildRoster = async (childId: string) => {
     if (!childId) return true;
     
-    // Check sports_event_roster
-    const { data: sportsRoster } = await supabase
-      .from("sports_event_roster")
-      .select("event_id")
-      .eq("child_id", childId);
-    
-    // Check trip_attendees
-    const { data: tripAttendees } = await supabase
-      .from("trip_attendees")
-      .select("trip_id")
-      .eq("child_id", childId);
-    
-    return { sportsRoster: sportsRoster || [], tripAttendees: tripAttendees || [] };
-  };
+      // Check sports_event_roster
+      const { data: sportsRoster } = await supabase
+        .from("sports_event_roster")
+        .select("event_id")
+        .eq("child_id", childId);
+      
+      // Check trip_attendees
+      const { data: tripAttendees } = await supabase
+        .from("trip_attendees")
+        .select("trip_id")
+        .eq("child_id", childId);
+      
+      return { sportsRoster: sportsRoster || [], tripAttendees: tripAttendees || [] };
+    };
 
   const filterByStaffRoster = async (staffId: string) => {
     if (!staffId) return true;

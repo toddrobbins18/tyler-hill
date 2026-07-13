@@ -9,7 +9,8 @@ export function normalizeDivisionNameForFilter(name?: string | null): string {
   return name
     .replace(/\bSuper\s+Senior\b/gi, "Super")
     .replace(/\bTeens\b/gi, "Teen")
-    .replace(/\bTN\d+\b/gi, "")
+    .replace(/\bTN\d+\b/gi, "Teen")
+    .replace(/\bTeen\s+Teen\b/gi, "Teen")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
@@ -22,7 +23,8 @@ export function getDivisionDropdownLabel(name?: string | null): string {
   return name
     .replace(/\bSuper\s+Senior\b/gi, "Super")
     .replace(/\bTeens\b/gi, "Teen")
-    .replace(/\bTN\d+\b/gi, "")
+    .replace(/\bTN\d+\b/gi, "Teen")
+    .replace(/\bTeen\s+Teen\b/gi, "Teen")
     .replace(/\s+/g, " ")
     .trim();
 }

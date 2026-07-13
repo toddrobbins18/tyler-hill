@@ -132,6 +132,20 @@ const OwlPayReports = () => {
     const audienceLabel = reportAudience === "all" ? "all-buyers" : reportAudience;
     const filename = `owlpay-report_${currentCompany.slug ?? "camp"}_${fromYmd}_${toYmd}_${audienceLabel}.csv`;
 
+    const spentByPerson = new Map<string, { name: string; type: string; totalSpent: number; totalItems: number }>();
+    data.purchases.forEach((p) => {
+      if (p.is_free) return;
+      const key = `${p.buyer_type}-${p.camper_name}`;
+      if (!spentByPerson.has(key)) {
+        spentByPerson.set(key, { name: p.camper_name, type: p.buyer_type, totalSpent: 0, totalItems: 0 });
+      }
+      const person = spentByPerson.get(key)!;
+      person.totalSpent += p.amount;
+      person.totalItems += 1;
+    });
+
+    const sortedSpenders = Array.from(spentByPerson.values()).sort((a, b) => b.totalSpent - a.totalSpent);
+
     const summaryRows: (string | number | boolean)[][] = [
       ["Report", "Owl Pay"],
       ["Company", currentCompany.name ?? ""],
@@ -143,6 +157,9 @@ const OwlPayReports = () => {
       ["Total purchase lines (paid + free)", data.stats.totalPurchaseLines],
       ["Avg paid transaction", data.stats.avgTransaction.toFixed(2)],
       ["Most popular item", data.stats.mostPopular],
+      [],
+      ["Total Spent by Person — Name", "Type", "Total Spent", "Items Bought"],
+      ...sortedSpenders.map((s) => [s.name, s.type, s.totalSpent.toFixed(2), s.totalItems]),
       [],
       ["Daily summary — Camp date", "Revenue (paid)", "Paid items", "Free items", "Total lines"],
       ...dailyRowsForDisplay.map((d) => [

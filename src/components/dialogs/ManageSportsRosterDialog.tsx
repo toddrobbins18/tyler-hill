@@ -324,7 +324,9 @@ Please review this conflict and take appropriate action.`;
         await notifyDivisionLeaders(detectedConflicts, overrideReason, newChildren);
       }
 
+      // Delete existing roster entries first
       await supabase.from("sports_event_roster").delete().eq("event_id", eventId);
+      
       if (roster.size > 0) {
         // Sort roster alphabetically by camper name before saving
         const sortedRosterIds = Array.from(roster)
@@ -335,14 +337,21 @@ Please review this conflict and take appropriate action.`;
           .sort((a, b) => a.name.localeCompare(b.name))
           .map(item => item.childId);
 
-        const rosterEntries = sortedRosterIds.map((childId, index) => ({
-          event_id: eventId,
-          child_id: childId,
-          confirmed: true,
-          company_id: currentCompany?.id,
-          sort_order: index
-        }));
-        await supabase.from("sports_event_roster").insert(rosterEntries);
+        // Insert in batches of 100 to avoid request size limits
+        const batchSize = 100;
+        for (let i = 0; i < sortedRosterIds.length; i += batchSize) {
+          const batch = sortedRosterIds.slice(i, i + batchSize);
+          const rosterEntries = batch.map((childId, index) => ({
+            event_id: eventId,
+            child_id: childId,
+            confirmed: true,
+            company_id: currentCompany?.id,
+            sort_order: i + index
+          }));
+          
+          const { error: insertError } = await supabase.from("sports_event_roster").insert(rosterEntries);
+          if (insertError) throw insertError;
+        }
       }
 
       await supabase.from("sports_event_staff").delete().eq("event_id", eventId);
