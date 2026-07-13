@@ -61,6 +61,31 @@ export type CompleteOwlPayCheckoutResult = {
   free_item_applied: boolean;
 };
 
+/** Pricing payload used when claiming the daily free scan with no cart items. */
+export const OWL_PAY_FIRST_SCAN_PRICING: OwlPayCartPricing = {
+  subtotal: 0,
+  freeDiscount: 0,
+  total: 0,
+  freeItemApplied: true,
+  freeItemLineId: null,
+  freeItemName: null,
+};
+
+/** Record today's free canteen scan on first wristband scan — no item selection required. */
+export async function recordOwlPayFirstDailyScan(
+  supabase: SupabaseClient,
+  input: { companyId: string; childId: string; createdBy?: string | null },
+): Promise<CompleteOwlPayCheckoutResult> {
+  return completeOwlPayCheckout(supabase, {
+    companyId: input.companyId,
+    childId: input.childId,
+    staffId: null,
+    createdBy: input.createdBy ?? null,
+    pricing: OWL_PAY_FIRST_SCAN_PRICING,
+    transactions: [],
+  });
+}
+
 /** Single atomic checkout: daily scan + transaction rows + balance deduction. */
 export async function completeOwlPayCheckout(
   supabase: SupabaseClient,

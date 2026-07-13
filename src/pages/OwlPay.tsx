@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -24,7 +24,8 @@ import {
   normalizeRfidInput,
   rfidsMatch,
 } from "@/lib/rfidUtils";
-import { isFreeDailyItemAvailableToday } from "@/lib/owlPayCheckout";
+import { isFreeDailyItemAvailableToday, recordOwlPayFirstDailyScan } from "@/lib/owlPayCheckout";
+import OwlPayFirstScanModal from "@/components/owlpay/OwlPayFirstScanModal";
 
 interface StaffMember {
   id: string;
@@ -44,6 +45,8 @@ function OwlPayPage() {
   const [scanStatus, setScanStatus] = useState<"idle" | "scanning" | "success" | "error">("idle");
   const [scanBuffer, setScanBuffer] = useState("");
   const [lastKeyTime, setLastKeyTime] = useState(0);
+  const [firstScanCamper, setFirstScanCamper] = useState<OwlPayCamper | null>(null);
+  const [processingFirstScan, setProcessingFirstScan] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -161,6 +164,52 @@ function OwlPayPage() {
     }
   };
 
+  const handleFirstScanComplete = useCallback(() => {
+    setFirstScanCamper(null);
+    setSearchTerm("");
+    setScanStatus("idle");
+    loadCampers();
+  }, []);
+
+  const tryClaimFirstDailyScan = async (camper: OwlPayCamper): Promise<boolean> => {
+    if (!currentCompany?.id || processingFirstScan) return false;
+
+    const hasFreeItem = await checkFreeDailyItemAvailable(camper.id);
+    if (!hasFreeItem) return false;
+
+    setProcessingFirstScan(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      await recordOwlPayFirstDailyScan(supabase, {
+        companyId: currentCompany.id,
+        childId: camper.id,
+        createdBy: user?.id,
+      });
+
+      setSelectedCamper(null);
+      setCart([]);
+      setHasFreeDailyItemAvailable(false);
+      setIsStaffSelected(false);
+      setScanStatus("success");
+      setFirstScanCamper(camper);
+      setSearchTerm("");
+      return true;
+    } catch (error: any) {
+      const message = String(error?.message || "");
+      if (message.toLowerCase().includes("already used")) {
+        return false;
+      }
+      toast({
+        title: "Free scan failed",
+        description: message || "Unable to record free daily item",
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      setProcessingFirstScan(false);
+    }
+  };
+
   const selectByRFID = async (rfidRaw: string) => {
     const rfid = normalizeRfidInput(rfidRaw);
     if (!rfid || !currentCompany?.id || !selectedSeason) {
@@ -174,6 +223,12 @@ function OwlPayPage() {
       (await lookupOwlPayCamperByRfid(rfid, currentCompany.id, selectedSeason)) ??
       findInListByRfid(campers, rfid);
     if (camperMatch) {
+      const claimedFirstScan = await tryClaimFirstDailyScan(camperMatch as OwlPayCamper);
+      if (claimedFirstScan) {
+        setTimeout(() => setScanStatus("idle"), 1000);
+        return;
+      }
+
       setScanStatus("success");
       await handleCamperSelect(camperMatch as OwlPayCamper);
       toast({ title: "✓ Camper Found", description: camperMatch.name, duration: 2000 });
@@ -268,6 +323,12 @@ function OwlPayPage() {
 
   return (
     <div className="space-y-6">
+      <OwlPayFirstScanModal
+        open={!!firstScanCamper}
+        camperName={firstScanCamper?.name ?? ""}
+        camperPhoto={firstScanCamper?.photo_url}
+        onClose={handleFirstScanComplete}
+      />
       <div>
         <h1 className="text-3xl font-bold mb-2">🦉 Owl Pay</h1>
         <p className="text-muted-foreground">Point-of-sale canteen system with RFID scanning</p>
