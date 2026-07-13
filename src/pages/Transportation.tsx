@@ -26,6 +26,7 @@ import { format, isSameDay, isWithinInterval } from "date-fns";
 import { formatTime12Hour, parseLocalDate } from "@/lib/utils";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
+import { compareByLastName } from "@/lib/nameSortUtils";
 
 export default function Transportation() {
   const { currentSeason } = useSeasonContext();
@@ -175,7 +176,7 @@ export default function Transportation() {
 
     setRosterData({
       trip,
-      children: roster?.map(r => r.child) || [],
+      children: (roster?.map(r => r.child).filter(Boolean) || []).sort(compareByLastName),
       coaches: staff?.filter(s => s.role === "coach").map(s => s.staff) || [],
       refs: staff?.filter(s => s.role === "ref").map(s => s.staff) || [],
     });

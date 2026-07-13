@@ -15,6 +15,7 @@ import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { Users, Plus, Trash2, Search, Edit, Copy } from "lucide-react";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
+import { compareByLastName } from "@/lib/nameSortUtils";
 
 interface RosterTemplate {
   id: string;
@@ -146,7 +147,7 @@ export default function RosterTemplates() {
     const divisionOrder =
       (a.division?.sort_order ?? 999) - (b.division?.sort_order ?? 999);
     if (divisionOrder !== 0) return divisionOrder;
-    return a.name.localeCompare(b.name);
+    return compareByLastName(a, b);
   });
 
   const resetForm = () => {
@@ -189,7 +190,7 @@ export default function RosterTemplates() {
           const child = children.find(c => c.id === childId);
           return { childId, name: child?.name || "" };
         })
-        .sort((a, b) => a.name.localeCompare(b.name))
+        .sort((a, b) => compareByLastName({ name: a.name }, { name: b.name }))
         .map(({ childId }, index) => ({
           template_id: template.id,
           child_id: childId,
@@ -246,7 +247,7 @@ export default function RosterTemplates() {
           const child = children.find(c => c.id === childId);
           return { childId, name: child?.name || "" };
         })
-        .sort((a, b) => a.name.localeCompare(b.name))
+        .sort((a, b) => compareByLastName({ name: a.name }, { name: b.name }))
         .map(({ childId }, index) => ({
           template_id: editingTemplate.id,
           child_id: childId,

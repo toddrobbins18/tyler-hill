@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useConflictDetection, Conflict } from "@/hooks/useConflictDetection";
 import ConflictWarningDialog from "./ConflictWarningDialog";
+import { compareByLastName } from "@/lib/nameSortUtils";
 
 interface ManageSportsRosterDialogProps {
   eventId: string;
@@ -146,7 +147,7 @@ export default function ManageSportsRosterDialog({
           : Promise.resolve({ data: [] as any[] }),
       ]);
 
-      setChildren(childrenData || []);
+      setChildren((childrenData || []).sort(compareByLastName));
       setStaff(staffData || []);
       setTemplates([]);
     } else {
@@ -164,10 +165,8 @@ export default function ManageSportsRosterDialog({
             .order("created_at", { ascending: false }),
         ]);
 
-        // Sort children alphabetically by name
-        const sortedChildren = [...(childrenData || [])].sort((a, b) => 
-          (a.name || "").localeCompare(b.name || "")
-        );
+        // Sort children by last name
+        const sortedChildren = [...(childrenData || [])].sort(compareByLastName);
 
         // Sort template children by sort_order
         const processedTemplates = (templatesResult.data || []).map(template => ({
@@ -328,13 +327,13 @@ Please review this conflict and take appropriate action.`;
       await supabase.from("sports_event_roster").delete().eq("event_id", eventId);
       
       if (roster.size > 0) {
-        // Sort roster alphabetically by camper name before saving
+        // Sort roster by last name before saving
         const sortedRosterIds = Array.from(roster)
           .map(childId => {
             const child = children.find(c => c.id === childId);
             return { childId, name: child?.name || "" };
           })
-          .sort((a, b) => a.name.localeCompare(b.name))
+          .sort((a, b) => compareByLastName({ name: a.name }, { name: b.name }))
           .map(item => item.childId);
 
         // Insert in batches of 100 to avoid request size limits
@@ -474,7 +473,7 @@ Please review this conflict and take appropriate action.`;
     )
     .sort((a, b) => {
       if (sortBy === "name") {
-        return a.name.localeCompare(b.name);
+        return compareByLastName(a, b);
       } else if (sortBy === "age") {
         return (a.age || 0) - (b.age || 0);
       } else if (sortBy === "grade") {

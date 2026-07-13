@@ -21,6 +21,7 @@ import {
   getDivisionDropdownLabel,
   normalizeDivisionNameForFilter,
 } from "@/lib/divisionFilterUtils";
+import { compareByLastName } from "@/lib/nameSortUtils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -112,8 +113,8 @@ export default function Roster() {
         from += CAMPERS_PAGE_SIZE;
       }
 
-      // Ensure exact alphabetical order by name
-      rows.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      // Ensure roster list is sorted by last name
+      rows.sort(compareByLastName);
 
       setChildren(rows);
     } catch (err) {
@@ -190,9 +191,9 @@ export default function Roster() {
         const nameA = normalizeDivisionNameForFilter(a.division?.name);
         const nameB = normalizeDivisionNameForFilter(b.division?.name);
         if (nameA !== nameB) return nameA.localeCompare(nameB);
-        return a.name.localeCompare(b.name);
+        return compareByLastName(a, b);
       }
-      return a.name.localeCompare(b.name);
+      return compareByLastName(a, b);
     });
 
   const totalPages = Math.ceil(filteredChildren.length / itemsPerPage);
