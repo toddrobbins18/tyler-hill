@@ -33,17 +33,27 @@ export async function isFreeDailyItemAvailableToday(
   companyId: string,
   childId: string,
 ): Promise<boolean> {
-  const today = getOwlPayCampDateYmd();
-  const { data, error } = await supabase
-    .from("owl_pay_daily_scans")
-    .select("id")
-    .eq("company_id", companyId)
-    .eq("child_id", childId)
-    .eq("scan_date", today)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc("is_owl_pay_free_daily_available", {
+    _company_id: companyId,
+    _child_id: childId,
+  });
 
-  if (error) throw error;
-  return !data;
+  if (error) {
+    // Fallback for environments before migration is applied.
+    const today = getOwlPayCampDateYmd();
+    const { data: row, error: selectError } = await supabase
+      .from("owl_pay_daily_scans")
+      .select("id")
+      .eq("company_id", companyId)
+      .eq("child_id", childId)
+      .eq("scan_date", today)
+      .maybeSingle();
+
+    if (selectError) throw selectError;
+    return !row;
+  }
+
+  return Boolean(data);
 }
 
 export type CompleteOwlPayCheckoutInput = {

@@ -23,6 +23,7 @@ import {
   lookupOwlPayStaffByRfid,
   normalizeRfidInput,
   rfidsMatch,
+  type OwlPayCamperRfidMatch,
 } from "@/lib/rfidUtils";
 import { isFreeDailyItemAvailableToday, recordOwlPayFirstDailyScan } from "@/lib/owlPayCheckout";
 import OwlPayFirstScanModal from "@/components/owlpay/OwlPayFirstScanModal";
@@ -151,6 +152,7 @@ function OwlPayPage() {
   };
 
   const handleCamperSelect = async (camper: OwlPayCamper) => {
+    setFirstScanCamper(null);
     setSelectedCamper(camper);
     setCart([]);
     setIsStaffSelected(false);
@@ -162,6 +164,22 @@ function OwlPayPage() {
         description: `${camper.name} can get one free snack or drink today.`,
       });
     }
+  };
+
+  const openCamperCheckout = async (camper: OwlPayCamperRfidMatch | OwlPayCamper) => {
+    const normalized: OwlPayCamper = {
+      id: camper.id,
+      name: camper.name,
+      rfid: camper.rfid ?? null,
+      photo_url: camper.photo_url ?? null,
+      owl_pay_balance: Number(camper.owl_pay_balance ?? 0),
+      person_id: camper.person_id ?? null,
+    };
+    setFirstScanCamper(null);
+    setScanStatus("success");
+    await handleCamperSelect(normalized);
+    toast({ title: "✓ Camper Found", description: normalized.name, duration: 2000 });
+    setTimeout(() => { setSearchTerm(""); setScanStatus("idle"); }, 1000);
   };
 
   const handleFirstScanComplete = useCallback(() => {
@@ -229,10 +247,7 @@ function OwlPayPage() {
         return;
       }
 
-      setScanStatus("success");
-      await handleCamperSelect(camperMatch as OwlPayCamper);
-      toast({ title: "✓ Camper Found", description: camperMatch.name, duration: 2000 });
-      setTimeout(() => { setSearchTerm(""); setScanStatus("idle"); }, 1000);
+      await openCamperCheckout(camperMatch as OwlPayCamper);
       return;
     }
 
