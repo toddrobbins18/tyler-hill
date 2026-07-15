@@ -3,6 +3,19 @@ import { toBirthdayIsoDate } from "./birthdayCalendar";
 import { normalizeCsvPersonId } from "./csvPersonIdResolve";
 import { pickCell, parseYesNo } from "./spreadsheetRowUtils";
 
+/** Excel often stores IDs and text columns as numbers — coerce for Zod string fields. */
+function coerceCsvString(value: unknown): string | null {
+  if (value == null || value === "") return null;
+  const text = String(value).trim();
+  return text || null;
+}
+
+function parseCsvAge(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : parseInt(String(value).trim(), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
 // Child validation schema - Only name and person_id are required
 export const childSchema = z.object({
   name: z.string().trim().min(1, "First and Last Name are required").max(100, "Name must be less than 100 characters"),
@@ -206,22 +219,43 @@ export function parseBunkStaffRow(row: Record<string, any>) {
 }
 
 // Convert CSV row to typed object for children
-export function parseChildRow(row: Record<string, any>) {
-  const firstName = row.first_name || row['First Name'] || row.firstname || '';
-  const lastName = row.last_name || row['Last Name'] || row.lastname || '';
-  const fullName = `${firstName} ${lastName}`.trim() || row.name || '';
-  
+export function parseChildRow(row: Record<string, any>): Record<string, unknown> | null {
+  const division = coerceCsvString(row.Division || row.division)?.toLowerCase();
+  if (division === "staff") return null;
+
+  const firstName = coerceCsvString(row.first_name || row["First Name"] || row.firstname) || "";
+  const lastName = coerceCsvString(row.last_name || row["Last Name"] || row.lastname) || "";
+  const fullName = `${firstName} ${lastName}`.trim() || coerceCsvString(row.name) || "";
+
+  const personId = normalizeCsvPersonId(
+    row.person_id ?? row["Person ID"] ?? row.PersonID ?? row.personid,
+  );
+
+  let allergies =
+    coerceCsvString(row.allergies || row.Allergies || row["All Allergies"] || row["All allergies"]) ??
+    null;
+  const epiPen = row["Epi Pen"] ?? row["Epi pen"] ?? row.epi_pen ?? row.EpiPen;
+  if (epiPen != null && String(epiPen).trim() !== "") {
+    const epiLabel =
+      String(epiPen).trim().toLowerCase() === "yes"
+        ? "Epi Pen: Yes"
+        : String(epiPen).trim().toLowerCase() === "no"
+          ? "Epi Pen: No"
+          : `Epi Pen: ${String(epiPen).trim()}`;
+    allergies = allergies ? `${allergies}; ${epiLabel}` : epiLabel;
+  }
+
   return {
     name: fullName,
-    person_id: row.person_id || row['Person ID'] || row.PersonID || row.personid || '',
-    age: row.age || row.Age ? parseInt(row.age || row.Age, 10) : null,
-    grade: row.grade || row.Grade || null,
-    group_name: row.group_name || row['Group Name'] || null,
-    guardian_email: row.guardian_email || row['Guardian Email'] || null,
-    guardian_phone: row.guardian_phone || row['Guardian Phone'] || null,
-    emergency_contact: row.emergency_contact || row['Emergency Contact'] || null,
-    allergies: row.allergies || row.Allergies || null,
-    medical_notes: row.medical_notes || row['Medical Notes'] || null,
+    person_id: personId,
+    age: parseCsvAge(row.age ?? row.Age),
+    grade: coerceCsvString(row.grade || row.Grade),
+    group_name: coerceCsvString(row.group_name || row["Group Name"]),
+    guardian_email: coerceCsvString(row.guardian_email || row["Guardian Email"]),
+    guardian_phone: coerceCsvString(row.guardian_phone || row["Guardian Phone"]),
+    emergency_contact: coerceCsvString(row.emergency_contact || row["Emergency Contact"]),
+    allergies,
+    medical_notes: coerceCsvString(row.medical_notes || row["Medical Notes"]),
   };
 }
 

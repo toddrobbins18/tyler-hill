@@ -26,6 +26,15 @@ function buildRosterSummary(result: Omit<RosterSyncResult, "message">, label: st
   };
 }
 
+function omitNullishFields(data: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value === null || value === undefined) continue;
+    result[key] = value;
+  }
+  return result;
+}
+
 export async function syncChildrenFromCsv(
   client: SupabaseClient,
   validatedRows: Record<string, unknown>[],
@@ -77,7 +86,7 @@ export async function syncChildrenFromCsv(
 
   let updateErrors = 0;
   for (const item of toUpdate) {
-    const updatePayload = { ...item.data };
+    const updatePayload = omitNullishFields({ ...item.data });
     delete updatePayload.person_id;
     const { error: updateError } = await client
       .from("children")

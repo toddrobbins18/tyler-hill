@@ -366,6 +366,7 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
       for (let i = 0; i < rawRows.length; i++) {
         try {
           const parsed = parser(rawRows[i]);
+          if (parsed == null) continue;
           if (tableName === "medication_logs") {
             const pid = String(parsed.person_id ?? "").trim();
             const med = String(parsed.medication_name ?? "").trim();
