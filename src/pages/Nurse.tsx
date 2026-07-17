@@ -107,6 +107,10 @@ export default function Nurse() {
   const [newAdmissionNote, setNewAdmissionNote] = useState<Record<string, string>>({});
   const [unadministerTarget, setUnadministerTarget] = useState<any | null>(null);
   const [refuseTarget, setRefuseTarget] = useState<any | null>(null);
+  const [checkoutConfirmTarget, setCheckoutConfirmTarget] = useState<{
+    id: string;
+    name?: string;
+  } | null>(null);
   const [rfidInput, setRfidInput] = useState("");
   const [scannedChild, setScannedChild] = useState<any>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -1172,13 +1176,17 @@ export default function Nurse() {
 
     if (error) {
       toast({ title: "Error checking out child", variant: "destructive" });
-      return;
+      return false;
     }
 
     toast({ title: "Checked out successfully" });
     fetchAdmissions();
     fetchAdmissionHistory();
     return true;
+  };
+
+  const requestCheckout = (admissionId: string, name?: string) => {
+    setCheckoutConfirmTarget({ id: admissionId, name });
   };
 
   // Health Center RFID Scan Handler
@@ -1236,15 +1244,8 @@ export default function Nurse() {
         .maybeSingle();
 
       if (existingAdmission) {
-        // Auto check-out
-        await handleCheckout(existingAdmission.id);
-        toast({
-          title: "✓ Checked Out",
-          description: `${entity.name} has been checked out of the Health Center`,
-        });
-        setHealthCenterScannedEntity({ ...entity, action: 'checkout', entityType });
+        requestCheckout(existingAdmission.id, entity.name);
         setHealthCenterRfidInput("");
-        setTimeout(() => setHealthCenterScannedEntity(null), 3000);
       } else {
         // Show admission form
         setHealthCenterScannedEntity({ ...entity, action: 'admit', entityType });
@@ -2293,7 +2294,7 @@ export default function Nurse() {
                             </div>
                             <Button
                               size="sm"
-                              onClick={() => handleCheckout(admission.id)}
+                              onClick={() => requestCheckout(admission.id, entity?.name)}
                               className="shrink-0"
                             >
                               <UserCheck className="h-4 w-4 mr-2" />
@@ -2861,6 +2862,36 @@ export default function Nurse() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Confirm refusal
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!checkoutConfirmTarget}
+        onOpenChange={(open) => !open && setCheckoutConfirmTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discharge from Health Center?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {checkoutConfirmTarget?.name
+                ? `Are you sure you want to check out ${checkoutConfirmTarget.name}?`
+                : "Are you sure you want to check this person out of the health center?"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!checkoutConfirmTarget) return;
+                const ok = await handleCheckout(checkoutConfirmTarget.id);
+                if (ok) {
+                  setCheckoutConfirmTarget(null);
+                }
+              }}
+            >
+              Yes, check out
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
