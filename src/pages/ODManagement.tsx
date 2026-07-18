@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { format, addDays } from "date-fns";
+import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, getDay, parseISO } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarIcon, AlertTriangle, Search, ArrowLeftRight, ChevronLeft, ChevronRight, Radio, Settings, Clock, AlertCircle, Moon, Upload } from "lucide-react";
+import { CalendarIcon, AlertTriangle, Search, ArrowLeftRight, ChevronLeft, ChevronRight, Radio, Settings, Clock, AlertCircle, Moon, Upload, RefreshCw } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
   buildNightOffScheduleDateRange,
@@ -42,6 +42,7 @@ import StaffDaysOffCSVUploader from "@/components/admin/StaffDaysOffCSVUploader"
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { getSeasonDateRange } from "@/lib/odWeeklyDayOffPatterns";
 
 interface Staff {
   id: string;
@@ -139,6 +140,7 @@ export default function ODManagement() {
   const [nightOffSchedule, setNightOffSchedule] = useState<NightOffScheduleEntry[]>([]);
   const [loadingNightSchedule, setLoadingNightSchedule] = useState(false);
   const [savingNightDate, setSavingNightDate] = useState<string | null>(null);
+  const [repeating, setRepeating] = useState(false);
 
   // OD Management is available globally for all camps
 
@@ -563,6 +565,102 @@ export default function ODManagement() {
       toast({ title: "Error updating night off", variant: "destructive" });
     } finally {
       setSavingNightDate(null);
+    }
+  };
+
+  const handleRepeatWeekly = async () => {
+    if (!manageNightsStaffId || !currentCompany?.id) return;
+    
+    setRepeating(true);
+    try {
+      const { start, end } = getSeasonDateRange(currentSeason);
+      const seasonStart = parseISO(start);
+      const seasonEnd = parseISO(end);
+      
+      // Get the week range for the current week displayed in the dialog
+      // The dialog shows building around selectedDate
+      const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 }); // Monday
+      const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 }); // Sunday
+      
+      const weekDates = eachDayOfInterval({ start: weekStart, end: weekEnd });
+      const weekDateStrings = weekDates.map(d => format(d, "yyyy-MM-dd"));
+
+      // Fetch all entries for this staff member for this week
+      const { data: weekRecords, error: fetchError } = await supabase
+        .from("staff_days_off")
+        .select("date, is_day_off, is_night_off, notes")
+        .eq("company_id", currentCompany.id)
+        .eq("season", currentSeason)
+        .eq("staff_id", manageNightsStaffId)
+        .in("date", weekDateStrings);
+
+      if (fetchError) throw fetchError;
+
+      const weekPattern = new Map<number, { is_day_off: boolean; is_night_off: boolean; notes: string | null }>();
+      
+      // Initialize with default (on duty)
+      for (let i = 0; i < 7; i++) {
+        weekPattern.set(i, { is_day_off: false, is_night_off: false, notes: null });
+      }
+
+      // Populate with existing data from the current week
+      weekRecords?.forEach(record => {
+        const dow = getDay(parseISO(record.date));
+        weekPattern.set(dow, { 
+          is_day_off: !!record.is_day_off, 
+          is_night_off: !!record.is_night_off,
+          notes: record.notes
+        });
+      });
+
+      // Now expand this pattern to the entire season
+      const toUpsert: any[] = [];
+      let cursor = seasonStart;
+      
+      while (cursor <= seasonEnd) {
+        const dow = getDay(cursor);
+        const dateStr = format(cursor, "yyyy-MM-dd");
+        const pattern = weekPattern.get(dow);
+        
+        if (pattern && (pattern.is_day_off || pattern.is_night_off)) {
+          toUpsert.push({
+            company_id: currentCompany.id,
+            staff_id: manageNightsStaffId,
+            season: currentSeason,
+            date: dateStr,
+            is_day_off: pattern.is_day_off,
+            is_night_off: pattern.is_night_off,
+            notes: pattern.notes,
+            updated_at: new Date().toISOString()
+          });
+        }
+        cursor = addDays(cursor, 1);
+      }
+
+      if (toUpsert.length > 0) {
+        // Use chunks of 100 to avoid request size limits
+        for (let i = 0; i < toUpsert.length; i += 100) {
+          const chunk = toUpsert.slice(i, i + 100);
+          const { error: upsertError } = await supabase
+            .from("staff_days_off")
+            .upsert(chunk, { onConflict: "company_id,staff_id,date,season" });
+          
+          if (upsertError) throw upsertError;
+        }
+      }
+
+      toast({ 
+        title: "Weekly schedule repeated", 
+        description: `Successfully applied this week's pattern to the entire summer for ${manageNightsStaffName}.`
+      });
+      
+      await loadNightOffSchedule(manageNightsStaffId);
+      await fetchData();
+    } catch (error) {
+      console.error("Error repeating weekly schedule:", error);
+      toast({ title: "Failed to repeat schedule", variant: "destructive" });
+    } finally {
+      setRepeating(false);
     }
   };
 
@@ -1264,8 +1362,26 @@ export default function ODManagement() {
               ))
             )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowManageNightsDialog(false)}>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="secondary" 
+                    className="w-full sm:w-auto"
+                    onClick={handleRepeatWeekly}
+                    disabled={repeating || !manageNightsStaffId}
+                  >
+                    <RefreshCw className={cn("h-4 w-4 mr-2", repeating && "animate-spin")} />
+                    {repeating ? "Repeating..." : "Repeat This Week for Summer"}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  Copies the day off and night off pattern from this current week to every week of the summer (Jun 1 - Aug 31).
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setShowManageNightsDialog(false)}>
               Done
             </Button>
           </DialogFooter>
