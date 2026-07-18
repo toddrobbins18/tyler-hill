@@ -45,6 +45,17 @@ const MISSED_MED_TIMEZONE = "America/New_York";
  */
 export const MISSED_MED_GRACE_MINUTES = 30;
 
+/** Default minute-of-day offsets for meal-time-only medications (fallback when scheduled_time is null). */
+const MEAL_TIME_FALLBACK_MINUTES: Record<string, number> = {
+  "Before Breakfast": 8 * 60, // 8:00 AM
+  "After Breakfast": 9 * 60, // 9:00 AM
+  "Before Lunch": 12 * 60, // 12:00 PM
+  "After Lunch": 13 * 60, // 1:00 PM
+  "Before Dinner": 18 * 60, // 6:00 PM
+  "After Dinner": 19 * 60, // 7:00 PM
+  "Bedtime": 21 * 60, // 9:00 PM
+};
+
 /** Parse HH:MM or HH:MM:SS (Postgres TIME) into minutes since midnight. */
 export function scheduledTimeToMinutes(scheduled: string | null | undefined): number | null {
   if (!scheduled || typeof scheduled !== "string") return null;
@@ -72,12 +83,27 @@ function minutesSinceMidnightInTimezone(now: Date, timeZone: string): number {
 /** True when current Eastern time is at or after the medication's scheduled slot. */
 export function medicationAlertIsDue(
   now: Date,
-  scheduledTime: string | null | undefined,
+  med: Pick<MedicationLogRow, "scheduled_time" | "meal_time">,
   timeZone = MISSED_MED_TIMEZONE,
   graceMinutes = MISSED_MED_GRACE_MINUTES,
 ): boolean {
-  const slotMin = scheduledTimeToMinutes(scheduledTime);
-  if (slotMin === null) return true;
+  let slotMin = scheduledTimeToMinutes(med.scheduled_time);
+
+  // Fallback to meal time if no specific scheduled time
+  if (slotMin === null && med.meal_time) {
+    const meals = Array.isArray(med.meal_time) ? med.meal_time : [med.meal_time];
+    for (const m of meals) {
+      if (typeof m === "string" && m in MEAL_TIME_FALLBACK_MINUTES) {
+        const min = MEAL_TIME_FALLBACK_MINUTES[m];
+        if (slotMin === null || min < slotMin) {
+          slotMin = min; // Use the earliest meal time if multiple
+        }
+      }
+    }
+  }
+
+  if (slotMin === null) return false;
+
   const nowMin = minutesSinceMidnightInTimezone(now, timeZone);
   return nowMin >= slotMin + graceMinutes;
 }

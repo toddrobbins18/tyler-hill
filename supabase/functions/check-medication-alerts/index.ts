@@ -98,7 +98,7 @@ serve(async (req) => {
         (med) => !med.administered && !med.refused && !isAsNeededMedication(med) && !medicationAlreadyAlerted(med, dateRows),
       );
 
-      const dueMeds = pending.filter((med) => medicationAlertIsDue(now, med.scheduled_time));
+      const dueMeds = pending.filter((med) => medicationAlertIsDue(now, med));
 
       if (!dueMeds.length) {
         continue;
