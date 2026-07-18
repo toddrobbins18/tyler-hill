@@ -1,5 +1,24 @@
 -- Migration to schedule the roster preview email for division leaders.
 
+-- Collapses suffixes like "A", "B", "1", "2" so that division leaders for "Freshman A" 
+-- can see "Freshman B" and "Freshman" (canonical) campers.
+CREATE OR REPLACE FUNCTION public.normalize_division_name_for_filter(name text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT lower(trim(regexp_replace(
+    regexp_replace(
+      regexp_replace(
+        regexp_replace(COALESCE(name, ''), '\mSuper\s+Senior\M', 'Super', 'gi'),
+        '\mTN\d+\M', '', 'gi'
+      ),
+      '\s+[A-Z0-9]\M', '', 'g'
+    ),
+    '\s+', ' ', 'g'
+  )));
+$$;
+
 -- Ensure the email type exists in the config (optional but good practice if we want to manage it via UI later)
 INSERT INTO public.automated_email_config (company_id, email_type, recipient_tags, enabled, send_timing)
 SELECT 

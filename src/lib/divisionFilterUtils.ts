@@ -11,6 +11,7 @@ export function normalizeDivisionNameForFilter(name?: string | null): string {
     .replace(/\bTeens\b/gi, "Teen")
     .replace(/\bTN\d+\b/gi, "Teen")
     .replace(/\bTeen\s+Teen\b/gi, "Teen")
+    .replace(/\s+[A-Z0-9]\b/gi, "")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();

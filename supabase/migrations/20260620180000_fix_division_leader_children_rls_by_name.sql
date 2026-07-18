@@ -1,5 +1,6 @@
 -- Robust division_leader children access: match by normalized division name within user's company.
--- Fixes hardylilly234@gmail.com seeing 0 Teen Boys campers when permission UUID != child division UUID.
+-- Collapses suffixes like "A", "B", "1", "2" so that division leaders for "Freshman A" 
+-- can see "Freshman B" and "Freshman" (canonical) campers.
 
 CREATE OR REPLACE FUNCTION public.normalize_division_name_for_filter(name text)
 RETURNS text
@@ -8,8 +9,11 @@ IMMUTABLE
 AS $$
   SELECT lower(trim(regexp_replace(
     regexp_replace(
-      regexp_replace(COALESCE(name, ''), '\mSuper\s+Senior\M', 'Super', 'gi'),
-      '\mTN\d+\M', '', 'gi'
+      regexp_replace(
+        regexp_replace(COALESCE(name, ''), '\mSuper\s+Senior\M', 'Super', 'gi'),
+        '\mTN\d+\M', '', 'gi'
+      ),
+      '\s+[A-Z0-9]\M', '', 'g'
     ),
     '\s+', ' ', 'g'
   )));
