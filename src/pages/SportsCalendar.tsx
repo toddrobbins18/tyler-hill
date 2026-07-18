@@ -1139,6 +1139,7 @@ export default function SportsCalendar() {
                   )}
                   <SelectItem value="WC One Day Tournament">WC One Day Tournament</SelectItem>
                   <SelectItem value="WC Knock Out Tournament">WC Knock Out Tournament</SelectItem>
+                  <SelectItem value="Tournament">Tournament</SelectItem>
                   <SelectItem value="Exhibition/Friendly">Exhibition/Friendly</SelectItem>
                   <SelectItem value="Invitational">Invitational</SelectItem>
                   <SelectItem value="Other">Other</SelectItem>

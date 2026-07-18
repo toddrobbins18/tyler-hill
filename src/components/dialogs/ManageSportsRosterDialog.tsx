@@ -115,6 +115,22 @@ export default function ManageSportsRosterDialog({
       .select("*")
       .eq("event_id", eventId);
 
+    const { data: eventWithDivs } = await supabase
+      .from("sports_calendar")
+      .select(`
+        *,
+        sports_calendar_divisions(division_id, division:divisions(id, name, gender))
+      `)
+      .eq("id", eventId)
+      .single();
+
+    if (eventWithDivs) {
+      setEventDetails({
+        ...eventWithDivs,
+        divisions: eventWithDivs.sports_calendar_divisions?.map((d: any) => d.division) || []
+      });
+    }
+
     const rosterSet = new Set(rosterData?.map(r => r.child_id) || []);
     const coachIds = staffAssignments?.filter(s => s.role === "coach").map(s => s.staff_id) || [];
     const refIds = staffAssignments?.filter(s => s.role === "ref").map(s => s.staff_id) || [];
@@ -591,39 +607,150 @@ Please review this conflict and take appropriate action.`;
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                 </div>
               ) : (
-                <div className="flex-1 overflow-y-auto border rounded-md p-4 space-y-2">
-                  {filteredAndSortedChildren.map((child) => (
-                    <div
-                      key={child.id}
-                      className="flex items-center gap-3 p-3 hover:bg-muted rounded-lg transition-colors"
-                    >
-                      {!readOnly && (
-                        <Checkbox
-                          id={child.id}
-                          checked={roster.has(child.id)}
-                          onCheckedChange={() => handleToggleChild(child.id)}
-                        />
-                      )}
-                      <label
-                        htmlFor={readOnly ? undefined : child.id}
-                        className={`flex-1 ${readOnly ? "" : "cursor-pointer"} flex items-center justify-between`}
+                <div className="flex-1 overflow-y-auto border rounded-md p-4 space-y-4">
+                  {(() => {
+                    const eventDivisions = eventDetails?.divisions || [];
+                    const eventDivIds = new Set(eventDivisions.map((d: any) => d.id));
+
+                    if (eventDivisions.length > 1) {
+                      return (
+                        <>
+                          {eventDivisions.map((division: any) => {
+                            const divisionCampers = filteredAndSortedChildren.filter(
+                              (c) => c.division_id === division.id
+                            );
+                            if (divisionCampers.length === 0 && readOnly) return null;
+
+                            return (
+                              <div key={division.id} className="space-y-2">
+                                <div className="bg-muted px-3 py-1.5 rounded-md text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                                  {division.name}
+                                </div>
+                                {divisionCampers.map((child) => (
+                                  <div
+                                    key={child.id}
+                                    className="flex items-center gap-3 p-2 hover:bg-muted/50 rounded-lg transition-colors border-b last:border-0"
+                                  >
+                                    {!readOnly && (
+                                      <Checkbox
+                                        id={child.id}
+                                        checked={roster.has(child.id)}
+                                        onCheckedChange={() => handleToggleChild(child.id)}
+                                      />
+                                    )}
+                                    <label
+                                      htmlFor={readOnly ? undefined : child.id}
+                                      className={`flex-1 ${readOnly ? "" : "cursor-pointer"} flex items-center justify-between`}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-medium">{child.name}</span>
+                                        {child.allergies && (
+                                          <Badge variant="destructive" className="text-[10px] h-4">
+                                            ⚠️ Allergies
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      <div className="flex gap-4 text-xs text-muted-foreground">
+                                        {child.age && <span>Age: {child.age}</span>}
+                                        {child.grade && <span>Grade: {child.grade}</span>}
+                                      </div>
+                                    </label>
+                                  </div>
+                                ))}
+                                {divisionCampers.length === 0 && !readOnly && (
+                                  <div className="text-xs text-muted-foreground italic px-4 py-2">No campers in this division</div>
+                                )}
+                              </div>
+                            );
+                          })}
+
+                          {/* Other divisions */}
+                          {(() => {
+                            const otherCampers = filteredAndSortedChildren.filter(
+                              (c) => !eventDivIds.has(c.division_id)
+                            );
+                            if (otherCampers.length === 0) return null;
+
+                            return (
+                              <div className="space-y-2 mt-4">
+                                <div className="bg-muted px-3 py-1.5 rounded-md text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                                  Other Divisions
+                                </div>
+                                {otherCampers.map((child) => (
+                                  <div
+                                    key={child.id}
+                                    className="flex items-center gap-3 p-2 hover:bg-muted/50 rounded-lg transition-colors border-b last:border-0"
+                                  >
+                                    {!readOnly && (
+                                      <Checkbox
+                                        id={child.id}
+                                        checked={roster.has(child.id)}
+                                        onCheckedChange={() => handleToggleChild(child.id)}
+                                      />
+                                    )}
+                                    <label
+                                      htmlFor={readOnly ? undefined : child.id}
+                                      className={`flex-1 ${readOnly ? "" : "cursor-pointer"} flex items-center justify-between`}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <div>
+                                          <div className="font-medium">{child.name}</div>
+                                          <div className="text-[10px] text-muted-foreground">{child.division?.name || "No Division"}</div>
+                                        </div>
+                                        {child.allergies && (
+                                          <Badge variant="destructive" className="text-[10px] h-4">
+                                            ⚠️ Allergies
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      <div className="flex gap-4 text-xs text-muted-foreground">
+                                        {child.age && <span>Age: {child.age}</span>}
+                                        {child.grade && <span>Grade: {child.grade}</span>}
+                                      </div>
+                                    </label>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                        </>
+                      );
+                    }
+
+                    // Default single list
+                    return filteredAndSortedChildren.map((child) => (
+                      <div
+                        key={child.id}
+                        className="flex items-center gap-3 p-3 hover:bg-muted rounded-lg transition-colors"
                       >
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{child.name}</span>
-                          {child.allergies && (
-                            <Badge variant="destructive" className="text-xs">
-                              ⚠️ Allergies
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex gap-4 text-sm text-muted-foreground">
-                          {child.age && <span>Age: {child.age}</span>}
-                          {child.grade && <span>Grade: {child.grade}</span>}
-                          {child.group_name && <span>Group: {child.group_name}</span>}
-                        </div>
-                      </label>
-                    </div>
-                  ))}
+                        {!readOnly && (
+                          <Checkbox
+                            id={child.id}
+                            checked={roster.has(child.id)}
+                            onCheckedChange={() => handleToggleChild(child.id)}
+                          />
+                        )}
+                        <label
+                          htmlFor={readOnly ? undefined : child.id}
+                          className={`flex-1 ${readOnly ? "" : "cursor-pointer"} flex items-center justify-between`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{child.name}</span>
+                            {child.allergies && (
+                              <Badge variant="destructive" className="text-xs">
+                                ⚠️ Allergies
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex gap-4 text-sm text-muted-foreground">
+                            {child.age && <span>Age: {child.age}</span>}
+                            {child.grade && <span>Grade: {child.grade}</span>}
+                            {child.group_name && <span>Group: {child.group_name}</span>}
+                          </div>
+                        </label>
+                      </div>
+                    ));
+                  })()}
                   {filteredAndSortedChildren.length === 0 && (
                     <div className="text-center py-8 text-muted-foreground">
                       {readOnly ? "No campers on this roster" : "No campers found"}
