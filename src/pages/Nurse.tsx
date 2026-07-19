@@ -409,7 +409,7 @@ export default function Nurse() {
     const medStartDate = defaultMedicationStartDate(currentSeason);
 
     if (formData.is_as_needed) {
-      const { error } = await supabase.from("medication_logs").insert({
+      const { error } = await insertMedicationLog(supabase, {
         child_id: selectedChild,
         date: medStartDate,
         medication_name: formData.medication_name,
@@ -429,7 +429,7 @@ export default function Nurse() {
         console.error("Medication insert error:", error);
         toast({
           title: "Error adding medication",
-          description: error.message,
+          description: medicationWriteErrorDescription(error),
           variant: "destructive",
         });
         setIsSubmitting(false);
@@ -527,13 +527,20 @@ export default function Nurse() {
         : []),
     ];
 
-    const { error } = await supabase.from("medication_logs").insert(inserts);
+    let insertError: { message?: string } | null = null;
+    for (const row of inserts) {
+      const { error } = await insertMedicationLog(supabase, row as any);
+      if (error) {
+        insertError = error;
+        break;
+      }
+    }
 
-    if (error) {
-      console.error("Medication insert error:", error);
+    if (insertError) {
+      console.error("Medication insert error:", insertError);
       toast({
         title: "Error adding medication",
-        description: error.message,
+        description: medicationWriteErrorDescription(insertError),
         variant: "destructive",
       });
       setIsSubmitting(false);
@@ -1765,7 +1772,7 @@ export default function Nurse() {
           <TabsTrigger value="today">Today's Medications</TabsTrigger>
           <TabsTrigger value="health-center">Health Center</TabsTrigger>
           <TabsTrigger value="health-log">Health Center Log</TabsTrigger>
-          <TabsTrigger value="add">Add Medication</TabsTrigger>
+          {canManageMedications && <TabsTrigger value="add">Add Medication</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="log">
@@ -2565,6 +2572,7 @@ export default function Nurse() {
           </Card>
         </TabsContent>
 
+        {canManageMedications && (
         <TabsContent value="add">
           <Card>
             <CardHeader>
@@ -2801,6 +2809,7 @@ export default function Nurse() {
             </CardContent>
           </Card>
         </TabsContent>
+        )}
       </Tabs>
         </>
       )}

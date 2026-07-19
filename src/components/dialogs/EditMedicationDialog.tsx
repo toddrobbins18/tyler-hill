@@ -10,6 +10,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import {
+  findRecurringTemplateId,
+  medicationUpdateAffectedNoRows,
+  medicationWriteErrorDescription,
+  updateMedicationLog,
+} from "@/lib/medicationLogWrites";
 import { Loader2, CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -138,27 +144,62 @@ export function EditMedicationDialog({
 
     setIsSubmitting(true);
 
-    const { error } = await supabase
-      .from("medication_logs")
-      .update({
-        medication_name: formData.medication_name,
-        dosage: formData.dosage,
-        meal_time,
-        scheduled_time,
-        notes: formData.notes,
-        is_recurring: formData.is_recurring,
-        frequency: formData.frequency,
-        days_of_week: formData.days_of_week,
-        date: formData.start_date ? format(formData.start_date, 'yyyy-MM-dd') : medication.date,
-        end_date: formData.end_date ? format(formData.end_date, 'yyyy-MM-dd') : null,
-      })
-      .eq("id", medication.id);
+    const updatePayload = {
+      medication_name: formData.medication_name,
+      dosage: formData.dosage,
+      meal_time,
+      scheduled_time,
+      notes: formData.notes,
+      is_recurring: formData.is_recurring,
+      frequency: formData.frequency,
+      days_of_week: formData.days_of_week,
+      date: formData.start_date ? format(formData.start_date, 'yyyy-MM-dd') : medication.date,
+      end_date: formData.end_date ? format(formData.end_date, 'yyyy-MM-dd') : null,
+    };
 
-    setIsSubmitting(false);
+    const templateUpdatePayload = {
+      medication_name: updatePayload.medication_name,
+      dosage: updatePayload.dosage,
+      meal_time: updatePayload.meal_time,
+      scheduled_time: updatePayload.scheduled_time,
+      notes: updatePayload.notes,
+      is_recurring: updatePayload.is_recurring,
+      frequency: updatePayload.frequency,
+      days_of_week: updatePayload.days_of_week,
+      end_date: updatePayload.end_date,
+    };
 
-    if (error) {
-      toast({ title: "Error updating medication", variant: "destructive" });
-      return;
+    try {
+      const { data, error } = await updateMedicationLog(supabase, medication.id, updatePayload);
+
+      if (error || medicationUpdateAffectedNoRows(data, error)) {
+        toast({
+          title: "Error updating medication",
+          description: medicationWriteErrorDescription(error) ?? "No rows were updated. Check your permissions.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const templateId = await findRecurringTemplateId(supabase, medication);
+      if (templateId && templateId !== medication.id) {
+        const { error: templateError } = await updateMedicationLog(
+          supabase,
+          templateId,
+          templateUpdatePayload,
+        );
+        if (templateError) {
+          toast({
+            title: "Partial save",
+            description:
+              "Today's row was updated, but the recurring schedule template could not be updated. Future days may show old details.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+    } finally {
+      setIsSubmitting(false);
     }
 
     toast({ title: "Medication updated successfully" });

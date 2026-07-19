@@ -1,6 +1,93 @@
 -- Run in Supabase SQL editor: staff achievements (awards.staff_id + RLS)
--- Same as migration 20260719100000_awards_staff_id.sql
+-- Self-contained: includes award helper functions if not already applied.
 
+-- Prerequisite helpers (from 20260707130000_fix_division_leader_awards_access.sql)
+CREATE OR REPLACE FUNCTION public.user_has_awards_page_access(
+  _user_id uuid,
+  _company_id uuid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.user_roles ur
+    JOIN public.role_permissions rp
+      ON rp.company_id = _company_id
+     AND rp.role = ur.role
+     AND rp.menu_item = 'awards'
+     AND rp.can_access = true
+    WHERE ur.user_id = _user_id
+      AND ur.company_id = _company_id
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.user_can_manage_awards(
+  _user_id uuid,
+  _company_id uuid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT public.is_super_admin(_user_id)
+    OR public.user_has_awards_page_access(_user_id, _company_id)
+    OR public.user_has_role_for_company(
+      _user_id,
+      _company_id,
+      ARRAY[
+        'admin',
+        'staff',
+        'health_center',
+        'division_leader',
+        'specialist',
+        'viewer'
+      ]::public.app_role[]
+    )
+    OR (
+      _company_id = public.get_user_company(_user_id)
+      AND (
+        public.has_role(_user_id, 'admin'::public.app_role)
+        OR public.has_role(_user_id, 'staff'::public.app_role)
+        OR public.has_role(_user_id, 'health_center'::public.app_role)
+        OR public.has_role(_user_id, 'division_leader'::public.app_role)
+        OR public.has_role(_user_id, 'specialist'::public.app_role)
+        OR public.has_role(_user_id, 'viewer'::public.app_role)
+      )
+    );
+$$;
+
+CREATE OR REPLACE FUNCTION public.user_can_write_award_for_child(
+  _user_id uuid,
+  _company_id uuid,
+  _child_id uuid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT public.is_super_admin(_user_id)
+    OR (
+      _company_id IS NOT NULL
+      AND _child_id IS NOT NULL
+      AND public.user_can_manage_awards(_user_id, _company_id)
+      AND (
+        public.has_role(_user_id, 'admin'::public.app_role)
+        OR public.has_role(_user_id, 'staff'::public.app_role)
+        OR public.has_role(_user_id, 'health_center'::public.app_role)
+        OR public.can_access_child(_child_id)
+      )
+    );
+$$;
+
+-- Staff achievements column
 ALTER TABLE public.awards
   ADD COLUMN IF NOT EXISTS staff_id uuid REFERENCES public.staff(id) ON DELETE CASCADE;
 
