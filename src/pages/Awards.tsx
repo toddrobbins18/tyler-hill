@@ -22,7 +22,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { AwardCategoryDisplay } from "@/components/AwardCategoryDisplay";
-import { fetchAwardsForSeason } from "@/lib/awardsQueries";
+import { fetchAwardsForSeason, fetchStaffAwardsForSeason } from "@/lib/awardsQueries";
 
 export default function Awards() {
   const navigate = useNavigate();
@@ -30,6 +30,7 @@ export default function Awards() {
   const { getDivisionFilter, loading: permissionsLoading, userDivisions } = usePermissions();
   const { currentCompany } = useCompany();
   const [awards, setAwards] = useState<any[]>([]);
+  const [staffAwards, setStaffAwards] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingAward, setEditingAward] = useState<string | null>(null);
   const [deletingAward, setDeletingAward] = useState<string | null>(null);
@@ -69,14 +70,22 @@ export default function Awards() {
         allDivisions = data || [];
       }
 
-      const data = await fetchAwardsForSeason(
-        supabase,
-        currentCompany!.id,
-        currentSeason,
-        divisionFilter,
-        allDivisions,
-      );
-      setAwards(data);
+      const [camperData, staffData] = await Promise.all([
+        fetchAwardsForSeason(
+          supabase,
+          currentCompany!.id,
+          currentSeason,
+          divisionFilter,
+          allDivisions,
+        ),
+        fetchStaffAwardsForSeason(
+          supabase,
+          currentCompany!.id,
+          currentSeason,
+        ),
+      ]);
+      setAwards(camperData);
+      setStaffAwards(staffData);
     } catch (error) {
       console.error("Failed to load awards:", error);
       const message =
@@ -88,6 +97,7 @@ export default function Awards() {
           : "Failed to load awards";
       toast.error(message);
       setAwards([]);
+      setStaffAwards([]);
     }
     setLoading(false);
   };
@@ -124,15 +134,107 @@ export default function Awards() {
     return acc;
   }, {} as Record<string, { childId: string; childName: string; achievements: any[] }>);
 
+  const groupedStaffAwards = staffAwards.reduce((acc, award) => {
+    const staffId = award.staff?.id;
+    const staffName = award.staff?.name || "Unknown Staff";
+
+    if (!acc[staffId]) {
+      acc[staffId] = {
+        staffId,
+        staffName,
+        achievements: [] as any[],
+      };
+    }
+
+    acc[staffId].achievements.push(award);
+    return acc;
+  }, {} as Record<string, { staffId: string; staffName: string; achievements: any[] }>);
+
+  const allStaffAchievements = Object.values(groupedStaffAwards) as Array<{
+    staffId: string;
+    staffName: string;
+    achievements: any[];
+  }>;
   const allAchievements = Object.values(groupedAwards) as Array<{ childId: string; childName: string; achievements: any[] }>;
-  const totalAchievements = awards.length;
+  const totalAchievements = awards.length + staffAwards.length;
+  const currentMonthPrefix = new Date().toISOString().slice(0, 7);
+  const achievementsThisMonth = [...awards, ...staffAwards].filter((award) =>
+    String(award.date).startsWith(currentMonthPrefix),
+  ).length;
+
+  const renderAchievementGroup = (
+    group: { id: string; name: string; achievements: any[] },
+    profilePath: string,
+    icon: typeof User,
+  ) => {
+    const Icon = icon;
+    return (
+      <Card key={group.id} className="shadow-card">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Icon className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-xl">{group.name}</CardTitle>
+                <CardDescription>{group.achievements.length} achievements</CardDescription>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => navigate(profilePath)}>
+              View Profile
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {group.achievements.map((achievement: any) => (
+            <div
+              key={achievement.id}
+              className="flex items-start gap-4 p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors group"
+            >
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Award className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="font-semibold mb-1">{achievement.title}</h4>
+                <p className="text-sm text-muted-foreground mb-2">{achievement.description}</p>
+                <AwardCategoryDisplay category={achievement.category} />
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Calendar className="h-3 w-3" />
+                  <span>{new Date(achievement.date + 'T00:00:00').toLocaleDateString('en-US')}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => setEditingAward(achievement.id)}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
+                  onClick={() => setDeletingAward(achievement.id)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground mb-2">Awards & Achievements</h1>
-          <p className="text-muted-foreground">Celebrating success across all children</p>
+          <p className="text-muted-foreground">Celebrating success across campers and staff</p>
         </div>
         <div className="flex gap-2">
           <CSVUploader tableName="awards" onUploadComplete={fetchAwards} />
@@ -143,7 +245,7 @@ export default function Awards() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card className="shadow-card">
           <CardHeader className="pb-3">
             <CardDescription>Total Achievements</CardDescription>
@@ -158,8 +260,14 @@ export default function Awards() {
         </Card>
         <Card className="shadow-card">
           <CardHeader className="pb-3">
+            <CardDescription>Staff with Awards</CardDescription>
+            <CardTitle className="text-3xl">{allStaffAchievements.length}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card className="shadow-card">
+          <CardHeader className="pb-3">
             <CardDescription>This Month</CardDescription>
-            <CardTitle className="text-3xl">{allAchievements.filter(c => c.achievements.some(a => a.date.includes("Oct") || a.date.includes("Nov"))).length}</CardTitle>
+            <CardTitle className="text-3xl">{achievementsThisMonth}</CardTitle>
           </CardHeader>
         </Card>
       </div>
@@ -168,68 +276,22 @@ export default function Awards() {
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
-      ) : allAchievements.length > 0 ? (
+      ) : allAchievements.length > 0 || allStaffAchievements.length > 0 ? (
         <div className="space-y-6">
-          {allAchievements.map((child) => (
-            <Card key={child.childId} className="shadow-card">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-primary/10">
-                      <User className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-xl">{child.childName}</CardTitle>
-                      <CardDescription>{child.achievements.length} achievements</CardDescription>
-                    </div>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => navigate(`/child/${child.childId}`)}
-                  >
-                    View Profile
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {child.achievements.map((achievement: any) => (
-                  <div key={achievement.id} className="flex items-start gap-4 p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors group">
-                    <div className="p-2 rounded-lg bg-primary/10">
-                      <Award className="h-5 w-5 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-semibold mb-1">{achievement.title}</h4>
-                      <p className="text-sm text-muted-foreground mb-2">{achievement.description}</p>
-                      <AwardCategoryDisplay category={achievement.category} />
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Calendar className="h-3 w-3" />
-                        <span>{new Date(achievement.date + 'T00:00:00').toLocaleDateString('en-US')}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => setEditingAward(achievement.id)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
-                        onClick={() => setDeletingAward(achievement.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          ))}
+          {allAchievements.map((child) =>
+            renderAchievementGroup(
+              { id: child.childId, name: child.childName, achievements: child.achievements },
+              `/child/${child.childId}`,
+              User,
+            ),
+          )}
+          {allStaffAchievements.map((member) =>
+            renderAchievementGroup(
+              { id: member.staffId, name: member.staffName, achievements: member.achievements },
+              `/staff/${member.staffId}`,
+              Star,
+            ),
+          )}
         </div>
       ) : (
         <div className="text-center py-12">

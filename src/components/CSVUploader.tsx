@@ -162,17 +162,26 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
           includeInactive,
         );
 
+        if (tableName === "awards") {
+          const unresolvedForStaff = Array.from(personIds).filter(
+            (pid) => pid && !childPersonIdMap.has(pid),
+          );
+          if (unresolvedForStaff.length > 0) {
+            staffPersonIdMap = await resolveStaffPersonIds(unresolvedForStaff);
+          }
+        }
+
         // Validate all person_ids were found
         const missingIds: string[] = [];
         validatedRows.forEach((row, i) => {
           const pid = normalizeCsvPersonId(row.person_id);
-          if (pid && !childPersonIdMap.has(pid)) {
+          if (pid && !childPersonIdMap.has(pid) && !staffPersonIdMap.has(pid)) {
             missingIds.push(pid);
           }
           if (row.person_ids) {
             row.person_ids.forEach((id: string) => {
               const personId = normalizeCsvPersonId(id);
-              if (personId && !childPersonIdMap.has(personId)) {
+              if (personId && !childPersonIdMap.has(personId) && !staffPersonIdMap.has(personId)) {
                 missingIds.push(personId);
               }
             });
@@ -208,7 +217,13 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
         if (CHILD_PERSON_ID_TABLES.includes(tableName)) {
           if (row.person_id) {
             const pid = normalizeCsvPersonId(row.person_id);
-            baseRow.child_id = childPersonIdMap.get(pid);
+            const childId = childPersonIdMap.get(pid);
+            const staffId = staffPersonIdMap.get(pid);
+            if (childId) {
+              baseRow.child_id = childId;
+            } else if (staffId) {
+              baseRow.staff_id = staffId;
+            }
             delete baseRow.person_id;
           }
           if (row.person_ids) {

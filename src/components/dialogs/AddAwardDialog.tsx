@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useCompany } from "@/contexts/CompanyContext";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
+import SearchableStaffSelect from "@/components/SearchableStaffSelect";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -51,22 +52,40 @@ export default function AddAwardDialog({ onSuccess, open, onOpenChange }: AddAwa
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
   const [loading, setLoading] = useState(false);
+  const [recipientType, setRecipientType] = useState<"child" | "staff">("child");
   const [children, setChildren] = useState<any[]>([]);
+  const [staffMembers, setStaffMembers] = useState<any[]>([]);
   const [weeklyStarfishValues, setWeeklyStarfishValues] = useState<string[]>([]);
   const [weeklyCamperAward, setWeeklyCamperAward] = useState("");
   const [yearEndAward, setYearEndAward] = useState("");
   const [yearEndStarfishValues, setYearEndStarfishValues] = useState<string[]>([]);
+  const [staffTitle, setStaffTitle] = useState("");
   const [formData, setFormData] = useState({
     description: "",
     date: new Date().toISOString().split('T')[0],
     child_id: "",
+    staff_id: "",
   });
 
   useEffect(() => {
     if (open) {
       fetchChildren();
+      fetchStaffMembers();
     }
   }, [open, currentSeason]);
+
+  const fetchStaffMembers = async () => {
+    if (!currentCompany?.id) return;
+    const { data } = await supabase
+      .from("staff")
+      .select("id, name, role, department")
+      .eq("status", "active")
+      .eq("company_id", currentCompany.id)
+      .eq("season", currentSeason)
+      .order("name");
+
+    if (data) setStaffMembers(data);
+  };
 
   const fetchChildren = async () => {
     if (!currentCompany?.id) return;
@@ -99,6 +118,42 @@ export default function AddAwardDialog({ onSuccess, open, onOpenChange }: AddAwa
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (recipientType === "staff") {
+      if (!formData.staff_id) {
+        toast.error("Please select a staff member");
+        return;
+      }
+      if (!staffTitle.trim()) {
+        toast.error("Please enter an award title");
+        return;
+      }
+
+      setLoading(true);
+      const { error } = await supabase
+        .from("awards")
+        .insert([{
+          title: staffTitle.trim(),
+          category: null,
+          description: formData.description,
+          date: formData.date,
+          staff_id: formData.staff_id,
+          company_id: currentCompany?.id,
+          season: currentSeason,
+        }]);
+
+      if (error) {
+        toast.error("Failed to add award");
+        console.error(error);
+      } else {
+        toast.success("Award added successfully");
+        onSuccess();
+        onOpenChange(false);
+        resetForm();
+      }
+      setLoading(false);
+      return;
+    }
     
     const hasWeeklyStarfish = weeklyStarfishValues.length > 0;
     const hasWeeklyCamperAward = weeklyCamperAward !== "";
@@ -159,14 +214,17 @@ export default function AddAwardDialog({ onSuccess, open, onOpenChange }: AddAwa
   };
 
   const resetForm = () => {
+    setRecipientType("child");
     setWeeklyStarfishValues([]);
     setWeeklyCamperAward("");
     setYearEndAward("");
     setYearEndStarfishValues([]);
+    setStaffTitle("");
     setFormData({
       description: "",
       date: new Date().toISOString().split('T')[0],
       child_id: "",
+      staff_id: "",
     });
   };
 
@@ -178,16 +236,59 @@ export default function AddAwardDialog({ onSuccess, open, onOpenChange }: AddAwa
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="child">Child</Label>
-            <SearchableChildSelect
-              children={children}
-              value={formData.child_id}
-              onValueChange={(value) => setFormData({ ...formData, child_id: value })}
-              placeholder="Type to search for a child..."
-              required
-            />
+            <Label htmlFor="recipientType">Recipient Type</Label>
+            <Select
+              value={recipientType}
+              onValueChange={(value: "child" | "staff") => setRecipientType(value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select recipient type..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="child">Camper</SelectItem>
+                <SelectItem value="staff">Staff</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
+          {recipientType === "child" ? (
+            <div>
+              <Label htmlFor="child">Child</Label>
+              <SearchableChildSelect
+                children={children}
+                value={formData.child_id}
+                onValueChange={(value) => setFormData({ ...formData, child_id: value })}
+                placeholder="Type to search for a child..."
+                required
+              />
+            </div>
+          ) : (
+            <>
+              <div>
+                <Label htmlFor="staff">Staff Member</Label>
+                <SearchableStaffSelect
+                  staff={staffMembers}
+                  value={formData.staff_id}
+                  onValueChange={(value) => setFormData({ ...formData, staff_id: value })}
+                  placeholder="Type to search for a staff member..."
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="staffTitle">Award Title</Label>
+                <Input
+                  id="staffTitle"
+                  value={staffTitle}
+                  onChange={(e) => setStaffTitle(e.target.value)}
+                  placeholder="e.g. Staff of the Week"
+                  required
+                />
+              </div>
+            </>
+          )}
+
+          {recipientType === "child" && (
+            <>
           <div className="space-y-2">
             <Label>Weekly Starfish (multi-select)</Label>
             <div className="grid grid-cols-2 gap-2 p-3 border rounded-md bg-muted/30">
@@ -262,6 +363,8 @@ export default function AddAwardDialog({ onSuccess, open, onOpenChange }: AddAwa
                 ))}
               </div>
             </div>
+          )}
+            </>
           )}
 
           <div>

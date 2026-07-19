@@ -17,7 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import BirthdayReportTable from "./BirthdayReportTable";
-import { fetchAwardsForSeason } from "@/lib/awardsQueries";
+import { fetchAwardsForReporting } from "@/lib/awardsQueries";
 import { fetchExpandedMedicationSchedule } from "@/lib/medicationReportSchedule";
 import { parseMedicationMealTimeLabels } from "@/lib/medicationMealTimeDisplay";
 import {
@@ -219,41 +219,39 @@ export default function ReportingCenter() {
         case 'awards': {
           const rangeStart = startDate || '1900-01-01';
           const rangeEnd = endDate || '2100-12-31';
-          const awardsList = await fetchAwardsForSeason(
+          const awardsList = await fetchAwardsForReporting(
             supabase,
             currentCompany.id,
             selectedSeason,
             allowedDivisionIds,
             divisions,
+            new Map(divisions.map((division) => [division.id, division.name])),
           );
           const filteredAwards = awardsList.filter(
             (a) => a.date >= rangeStart && a.date <= rangeEnd,
           );
-          const divisionNameById = new Map(
-            divisions.map((division) => [division.id, division.name]),
-          );
 
-          data = filteredAwards.map((a) => {
-            const divisionName =
-              (a.children?.division_id && divisionNameById.get(a.children.division_id)) ||
-              'N/A';
-
-            return withDivisionMeta(
+          data = filteredAwards.map((a) =>
+            withDivisionMeta(
               {
                 Date: a.date,
-                Child: a.children?.name || 'Unknown',
-                Division: divisionName,
+                'Recipient Type': a.recipientType,
+                Name: a.name,
+                Division: a.division,
+                Department: a.department,
                 Title: a.title,
                 Category: a.category,
                 Description: a.description,
               },
-              [a.children?.division_id],
-              [divisionName],
-            );
-          });
+              a.divisionIds,
+              a.divisionNames,
+            ),
+          );
 
           summaryData = {
             'Total Awards': filteredAwards.length,
+            'Camper Awards': filteredAwards.filter((row) => row.recipientType === 'Camper').length,
+            'Staff Awards': filteredAwards.filter((row) => row.recipientType === 'Staff').length,
           };
           break;
         }
@@ -1162,10 +1160,16 @@ export default function ReportingCenter() {
           'Average Rating': averageRating.toFixed(2),
         };
       }
-      case 'awards':
+      case 'awards': {
+        const camperAwards = filteredReportData.filter((row) => row['Recipient Type'] === 'Camper').length;
+        const staffAwardCount = filteredReportData.filter((row) => row['Recipient Type'] === 'Staff').length;
+
         return {
           'Total Awards': filteredReportData.length,
+          'Camper Awards': camperAwards,
+          'Staff Awards': staffAwardCount,
         };
+      }
       case 'camper_reports': {
         const tenDay = filteredReportData.filter((row) => row['Report Type'] === '10-Day').length;
         const endOfSummer = filteredReportData.filter(

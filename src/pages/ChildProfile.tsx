@@ -19,6 +19,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { HealthCenterTab } from "@/components/HealthCenterTab";
 import ProfilePhotoUpload from "@/components/ProfilePhotoUpload";
 import { AwardCategoryDisplay } from "@/components/AwardCategoryDisplay";
+import ProfileQuickSearch from "@/components/ProfileQuickSearch";
 
 export default function ChildProfile() {
   const { id } = useParams();
@@ -277,6 +278,10 @@ export default function ChildProfile() {
         <Button variant="ghost" size="icon" onClick={() => navigate("/roster")}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
+        <ProfileQuickSearch type="child" currentId={id} />
+      </div>
+
+      <div className="flex items-center gap-4">
         <Avatar className="h-16 w-16 border-2 border-border">
           <AvatarImage src={child.photo_url || undefined} alt={child.name} />
           <AvatarFallback className="bg-primary/10 text-primary font-bold text-xl">

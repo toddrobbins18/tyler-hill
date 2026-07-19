@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Star, Calendar, TrendingUp, Award, Pencil, ClipboardCheck, FileText, Plus, Stethoscope, Clock, MapPin, Hospital } from "lucide-react";
+import { ArrowLeft, Star, Calendar, TrendingUp, Award, Pencil, ClipboardCheck, FileText, Plus, Stethoscope, Clock, MapPin, Hospital, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,8 @@ import { formatBirthdayDisplay } from "@/lib/birthdayCalendar";
 import ConflictIndicator from "@/components/ConflictIndicator";
 import { HealthCenterTab } from "@/components/HealthCenterTab";
 import ProfilePhotoUpload from "@/components/ProfilePhotoUpload";
+import { AwardCategoryDisplay } from "@/components/AwardCategoryDisplay";
+import ProfileQuickSearch from "@/components/ProfileQuickSearch";
 
 export default function StaffProfile() {
   const { id } = useParams();
@@ -25,6 +27,7 @@ export default function StaffProfile() {
   const { currentSeason } = useSeasonContext();
   const [staff, setStaff] = useState<any>(null);
   const [evaluations, setEvaluations] = useState<any[]>([]);
+  const [awards, setAwards] = useState<any[]>([]);
   const [staffNotes, setStaffNotes] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [assignedBunks, setAssignedBunks] = useState<any[]>([]);
@@ -103,6 +106,39 @@ export default function StaffProfile() {
 
       setAppointments(appointmentsData || []);
     }
+
+    // Fetch awards for this staff member - including historical awards from previous seasons
+    let awardsData: any[] = [];
+    if (staffData?.person_id) {
+      const { data: allStaffRecords } = await supabase
+        .from("staff")
+        .select("id")
+        .eq("person_id", staffData.person_id)
+        .eq("company_id", currentCompany?.id || '');
+
+      if (allStaffRecords && allStaffRecords.length > 0) {
+        const staffIds = allStaffRecords.map((member) => member.id);
+        const { data: historicalAwards } = await supabase
+          .from("awards")
+          .select("*")
+          .in("staff_id", staffIds)
+          .eq("company_id", currentCompany?.id || '')
+          .order("date", { ascending: false });
+
+        awardsData = historicalAwards || [];
+      }
+    } else {
+      const { data: currentAwards } = await supabase
+        .from("awards")
+        .select("*")
+        .eq("staff_id", id)
+        .eq("company_id", currentCompany?.id || '')
+        .order("date", { ascending: false });
+
+      awardsData = currentAwards || [];
+    }
+
+    setAwards(awardsData);
 
     // Fetch assigned bunks for this staff member
     const { data: bunkStaffData } = await supabase
@@ -202,6 +238,10 @@ export default function StaffProfile() {
         <Button variant="ghost" size="icon" onClick={() => navigate("/staff")}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
+        <ProfileQuickSearch type="staff" currentId={id} />
+      </div>
+
+      <div className="flex items-center gap-4">
         <Avatar className="h-16 w-16 border-2 border-border">
           <AvatarImage src={staff.photo_url || undefined} alt={staff.name} />
           <AvatarFallback className="bg-primary/10 text-primary font-bold text-xl">
@@ -591,12 +631,44 @@ export default function StaffProfile() {
         </TabsContent>
 
         <TabsContent value="achievements" className="space-y-4">
-          <Card>
-            <CardContent className="py-12 text-center">
-              <Award className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">Achievements feature coming soon</p>
-            </CardContent>
-          </Card>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-muted-foreground">
+              {awards.length} total achievements
+            </p>
+          </div>
+
+          {awards.length === 0 ? (
+            <Card className="shadow-card">
+              <CardContent className="py-8 text-center text-muted-foreground">
+                No awards recorded yet
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4">
+              {awards.map((award) => (
+                <Card key={award.id} className="shadow-card">
+                  <CardContent className="p-6">
+                    <div className="flex items-start gap-4">
+                      <div className="p-3 rounded-xl bg-primary/10">
+                        <Trophy className="h-6 w-6 text-primary" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-lg mb-1">{award.title}</h3>
+                        {award.description && (
+                          <p className="text-sm text-muted-foreground mb-2">{award.description}</p>
+                        )}
+                        <AwardCategoryDisplay category={award.category} />
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Calendar className="h-3 w-3" />
+                          <span>{new Date(award.date + 'T00:00:00').toLocaleDateString('en-US')}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         {currentCompany?.slug === 'tyler-hill-camp' && (

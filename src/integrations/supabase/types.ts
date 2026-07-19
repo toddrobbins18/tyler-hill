@@ -339,6 +339,7 @@ export type Database = {
           description: string | null
           id: string
           season: string | null
+          staff_id: string | null
           title: string
         }
         Insert: {
@@ -350,6 +351,7 @@ export type Database = {
           description?: string | null
           id?: string
           season?: string | null
+          staff_id?: string | null
           title: string
         }
         Update: {
@@ -361,6 +363,7 @@ export type Database = {
           description?: string | null
           id?: string
           season?: string | null
+          staff_id?: string | null
           title?: string
         }
         Relationships: [
@@ -369,6 +372,13 @@ export type Database = {
             columns: ["child_id"]
             isOneToOne: false
             referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "awards_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
             referencedColumns: ["id"]
           },
           {
