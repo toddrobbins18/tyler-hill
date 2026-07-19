@@ -278,7 +278,7 @@ export default function ChildProfile() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
+      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 flex items-center gap-4 pb-2 -mx-1 px-1">
         <Button variant="ghost" size="icon" onClick={() => navigate("/roster")}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
