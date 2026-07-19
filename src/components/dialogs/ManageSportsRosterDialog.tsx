@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Search, Users, Save, X, Pencil, Trash2, UserPlus } from "lucide-react";
+import { Search, Users, Save, X, Pencil, Trash2, UserPlus, Printer } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -502,10 +502,127 @@ Please review this conflict and take appropriate action.`;
     return staff.find(s => s.id === staffId)?.name || "Unknown";
   };
 
+  const rosterChildrenForPrint = useMemo(() => {
+    return children
+      .filter((child) => roster.has(child.id))
+      .sort(compareByLastName);
+  }, [children, roster]);
+
+  const printDivisionGroups = useMemo(() => {
+    const eventDivisions = eventDetails?.divisions || [];
+    const eventDivIds = new Set(eventDivisions.map((d: any) => d.id));
+    const groups: Array<{ label: string; campers: any[] }> = [];
+
+    for (const division of eventDivisions) {
+      const divisionCampers = rosterChildrenForPrint.filter((c) => c.division_id === division.id);
+      if (divisionCampers.length > 0) {
+        groups.push({ label: division.name, campers: divisionCampers });
+      }
+    }
+
+    const otherCampers = rosterChildrenForPrint.filter((c) => !eventDivIds.has(c.division_id));
+    if (otherCampers.length > 0) {
+      groups.push({ label: "Other Divisions", campers: otherCampers });
+    }
+
+    if (groups.length === 0 && rosterChildrenForPrint.length > 0) {
+      groups.push({ label: "Roster", campers: rosterChildrenForPrint });
+    }
+
+    return groups;
+  }, [eventDetails, rosterChildrenForPrint]);
+
+  const handlePrintRoster = () => {
+    window.print();
+  };
+
+  const printStyles = `
+    .sports-roster-print {
+      display: none;
+    }
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      .sports-roster-print, .sports-roster-print * {
+        visibility: visible;
+      }
+      .sports-roster-print {
+        display: block !important;
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: 24px;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .roster-print-division {
+        page-break-inside: avoid;
+        margin-bottom: 16px;
+      }
+    }
+  `;
+
   return (
     <>
+      <style>{printStyles}</style>
+      <div className="sports-roster-print">
+        <h1 style={{ fontSize: "24px", marginBottom: "4px" }}>{eventTitle}</h1>
+        {eventDetails && (
+          <p style={{ margin: "0 0 16px", color: "#444" }}>
+            {[
+              eventDetails.event_date
+                ? new Date(`${eventDetails.event_date}T00:00:00`).toLocaleDateString("en-US")
+                : null,
+              eventDetails.time,
+              eventDetails.location,
+              eventDetails.sport_type,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        )}
+        <h2 style={{ fontSize: "18px", marginBottom: "8px" }}>Campers ({rosterChildrenForPrint.length})</h2>
+        {printDivisionGroups.map((group) => (
+          <div key={group.label} className="roster-print-division">
+            <h3 style={{ fontSize: "14px", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "6px" }}>
+              {group.label}
+            </h3>
+            <ul style={{ margin: 0, paddingLeft: "20px" }}>
+              {group.campers.map((child) => (
+                <li key={child.id} style={{ marginBottom: "4px" }}>
+                  <strong>{child.name}</strong>
+                  {child.grade ? ` — Grade ${child.grade}` : ""}
+                  {child.age ? ` — Age ${child.age}` : ""}
+                  {child.allergies ? ` — Allergies: ${child.allergies}` : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+        {(assignedCoaches.length > 0 || assignedRefs.length > 0) && (
+          <div style={{ marginTop: "16px" }}>
+            <h2 style={{ fontSize: "18px", marginBottom: "8px" }}>Staff</h2>
+            {assignedCoaches.length > 0 && (
+              <div style={{ marginBottom: "8px" }}>
+                <strong>Coaches:</strong>{" "}
+                {assignedCoaches.map((id) => getStaffName(id)).join(", ")}
+              </div>
+            )}
+            {assignedRefs.length > 0 && (
+              <div>
+                <strong>Referees:</strong>{" "}
+                {assignedRefs.map((id) => getStaffName(id)).join(", ")}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col min-h-0">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
@@ -563,14 +680,14 @@ Please review this conflict and take appropriate action.`;
             );
           })()}
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden min-h-0">
             <TabsList className={`grid w-full ${readOnly ? "grid-cols-2" : "grid-cols-3"}`}>
               <TabsTrigger value="campers">{readOnly ? "Campers" : "Select Campers"}</TabsTrigger>
               <TabsTrigger value="staff">Staff Assignments</TabsTrigger>
               {!readOnly && <TabsTrigger value="templates">Saved Templates</TabsTrigger>}
             </TabsList>
 
-            <TabsContent value="campers" className="flex-1 overflow-hidden flex flex-col space-y-4">
+            <TabsContent value="campers" className="flex-1 overflow-hidden flex flex-col space-y-4 min-h-0">
               <div className="flex gap-4 items-end">
                 <div className="flex-1">
                   <Label>Search Campers</Label>
@@ -607,7 +724,7 @@ Please review this conflict and take appropriate action.`;
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                 </div>
               ) : (
-                <div className="flex-1 overflow-y-auto border rounded-md p-4 space-y-4">
+                <div className="flex-1 min-h-0 overflow-y-auto border rounded-md p-4 space-y-4">
                   {(() => {
                     const eventDivisions = eventDetails?.divisions || [];
                     const eventDivIds = new Set(eventDivisions.map((d: any) => d.id));
@@ -773,8 +890,8 @@ Please review this conflict and take appropriate action.`;
               )}
             </TabsContent>
 
-            <TabsContent value="staff" className="flex-1 overflow-hidden flex flex-col space-y-6">
-              <div className="space-y-4 overflow-y-auto">
+            <TabsContent value="staff" className="flex-1 overflow-hidden flex flex-col space-y-6 min-h-0">
+              <div className="space-y-4 overflow-y-auto min-h-0 flex-1">
                 {/* Coaches Section */}
                 <div className="space-y-3 p-4 border rounded-lg">
                   <div className="flex items-center justify-between">
@@ -1008,7 +1125,15 @@ Please review this conflict and take appropriate action.`;
             </TabsContent>
           </Tabs>
 
-          <div className="flex justify-end gap-2 pt-4 border-t">
+          <div className="flex justify-end gap-2 pt-4 border-t no-print">
+            <Button
+              variant="outline"
+              onClick={handlePrintRoster}
+              disabled={loading || roster.size === 0}
+            >
+              <Printer className="h-4 w-4 mr-2" />
+              Print Roster
+            </Button>
             <Button
               variant="outline"
               onClick={() => onOpenChange(false)}

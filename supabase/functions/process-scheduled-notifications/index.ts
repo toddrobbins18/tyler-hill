@@ -2,6 +2,10 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getRecipientsForEmailTypeWithFilters, sendEmailNotifications } from "../_shared/emailHelpers.ts";
 import { buildTimingSubject, addTimingContext } from "../_shared/timingHelpers.ts";
+import {
+  buildSportsEventEmailHtml,
+  SPORTS_EVENT_EMAIL_SELECT,
+} from "../_shared/rosterEmailContent.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -84,8 +88,23 @@ serve(async (req) => {
           notification.timing_type
         );
 
-        // Build content with timing prefix
+        // Build content with timing prefix (refresh sports rosters at send time)
         let content = eventData.content || 'Event details not available';
+        if (
+          notification.event_id &&
+          (notification.email_type === 'sports_event_home' ||
+            notification.email_type === 'sports_event_away')
+        ) {
+          const { data: freshEvent } = await supabase
+            .from('sports_calendar')
+            .select(SPORTS_EVENT_EMAIL_SELECT)
+            .eq('id', notification.event_id)
+            .maybeSingle();
+
+          if (freshEvent) {
+            content = buildSportsEventEmailHtml(freshEvent);
+          }
+        }
         content = addTimingContext(content, notification.timing_type);
 
         // Send the notifications

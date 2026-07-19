@@ -1,6 +1,10 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendEmailNotifications } from "../_shared/emailHelpers.ts";
+import {
+  buildSportsEventEmailHtml,
+  SPORTS_EVENT_EMAIL_SELECT,
+} from "../_shared/rosterEmailContent.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -21,14 +25,12 @@ serve(async (req) => {
     const { eventId, companyId, eventTitle, rosterCount, action } = await req.json();
     console.log(`Processing roster notification: ${eventId}, action: ${action}`);
 
-    // Fetch Health Center users
     const { data: hcRoles } = await supabase
       .from('user_roles')
       .select('user_id')
       .eq('role', 'health_center')
       .eq('company_id', companyId);
 
-    // Fetch Food Service users
     const { data: foodTags } = await supabase
       .from('user_tags')
       .select('user_id')
@@ -48,7 +50,6 @@ serve(async (req) => {
       );
     }
 
-    // Get profiles
     const { data: profiles } = await supabase
       .from('profiles')
       .select('id, email, full_name')
@@ -64,18 +65,24 @@ serve(async (req) => {
       );
     }
 
-    // Create notification content
-    const subject = `Roster Submitted: ${eventTitle}`;
+    const { data: event, error: eventError } = await supabase
+      .from('sports_calendar')
+      .select(SPORTS_EVENT_EMAIL_SELECT)
+      .eq('id', eventId)
+      .single();
+
+    if (eventError) {
+      console.error('Error fetching event for roster email:', eventError);
+      throw eventError;
+    }
+
+    const subject = `Roster Submitted: ${eventTitle || event.title}`;
     const content = `
-A roster for the event "${eventTitle}" has been ${action}.
-
-**Event Title:** ${eventTitle}
-**Total Campers on Roster:** ${rosterCount}
-
-Please review the event details in the Sports Calendar or Roster section to prepare any necessary medications or meals.
+<p>A roster for <strong>${eventTitle || event.title}</strong> has been ${action}.</p>
+<p><strong>Total Campers on Roster:</strong> ${rosterCount ?? event.sports_event_roster?.length ?? 0}</p>
+${buildSportsEventEmailHtml(event)}
     `.trim();
 
-    // Send notifications
     await sendEmailNotifications(supabase, recipients, subject, content, companyId);
 
     console.log(`Successfully sent roster notifications to ${recipients.length} recipients`);

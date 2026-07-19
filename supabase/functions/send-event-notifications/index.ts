@@ -2,6 +2,10 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getRecipientsForEmailTypeWithFilters, sendEmailNotifications } from "../_shared/emailHelpers.ts";
 import { calculateSendTime } from "../_shared/timingHelpers.ts";
+import {
+  buildSportsEventEmailHtml,
+  SPORTS_EVENT_EMAIL_SELECT,
+} from "../_shared/rosterEmailContent.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -33,27 +37,7 @@ serve(async (req) => {
       // Get sports event details with divisions
       const { data: event, error: eventError } = await supabase
         .from('sports_calendar')
-        .select(`
-          *,
-          sports_calendar_divisions(division_id),
-          division:divisions (
-            name
-          ),
-          sports_event_roster (
-            child:children (
-              name,
-              allergies
-            )
-          ),
-          sports_event_staff (
-            role,
-            staff (
-              name,
-              role,
-              allergies
-            )
-          )
-        `)
+        .select(SPORTS_EVENT_EMAIL_SELECT)
         .eq('id', event_id)
         .single();
 
@@ -112,74 +96,13 @@ serve(async (req) => {
         trip = tripData;
       }
 
-      // Build roster
-      const roster = event.sports_event_roster
-        ?.map((r: any) => r.child?.name)
-        .filter(Boolean)
-        .join(', ') || 'No roster yet';
-
-      // Check for allergies in both campers and staff
-      const childAllergies = event.sports_event_roster
-        ?.map((r: any) => r.child)
-        .filter((c: any) => c?.allergies)
-        .map((c: any) => ({ name: c.name, allergies: c.allergies })) || [];
-      
-      const staffAllergies = event.sports_event_staff
-        ?.map((s: any) => s.staff)
-        .filter((s: any) => s?.allergies)
-        .map((s: any) => ({ name: s.name, role: s.role, allergies: s.allergies })) || [];
-      
-      const totalAllergies = childAllergies.length + staffAllergies.length;
-      
-      let allergyWarning = '';
-      if (totalAllergies > 0) {
-        allergyWarning = `\n\n⚠️ **ALLERGY ALERT:** ${totalAllergies} individual(s) have documented allergies.\n\n`;
-        
-        if (childAllergies.length > 0) {
-          allergyWarning += `**Campers with Allergies:**\n`;
-          childAllergies.forEach((c: any) => {
-            allergyWarning += `- ${c.name}: ${c.allergies}\n`;
-          });
-        }
-        
-        if (staffAllergies.length > 0) {
-          allergyWarning += `\n**Staff with Allergies:**\n`;
-          staffAllergies.forEach((s: any) => {
-            allergyWarning += `- ${s.name} (${s.role}): ${s.allergies}\n`;
-          });
-        }
-      }
+      const rosterHtml = buildSportsEventEmailHtml(event, trip);
 
       subject = action === 'created' 
         ? `New Sports Event: ${event.title}`
         : `Sports Event Updated: ${event.title}`;
 
-      content = `
-**Event:** ${event.title}
-**Sport:** ${event.sport_type}${event.custom_sport_type ? ` (${event.custom_sport_type})` : ''}
-**Date:** ${new Date(event.event_date).toLocaleDateString()}
-**Time:** ${event.time || 'TBD'}
-**Location:** ${event.location || 'TBD'}
-${event.home_away ? `**Home/Away:** ${event.home_away}` : ''}
-${event.opponent ? `**Opponent:** ${event.opponent}` : ''}
-
-**Roster:**
-${roster}
-${allergyWarning}
-
-${trip ? `
-**Transportation Details:**
-- **Departure:** ${trip.departure_time || 'TBD'}
-- **Return:** ${trip.return_time || 'TBD'}
-- **Transportation:** ${trip.transportation_type || 'TBD'}
-- **Driver:** ${trip.driver || 'TBD'}
-` : ''}
-
-${event.meal_options?.length ? `**Meal Options:** ${event.meal_options.join(', ')}` : ''}
-${event.meal_notes ? `**Meal Notes:** ${event.meal_notes}` : ''}
-
-Please review the complete event details in the Sports Calendar.
-      `.trim();
+      content = rosterHtml;
 
       // Queue scheduled notifications for future timings
       const futureTimings = sendTimings.filter((t: string) => 

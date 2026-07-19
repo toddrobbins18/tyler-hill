@@ -2,6 +2,10 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendEmailNotifications } from "../_shared/emailHelpers.ts";
 import { easternSeasonYear, easternTodayYMD, formatBulletinDisplayDate } from "../_shared/dailyDashboardFormat.ts";
+import {
+  buildRosterGroupedByDivisionHtml,
+  buildStaffAssignmentsHtml,
+} from "../_shared/rosterEmailContent.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -51,13 +55,19 @@ serve(async (req) => {
           location,
           sport_type,
           custom_sport_type,
+          event_date,
           sports_event_roster(
             child:children(
               id,
               name,
               division_id,
+              allergies,
               division:divisions(id, name)
             )
+          ),
+          sports_event_staff(
+            role,
+            staff(name, role, allergies)
           )
         `)
         .eq('company_id', companyId)
@@ -138,12 +148,10 @@ serve(async (req) => {
             if (event.time) content += `<strong>Time:</strong> ${event.time}<br/>`;
             if (event.location) content += `<strong>Location:</strong> ${event.location}</p>`;
             
-            content += `<h4 style="margin-bottom: 5px;">Campers from your division(s):</h4>`;
-            content += `<ul style="margin-top: 0;">`;
-            myCampers.forEach((c: any) => {
-              content += `<li><strong>${c.name}</strong> (${c.division?.name || 'Unknown Division'})</li>`;
-            });
-            content += `</ul></div>`;
+            content += `<h4 style="margin-bottom: 5px;">Your division campers on this roster:</h4>`;
+            content += buildRosterGroupedByDivisionHtml(myCampers, { divisionFilter: divisions });
+            content += buildStaffAssignmentsHtml(event.sports_event_staff || []);
+            content += `</div>`;
           }
         });
 
