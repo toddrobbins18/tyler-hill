@@ -19,6 +19,7 @@ import { HealthCenterTab } from "@/components/HealthCenterTab";
 import ProfilePhotoUpload from "@/components/ProfilePhotoUpload";
 import { AwardCategoryDisplay } from "@/components/AwardCategoryDisplay";
 import ProfileQuickSearch from "@/components/ProfileQuickSearch";
+import PersonThreeDayOutlook from "@/components/PersonThreeDayOutlook";
 
 export default function StaffProfile() {
   const { id } = useParams();
@@ -306,6 +307,13 @@ export default function StaffProfile() {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
+          <PersonThreeDayOutlook
+            personType="staff"
+            personId={staff.id}
+            companyId={currentCompany?.id || ""}
+            season={currentSeason}
+            staffName={staff.name}
+          />
           <div className="grid gap-6 md:grid-cols-2">
             <Card className="shadow-card">
               <CardHeader>

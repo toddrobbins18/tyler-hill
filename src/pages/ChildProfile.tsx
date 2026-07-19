@@ -21,12 +21,15 @@ import ProfilePhotoUpload from "@/components/ProfilePhotoUpload";
 import { AwardCategoryDisplay } from "@/components/AwardCategoryDisplay";
 import ProfileQuickSearch from "@/components/ProfileQuickSearch";
 import { formatSportsAcademySessionDate } from "@/lib/sportsAcademyUtils";
+import PersonThreeDayOutlook from "@/components/PersonThreeDayOutlook";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 
 export default function ChildProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const { getDivisionFilter, canSeeDivision, loading: permissionsLoading } = usePermissions();
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
@@ -337,6 +340,13 @@ export default function ChildProfile() {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
+          <PersonThreeDayOutlook
+            personType="child"
+            personId={child.id}
+            companyId={currentCompany?.id || ""}
+            season={currentSeason}
+            divisionId={child.division_id}
+          />
           <div className="grid gap-6 md:grid-cols-2">
             <Card className="shadow-card">
               <CardHeader>
