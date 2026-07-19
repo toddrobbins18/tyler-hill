@@ -123,9 +123,9 @@ const ALL_FORMATS: Record<string, FormatDef> = {
   },
   sports_academy: {
     title: "Sports Academy",
-    columns: "person_id, sport, session, enrollment_date, status, notes",
-    example: "P12345, Basketball, Session 1, 2024-06-01, active, Advanced level",
-    notes: "All fields are optional. person_id and sport are recommended for proper matching."
+    columns: "person_id, sport, instructor, schedule_period, start_date, end_date, notes",
+    example: "P12345, Basketball, Coach Smith, Period 1, 2024-06-15, , Advanced level",
+    notes: "Each row is one session day. Use start_date for the session date; end_date is optional (defaults to start_date). Legacy rows may still use a date range in start_date/end_date."
   },
   tutoring_therapy: {
     title: "Tutoring & Therapy",

@@ -20,6 +20,7 @@ import { HealthCenterTab } from "@/components/HealthCenterTab";
 import ProfilePhotoUpload from "@/components/ProfilePhotoUpload";
 import { AwardCategoryDisplay } from "@/components/AwardCategoryDisplay";
 import ProfileQuickSearch from "@/components/ProfileQuickSearch";
+import { formatSportsAcademySessionDate } from "@/lib/sportsAcademyUtils";
 
 export default function ChildProfile() {
   const { id } = useParams();
@@ -858,10 +859,7 @@ export default function ChildProfile() {
                         {(enrollment.start_date || enrollment.end_date) && (
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Calendar className="h-3 w-3" />
-                            <span>
-                              {enrollment.start_date && new Date(enrollment.start_date + 'T00:00:00').toLocaleDateString('en-US')}
-                              {enrollment.end_date && ` - ${new Date(enrollment.end_date + 'T00:00:00').toLocaleDateString('en-US')}`}
-                            </span>
+                            <span>{formatSportsAcademySessionDate(enrollment)}</span>
                           </div>
                         )}
                         {enrollment.notes && (

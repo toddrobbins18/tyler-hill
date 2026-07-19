@@ -29,6 +29,7 @@ import {
   enrichSportsAcademyEnrollments,
   enrollmentMatchesSpecialistSports,
   expandSportsAcademyCalendarEvents,
+  formatSportsAcademySessionDate,
   sportsAcademyCalendarRange,
   sportsAcademyCamperName,
   type SportsAcademyCalendarEvent,
@@ -259,14 +260,8 @@ export default function SportsAcademyCalendar() {
     };
   };
 
-  const formatDateRange = (enrollment: SportsAcademyEnrollment) => {
-    if (!enrollment.start_date) return "No dates set";
-    const start = new Date(`${enrollment.start_date}T00:00:00`).toLocaleDateString("en-US");
-    const end = enrollment.end_date
-      ? new Date(`${enrollment.end_date}T00:00:00`).toLocaleDateString("en-US")
-      : "Ongoing";
-    return `${start} - ${end}`;
-  };
+  const formatDateRange = (enrollment: SportsAcademyEnrollment) =>
+    formatSportsAcademySessionDate(enrollment);
 
   const groupedListEvents = useMemo(() => {
     const groups = new Map<string, SportsAcademyCalendarEvent[]>();

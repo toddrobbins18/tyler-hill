@@ -23,6 +23,11 @@ import { useSpecialistSportScope } from "@/hooks/useSpecialistSportScope";
 import {
   enrichSportsAcademyEnrollments,
   enrollmentMatchesSpecialistSports,
+  enrollmentOccursOnDate,
+  buildSportsAcademySessionDates,
+  formatSportsAcademySessionDate,
+  isLegacySportsAcademyRange,
+  normalizeSessionDateYmd,
   sportsAcademyCamperName,
 } from "@/lib/sportsAcademyUtils";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
@@ -58,8 +63,7 @@ export default function SportsAcademy() {
     schedule_periods: [] as string[],
     period_number: "",
     other_period: "",
-    start_date: "",
-    end_date: "",
+    session_date: "",
     notes: "",
   });
   const { toast } = useToast();
@@ -203,8 +207,13 @@ export default function SportsAcademy() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent, addAnother = false) => {
     e.preventDefault();
+
+    if (!formData.session_date) {
+      toast({ title: "Session date is required", variant: "destructive" });
+      return;
+    }
 
     // Build schedule_periods array
     const periods: string[] = [];
@@ -218,13 +227,15 @@ export default function SportsAcademy() {
       }
     });
 
+    const sessionDates = buildSportsAcademySessionDates(formData.session_date);
+
     const submitData = {
       child_id: formData.child_id,
       sport_name: formData.sport_name,
       instructor: formData.instructor,
       schedule_periods: periods.length > 0 ? periods : null,
-      start_date: formData.start_date || null,
-      end_date: formData.end_date || null,
+      start_date: sessionDates.start_date,
+      end_date: sessionDates.end_date,
       notes: formData.notes || null,
       company_id: currentCompany?.id,
       season: currentSeason,
@@ -240,17 +251,33 @@ export default function SportsAcademy() {
         toast({ title: "Error updating enrollment", variant: "destructive" });
         return;
       }
-      toast({ title: "Enrollment updated successfully" });
+      toast({ title: "Session updated successfully" });
     } else {
       const { error } = await supabase
         .from("sports_academy")
         .insert(submitData);
 
       if (error) {
-        toast({ title: "Error adding enrollment", variant: "destructive" });
+        toast({ title: "Error adding session", variant: "destructive" });
         return;
       }
-      toast({ title: "Enrollment added successfully" });
+      toast({ title: "Session added successfully" });
+    }
+
+    if (addAnother && !editingEnrollment) {
+      setFormData({
+        child_id: formData.child_id,
+        sport_name: formData.sport_name,
+        instructor: formData.instructor,
+        schedule_periods: formData.schedule_periods,
+        period_number: formData.period_number,
+        other_period: formData.other_period,
+        session_date: "",
+        notes: "",
+      });
+      setEditingEnrollment(null);
+      fetchEnrollments();
+      return;
     }
 
     resetForm();
@@ -264,8 +291,7 @@ export default function SportsAcademy() {
       schedule_periods: [],
       period_number: "",
       other_period: "",
-      start_date: "",
-      end_date: "",
+      session_date: "",
       notes: "",
     });
     setEditingEnrollment(null);
@@ -301,8 +327,7 @@ export default function SportsAcademy() {
       schedule_periods: basePeriods,
       period_number: periodNum,
       other_period: otherText,
-      start_date: enrollment.start_date || "",
-      end_date: enrollment.end_date || "",
+      session_date: normalizeSessionDateYmd(enrollment.start_date) || "",
       notes: enrollment.notes || "",
     });
     setShowDialog(true);
@@ -375,25 +400,25 @@ export default function SportsAcademy() {
 
   const getDaysWithActivities = () => {
     const dates: Date[] = [];
-    enrollments.forEach(enrollment => {
-      if (enrollment.start_date) {
-        const start = parseISO(enrollment.start_date);
-        const end = enrollment.end_date ? parseISO(enrollment.end_date) : new Date();
+    enrollments.forEach((enrollment) => {
+      if (!enrollment.start_date) return;
+      if (isLegacySportsAcademyRange(enrollment)) {
+        const start = parseISO(normalizeSessionDateYmd(enrollment.start_date)!);
+        const end = parseISO(normalizeSessionDateYmd(enrollment.end_date)!);
         for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-          dates.push(new Date(d));
+          if (enrollmentOccursOnDate(enrollment, d)) {
+            dates.push(new Date(d));
+          }
         }
+        return;
       }
+      dates.push(parseISO(normalizeSessionDateYmd(enrollment.start_date)!));
     });
     return dates;
   };
 
   const getActivitiesForDate = (date: Date) => {
-    return filteredEnrollments.filter(enrollment => {
-      if (!enrollment.start_date) return false;
-      const start = parseISO(enrollment.start_date);
-      const end = enrollment.end_date ? parseISO(enrollment.end_date) : new Date();
-      return date >= start && date <= end;
-    });
+    return filteredEnrollments.filter((enrollment) => enrollmentOccursOnDate(enrollment, date));
   };
 
   const activeFilterCount = (selectedSport !== "all" ? 1 : 0) + 
@@ -659,8 +684,7 @@ export default function SportsAcademy() {
                       )}
                       {enrollment.start_date && (
                         <p className="text-sm text-muted-foreground">
-                          📆 {new Date(enrollment.start_date + 'T00:00:00').toLocaleDateString('en-US')} 
-                          {enrollment.end_date && ` - ${new Date(enrollment.end_date + 'T00:00:00').toLocaleDateString('en-US')}`}
+                          📆 Session: {formatSportsAcademySessionDate(enrollment)}
                         </p>
                       )}
                       {enrollment.notes && (
@@ -683,9 +707,12 @@ export default function SportsAcademy() {
       }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingEnrollment ? 'Edit Enrollment' : 'Add Enrollment'}</DialogTitle>
+            <DialogTitle>{editingEnrollment ? "Edit Session" : "Add Session"}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <p className="text-sm text-muted-foreground -mt-2">
+            Each session is one date. Add another session when the camper has academy on a different day.
+          </p>
+          <form onSubmit={(e) => handleSubmit(e, false)} className="space-y-4">
             <div className="space-y-2">
               <Label>Camper *</Label>
               <SearchableChildSelect
@@ -759,24 +786,14 @@ export default function SportsAcademy() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Start Date</Label>
-                <Input
-                  type="date"
-                  value={formData.start_date}
-                  onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>End Date</Label>
-                <Input
-                  type="date"
-                  value={formData.end_date}
-                  onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label>Session Date *</Label>
+              <Input
+                type="date"
+                value={formData.session_date}
+                onChange={(e) => setFormData({ ...formData, session_date: e.target.value })}
+                required
+              />
             </div>
 
             <div className="space-y-2">
@@ -796,7 +813,16 @@ export default function SportsAcademy() {
               }}>
                 Cancel
               </Button>
-              <Button type="submit">{editingEnrollment ? 'Update' : 'Add'} Enrollment</Button>
+              {!editingEnrollment && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={(e) => handleSubmit(e, true)}
+                >
+                  Save & add another
+                </Button>
+              )}
+              <Button type="submit">{editingEnrollment ? "Update Session" : "Add Session"}</Button>
             </div>
           </form>
         </DialogContent>

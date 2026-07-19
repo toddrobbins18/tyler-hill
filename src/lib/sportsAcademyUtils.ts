@@ -44,6 +44,51 @@ export type SportsAcademyCalendarEvent = {
 
 const CHILD_BATCH_SIZE = 500;
 
+export function normalizeSessionDateYmd(date: string | null | undefined): string | null {
+  if (!date) return null;
+  const trimmed = String(date).trim();
+  if (!trimmed) return null;
+  return trimmed.split("T")[0];
+}
+
+/** Legacy imports may still use a start/end range on one row. */
+export function isLegacySportsAcademyRange(
+  enrollment: Pick<SportsAcademyEnrollment, "start_date" | "end_date">,
+): boolean {
+  const start = normalizeSessionDateYmd(enrollment.start_date);
+  const end = normalizeSessionDateYmd(enrollment.end_date);
+  if (!start || !end) return false;
+  return end !== start;
+}
+
+export function formatSportsAcademySessionDate(
+  enrollment: Pick<SportsAcademyEnrollment, "start_date" | "end_date">,
+): string {
+  const start = normalizeSessionDateYmd(enrollment.start_date);
+  const end = normalizeSessionDateYmd(enrollment.end_date);
+  if (!start && !end) return "No session date";
+
+  const fmt = (ymd: string) =>
+    new Date(`${ymd}T00:00:00`).toLocaleDateString("en-US");
+
+  if (start && isLegacySportsAcademyRange(enrollment) && end) {
+    return `${fmt(start)} - ${fmt(end)}`;
+  }
+
+  return fmt(start || end!);
+}
+
+export function buildSportsAcademySessionDates(sessionDate: string | null | undefined): {
+  start_date: string | null;
+  end_date: string | null;
+} {
+  const normalized = normalizeSessionDateYmd(sessionDate);
+  return {
+    start_date: normalized,
+    end_date: normalized,
+  };
+}
+
 /** Prefer roster `name`; tolerate empty strings from imports. */
 export function sportsAcademyCamperName(enrollment: SportsAcademyEnrollment): string {
   const child = enrollment.child ?? enrollment.children;
@@ -98,6 +143,12 @@ export async function enrichSportsAcademyEnrollments(
   });
 }
 
+function matchesWeekdayFilter(enrollment: SportsAcademyEnrollment, day: Date): boolean {
+  const weekdays = (enrollment.weekdays || []).filter(Boolean);
+  if (weekdays.length === 0) return true;
+  return weekdays.includes(format(day, "EEEE"));
+}
+
 /** True when an enrollment should appear on a calendar day. */
 export function enrollmentOccursOnDate(
   enrollment: SportsAcademyEnrollment,
@@ -106,19 +157,15 @@ export function enrollmentOccursOnDate(
   if (!enrollment.start_date) return false;
 
   const day = startOfDay(date);
-  const start = startOfDay(parseISO(enrollment.start_date));
-  const end = startOfDay(
-    enrollment.end_date ? parseISO(enrollment.end_date) : new Date(),
-  );
+  const start = startOfDay(parseISO(normalizeSessionDateYmd(enrollment.start_date)!));
 
-  if (day < start || day > end) return false;
-
-  const weekdays = (enrollment.weekdays || []).filter(Boolean);
-  if (weekdays.length > 0) {
-    return weekdays.includes(format(day, "EEEE"));
+  if (!isLegacySportsAcademyRange(enrollment)) {
+    return day.getTime() === start.getTime() && matchesWeekdayFilter(enrollment, day);
   }
 
-  return true;
+  const end = startOfDay(parseISO(normalizeSessionDateYmd(enrollment.end_date)!));
+  if (day < start || day > end) return false;
+  return matchesWeekdayFilter(enrollment, day);
 }
 
 /** Expand enrollments into all-day calendar events within an optional visible range. */
@@ -132,10 +179,10 @@ export function expandSportsAcademyCalendarEvents(
   for (const enrollment of enrollments) {
     if (!enrollment.start_date || !enrollment.id) continue;
 
-    const enrollmentStart = startOfDay(parseISO(enrollment.start_date));
-    const enrollmentEnd = startOfDay(
-      enrollment.end_date ? parseISO(enrollment.end_date) : new Date(),
-    );
+    const enrollmentStart = startOfDay(parseISO(normalizeSessionDateYmd(enrollment.start_date)!));
+    const enrollmentEnd = isLegacySportsAcademyRange(enrollment)
+      ? startOfDay(parseISO(normalizeSessionDateYmd(enrollment.end_date)!))
+      : enrollmentStart;
 
     const intervalStart =
       rangeStart && rangeStart > enrollmentStart ? rangeStart : enrollmentStart;
