@@ -126,6 +126,19 @@ function looksLikePersonId(value: string): boolean {
   return /^\d{5,12}$/.test(value.replace(/\s/g, ""));
 }
 
+function pickDayOffCell(row: Record<string, unknown>): string {
+  return pickCell(
+    row,
+    "day_of",
+    "Day Of",
+    "day off",
+    "Day Off",
+    "DAY OFF",
+    "is_day_off",
+    "Is Day Off",
+  );
+}
+
 export function isLikelyStaffDaysOffPatternRow(row: Record<string, unknown>): boolean {
   const personId = pickPersonId(row);
   if (!looksLikePersonId(personId)) return false;
@@ -133,8 +146,7 @@ export function isLikelyStaffDaysOffPatternRow(row: Record<string, unknown>): bo
   const dateRaw = pickCell(row, "date", "Date", "DATE");
   if (normalizeSpreadsheetDate(dateRaw)) return false;
 
-  const dayOffRaw = pickCell(row, "day_off", "Day Off", "day off", "DAY OFF", "is_day_off", "Is Day Off");
-  return weeklyPatternKeyFromDayOffColumn(dayOffRaw) !== null;
+  return weeklyPatternKeyFromDayOffColumn(pickDayOffCell(row)) !== null;
 }
 
 export function preprocessStaffDaysOffUploadRows(
@@ -153,8 +165,7 @@ export function preprocessStaffDaysOffUploadRows(
   for (const row of rows) {
     if (isLikelyStaffDaysOffPatternRow(row)) {
       const personId = pickPersonId(row);
-      const dayOffRaw = pickCell(row, "day_off", "Day Off", "day off", "DAY OFF", "is_day_off", "Is Day Off");
-      const patternKey = weeklyPatternKeyFromDayOffColumn(dayOffRaw);
+      const patternKey = weeklyPatternKeyFromDayOffColumn(pickDayOffCell(row));
       if (!patternKey) continue;
 
       const datedRows = expandWeeklyPatternRows(personId, patternKey, season);

@@ -48,6 +48,7 @@ export function parseSpreadsheetFile(
               lower.includes('personid') ||
               lower.includes('bunk number') || 
               lower.includes('bunk name') ||
+              lower.includes('day of') ||
               lower.includes('is primary') ||
               lower.includes('first name') ||
               lower.includes('last name') ||
@@ -97,6 +98,7 @@ export function parseSpreadsheetFile(
                   val.includes('personid') ||
                   val.includes('bunk number') || 
                   val.includes('bunk name') ||
+                  val.includes('day of') ||
                   val.includes('is primary') ||
                   val.includes('first name') ||
                   val.includes('last name') ||

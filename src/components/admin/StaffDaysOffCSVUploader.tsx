@@ -98,7 +98,7 @@ export default function StaffDaysOffCSVUploader({ onUploadComplete }: StaffDaysO
           <div>
             <h4 className="font-medium">Upload Day & Night Off Schedule</h4>
             <p className="text-sm text-muted-foreground">
-              Bulk-import staff day offs and night offs by Person ID and date
+              Bulk-import staff day offs and night offs by Person ID, or upload the Tyler Hill bunk OD sheet
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -134,10 +134,15 @@ export default function StaffDaysOffCSVUploader({ onUploadComplete }: StaffDaysO
           <ul className="list-disc list-inside space-y-1">
             <li><strong>Person ID</strong> — staff CampMinder Person ID (required)</li>
             <li>
-              <strong>Weekly pattern format (Tyler Hill OD sheet):</strong> columns{" "}
+              <strong>Tyler Hill bunk OD sheet:</strong> columns <strong>Bunk Name</strong> (B1, B2, SH),{" "}
+              <strong>Name</strong>, and <strong>Day Of</strong> (Tuesday/Wednesday/Thursday). Extra
+              pages and legend rows are skipped; staff are matched by name and bunk assignment.
+            </li>
+            <li>
+              <strong>Weekly pattern format (Person ID):</strong> columns{" "}
               <strong>PersonID</strong> + <strong>Day Off</strong> with{" "}
               <strong>TUESDAY</strong>, <strong>WEDNESDAY</strong>, or <strong>THURSDAY</strong>.
-              Legend rows at the top are skipped automatically. The full season (Jun–Aug) is generated.
+              The full season (Jun–Aug) is generated.
             </li>
             <li><strong>Date</strong> — YYYY-MM-DD or M/D/YYYY (dated format)</li>
             <li><strong>Day Off</strong> — yes/no for full day off (dated format)</li>

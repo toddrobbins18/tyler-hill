@@ -4,6 +4,11 @@ import { normalizeCsvPersonId } from "@/lib/csvPersonIdResolve";
 import { normalizeSpreadsheetDate } from "@/lib/spreadsheetDates";
 import { pickCell, parseYesNo } from "@/lib/spreadsheetRowUtils";
 import { shouldRemoveDayOffRecord } from "@/lib/odNightOffSchedule";
+import {
+  looksLikeOdBunkSheet,
+  parseOdBunkSheetUpload,
+  resolveOdBunkSheetPatterns,
+} from "@/lib/odBunkSheetImport";
 import { getSeasonDateRange, preprocessStaffDaysOffUploadRows } from "@/lib/odWeeklyDayOffPatterns";
 
 export type StaffDaysOffCsvUploadResult = {
@@ -105,11 +110,17 @@ export const STAFF_DAYS_OFF_CSV_TEMPLATE = `Person ID,Date,Day Off,Night Off,Not
 12345678,2026-07-20,no,yes,Monday night off
 12345678,2026-07-21,no,yes,Tuesday night off
 
---- OR weekly pattern format (Tyler Hill OD sheet) ---
+--- OR weekly pattern format (Person ID) ---
 PersonID,Day Off
 20424253,THURSDAY
 20542345,TUESDAY
-20599277,WEDNESDAY`;
+20599277,WEDNESDAY
+
+--- OR Tyler Hill bunk OD sheet ---
+Bunk Name,Name,Day Of
+B1,Dylan Blum Donato,Tuesday
+B2,Flynn Smith,Tuesday
+SH,Fabian Rostedt,Tuesday`;
 
 function pushError(result: StaffDaysOffCsvUploadResult, message: string) {
   result.failed++;
@@ -165,17 +176,53 @@ export async function importStaffDaysOffSchedule(
   const { companyId, season, rows } = params;
   const result: StaffDaysOffCsvUploadResult = { success: 0, failed: 0, errors: [] };
 
-  if (rows.length > 500) {
+  const isBunkSheet = looksLikeOdBunkSheet(rows);
+  const rowLimit = isBunkSheet ? 3000 : 500;
+  if (rows.length > rowLimit) {
     return {
       success: 0,
       failed: rows.length,
-      errors: ["Maximum 500 spreadsheet rows allowed per upload."],
+      errors: [`Maximum ${rowLimit} spreadsheet rows allowed per upload.`],
     };
   }
 
-  const preprocessed = preprocessStaffDaysOffUploadRows(rows, season);
+  let importRows = rows;
+  const bunkSheet = parseOdBunkSheetUpload(rows);
+  if (bunkSheet.isBunkSheet) {
+    const resolveErrors: string[] = [];
+    try {
+      importRows = await resolveOdBunkSheetPatterns(supabase, {
+        companyId,
+        season,
+        patternRows: bunkSheet.patternRows,
+        errors: resolveErrors,
+      });
+    } catch (error) {
+      return {
+        success: 0,
+        failed: rows.length,
+        errors: [error instanceof Error ? error.message : "Failed to resolve bunk sheet staff"],
+      };
+    }
+
+    if (importRows.length === 0) {
+      return {
+        success: 0,
+        failed: bunkSheet.patternRows.length,
+        errors: resolveErrors.length
+          ? resolveErrors
+          : ["No staff matched from bunk sheet. Check bunk assignments and staff names."],
+      };
+    }
+
+    for (const message of resolveErrors) {
+      pushError(result, message);
+    }
+  }
+
   result.patternStaffCount = preprocessed.patternStaffCount;
-  result.skippedLegendRows = preprocessed.skippedLegendRows;
+  result.skippedLegendRows =
+    preprocessed.skippedLegendRows + (bunkSheet.isBunkSheet ? bunkSheet.skippedLegendRows : 0);
   result.expandedRowCount = preprocessed.expandedRowCount;
 
   if (preprocessed.rows.length === 0) {
@@ -183,7 +230,7 @@ export async function importStaffDaysOffSchedule(
       ...result,
       failed: rows.length,
       errors: [
-        "No valid rows found. Use Person ID + Date rows, or PersonID + weekday (TUESDAY/WEDNESDAY/THURSDAY) for weekly patterns.",
+        "No valid rows found. Use Person ID + Date rows, PersonID + weekday (TUESDAY/WEDNESDAY/THURSDAY), or the Tyler Hill bunk sheet (Bunk Name + Name + Day Of).",
       ],
     };
   }
