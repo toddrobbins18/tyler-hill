@@ -48,7 +48,7 @@ SET search_path = public
 AS $$
 DECLARE
   new_balance numeric;
-  min_balance constant numeric := -25;
+  min_balance constant numeric := -75;
   tx jsonb;
   applied_free boolean := false;
   camp_today date := (now() AT TIME ZONE 'America/New_York')::date;
@@ -120,7 +120,7 @@ BEGIN
     RETURNING owl_pay_balance INTO new_balance;
 
     IF new_balance IS NULL THEN
-      RAISE EXCEPTION 'Unable to update camper balance (camper not found or below -$25 credit limit)';
+      RAISE EXCEPTION 'Unable to update camper balance (camper not found or below -$75 credit limit)';
     END IF;
   END IF;
 

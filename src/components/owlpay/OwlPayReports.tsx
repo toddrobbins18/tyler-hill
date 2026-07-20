@@ -21,6 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   fetchOwlPayReportBundle,
   formatCampReportDateTime,
+  OWL_PAY_CREDIT_LIMIT,
   formatCampReportDateTimeCsv,
   formatCampReportTime,
   formatCampYmdDisplay,
@@ -155,9 +156,11 @@ const OwlPayReports = () => {
         "Season",
         "Person ID",
         "Period spent",
+        "Season spent",
         "Items bought",
         "CM deposits",
-        "Current balance",
+        "Full balance",
+        "Beyond $75 credit cap",
       ],
       ...data.buyerSummaries.map((s) => [
         s.name,
@@ -165,9 +168,11 @@ const OwlPayReports = () => {
         s.season ?? "",
         s.person_id ?? "",
         s.period_spent.toFixed(2),
+        s.season_spent != null ? s.season_spent.toFixed(2) : "",
         s.period_items,
         s.cm_deposits != null ? s.cm_deposits.toFixed(2) : "",
-        s.current_balance != null ? s.current_balance.toFixed(2) : "",
+        s.full_balance != null ? s.full_balance.toFixed(2) : s.current_balance != null ? s.current_balance.toFixed(2) : "",
+        s.beyond_credit_cap != null ? s.beyond_credit_cap.toFixed(2) : "",
       ]),
       [],
       ["Daily summary — Camp date", "Revenue (paid)", "Paid items", "Free items", "Total lines"],
@@ -493,7 +498,7 @@ const OwlPayReports = () => {
             <CardHeader>
               <CardTitle className="text-base">Spending by person</CardTitle>
               <p className="text-xs text-muted-foreground mt-1">
-                Period spent is for the selected date range. Deposits and balance are current for {currentSeason}.
+                Full balance = CampMinder deposits minus season canteen spend. New purchases stop at −${OWL_PAY_CREDIT_LIMIT} credit limit.
               </p>
               <Input placeholder="Search by name..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="max-w-sm mt-2" />
             </CardHeader>
@@ -510,7 +515,8 @@ const OwlPayReports = () => {
                         <TableHead className="text-right">Period spent</TableHead>
                         <TableHead className="text-right">Items</TableHead>
                         {reportAudience !== "staff" && <TableHead className="text-right">Deposits</TableHead>}
-                        {reportAudience !== "staff" && <TableHead className="text-right">Balance</TableHead>}
+                        {reportAudience !== "staff" && <TableHead className="text-right">Season spent</TableHead>}
+                        {reportAudience !== "staff" && <TableHead className="text-right">Full balance</TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -528,8 +534,17 @@ const OwlPayReports = () => {
                             </TableCell>
                           )}
                           {reportAudience !== "staff" && (
-                            <TableCell className={`text-right ${s.current_balance != null && s.current_balance < 0 ? "text-destructive" : ""}`}>
-                              {s.current_balance != null ? `$${s.current_balance.toFixed(2)}` : "—"}
+                            <TableCell className="text-right">
+                              {s.season_spent != null ? `$${s.season_spent.toFixed(2)}` : "—"}
+                            </TableCell>
+                          )}
+                          {reportAudience !== "staff" && (
+                            <TableCell className={`text-right ${(s.full_balance ?? s.current_balance ?? 0) < 0 ? "text-destructive" : ""}`}>
+                              {s.full_balance != null
+                                ? `$${s.full_balance.toFixed(2)}`
+                                : s.current_balance != null
+                                  ? `$${s.current_balance.toFixed(2)}`
+                                  : "—"}
                             </TableCell>
                           )}
                         </TableRow>

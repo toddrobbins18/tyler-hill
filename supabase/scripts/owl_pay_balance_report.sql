@@ -3,11 +3,11 @@
 -- Run in Supabase SQL Editor → Results → Export CSV.
 --
 -- Columns explained:
---   cm_deposits        CampMinder canteen deposits (season)
+--   cm_deposits        CampMinder canteen deposits
 --   season_spent       Total paid Owl Pay purchases (season)
---   true_balance       Deposits minus spend (full accounting, no cap)
---   pos_balance        Balance stored in Owl Pay (capped at -$25 credit limit)
---   beyond_credit_cap  Dollars spent beyond the -$25 POS limit (0 if not over)
+--   full_balance       Deposits minus spend (full accounting — what Todd sees)
+--   pos_balance        Stored owl_pay_balance (should match full_balance)
+--   beyond_credit_cap  Dollars below the -$75 credit limit (0 if not over)
 --
 -- Change season below if needed.
 
@@ -49,25 +49,18 @@ SELECT
   c.name AS camper_name,
   c.season,
   c.rfid,
-  ROUND(c.owl_pay_balance::numeric, 2) AS pos_balance,
   COALESCE(d.cm_deposits, 0) AS cm_deposits,
   COALESCE(s.season_spent, 0) AS season_spent,
   COALESCE(s.paid_items, 0) AS paid_items,
-  ROUND((COALESCE(d.cm_deposits, 0) - COALESCE(s.season_spent, 0))::numeric, 2) AS true_balance,
-  ROUND(GREATEST(COALESCE(d.cm_deposits, 0) - COALESCE(s.season_spent, 0), -25)::numeric, 2) AS expected_pos_balance,
-  ROUND(
-    GREATEST(
-      (COALESCE(d.cm_deposits, 0) - COALESCE(s.season_spent, 0)) - (-25),
-      0
-    )::numeric,
-    2
-  ) AS beyond_credit_cap,
+  ROUND((COALESCE(d.cm_deposits, 0) - COALESCE(s.season_spent, 0))::numeric, 2) AS full_balance,
+  ROUND(c.owl_pay_balance::numeric, 2) AS pos_balance,
+  ROUND(GREATEST((COALESCE(d.cm_deposits, 0) - COALESCE(s.season_spent, 0)) - (-75), 0)::numeric, 2) AS beyond_credit_cap,
   CASE
     WHEN ABS(
-      c.owl_pay_balance - GREATEST(COALESCE(d.cm_deposits, 0) - COALESCE(s.season_spent, 0), -25)
+      c.owl_pay_balance - (COALESCE(d.cm_deposits, 0) - COALESCE(s.season_spent, 0))
     ) <= 0.01 THEN 'yes'
     ELSE 'no'
-  END AS pos_balance_matches_expected
+  END AS balance_matches_full_accounting
 FROM public.children c
 JOIN camp ON c.company_id = camp.company_id
 LEFT JOIN cm_deposits d ON d.child_id = c.id
@@ -76,8 +69,8 @@ WHERE c.season = '2026'
   AND c.status IS DISTINCT FROM 'inactive'
 ORDER BY
   beyond_credit_cap DESC,
-  true_balance ASC,
+  full_balance ASC,
   c.name ASC;
 
--- Campers over the $25 credit cap only:
+-- Campers over the $75 credit cap only:
 -- Add at end: WHERE beyond_credit_cap > 0  (wrap in outer query or use HAVING in a subquery)

@@ -11,7 +11,7 @@ SET search_path = public
 AS $$
 DECLARE
   new_balance numeric;
-  min_balance constant numeric := -25;
+  min_balance constant numeric := -75;
 BEGIN
   UPDATE public.children
   SET owl_pay_balance = owl_pay_balance + _amount,
@@ -21,7 +21,7 @@ BEGIN
   RETURNING owl_pay_balance INTO new_balance;
 
   IF new_balance IS NULL THEN
-    RAISE EXCEPTION 'Owl Pay balance cannot go below -$25.00';
+    RAISE EXCEPTION 'Owl Pay balance cannot go below -$75.00';
   END IF;
 
   RETURN new_balance;

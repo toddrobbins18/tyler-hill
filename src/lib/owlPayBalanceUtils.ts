@@ -1,5 +1,5 @@
 /** Campers may charge up to this amount below zero (matches DB/RPC limit). */
-export const OWL_PAY_MAX_OVERDRAFT = 25;
+export const OWL_PAY_MAX_OVERDRAFT = 75;
 
 export const OWL_PAY_MIN_BALANCE = -OWL_PAY_MAX_OVERDRAFT;
 
@@ -26,7 +26,9 @@ export function getOwlPayBalanceTone(balance: number): OwlPayBalanceTone {
 }
 
 export function formatOwlPayBalanceHint(balance: number): string | null {
-  if (balance < OWL_PAY_MIN_BALANCE) return null;
+  if (balance < OWL_PAY_MIN_BALANCE) {
+    return `Over $${OWL_PAY_MAX_OVERDRAFT.toFixed(0)} credit limit — no new purchases`;
+  }
   if (balance < 0) {
     return `Negative balance — up to $${OWL_PAY_MAX_OVERDRAFT.toFixed(0)} credit available`;
   }

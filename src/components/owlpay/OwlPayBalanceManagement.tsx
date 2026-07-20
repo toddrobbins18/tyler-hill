@@ -9,7 +9,7 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useToast } from "@/hooks/use-toast";
 import { Search, DollarSign } from "lucide-react";
-import { getOwlPayBalanceTone } from "@/lib/owlPayBalanceUtils";
+import { getOwlPayBalanceTone, OWL_PAY_MAX_OVERDRAFT } from "@/lib/owlPayBalanceUtils";
 
 interface CamperBalance {
   id: string;
@@ -230,7 +230,7 @@ const OwlPayBalanceManagement = () => {
           </div>
           <p className="text-sm text-muted-foreground">
             {audience === "campers"
-              ? "Balances sync from enrollment / CampMinder and adjust at checkout."
+              ? `Full balance = CampMinder deposits minus canteen spend. New POS purchases stop at −$${OWL_PAY_MAX_OVERDRAFT} credit limit.`
               : "Staff purchases use running POS totals (sum of OwlPay purchase rows); prepaid balances apply to campers."}
           </p>
         </CardHeader>
@@ -243,7 +243,7 @@ const OwlPayBalanceManagement = () => {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Person ID</TableHead>
-                  <TableHead>Balance</TableHead>
+                  <TableHead>Full balance</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

@@ -65,7 +65,12 @@ export type OwlPayCamperFinancial = {
   person_id: string | null;
   owl_pay_balance: number;
   cm_deposits: number;
+  season_spent: number;
+  full_balance: number;
+  beyond_credit_cap: number;
 };
+
+export const OWL_PAY_CREDIT_LIMIT = 75;
 
 export type OwlPayBuyerSummary = {
   buyer_key: string;
@@ -76,8 +81,11 @@ export type OwlPayBuyerSummary = {
   staff_id: string | null;
   period_spent: number;
   period_items: number;
+  season_spent: number | null;
   cm_deposits: number | null;
   current_balance: number | null;
+  full_balance: number | null;
+  beyond_credit_cap: number | null;
   person_id: string | null;
 };
 
@@ -511,7 +519,8 @@ export async function fetchOwlPayCamperFinancials(
   companyId: string,
   season: string,
 ): Promise<OwlPayCamperFinancial[]> {
-  const [{ data: campers, error: camperErr }, { data: cmRows, error: cmErr }] = await Promise.all([
+  const [{ data: campers, error: camperErr }, { data: cmRows, error: cmErr }, { data: spendRows, error: spendErr }] =
+    await Promise.all([
     supabase
       .from("children")
       .select("id, name, season, person_id, owl_pay_balance")
@@ -519,10 +528,12 @@ export async function fetchOwlPayCamperFinancials(
       .eq("season", season)
       .neq("status", "inactive"),
     supabase.from("campminder_transactions").select("person_id, amount").eq("company_id", companyId),
+    supabase.rpc("get_owl_pay_purchase_totals", { _company_id: companyId }),
   ]);
 
   if (camperErr) throw camperErr;
   if (cmErr) throw cmErr;
+  if (spendErr) throw spendErr;
 
   const depositsByPerson = new Map<string, number>();
   for (const row of cmRows || []) {
@@ -531,14 +542,27 @@ export async function fetchOwlPayCamperFinancials(
     depositsByPerson.set(personId, (depositsByPerson.get(personId) || 0) + Number(row.amount || 0));
   }
 
-  return (campers || []).map((camper) => ({
-    child_id: camper.id,
-    name: camper.name,
-    season: camper.season,
-    person_id: camper.person_id,
-    owl_pay_balance: Number(camper.owl_pay_balance || 0),
-    cm_deposits: camper.person_id ? depositsByPerson.get(String(camper.person_id)) || 0 : 0,
-  }));
+  const spentByChild = new Map<string, number>();
+  for (const row of spendRows || []) {
+    spentByChild.set(String(row.child_id), Number(row.total_spent || 0));
+  }
+
+  return (campers || []).map((camper) => {
+    const cmDeposits = camper.person_id ? depositsByPerson.get(String(camper.person_id)) || 0 : 0;
+    const seasonSpent = spentByChild.get(camper.id) || 0;
+    const fullBalance = cmDeposits - seasonSpent;
+    return {
+      child_id: camper.id,
+      name: camper.name,
+      season: camper.season,
+      person_id: camper.person_id,
+      owl_pay_balance: Number(camper.owl_pay_balance || 0),
+      cm_deposits: cmDeposits,
+      season_spent: seasonSpent,
+      full_balance: fullBalance,
+      beyond_credit_cap: Math.max(fullBalance - -OWL_PAY_CREDIT_LIMIT, 0),
+    };
+  });
 }
 
 export function buildOwlPayBuyerSummaries(
@@ -562,8 +586,11 @@ export function buildOwlPayBuyerSummaries(
         staff_id: purchase.staff_id,
         period_spent: 0,
         period_items: 0,
+        season_spent: camper ? camper.season_spent : null,
         cm_deposits: camper ? camper.cm_deposits : null,
         current_balance: camper ? camper.owl_pay_balance : null,
+        full_balance: camper ? camper.full_balance : null,
+        beyond_credit_cap: camper ? camper.beyond_credit_cap : null,
         person_id: camper?.person_id ?? null,
       });
     }
