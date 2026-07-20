@@ -1,5 +1,5 @@
-/** Campers may charge up to this amount below zero (e.g. -$75). */
-export const OWL_PAY_MAX_OVERDRAFT = 75;
+/** Campers may charge up to this amount below zero (matches DB/RPC limit). */
+export const OWL_PAY_MAX_OVERDRAFT = 25;
 
 export const OWL_PAY_MIN_BALANCE = -OWL_PAY_MAX_OVERDRAFT;
 

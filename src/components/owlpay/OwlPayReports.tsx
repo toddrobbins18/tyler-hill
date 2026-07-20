@@ -16,10 +16,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeason } from "@/contexts/SeasonContext";
 import { useToast } from "@/hooks/use-toast";
 import {
-  aggregateOwlPayReports,
-  fetchAllOwlPayPurchaseTransactions,
+  fetchOwlPayReportBundle,
   formatCampReportDateTime,
   formatCampReportDateTimeCsv,
   formatCampReportTime,
@@ -69,6 +69,7 @@ function pickerDateToDisplay(date: Date): string {
 
 const OwlPayReports = () => {
   const { currentCompany } = useCompany();
+  const { selectedSeason: currentSeason } = useSeason();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const todayYmd = getCampYmd();
@@ -80,32 +81,32 @@ const OwlPayReports = () => {
   const [reportAudience, setReportAudience] = useState<OwlPayReportAudience>("all");
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["owl-pay-reports", "v4", fromYmd, toYmd, currentCompany?.id, reportAudience],
-    enabled: !!currentCompany?.id,
+    queryKey: ["owl-pay-reports", "v5", fromYmd, toYmd, currentCompany?.id, currentSeason, reportAudience],
+    enabled: !!currentCompany?.id && !!currentSeason,
     staleTime: 0,
     refetchOnMount: "always",
     queryFn: async () => {
-      const { startISO, endInclusiveISO } = getOwlPayReportFetchBounds(fromYmd, toYmd);
-      const transactions = await fetchAllOwlPayPurchaseTransactions(
-        supabase,
-        currentCompany!.id,
-        startISO,
-        endInclusiveISO,
-      );
-      const aggregated = aggregateOwlPayReports(transactions, reportAudience, fromYmd, toYmd);
+      const bundle = await fetchOwlPayReportBundle(supabase, {
+        companyId: currentCompany!.id,
+        season: currentSeason,
+        fromYmd,
+        toYmd,
+        audience: reportAudience,
+      });
       if (import.meta.env.DEV) {
+        const { startISO, endInclusiveISO } = getOwlPayReportFetchBounds(fromYmd, toYmd);
         console.info("[OwlPay Reports]", {
           fromYmd,
           toYmd,
           startISO,
           endInclusiveISO,
-          fetched: transactions.length,
-          purchases: aggregated.purchases.length,
-          paidItems: aggregated.stats.totalItems,
-          revenue: aggregated.stats.totalRevenue,
+          purchases: bundle.purchases.length,
+          paidItems: bundle.stats.totalItems,
+          revenue: bundle.stats.totalRevenue,
+          buyerSummaries: bundle.buyerSummaries.length,
         });
       }
-      return aggregated;
+      return bundle;
     },
   });
 
@@ -124,6 +125,9 @@ const OwlPayReports = () => {
   const dailyRowsForDisplay = data ? getOwlPayDailyRowsForDisplay(data.salesOverTime) : [];
   const dailyRowsForChart = data ? getOwlPayDailyRowsForChart(data.salesOverTime) : [];
 
+  const filteredBuyerSummaries =
+    data?.buyerSummaries?.filter((s) => s.name.toLowerCase().includes(searchTerm.toLowerCase())) || [];
+
   const exportReportsCsv = () => {
     if (!data || !currentCompany?.id) {
       toast({ title: "Nothing to export", variant: "destructive" });
@@ -132,23 +136,10 @@ const OwlPayReports = () => {
     const audienceLabel = reportAudience === "all" ? "all-buyers" : reportAudience;
     const filename = `owlpay-report_${currentCompany.slug ?? "camp"}_${fromYmd}_${toYmd}_${audienceLabel}.csv`;
 
-    const spentByPerson = new Map<string, { name: string; type: string; totalSpent: number; totalItems: number }>();
-    data.purchases.forEach((p) => {
-      if (p.is_free) return;
-      const key = `${p.buyer_type}-${p.camper_name}`;
-      if (!spentByPerson.has(key)) {
-        spentByPerson.set(key, { name: p.camper_name, type: p.buyer_type, totalSpent: 0, totalItems: 0 });
-      }
-      const person = spentByPerson.get(key)!;
-      person.totalSpent += p.amount;
-      person.totalItems += 1;
-    });
-
-    const sortedSpenders = Array.from(spentByPerson.values()).sort((a, b) => b.totalSpent - a.totalSpent);
-
     const summaryRows: (string | number | boolean)[][] = [
       ["Report", "Owl Pay"],
       ["Company", currentCompany.name ?? ""],
+      ["Season", currentSeason],
       ["Date range (camp time / US Eastern)", `${formatCampYmdDisplay(fromYmd)} to ${formatCampYmdDisplay(toYmd)}`],
       ["Audience", reportAudience],
       ["Total revenue (paid items)", data.stats.totalRevenue.toFixed(2)],
@@ -158,8 +149,26 @@ const OwlPayReports = () => {
       ["Avg paid transaction", data.stats.avgTransaction.toFixed(2)],
       ["Most popular item", data.stats.mostPopular],
       [],
-      ["Total Spent by Person — Name", "Type", "Total Spent", "Items Bought"],
-      ...sortedSpenders.map((s) => [s.name, s.type, s.totalSpent.toFixed(2), s.totalItems]),
+      [
+        "By person — Name",
+        "Type",
+        "Season",
+        "Person ID",
+        "Period spent",
+        "Items bought",
+        "CM deposits",
+        "Current balance",
+      ],
+      ...data.buyerSummaries.map((s) => [
+        s.name,
+        s.buyer_type,
+        s.season ?? "",
+        s.person_id ?? "",
+        s.period_spent.toFixed(2),
+        s.period_items,
+        s.cm_deposits != null ? s.cm_deposits.toFixed(2) : "",
+        s.current_balance != null ? s.current_balance.toFixed(2) : "",
+      ]),
       [],
       ["Daily summary — Camp date", "Revenue (paid)", "Paid items", "Free items", "Total lines"],
       ...dailyRowsForDisplay.map((d) => [
@@ -418,6 +427,7 @@ const OwlPayReports = () => {
       <Tabs defaultValue="by-item">
         <TabsList>
           <TabsTrigger value="by-item">By Item</TabsTrigger>
+          <TabsTrigger value="by-person">By Person</TabsTrigger>
           <TabsTrigger value="over-time">Over Time</TabsTrigger>
           <TabsTrigger value="purchases">Purchases</TabsTrigger>
         </TabsList>
@@ -476,6 +486,60 @@ const OwlPayReports = () => {
               </Card>
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="by-person">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Spending by person</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Period spent is for the selected date range. Deposits and balance are current for {currentSeason}.
+              </p>
+              <Input placeholder="Search by name..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="max-w-sm mt-2" />
+            </CardHeader>
+            <CardContent>
+              {filteredBuyerSummaries.length === 0 ? (
+                <p className="text-center text-muted-foreground py-6">No paid purchases for this period.</p>
+              ) : (
+                <ScrollArea className="h-[400px]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        {reportAudience === "all" && <TableHead>Type</TableHead>}
+                        <TableHead className="text-right">Period spent</TableHead>
+                        <TableHead className="text-right">Items</TableHead>
+                        {reportAudience !== "staff" && <TableHead className="text-right">Deposits</TableHead>}
+                        {reportAudience !== "staff" && <TableHead className="text-right">Balance</TableHead>}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredBuyerSummaries.map((s) => (
+                        <TableRow key={s.buyer_key}>
+                          <TableCell className="font-medium">{s.name}</TableCell>
+                          {reportAudience === "all" && (
+                            <TableCell><Badge variant="outline" className="capitalize">{s.buyer_type}</Badge></TableCell>
+                          )}
+                          <TableCell className="text-right">${s.period_spent.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">{s.period_items}</TableCell>
+                          {reportAudience !== "staff" && (
+                            <TableCell className="text-right">
+                              {s.cm_deposits != null ? `$${s.cm_deposits.toFixed(2)}` : "—"}
+                            </TableCell>
+                          )}
+                          {reportAudience !== "staff" && (
+                            <TableCell className={`text-right ${s.current_balance != null && s.current_balance < 0 ? "text-destructive" : ""}`}>
+                              {s.current_balance != null ? `$${s.current_balance.toFixed(2)}` : "—"}
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="over-time">

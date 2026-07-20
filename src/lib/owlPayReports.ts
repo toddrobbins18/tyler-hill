@@ -44,6 +44,9 @@ export type OwlPayReportData = {
   purchases: {
     id: string;
     buyer_type: "camper" | "staff";
+    buyer_key: string;
+    child_id: string | null;
+    staff_id: string | null;
     camper_name: string;
     item_name: string;
     item_category: string;
@@ -53,6 +56,33 @@ export type OwlPayReportData = {
     camp_date: string;
   }[];
   stats: OwlPayReportStats;
+};
+
+export type OwlPayCamperFinancial = {
+  child_id: string;
+  name: string;
+  season: string;
+  person_id: string | null;
+  owl_pay_balance: number;
+  cm_deposits: number;
+};
+
+export type OwlPayBuyerSummary = {
+  buyer_key: string;
+  buyer_type: "camper" | "staff";
+  name: string;
+  season: string | null;
+  child_id: string | null;
+  staff_id: string | null;
+  period_spent: number;
+  period_items: number;
+  cm_deposits: number | null;
+  current_balance: number | null;
+  person_id: string | null;
+};
+
+export type OwlPayReportBundle = OwlPayReportData & {
+  buyerSummaries: OwlPayBuyerSummary[];
 };
 
 /** Match the live/production query shape that is known to work. */
@@ -392,6 +422,14 @@ export function aggregateOwlPayReports(
     purchases.push({
       id: tx.id,
       buyer_type: buyer === "staff" ? "staff" : "camper",
+      buyer_key:
+        buyer === "staff" && tx.staff_id
+          ? `staff:${tx.staff_id}`
+          : buyer === "camper" && tx.child_id
+            ? `camper:${tx.child_id}`
+            : `${buyer}-name:${child?.name || staffMember?.name || "unknown"}`,
+      child_id: tx.child_id ?? null,
+      staff_id: tx.staff_id ?? null,
       camper_name: child?.name || staffMember?.name || "Unknown",
       item_name: itemName,
       item_category: itemCategory,
@@ -466,4 +504,97 @@ export function campLocalToUtc(
   const ss = String(second).padStart(2, "0");
   const base = new Date(`${ymd}T${hh}:${mm}:${ss}${offset}`);
   return new Date(base.getTime() + ms);
+}
+
+export async function fetchOwlPayCamperFinancials(
+  supabase: SupabaseClient,
+  companyId: string,
+  season: string,
+): Promise<OwlPayCamperFinancial[]> {
+  const [{ data: campers, error: camperErr }, { data: cmRows, error: cmErr }] = await Promise.all([
+    supabase
+      .from("children")
+      .select("id, name, season, person_id, owl_pay_balance")
+      .eq("company_id", companyId)
+      .eq("season", season)
+      .neq("status", "inactive"),
+    supabase.from("campminder_transactions").select("person_id, amount").eq("company_id", companyId),
+  ]);
+
+  if (camperErr) throw camperErr;
+  if (cmErr) throw cmErr;
+
+  const depositsByPerson = new Map<string, number>();
+  for (const row of cmRows || []) {
+    const personId = String(row.person_id || "");
+    if (!personId) continue;
+    depositsByPerson.set(personId, (depositsByPerson.get(personId) || 0) + Number(row.amount || 0));
+  }
+
+  return (campers || []).map((camper) => ({
+    child_id: camper.id,
+    name: camper.name,
+    season: camper.season,
+    person_id: camper.person_id,
+    owl_pay_balance: Number(camper.owl_pay_balance || 0),
+    cm_deposits: camper.person_id ? depositsByPerson.get(String(camper.person_id)) || 0 : 0,
+  }));
+}
+
+export function buildOwlPayBuyerSummaries(
+  purchases: OwlPayReportData["purchases"],
+  camperFinancials: OwlPayCamperFinancial[],
+): OwlPayBuyerSummary[] {
+  const camperById = new Map(camperFinancials.map((camper) => [camper.child_id, camper]));
+  const byKey = new Map<string, OwlPayBuyerSummary>();
+
+  for (const purchase of purchases) {
+    if (purchase.is_free) continue;
+
+    if (!byKey.has(purchase.buyer_key)) {
+      const camper = purchase.child_id ? camperById.get(purchase.child_id) : undefined;
+      byKey.set(purchase.buyer_key, {
+        buyer_key: purchase.buyer_key,
+        buyer_type: purchase.buyer_type,
+        name: purchase.camper_name,
+        season: camper?.season ?? null,
+        child_id: purchase.child_id,
+        staff_id: purchase.staff_id,
+        period_spent: 0,
+        period_items: 0,
+        cm_deposits: camper ? camper.cm_deposits : null,
+        current_balance: camper ? camper.owl_pay_balance : null,
+        person_id: camper?.person_id ?? null,
+      });
+    }
+
+    const summary = byKey.get(purchase.buyer_key)!;
+    summary.period_spent += purchase.amount;
+    summary.period_items += 1;
+  }
+
+  return Array.from(byKey.values()).sort((a, b) => b.period_spent - a.period_spent);
+}
+
+export async function fetchOwlPayReportBundle(
+  supabase: SupabaseClient,
+  params: {
+    companyId: string;
+    season: string;
+    fromYmd: string;
+    toYmd: string;
+    audience: OwlPayReportAudience;
+  },
+): Promise<OwlPayReportBundle> {
+  const { companyId, season, fromYmd, toYmd, audience } = params;
+  const { startISO, endInclusiveISO } = getOwlPayReportFetchBounds(fromYmd, toYmd);
+  const [transactions, camperFinancials] = await Promise.all([
+    fetchAllOwlPayPurchaseTransactions(supabase, companyId, startISO, endInclusiveISO),
+    fetchOwlPayCamperFinancials(supabase, companyId, season),
+  ]);
+  const aggregated = aggregateOwlPayReports(transactions, audience, fromYmd, toYmd);
+  return {
+    ...aggregated,
+    buyerSummaries: buildOwlPayBuyerSummaries(aggregated.purchases, camperFinancials),
+  };
 }
