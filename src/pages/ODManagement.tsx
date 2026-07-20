@@ -206,19 +206,22 @@ export default function ODManagement() {
             checked_out, checked_in, checked_out_at, checked_in_at, 
             checked_out_by, checked_in_by, notes,
             late_override, late_override_reason, late_override_approved_by, late_override_approved_at,
-            staff:staff_id(id, name, department, role, rfid, gender),
-            checked_out_by_profile:checked_out_by(full_name),
-            checked_in_by_profile:checked_in_by(full_name)
+            staff:staff_id(id, name, department, role, rfid, gender)
           `)
           .eq("company_id", currentCompany.id)
           .eq("season", currentSeason)
           .eq("date", dateStr)
       ]);
 
+      if (staffRes.error) throw staffRes.error;
+      if (bunksRes.error) throw bunksRes.error;
+      if (bunkStaffRes.error) throw bunkStaffRes.error;
+      if (daysOffRes.error) throw daysOffRes.error;
+
       if (staffRes.data) setStaff(staffRes.data);
       if (bunksRes.data) setBunks(bunksRes.data as unknown as Bunk[]);
       if (bunkStaffRes.data) setBunkStaff(bunkStaffRes.data as unknown as BunkStaff[]);
-      if (daysOffRes.data) setDaysOff(daysOffRes.data as unknown as DayOff[]);
+      setDaysOff((daysOffRes.data as unknown as DayOff[]) || []);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({ title: "Error loading data", variant: "destructive" });
@@ -244,8 +247,8 @@ export default function ODManagement() {
 
   const getStaffWithBunk = () => {
     const rows = bunkStaff.map(bs => {
-      const staffMember = staff.find(s => s.id === bs.staff_id);
-      const bunk = bunks.find(b => b.id === bs.bunk_id);
+      const staffMember = bs.staff || staff.find(s => s.id === bs.staff_id);
+      const bunk = bs.bunk || bunks.find(b => b.id === bs.bunk_id);
       const dayOff = daysOff.find(d => d.staff_id === bs.staff_id);
       
       return {
@@ -979,7 +982,7 @@ export default function ODManagement() {
                   </TableHeader>
                   <TableBody>
                     {filteredStaffWithBunk
-                      .filter(item => !item.dayOff?.is_day_off)
+                      .filter(item => !staffIsScheduledOff(item.dayOff))
                       .map((item) => (
                         <TableRow key={item.id}>
                           <TableCell className="font-medium">
@@ -1050,7 +1053,7 @@ export default function ODManagement() {
                           </TableCell>
                         </TableRow>
                       ))}
-                    {filteredStaffWithBunk.filter(item => !item.dayOff?.is_day_off).length === 0 && (
+                    {filteredStaffWithBunk.filter(item => !staffIsScheduledOff(item.dayOff)).length === 0 && (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                           {bunks.length === 0 

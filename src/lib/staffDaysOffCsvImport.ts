@@ -220,6 +220,7 @@ export async function importStaffDaysOffSchedule(
     }
   }
 
+  const preprocessed = preprocessStaffDaysOffUploadRows(importRows, season);
   result.patternStaffCount = preprocessed.patternStaffCount;
   result.skippedLegendRows =
     preprocessed.skippedLegendRows + (bunkSheet.isBunkSheet ? bunkSheet.skippedLegendRows : 0);

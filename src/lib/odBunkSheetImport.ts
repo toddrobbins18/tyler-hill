@@ -211,9 +211,18 @@ type StaffRecord = { id: string; person_id: string | null; name: string | null }
 
 function bunkRefsForRecord(bunkNumber: string | null, bunkName: string | null): string[] {
   const refs = new Set<string>();
-  const number = String(bunkNumber ?? "").trim();
+  const number = String(bunkNumber ?? "").trim().toUpperCase();
   const name = String(bunkName ?? "").trim().toUpperCase();
-  if (number) refs.add(`B${number}`.toUpperCase());
+
+  if (number) {
+    if (/^B\d+$/i.test(number) || number === "SH") {
+      refs.add(number);
+    } else if (/^\d+$/.test(number)) {
+      refs.add(`B${number}`);
+    } else {
+      refs.add(number);
+    }
+  }
   if (name) refs.add(name);
   if (name.includes("SENIOR") || name === "SH") refs.add("SH");
   return [...refs];
@@ -258,7 +267,8 @@ export async function resolveOdBunkSheetPatterns(
       supabase
         .from("bunk_staff")
         .select("staff_id, bunk:bunk_id(bunk_number, bunk_name)")
-        .eq("company_id", companyId),
+        .eq("company_id", companyId)
+        .eq("season", season),
     ]);
 
   if (staffErr) throw staffErr;
