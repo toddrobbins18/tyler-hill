@@ -28,6 +28,7 @@ import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { syncLinkedTripsFromSportsEvent } from "@/lib/syncLinkedTripFromSportsEvent";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useSpecialistSportScope } from "@/hooks/useSpecialistSportScope";
+import { isUpcomingSportsCalendarDate, sportsCalendarTodayYmd } from "@/lib/sportsCalendarDates";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -58,6 +59,7 @@ export default function SportsCalendar() {
   const [rosterCounts, setRosterCounts] = useState<Record<string, number>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [customColors, setCustomColors] = useState<Record<string, string>>({});
+  const [showPastEvents, setShowPastEvents] = useState(false);
 
   const sportsDefaultColors: Record<string, string> = {
     "Away": "#1e3a5f",
@@ -588,7 +590,10 @@ export default function SportsCalendar() {
     return null;
   };
 
+  const todayYmd = sportsCalendarTodayYmd();
+
   const filteredAndSortedEvents = events
+    .filter((event) => showPastEvents || isUpcomingSportsCalendarDate(event.event_date, todayYmd))
     .filter(event => {
       // Division filter
       if (selectedDivisions.length > 0) {
@@ -710,7 +715,9 @@ export default function SportsCalendar() {
               <Trophy className="h-8 w-8" />
               Sports Calendar
             </h1>
-            <p className="text-muted-foreground">Track sports events and games</p>
+            <p className="text-muted-foreground">
+              {showPastEvents ? "Track sports events and games" : "Showing today and upcoming — turn on past events to view earlier games"}
+            </p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -846,6 +853,17 @@ export default function SportsCalendar() {
                 Clear ({activeFilterCount})
               </Button>
             )}
+
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="show-past-sports-events"
+                checked={showPastEvents}
+                onCheckedChange={(checked) => setShowPastEvents(checked === true)}
+              />
+              <label htmlFor="show-past-sports-events" className="text-sm cursor-pointer whitespace-nowrap">
+                Show past events
+              </label>
+            </div>
           </div>
         </CardContent>
       </Card>
