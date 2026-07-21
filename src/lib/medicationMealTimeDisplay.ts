@@ -144,6 +144,8 @@ export function medicationMatchesListVisibility(
     mealFilter: string;
     divisionName?: string | null;
     childName?: string | null;
+    /** Past dates: keep given/refused meds visible for history. */
+    showCompleted?: boolean;
   },
 ): boolean {
   if (isAsNeededMedication(med)) return false;
@@ -155,8 +157,10 @@ export function medicationMatchesListVisibility(
   const matchesSearch =
     isSearching && (childName.includes(searchLower) || medName.includes(searchLower));
 
-  if (med.administered === true) return matchesSearch;
-  if (med.refused === true) return matchesSearch;
+  if (!options.showCompleted) {
+    if (med.administered === true) return matchesSearch;
+    if (med.refused === true) return matchesSearch;
+  }
 
   const hasMeal = medicationHasMealTime(med.meal_time, options.divisionName);
   if (!hasMeal) return matchesSearch;

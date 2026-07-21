@@ -1412,12 +1412,14 @@ export default function Nurse() {
       null;
     const childName =
       (child && "name" in child ? child.name : null) ?? med.children?.name ?? "";
+    const isPastSelectedDate = isBefore(startOfDay(selectedDate), startOfDay(new Date()));
 
     return medicationMatchesListVisibility(med, {
       searchQuery: searchQuery,
       mealFilter: medMealFilter,
       divisionName,
       childName,
+      showCompleted: isPastSelectedDate,
     });
   };
 

@@ -59,7 +59,7 @@ export default function SportsCalendar() {
   const [rosterCounts, setRosterCounts] = useState<Record<string, number>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [customColors, setCustomColors] = useState<Record<string, string>>({});
-  const [showPastEvents, setShowPastEvents] = useState(false);
+  const [showPastEvents, setShowPastEvents] = useState(true);
 
   const sportsDefaultColors: Record<string, string> = {
     "Away": "#1e3a5f",
