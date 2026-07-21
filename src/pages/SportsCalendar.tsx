@@ -28,7 +28,6 @@ import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { syncLinkedTripsFromSportsEvent } from "@/lib/syncLinkedTripFromSportsEvent";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useSpecialistSportScope } from "@/hooks/useSpecialistSportScope";
-import { isUpcomingSportsCalendarDate, sportsCalendarTodayYmd } from "@/lib/sportsCalendarDates";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -589,10 +588,7 @@ export default function SportsCalendar() {
     return null;
   };
 
-  const todayYmd = sportsCalendarTodayYmd();
-
   const filteredAndSortedEvents = events
-    .filter((event) => isUpcomingSportsCalendarDate(event.event_date, todayYmd))
     .filter(event => {
       // Division filter
       if (selectedDivisions.length > 0) {
@@ -714,7 +710,7 @@ export default function SportsCalendar() {
               <Trophy className="h-8 w-8" />
               Sports Calendar
             </h1>
-            <p className="text-muted-foreground">Track sports events and games — showing today and upcoming</p>
+            <p className="text-muted-foreground">Track sports events and games</p>
           </div>
         </div>
         <div className="flex gap-2">
