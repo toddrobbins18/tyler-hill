@@ -67,85 +67,85 @@ export default function Staff() {
       return;
     }
 
-    console.log("[Staff] Fetching staff for company:", currentCompany.id, "season:", currentSeason);
+    try {
+      console.log("[Staff] Fetching staff for company:", currentCompany.id, "season:", currentSeason);
 
-    // NOTE: Avoid PostgREST nested relation joins here.
-    // We fetch staff first, then evaluations in a separate query.
-    const { data: staffData, error: staffError } = await supabase
-      .from("staff")
-      .select("*")
-      .eq("company_id", currentCompany.id)
-      .eq("season", currentSeason)
-      .or("status.eq.active,status.is.null,status.eq.Active")
-      .neq("name", "Unknown")
-      .not("name", "is", null)
-      .order("name");
+      const { data: staffData, error: staffQueryError } = await supabase
+        .from("staff")
+        .select("*")
+        .eq("company_id", currentCompany.id)
+        .eq("season", currentSeason)
+        .or("status.eq.active,status.is.null,status.eq.Active")
+        .neq("name", "Unknown")
+        .not("name", "is", null)
+        .order("name");
 
-    console.log("[Staff] Fetched", staffData?.length || 0, "staff members, error:", staffError);
+      console.log("[Staff] Fetched", staffData?.length || 0, "staff members, error:", staffQueryError);
 
-    if (staffError) {
-      console.error("[Staff] Failed to fetch staff:", staffError);
-      setStaff([]);
-      setStaffError(staffError.message || "Failed to load staff");
-      setLoading(false);
-      return;
-    }
+      if (staffQueryError) {
+        console.error("[Staff] Failed to fetch staff:", staffQueryError);
+        setStaff([]);
+        setStaffError(staffQueryError.message || "Failed to load staff");
+        return;
+      }
 
-    const staffRows = (staffData || []).filter(
-      (member: any) => String(member.status ?? "active").toLowerCase() !== "inactive",
-    );
+      const staffRows = (staffData || []).filter(
+        (member: any) => String(member.status ?? "active").toLowerCase() !== "inactive",
+      );
 
-    // Fetch evaluations (if any) and map them to staff_id
-    const staffIds = staffRows.map((s: any) => s.id).filter(Boolean);
-    let evalsByStaffId = new Map<string, any[]>();
+      const staffIdSet = new Set(staffRows.map((s: any) => String(s.id)).filter(Boolean));
+      const evalsByStaffId = new Map<string, any[]>();
 
-    if (staffIds.length > 0) {
+      // Fetch by company+season — avoid .in(staff_id, 200+ ids) which hangs (URI too long).
       const { data: evalRows, error: evalError } = await supabase
         .from("staff_evaluations")
         .select("staff_id, rating, date, comments, status, dl_submitted_by, head_specialist_submitted_by")
         .eq("company_id", currentCompany.id)
-        .eq("season", currentSeason)
-        .in("staff_id", staffIds);
+        .eq("season", currentSeason);
 
       if (evalError) {
-        // Non-fatal: staff can still render.
         console.warn("[Staff] Failed to fetch staff evaluations:", evalError);
+      } else {
+        for (const row of evalRows || []) {
+          const key = String((row as any).staff_id);
+          if (!staffIdSet.has(key)) continue;
+          const existing = evalsByStaffId.get(key) || [];
+          existing.push(row);
+          evalsByStaffId.set(key, existing);
+        }
       }
 
-      for (const row of evalRows || []) {
-        const key = String((row as any).staff_id);
-        const existing = evalsByStaffId.get(key) || [];
-        existing.push(row);
-        evalsByStaffId.set(key, existing);
-      }
+      const staffWithEvals = staffRows.map((member: any) => {
+        const evals = evalsByStaffId.get(String(member.id)) || [];
+
+        const sortedEvals = [...evals].sort(
+          (a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()
+        );
+
+        const averageRating = sortedEvals.length
+          ? sortedEvals.reduce((sum: number, e: any) => sum + (Number(e.rating) || 0), 0) /
+            sortedEvals.length
+          : 0;
+
+        return {
+          ...member,
+          averageRating: averageRating.toFixed(1),
+          evaluationsCount: sortedEvals.length,
+          recentEvaluation: sortedEvals[0]?.comments || "No evaluations yet",
+          lastEvaluationDate: sortedEvals[0]?.date || null,
+          latestEvaluationStatus: sortedEvals[0]?.status || "complete",
+          latestEvaluation: sortedEvals[0] || null,
+        };
+      });
+
+      setStaff(staffWithEvals);
+    } catch (error) {
+      console.error("[Staff] Unexpected fetch error:", error);
+      setStaff([]);
+      setStaffError(error instanceof Error ? error.message : "Failed to load staff");
+    } finally {
+      setLoading(false);
     }
-
-    const staffWithEvals = staffRows.map((member: any) => {
-      const evals = evalsByStaffId.get(String(member.id)) || [];
-
-      // Sort evaluations by date descending
-      const sortedEvals = [...evals].sort(
-        (a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
-
-      const averageRating = sortedEvals.length
-        ? sortedEvals.reduce((sum: number, e: any) => sum + (Number(e.rating) || 0), 0) /
-          sortedEvals.length
-        : 0;
-
-      return {
-        ...member,
-        averageRating: averageRating.toFixed(1),
-        evaluationsCount: sortedEvals.length,
-        recentEvaluation: sortedEvals[0]?.comments || "No evaluations yet",
-        lastEvaluationDate: sortedEvals[0]?.date || null,
-        latestEvaluationStatus: sortedEvals[0]?.status || "complete",
-        latestEvaluation: sortedEvals[0] || null,
-      };
-    });
-
-    setStaff(staffWithEvals);
-    setLoading(false);
   };
 
   // Track staff IDs assigned to the logged-in leader (many-to-many)
@@ -190,10 +190,8 @@ export default function Staff() {
       const staffId = myStaffRecord?.id || null;
       setMyStaffId(staffId);
 
-      // Fallback: use sports on the leader's own staff profile when assignment rows aren't readable.
-      for (const sport of Array.isArray(myStaffRecord?.specialty_sports) ? myStaffRecord.specialty_sports : []) {
-        if (sport) assignedSports.add(sport);
-      }
+      // Only specialist_sport_assignments rows drive sport-based visibility — not the leader's
+      // own specialty_sports profile field (that tagged all Waterfront staff and crossed teams).
       setMyAssignedSports(assignedSports);
 
       if (staffId) {
@@ -214,17 +212,20 @@ export default function Staff() {
   useEffect(() => {
     if (currentCompany?.id) {
       fetchStaff();
+    } else {
+      setLoading(false);
     }
   }, [currentCompany?.id, currentSeason]);
 
   const filteredStaff = staff.filter((member) => {
-    // Leader-based filtering: division leaders use manual assignments; specialists can also see staff assigned to their sports.
-    if (isLeaderRole && (myStaffId || isSpecialistRole || myAssignedSports.size > 0)) {
+    // Leader-based filtering: manual assignments + direct reports (+ explicit sport assignments only).
+    if (isLeaderRole && myStaffId) {
       const isSelf = myStaffId === member.id;
-      const isManuallyAssigned = myStaffId ? myAssignedStaffIds.has(member.id) : false;
-      const isDirectReport = myStaffId ? member.leader_id === myStaffId : false;
+      const isManuallyAssigned = myAssignedStaffIds.has(member.id);
+      const isDirectReport = member.leader_id === myStaffId;
       const memberSports = Array.isArray(member.specialty_sports) ? member.specialty_sports : [];
       const isSportAssigned =
+        isSpecialistRole &&
         myAssignedSports.size > 0 &&
         memberSports.some((sport: string) => myAssignedSports.has(sport));
 
@@ -450,7 +451,7 @@ export default function Staff() {
           )}
           {isLeaderRole && (myStaffId || isSpecialistRole) && (
             <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-sm">
-              <strong>My Team:</strong> Showing staff assigned to you. Specialist leaders also see staff assigned to their sports. Contact an admin to update assignments.
+              <strong>My Team:</strong> Showing staff assigned to you via leader assignments. Contact an admin to update assignments.
             </div>
           )}
           <div className="text-sm text-muted-foreground">
