@@ -1,4 +1,4 @@
-import { Users, Truck, FileText, Award, Utensils, Calendar as CalendarIcon, CalendarDays, MapPin, Cake, Trophy, Activity, Quote, Phone, Shirt, User, Camera, Film, CalendarOff, Palmtree } from "lucide-react";
+import { Users, Truck, FileText, Award, Utensils, Calendar as CalendarIcon, MapPin, Cake, Trophy, Activity, Quote, Phone, Shirt, User, Camera, Film, CalendarOff, Palmtree } from "lucide-react";
 import { useTigerTimesColors } from "@/hooks/useTigerTimesColors";
 import { StatCard } from "@/components/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +14,7 @@ import { WeatherWidget } from "@/components/WeatherWidget";
 import NotesBoard from "@/components/dashboard/NotesBoard";
 import { DashboardWidgetGrid } from "@/components/dashboard/DashboardWidgetGrid";
 import { CompactInfoCard } from "@/components/dashboard/CompactInfoCard";
+import SupervisorThreeDayOutlook from "@/components/dashboard/SupervisorThreeDayOutlook";
 import timberLakeWestBg from "@/assets/timber-lake-west-bg.jpeg";
 import tylerHillDashboardBg from "@/assets/image001.jpg";
 import timberLakeCampHero from "@/assets/tember-camp.jpeg";
@@ -58,7 +59,6 @@ export default function Dashboard() {
   const [activitiesToday, setActivitiesToday] = useState<any[]>([]);
   const [specialEvents, setSpecialEvents] = useState<any[]>([]);
   const [sportsEvents, setSportsEvents] = useState<any[]>([]);
-  const [threeDayOutlook, setThreeDayOutlook] = useState<any[]>([]);
   const [todaysBirthdays, setTodaysBirthdays] = useState<any[]>([]);
   const [staffBirthdays, setStaffBirthdays] = useState<any[]>([]);
   const [healthCenterAdmissions, setHealthCenterAdmissions] = useState<any[]>([]);
@@ -410,61 +410,6 @@ export default function Dashboard() {
       console.error('Error fetching sports events:', error);
     }
 
-    // Fetch sports calendar events for the next 3 days (for Tyler Hill Camp) with division filtering
-    let threeDayData: any[] = [];
-    if (currentCompany?.slug === 'tyler-hill-camp') {
-      try {
-        const threeDaysFromNow = new Date();
-        threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
-        const threeDaysFromNowStr = threeDaysFromNow.toISOString().split('T')[0];
-        
-        const result = await supabase
-          .from('sports_calendar')
-          .select('*')
-          .eq('company_id', currentCompany.id)
-          .gt('event_date', today)
-          .lte('event_date', threeDaysFromNowStr)
-          .order('event_date', { ascending: true });
-        
-        let events = result.data || [];
-        
-        // Apply division filtering if user has restrictions
-        if (!hasFullAccess && divisionFilter && divisionFilter.length > 0) {
-          const eventIds = events.map((e: any) => e.id);
-          if (eventIds.length > 0) {
-            const { data: divisionAssocs } = await supabase
-              .from('sports_calendar_divisions')
-              .select('sports_event_id, division_id')
-              .in('sports_event_id', eventIds);
-            
-            events = events.filter((event: any) => {
-              const eventDivisions = (divisionAssocs || [])
-                .filter((d: any) => d.sports_event_id === event.id)
-                .map((d: any) => d.division_id);
-              
-              return eventDivisions.length === 0 || 
-                eventDivisions.some((divId: string) => divisionFilter.includes(divId));
-            });
-          }
-        }
-        
-        // Sort events by date and time
-        events.sort((a: any, b: any) => {
-          const dateA = a.event_date || "9999-12-31";
-          const dateB = b.event_date || "9999-12-31";
-          if (dateA !== dateB) return dateA.localeCompare(dateB);
-          
-          const timeA = a.start_time_field || a.time || a.depart_time || "23:59";
-          const timeB = b.start_time_field || b.time || b.depart_time || "23:59";
-          return timeA.localeCompare(timeB);
-        });
-
-        threeDayData = events;
-      } catch (error) {
-        console.error('Error fetching three day outlook:', error);
-      }
-    }
-
     // Fetch birthdays for today (matching month and day) with division filtering
     let birthdayQuery = supabase
       .from('children')
@@ -539,7 +484,6 @@ export default function Dashboard() {
 
     setSpecialEvents(specialEventsData || []);
     setSportsEvents(sportsData || []);
-    setThreeDayOutlook(threeDayData || []);
     setTodaysBirthdays(birthdaysToday);
     setStaffBirthdays(staffBirthdaysToday);
     setHealthCenterAdmissions(healthCenterData || []);
@@ -917,7 +861,7 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Athletics Schedule Card */}
+        {/* Athletics Schedule */}
         <Card className={`shadow-card ${glassCardClass}`}>
           <CardHeader className={widgetHeaderClass}>
             <div className="flex min-w-0 items-center gap-2">
@@ -931,9 +875,9 @@ export default function Dashboard() {
             </Button>
           </CardHeader>
           <CardContent className={`${widgetContentClass} space-y-2`}>
-              {sportsEvents.length === 0 && (!isTylerHill || threeDayOutlook.length === 0) ? (
+              {sportsEvents.length === 0 ? (
               <p className="text-sm text-muted-foreground">No sports events today</p>
-            ) : sportsEvents.length > 0 ? (
+            ) : (
               <div className="space-y-1 rounded-lg border-l-4 border-info bg-info/5 p-2 dark:bg-info/10">
                 {isTylerHill && (
                   <div className="mb-1 flex items-center gap-2">
@@ -953,29 +897,18 @@ export default function Dashboard() {
                     </div>
                   ))}
             </div>
-            ) : null}
-
-            {isTylerHill && threeDayOutlook.length > 0 && (
-              <div className="space-y-1 rounded-lg border-l-4 border-warning bg-warning/5 p-2 dark:bg-warning/10">
-                <div className="mb-1 flex items-center gap-2">
-                  <CalendarDays className="h-3.5 w-3.5 text-warning" />
-                  <p className="text-xs font-semibold uppercase tracking-wide text-warning">Three Day Outlook</p>
-                </div>
-                {threeDayOutlook.map((event) => (
-                  <div key={event.id} className="flex cursor-pointer items-center gap-2 rounded-lg bg-card p-2 transition-colors hover:bg-muted/50" onClick={() => navigate("/athletics")}>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium">{event.title}</p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {new Date(event.event_date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} • {formatTime12Hour(event.start_time_field || event.time || event.depart_time) || event.start_time_field || event.time || event.depart_time || "TBD"}
-                      </p>
-                    </div>
-                    <Badge variant="outline" className="shrink-0 text-xs">{event.sport_type}</Badge>
-                  </div>
-                ))}
-              </div>
             )}
           </CardContent>
         </Card>
+
+        <SupervisorThreeDayOutlook
+          className={glassCardClass}
+          headerClassName={widgetHeaderClass}
+          titleClassName={widgetTitleClass}
+          contentClassName={widgetContentClass}
+          linkClassName={widgetLinkClass}
+          iconWrapClassName={widgetIconWrapClass}
+        />
 
         {/* Today's Birthdays Card */}
         <Card className={`shadow-card ${glassCardClass}`}>
