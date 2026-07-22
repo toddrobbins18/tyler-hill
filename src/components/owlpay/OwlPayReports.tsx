@@ -160,7 +160,6 @@ const OwlPayReports = () => {
         "Items bought",
         "CM deposits",
         "Full balance",
-        "Beyond $75 credit cap",
       ],
       ...data.buyerSummaries.map((s) => [
         s.name,
@@ -172,7 +171,6 @@ const OwlPayReports = () => {
         s.period_items,
         s.cm_deposits != null ? s.cm_deposits.toFixed(2) : "",
         s.full_balance != null ? s.full_balance.toFixed(2) : s.current_balance != null ? s.current_balance.toFixed(2) : "",
-        s.beyond_credit_cap != null ? s.beyond_credit_cap.toFixed(2) : "",
       ]),
       [],
       ["Daily summary — Camp date", "Revenue (paid)", "Paid items", "Free items", "Total lines"],
