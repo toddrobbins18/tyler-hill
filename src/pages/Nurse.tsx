@@ -102,9 +102,12 @@ export default function Nurse() {
   const [medSortBy, setMedSortBy] = useState<'meal_time' | 'name' | 'status' | 'division' | 'gender'>('meal_time');
   const [medMealFilter, setMedMealFilter] = useState<string>("all");
   const [admissionNotesByAdmission, setAdmissionNotesByAdmission] = useState<
-    Record<string, { id: string; note: string; created_at: string }[]>
+    Record<string, { id: string; note: string; created_at: string; updated_at?: string | null }[]>
   >({});
   const [newAdmissionNote, setNewAdmissionNote] = useState<Record<string, string>>({});
+  const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null);
+  const [editingNoteDraft, setEditingNoteDraft] = useState("");
+  const [savingNoteEdit, setSavingNoteEdit] = useState(false);
   const [unadministerTarget, setUnadministerTarget] = useState<any | null>(null);
   const [refuseTarget, setRefuseTarget] = useState<any | null>(null);
   const [checkoutConfirmTarget, setCheckoutConfirmTarget] = useState<{
@@ -1065,7 +1068,7 @@ export default function Nurse() {
 
     const { data, error } = await supabase
       .from("health_center_admission_notes")
-      .select("id, admission_id, note, created_at")
+      .select("id, admission_id, note, created_at, updated_at")
       .eq("company_id", currentCompany.id)
       .order("created_at", { ascending: true });
 
@@ -1074,13 +1077,14 @@ export default function Nurse() {
       return;
     }
 
-    const grouped: Record<string, { id: string; note: string; created_at: string }[]> = {};
-    (data || []).forEach((row: { id: string; admission_id: string; note: string; created_at: string }) => {
+    const grouped: Record<string, { id: string; note: string; created_at: string; updated_at?: string | null }[]> = {};
+    (data || []).forEach((row: { id: string; admission_id: string; note: string; created_at: string; updated_at?: string | null }) => {
       if (!grouped[row.admission_id]) grouped[row.admission_id] = [];
       grouped[row.admission_id].push({
         id: row.id,
         note: row.note,
         created_at: row.created_at,
+        updated_at: row.updated_at ?? null,
       });
     });
     setAdmissionNotesByAdmission(grouped);
@@ -1111,6 +1115,146 @@ export default function Nurse() {
     toast({ title: "Note added" });
     fetchAdmissionNotes();
   };
+
+  const startEditingNote = (key: string, currentText: string) => {
+    setEditingNoteKey(key);
+    setEditingNoteDraft(currentText);
+  };
+
+  const cancelEditingNote = () => {
+    setEditingNoteKey(null);
+    setEditingNoteDraft("");
+  };
+
+  const handleSaveAdmissionNoteEdit = async () => {
+    const text = editingNoteDraft.trim();
+    if (!text || !editingNoteKey || !currentCompany?.id) return;
+
+    setSavingNoteEdit(true);
+    try {
+      if (editingNoteKey.startsWith("initial:")) {
+        const admissionId = editingNoteKey.slice("initial:".length);
+        const { error } = await supabase
+          .from("health_center_admissions")
+          .update({ notes: text })
+          .eq("id", admissionId)
+          .eq("company_id", currentCompany.id);
+        if (error) throw error;
+        await fetchAdmissions();
+        await fetchAdmissionHistory();
+      } else if (editingNoteKey.startsWith("note:")) {
+        const noteId = editingNoteKey.slice("note:".length);
+        const { error } = await supabase
+          .from("health_center_admission_notes")
+          .update({ note: text, updated_at: new Date().toISOString() })
+          .eq("id", noteId)
+          .eq("company_id", currentCompany.id);
+        if (error) throw error;
+        await fetchAdmissionNotes();
+      }
+
+      toast({ title: "Note updated" });
+      cancelEditingNote();
+    } catch (error: any) {
+      toast({
+        title: "Could not update note",
+        description: error?.message || "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingNoteEdit(false);
+    }
+  };
+
+  const renderEditableNote = (
+    key: string,
+    noteText: string,
+    timestamp?: string,
+    editedAt?: string | null,
+  ) => {
+    const isEditing = editingNoteKey === key;
+
+    if (isEditing) {
+      return (
+        <div key={key} className="space-y-2 rounded-md border bg-muted/40 p-2">
+          <Textarea
+            value={editingNoteDraft}
+            onChange={(e) => setEditingNoteDraft(e.target.value)}
+            rows={3}
+            className="text-sm"
+          />
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleSaveAdmissionNoteEdit} disabled={savingNoteEdit || !editingNoteDraft.trim()}>
+              {savingNoteEdit ? "Saving..." : "Save"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={cancelEditingNote} disabled={savingNoteEdit}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div key={key} className="flex items-start gap-2 rounded-md border bg-muted/40 px-2 py-1.5 text-sm">
+        <div className="min-w-0 flex-1">
+          <p>{noteText}</p>
+          {timestamp && (
+            <span className="mt-1 block text-xs text-muted-foreground">
+              {safeFormatDate(timestamp, "MMM d, h:mm a")}
+              {editedAt ? ` · edited ${safeFormatDate(editedAt, "MMM d, h:mm a")}` : ""}
+            </span>
+          )}
+        </div>
+        {canManageMedications && (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 shrink-0"
+            aria-label="Edit note"
+            onClick={() => startEditingNote(key, noteText)}
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+    );
+  };
+
+  const renderAdmissionNotesBlock = (admission: { id: string; notes?: string | null }) => (
+    <div className="mt-2 space-y-2">
+      <p className="text-xs font-medium text-muted-foreground">Notes</p>
+      {admission.notes &&
+        renderEditableNote(`initial:${admission.id}`, admission.notes, undefined, null)}
+      {(admissionNotesByAdmission[admission.id] || []).map((note) =>
+        renderEditableNote(`note:${note.id}`, note.note, note.created_at, note.updated_at),
+      )}
+      {canManageMedications && (
+        <div className="flex flex-col gap-2 sm:flex-row pt-1">
+          <Textarea
+            placeholder="Add a follow-up note..."
+            value={newAdmissionNote[admission.id] || ""}
+            onChange={(e) =>
+              setNewAdmissionNote((prev) => ({
+                ...prev,
+                [admission.id]: e.target.value,
+              }))
+            }
+            rows={2}
+            className="text-sm"
+          />
+          <Button
+            size="sm"
+            className="shrink-0"
+            onClick={() => handleAddAdmissionNote(admission.id)}
+          >
+            Add note
+          </Button>
+        </div>
+      )}
+    </div>
+  );
 
   const handleAdmit = async (
     entityId: string,
@@ -2260,46 +2404,7 @@ export default function Nurse() {
                               {admission.reason && (
                                 <p className="text-sm mt-2"><strong>Reason:</strong> {admission.reason}</p>
                               )}
-                              <div className="mt-2 space-y-2">
-                                <p className="text-xs font-medium text-muted-foreground">Notes</p>
-                                {admission.notes && (
-                                  <p className="text-sm rounded-md border bg-muted/40 px-2 py-1.5">{admission.notes}</p>
-                                )}
-                                {(admissionNotesByAdmission[admission.id] || []).map((note) => (
-                                  <p
-                                    key={note.id}
-                                    className="text-sm rounded-md border bg-muted/40 px-2 py-1.5"
-                                  >
-                                    {note.note}
-                                    <span className="block text-xs text-muted-foreground mt-1">
-                                      {safeFormatDate(note.created_at, "MMM d, h:mm a")}
-                                    </span>
-                                  </p>
-                                ))}
-                                {canManageMedications && (
-                                  <div className="flex flex-col gap-2 sm:flex-row">
-                                    <Textarea
-                                      placeholder="Add a follow-up note..."
-                                      value={newAdmissionNote[admission.id] || ""}
-                                      onChange={(e) =>
-                                        setNewAdmissionNote((prev) => ({
-                                          ...prev,
-                                          [admission.id]: e.target.value,
-                                        }))
-                                      }
-                                      rows={2}
-                                      className="text-sm"
-                                    />
-                                    <Button
-                                      size="sm"
-                                      className="shrink-0"
-                                      onClick={() => handleAddAdmissionNote(admission.id)}
-                                    >
-                                      Add note
-                                    </Button>
-                                  </div>
-                                )}
-                              </div>
+                              {renderAdmissionNotesBlock(admission)}
                             </div>
                             <Button
                               size="sm"
@@ -2508,48 +2613,7 @@ export default function Nurse() {
                                       </div>
                                     )}
                                     
-                                    <div className="mb-2 space-y-2">
-                                      <p className="text-xs font-medium text-muted-foreground">Notes</p>
-                                      {admission.notes && (
-                                        <p className="text-sm rounded-md border bg-muted/40 px-2 py-1.5">
-                                          {admission.notes}
-                                        </p>
-                                      )}
-                                      {(admissionNotesByAdmission[admission.id] || []).map((note) => (
-                                        <p
-                                          key={note.id}
-                                          className="text-sm rounded-md border bg-muted/40 px-2 py-1.5"
-                                        >
-                                          {note.note}
-                                          <span className="block text-xs text-muted-foreground mt-1">
-                                            {safeFormatDate(note.created_at, "MMM d, yyyy h:mm a")}
-                                          </span>
-                                        </p>
-                                      ))}
-                                      {canManageMedications && (
-                                        <div className="flex flex-col gap-2 sm:flex-row pt-1">
-                                          <Textarea
-                                            placeholder="Add another note..."
-                                            value={newAdmissionNote[admission.id] || ""}
-                                            onChange={(e) =>
-                                              setNewAdmissionNote((prev) => ({
-                                                ...prev,
-                                                [admission.id]: e.target.value,
-                                              }))
-                                            }
-                                            rows={2}
-                                            className="text-sm"
-                                          />
-                                          <Button
-                                            size="sm"
-                                            className="shrink-0"
-                                            onClick={() => handleAddAdmissionNote(admission.id)}
-                                          >
-                                            Add note
-                                          </Button>
-                                        </div>
-                                      )}
-                                    </div>
+                                    {renderAdmissionNotesBlock(admission)}
                                     
                                     <div className="flex gap-4 text-xs text-muted-foreground mt-2">
                                       <span>
