@@ -2751,55 +2751,96 @@ async function performFullSync(
         console.warn('[Cleanup] Skipping camper inactivation — no enrolled attendees from CampMinder');
       }
 
-      // Inactivate staff no longer active in CampMinder (use staffPersonIds from API, not staffData)
+      // Staff status sync with CampMinder (source of truth for hired/active)
       if ((syncType === 'full' || syncType === 'staff') && staffCmPersonIds.length > 0) {
-        console.log(`[Cleanup] Checking for staff not in CampMinder active list (${staffCmPersonIds.length} active staff)...`);
+        const cmActiveCount = staffCmPersonIds.length;
+        console.log(`[Staff Status] CampMinder active staff: ${cmActiveCount}`);
 
-        const { data: existingStaff, error: fetchError } = await supabase
+        // Always mark CampMinder active staff as active in our DB (upsert may skip status if unchanged)
+        const REACTIVATE_BATCH = 100;
+        for (let i = 0; i < staffCmPersonIds.length; i += REACTIVATE_BATCH) {
+          const personIdBatch = staffCmPersonIds.slice(i, i + REACTIVATE_BATCH);
+          const { error: reactivateError } = await supabase
+            .from('staff')
+            .update({ status: 'active', updated_at: new Date().toISOString() })
+            .eq('company_id', companyId)
+            .eq('season', season)
+            .in('person_id', personIdBatch);
+          if (reactivateError) {
+            console.error('[Staff Status] Error reactivating CampMinder staff batch:', reactivateError);
+          }
+        }
+
+        const { count: dbActiveStaffCount, error: countError } = await supabase
           .from('staff')
-          .select('id, person_id, name')
+          .select('*', { count: 'exact', head: true })
           .eq('company_id', companyId)
           .eq('season', season)
           .neq('status', 'inactive');
 
-        if (fetchError) {
-          console.error('[Cleanup] Error fetching existing staff:', fetchError);
-        } else if (existingStaff) {
-          const staffPersonIdSet = new Set(staffCmPersonIds);
-          const staffToInactivate = existingStaff.filter(
-            (s: { id: string; person_id: string; name: string }) =>
-              s.person_id && !staffPersonIdSet.has(String(s.person_id)),
+        if (countError) {
+          console.error('[Staff Status] Error counting active staff:', countError);
+        }
+
+        const dbActive = dbActiveStaffCount ?? 0;
+        // Skip cleanup when CM response looks incomplete (prevents mass wrongful inactivation)
+        const skipStaffInactivation =
+          cmActiveCount < 100 ||
+          (dbActive > 0 && cmActiveCount < Math.floor(dbActive * 0.85));
+
+        if (skipStaffInactivation) {
+          console.warn(
+            `[Staff Status] SKIPPING inactivation — CampMinder returned ${cmActiveCount} active but DB has ${dbActive}. Possible incomplete API response.`,
           );
+        } else {
+          console.log(`[Cleanup] Aligning DB to CampMinder active list (${cmActiveCount} person IDs)...`);
 
-          if (staffToInactivate.length > 0) {
-            console.log(`[Cleanup] Found ${staffToInactivate.length} staff to inactivate (not active in CampMinder):`);
-            staffToInactivate.slice(0, 10).forEach((s: { id: string; person_id: string; name: string }) => {
-              console.log(`  - ${s.name} (person_id: ${s.person_id})`);
-            });
-            if (staffToInactivate.length > 10) {
-              console.log(`  ... and ${staffToInactivate.length - 10} more`);
-            }
+          const { data: existingStaff, error: fetchError } = await supabase
+            .from('staff')
+            .select('id, person_id, name')
+            .eq('company_id', companyId)
+            .eq('season', season)
+            .neq('status', 'inactive');
 
-            const BATCH_SIZE = 100;
-            for (let i = 0; i < staffToInactivate.length; i += BATCH_SIZE) {
-              const batchIds = staffToInactivate.slice(i, i + BATCH_SIZE).map((s: { id: string }) => s.id);
-              const { error: updateError } = await supabase
-                .from('staff')
-                .update({ status: 'inactive', updated_at: new Date().toISOString() })
-                .in('id', batchIds);
-              if (updateError) {
-                throw updateError;
+          if (fetchError) {
+            console.error('[Cleanup] Error fetching existing staff:', fetchError);
+          } else if (existingStaff) {
+            const staffPersonIdSet = new Set(staffCmPersonIds.map(String));
+            const staffToInactivate = existingStaff.filter(
+              (s: { id: string; person_id: string | null; name: string }) =>
+                !s.person_id || !staffPersonIdSet.has(String(s.person_id)),
+            );
+
+            if (staffToInactivate.length > 0) {
+              console.log(`[Cleanup] Found ${staffToInactivate.length} staff to inactivate (not in CampMinder active list or missing person_id):`);
+              staffToInactivate.slice(0, 10).forEach((s: { id: string; person_id: string | null; name: string }) => {
+                console.log(`  - ${s.name} (person_id: ${s.person_id ?? 'none'})`);
+              });
+              if (staffToInactivate.length > 10) {
+                console.log(`  ... and ${staffToInactivate.length - 10} more`);
               }
-            }
 
-            staffInactivated = staffToInactivate.length;
-            console.log(`[Cleanup] Successfully inactivated ${staffInactivated} staff`);
-          } else {
-            console.log('[Cleanup] No staff to inactivate - all match CampMinder data');
+              const BATCH_SIZE = 100;
+              for (let i = 0; i < staffToInactivate.length; i += BATCH_SIZE) {
+                const batchIds = staffToInactivate.slice(i, i + BATCH_SIZE).map((s: { id: string }) => s.id);
+                const { error: updateError } = await supabase
+                  .from('staff')
+                  .update({ status: 'inactive', updated_at: new Date().toISOString() })
+                  .in('id', batchIds);
+                if (updateError) {
+                  throw updateError;
+                }
+              }
+
+              staffInactivated = staffToInactivate.length;
+              console.log(`[Cleanup] Successfully inactivated ${staffInactivated} staff`);
+            } else {
+              console.log('[Cleanup] No staff to inactivate — DB matches CampMinder active list');
+            }
           }
         }
       } else if (syncType === 'full' || syncType === 'staff') {
-        console.warn('[Cleanup] Skipping staff inactivation — no active staff returned from CampMinder');
+        console.warn('[Cleanup] Skipping staff status sync — no active staff returned from CampMinder');
       }
 
       console.log(`[Cleanup Summary] Inactivated ${campersInactivated} campers, inactivated ${staffInactivated} staff`);
