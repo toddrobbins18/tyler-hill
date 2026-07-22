@@ -1131,7 +1131,7 @@ async function syncOwlPayBalancesFromCampminder(
       // Expected balance = CampMinder deposits (current season payload) minus Owl Pay purchases.
       // Do NOT set balance to deposits alone — that wipes POS deductions after each sync.
       // Full accounting balance = CM deposits minus Owl Pay purchases (no cap on stored balance).
-      // Checkout RPC still blocks new purchases below -$75 credit limit.
+      // Checkout RPC allows negative balances (no credit cap — Todd policy).
       const sumByPerson = new Map<string, number>();
       for (const { personId, contribution } of seasonTxById.values()) {
         const prev = sumByPerson.get(personId) || 0;

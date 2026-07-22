@@ -67,10 +67,7 @@ export type OwlPayCamperFinancial = {
   cm_deposits: number;
   season_spent: number;
   full_balance: number;
-  beyond_credit_cap: number;
 };
-
-export const OWL_PAY_CREDIT_LIMIT = 75;
 
 export type OwlPayBuyerSummary = {
   buyer_key: string;
@@ -85,7 +82,6 @@ export type OwlPayBuyerSummary = {
   cm_deposits: number | null;
   current_balance: number | null;
   full_balance: number | null;
-  beyond_credit_cap: number | null;
   person_id: string | null;
 };
 
@@ -560,7 +556,6 @@ export async function fetchOwlPayCamperFinancials(
       cm_deposits: cmDeposits,
       season_spent: seasonSpent,
       full_balance: fullBalance,
-      beyond_credit_cap: Math.max(fullBalance - -OWL_PAY_CREDIT_LIMIT, 0),
     };
   });
 }
@@ -590,7 +585,6 @@ export function buildOwlPayBuyerSummaries(
         cm_deposits: camper ? camper.cm_deposits : null,
         current_balance: camper ? camper.owl_pay_balance : null,
         full_balance: camper ? camper.full_balance : null,
-        beyond_credit_cap: camper ? camper.beyond_credit_cap : null,
         person_id: camper?.person_id ?? null,
       });
     }

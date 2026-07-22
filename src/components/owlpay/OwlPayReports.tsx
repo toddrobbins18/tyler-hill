@@ -21,7 +21,6 @@ import { useToast } from "@/hooks/use-toast";
 import {
   fetchOwlPayReportBundle,
   formatCampReportDateTime,
-  OWL_PAY_CREDIT_LIMIT,
   formatCampReportDateTimeCsv,
   formatCampReportTime,
   formatCampYmdDisplay,
@@ -496,7 +495,7 @@ const OwlPayReports = () => {
             <CardHeader>
               <CardTitle className="text-base">Spending by person</CardTitle>
               <p className="text-xs text-muted-foreground mt-1">
-                Full balance = CampMinder deposits minus season canteen spend. New purchases stop at −${OWL_PAY_CREDIT_LIMIT} credit limit.
+                Full balance = CampMinder deposits minus season canteen spend. No negative balance cap — purchases allowed into the red.
               </p>
               <Input placeholder="Search by name..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="max-w-sm mt-2" />
             </CardHeader>

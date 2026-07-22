@@ -1,7 +1,4 @@
-/** Campers may charge up to this amount below zero (matches DB/RPC limit). */
-export const OWL_PAY_MAX_OVERDRAFT = 75;
-
-export const OWL_PAY_MIN_BALANCE = -OWL_PAY_MAX_OVERDRAFT;
+/** Camp policy: no negative balance cap — campers may spend into the red. */
 
 export function calculateOwlPayNewBalance(
   currentBalance: number,
@@ -12,8 +9,9 @@ export function calculateOwlPayNewBalance(
   return currentBalance - chargeTotal;
 }
 
-export function wouldExceedOwlPayOverdraft(currentBalance: number, chargeTotal: number): boolean {
-  return currentBalance - chargeTotal < OWL_PAY_MIN_BALANCE;
+/** @deprecated No credit limit — always returns false. */
+export function wouldExceedOwlPayOverdraft(_currentBalance: number, _chargeTotal: number): boolean {
+  return false;
 }
 
 export type OwlPayBalanceTone = "negative" | "low" | "medium" | "healthy";
@@ -26,12 +24,7 @@ export function getOwlPayBalanceTone(balance: number): OwlPayBalanceTone {
 }
 
 export function formatOwlPayBalanceHint(balance: number): string | null {
-  if (balance < OWL_PAY_MIN_BALANCE) {
-    return `Over $${OWL_PAY_MAX_OVERDRAFT.toFixed(0)} credit limit — no new purchases`;
-  }
-  if (balance < 0) {
-    return `Negative balance — up to $${OWL_PAY_MAX_OVERDRAFT.toFixed(0)} credit available`;
-  }
+  if (balance < 0) return "Negative balance";
   if (balance < 5) return "Low balance — please add funds";
   if (balance < 15) return "Balance is getting low";
   return null;

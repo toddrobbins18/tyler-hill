@@ -18,8 +18,6 @@ import {
   calculateOwlPayNewBalance,
   formatOwlPayBalanceHint,
   getOwlPayBalanceTone,
-  OWL_PAY_MAX_OVERDRAFT,
-  wouldExceedOwlPayOverdraft,
 } from "@/lib/owlPayBalanceUtils";
 import {
   completeOwlPayCheckout,
@@ -67,7 +65,6 @@ const OwlPayTransactionSummary = ({
   );
   const { subtotal, freeDiscount, total } = pricing;
   const newBalance = calculateOwlPayNewBalance(camper.owl_pay_balance, total, isStaff);
-  const exceedsOverdraft = !isStaff && wouldExceedOwlPayOverdraft(camper.owl_pay_balance, total);
   const balanceTone = getOwlPayBalanceTone(newBalance);
   const animatedBalance = useCountAnimation(newBalance, 500);
 
@@ -90,15 +87,6 @@ const OwlPayTransactionSummary = ({
 
     if (cart.length === 0) {
       toast({ title: "No items selected", variant: "destructive" });
-      return;
-    }
-
-    if (!isStaff && exceedsOverdraft) {
-      toast({
-        title: "Over credit limit",
-        description: `Campers can go up to $${OWL_PAY_MAX_OVERDRAFT.toFixed(0)} negative.`,
-        variant: "destructive",
-      });
       return;
     }
 
@@ -126,15 +114,6 @@ const OwlPayTransactionSummary = ({
         effectivePricing.total,
         isStaff,
       );
-
-      if (!isStaff && wouldExceedOwlPayOverdraft(camper.owl_pay_balance, effectivePricing.total)) {
-        toast({
-          title: "Over credit limit",
-          description: `Campers can go up to $${OWL_PAY_MAX_OVERDRAFT.toFixed(0)} negative.`,
-          variant: "destructive",
-        });
-        return;
-      }
 
       const transactionInserts = buildOwlPayPurchaseRows(cart, effectivePricing, {
         child_id: isStaff ? null : camper.id,
@@ -307,18 +286,13 @@ const OwlPayTransactionSummary = ({
               className="w-full owlpay-gradient-header text-white shadow-xl text-lg active:scale-95 transition-transform"
               size="lg"
               onClick={handleComplete}
-              disabled={processing || exceedsOverdraft}
+              disabled={processing}
             >
               {processing ? "Processing..." : "💳 Complete Transaction"}
             </Button>
           )}
 
-          {!isStaff && exceedsOverdraft && cart.length > 0 && (
-            <p className="text-sm text-destructive text-center">
-              ⚠️ Exceeds ${OWL_PAY_MAX_OVERDRAFT.toFixed(0)} credit limit
-            </p>
-          )}
-          {!isStaff && !exceedsOverdraft && formatOwlPayBalanceHint(newBalance) && cart.length > 0 && (
+          {!isStaff && formatOwlPayBalanceHint(newBalance) && cart.length > 0 && (
             <p className={`text-sm text-center ${newBalance < 0 ? "text-destructive" : "text-yellow-600"}`}>
               ⚠️ {formatOwlPayBalanceHint(newBalance)}
             </p>
