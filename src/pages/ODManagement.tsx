@@ -27,6 +27,10 @@ import {
   type NightOffScheduleEntry,
   staffIsScheduledOff,
   shouldRemoveDayOffRecord,
+  resolveOdCheckInOut,
+  resolveOdRfidScan,
+  type OdCheckInOutContext,
+  type OdCheckInOutResult,
 } from "@/lib/odNightOffSchedule";
 import { lookupStaffByRfid, normalizeRfidInput } from "@/lib/rfidUtils";
 import {
@@ -299,56 +303,18 @@ export default function ODManagement() {
         return;
       }
 
-      // Check if staff has a day off record for today
-      const dateStr = format(selectedDate, "yyyy-MM-dd");
       const existingDayOff = daysOff.find(d => d.staff_id === staffMember.id);
 
-      if (!existingDayOff || !staffIsScheduledOff(existingDayOff)) {
-        // Staff is not scheduled off - prompt for late override
-        setLateOverrideStaffId(staffMember.id);
-        setShowLateOverrideDialog(true);
-        setRfidInput("");
-        setTimeout(() => rfidInputRef.current?.focus(), 100);
-        return;
-      }
+      const rfidResult = resolveOdRfidScan(existingDayOff, user?.id || "");
+      const applied = await applyCheckInOutResult(staffMember.id, rfidResult);
+      if (!applied) return;
 
-      // Determine action: check out or check in
-      if (!existingDayOff.checked_out) {
-        // Check OUT
-        const { error: updateError } = await supabase
-          .from("staff_days_off")
-          .update({ 
-            checked_out: true, 
-            checked_out_at: new Date().toISOString() 
-          })
-          .eq("id", existingDayOff.id);
-
-        if (updateError) throw updateError;
-
+      if (rfidResult.kind === "update" || rfidResult.kind === "insert") {
+        const signedOut =
+          rfidResult.kind === "update" && rfidResult.updates.checked_out === true;
         toast({
-          title: "✓ Checked Out",
-          description: `${staffMember.name} signed out at ${format(new Date(), "h:mm a")}`,
-        });
-      } else if (!existingDayOff.checked_in) {
-        // Check IN
-        const { error: updateError } = await supabase
-          .from("staff_days_off")
-          .update({ 
-            checked_in: true, 
-            checked_in_at: new Date().toISOString() 
-          })
-          .eq("id", existingDayOff.id);
-
-        if (updateError) throw updateError;
-
-        toast({
-          title: "✓ Checked In",
-          description: `${staffMember.name} signed in at ${format(new Date(), "h:mm a")}`,
-        });
-      } else {
-        toast({
-          title: "Already Completed",
-          description: `${staffMember.name} has already checked out and back in today.`,
+          title: signedOut ? "✓ Checked Out" : "✓ Checked In",
+          description: `${staffMember.name} at ${format(new Date(), "h:mm a")}`,
         });
       }
 
@@ -667,7 +633,52 @@ export default function ODManagement() {
     }
   };
 
-  const handleCheckInOut = async (staffId: string, type: 'out' | 'in') => {
+  const applyCheckInOutResult = async (
+    staffId: string,
+    result: OdCheckInOutResult,
+  ): Promise<boolean> => {
+    if (!currentCompany?.id || !user?.id) return false;
+
+    const dateStr = format(selectedDate, "yyyy-MM-dd");
+
+    switch (result.kind) {
+      case "noop":
+        toast({ title: result.message });
+        return false;
+      case "error":
+        toast({ title: result.message, variant: "destructive" });
+        return false;
+      case "late_override":
+        setLateOverrideStaffId(staffId);
+        setShowLateOverrideDialog(true);
+        return false;
+      case "insert": {
+        const { error } = await supabase.from("staff_days_off").insert({
+          company_id: currentCompany.id,
+          staff_id: staffId,
+          date: dateStr,
+          season: currentSeason,
+          ...result.record,
+        });
+        if (error) throw error;
+        return true;
+      }
+      case "update": {
+        const { error } = await supabase
+          .from("staff_days_off")
+          .update(result.updates)
+          .eq("id", result.recordId);
+        if (error) throw error;
+        return true;
+      }
+    }
+  };
+
+  const handleCheckInOut = async (
+    staffId: string,
+    type: 'out' | 'in',
+    context: OdCheckInOutContext,
+  ) => {
     if (!currentCompany?.id || !user?.id) return;
 
     // Permission check: only admin, staff, and health_center can manually check in/out
@@ -682,39 +693,16 @@ export default function ODManagement() {
     }
 
     const existing = daysOff.find(d => d.staff_id === staffId);
-
-    if (!existing) {
-      // Prompt for late override if trying to sign out without being scheduled off
-      if (type === 'out') {
-        setLateOverrideStaffId(staffId);
-        setShowLateOverrideDialog(true);
-        return;
-      }
-      toast({ title: "Please set day off first", variant: "destructive" });
-      return;
-    }
-
-    // Check if signing out on wrong day
-    if (type === 'out' && !staffIsScheduledOff(existing)) {
-      setLateOverrideStaffId(staffId);
-      setShowLateOverrideDialog(true);
-      return;
-    }
+    const result = resolveOdCheckInOut(context, type, existing, user.id);
 
     try {
-      const updates = type === 'out' 
-        ? { checked_out: true, checked_out_at: new Date().toISOString(), checked_out_by: user.id }
-        : { checked_in: true, checked_in_at: new Date().toISOString(), checked_in_by: user.id };
+      const applied = await applyCheckInOutResult(staffId, result);
+      if (!applied) return;
 
-      const { error } = await supabase
-        .from("staff_days_off")
-        .update(updates)
-        .eq("id", existing.id);
-
-      if (error) throw error;
-      
       await fetchData();
-      toast({ title: `Checked ${type} successfully` });
+      toast({
+        title: type === "out" ? "Signed out successfully" : "Signed in successfully",
+      });
     } catch (error) {
       console.error("Error checking in/out:", error);
       toast({ title: "Error updating", variant: "destructive" });
@@ -974,9 +962,8 @@ export default function ODManagement() {
                     <TableRow>
                       <TableHead>Bunk</TableHead>
                       <TableHead>Name</TableHead>
-                      <TableHead className="text-center">Out</TableHead>
                       {showFreePlay && <TableHead className="text-center">Free Play</TableHead>}
-                      <TableHead className="text-center">In</TableHead>
+                      <TableHead className="text-center">Sign In</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1003,13 +990,6 @@ export default function ODManagement() {
                               )}
                             </div>
                           </TableCell>
-                          <TableCell className="text-center">
-                            <Checkbox
-                              checked={item.dayOff?.checked_out || false}
-                              onCheckedChange={() => handleCheckInOut(item.staff_id, 'out')}
-                              disabled={!canManualCheckInOut}
-                            />
-                          </TableCell>
                           {showFreePlay && (
                             <TableCell className="text-center">
                               <Checkbox
@@ -1019,11 +999,18 @@ export default function ODManagement() {
                             </TableCell>
                           )}
                           <TableCell className="text-center">
-                            <Checkbox
-                              checked={item.dayOff?.checked_in || false}
-                              onCheckedChange={() => handleCheckInOut(item.staff_id, 'in')}
-                              disabled={!canManualCheckInOut}
-                            />
+                            {item.dayOff?.checked_in ? (
+                              <Badge variant="outline" className="bg-green-100 dark:bg-green-900">Signed In</Badge>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={!canManualCheckInOut}
+                                onClick={() => handleCheckInOut(item.staff_id, 'in', 'on_duty')}
+                              >
+                                Sign In
+                              </Button>
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-wrap gap-2">
@@ -1055,7 +1042,7 @@ export default function ODManagement() {
                       ))}
                     {filteredStaffWithBunk.filter(item => !staffIsScheduledOff(item.dayOff)).length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={showFreePlay ? 5 : 4} className="text-center text-muted-foreground py-8">
                           {bunks.length === 0 
                             ? "No bunks configured. Click 'Manage Bunks' to set up bunks and assign staff."
                             : "No staff on duty found"}
@@ -1112,7 +1099,8 @@ export default function ODManagement() {
                     <TableRow>
                       <TableHead>Bunk</TableHead>
                       <TableHead>Name</TableHead>
-                      <TableHead className="text-center">In</TableHead>
+                      <TableHead className="text-center">Sign Out</TableHead>
+                      <TableHead className="text-center">Sign In</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Times</TableHead>
                       <TableHead>Actions</TableHead>
@@ -1140,11 +1128,32 @@ export default function ODManagement() {
                             </div>
                           </TableCell>
                           <TableCell className="text-center">
-                            <Checkbox
-                              checked={item.dayOff?.checked_in || false}
-                              onCheckedChange={() => handleCheckInOut(item.staff_id, 'in')}
-                              disabled={!canManualCheckInOut}
-                            />
+                            {item.dayOff?.checked_out ? (
+                              <Badge variant="outline">Signed Out</Badge>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={!canManualCheckInOut}
+                                onClick={() => handleCheckInOut(item.staff_id, 'out', 'off_duty')}
+                              >
+                                Sign Out
+                              </Button>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {item.dayOff?.checked_in ? (
+                              <Badge variant="outline" className="bg-green-100 dark:bg-green-900">Signed In</Badge>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={!canManualCheckInOut}
+                                onClick={() => handleCheckInOut(item.staff_id, 'in', 'off_duty')}
+                              >
+                                Sign In
+                              </Button>
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1 flex-wrap">
@@ -1232,7 +1241,7 @@ export default function ODManagement() {
                       ))}
                     {getFilteredOffStaff().length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                           No staff with a day off or night off today
                         </TableCell>
                       </TableRow>
