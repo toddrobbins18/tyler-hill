@@ -84,15 +84,15 @@ export function usePermissions() {
 
   // Get division filter for queries
   const getDivisionFilter = useCallback((): string[] | null => {
-    // Roles with full access see all divisions (no filter)
-    if (userRole && fullDivisionAccessRoles.includes(userRole)) {
+    // Any full-access role wins (user may hold staff + division_leader — match mobile)
+    if (userRoles.some((role) => fullDivisionAccessRoles.includes(role))) {
       return null;
     }
-    
+
     // Other roles (division_leader, viewer) see only their assigned divisions
     // Empty array = defer to RLS (same as Roster when client ids aren't loaded)
     return scopedUserDivisions.length > 0 ? scopedUserDivisions : [];
-  }, [userRole, scopedUserDivisions]);
+  }, [userRoles, scopedUserDivisions]);
 
   return {
     userRole,

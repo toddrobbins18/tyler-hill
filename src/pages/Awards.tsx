@@ -59,16 +59,6 @@ export default function Awards() {
     setLoading(true);
     try {
       const divisionFilter = getDivisionFilter();
-      let allDivisions: { id: string; name?: string | null }[] = [];
-
-      if (divisionFilter !== null && divisionFilter.length > 0) {
-        const { data } = await supabase
-          .from("divisions")
-          .select("id, name")
-          .eq("company_id", currentCompany!.id)
-          .eq("is_active", true);
-        allDivisions = data || [];
-      }
 
       const [camperData, staffData] = await Promise.all([
         fetchAwardsForSeason(
@@ -76,7 +66,6 @@ export default function Awards() {
           currentCompany!.id,
           currentSeason,
           divisionFilter,
-          allDivisions,
         ),
         fetchStaffAwardsForSeason(
           supabase,

@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeCsvPersonId } from "./csvPersonIdResolve";
-import { expandDivisionIdsForRosterFilter } from "./divisionFilterUtils";
 
 type DivisionRow = { id: string; name?: string | null };
 
@@ -145,40 +144,27 @@ async function fetchAwardsForChildIds(
  * Load awards for the active season roster, including achievements stored against
  * prior-season child rows for the same person_id.
  *
- * When divisionFilter is an empty array, client-side division filtering is skipped
- * and RLS scopes results (same as the Roster page for division leaders).
+ * Division leaders/viewers: RLS (get_user_divisions) scopes the children query —
+ * do not add a client-side division_id filter (same as the Roster page).
+ * divisionFilter / allDivisions are kept for API compatibility with callers.
  */
 export async function fetchAwardsForSeason(
   supabase: SupabaseClient,
   companyId: string,
   season: string,
-  divisionFilter: string[] | null,
-  allDivisions: DivisionRow[] = [],
+  _divisionFilter: string[] | null = null,
+  _allDivisions: DivisionRow[] = [],
 ): Promise<AwardWithChild[]> {
-  let effectiveDivisionFilter = divisionFilter;
-  if (divisionFilter !== null && divisionFilter.length > 0 && allDivisions.length > 0) {
-    effectiveDivisionFilter = expandDivisionIdsForRosterFilter(
-      divisionFilter,
-      allDivisions,
-    );
-  }
-
-  const roster = await fetchAllRows<RosterChild>(async (from, to) => {
-    let query = supabase
+  const roster = await fetchAllRows<RosterChild>(async (from, to) =>
+    supabase
       .from("children")
       .select("id, person_id, name, division_id")
       .eq("company_id", companyId)
       .eq("season", season)
       .neq("status", "inactive")
       .order("id")
-      .range(from, to);
-
-    if (effectiveDivisionFilter !== null && effectiveDivisionFilter.length > 0) {
-      query = query.in("division_id", effectiveDivisionFilter);
-    }
-
-    return query;
-  });
+      .range(from, to),
+  );
 
   if (roster.length === 0) {
     return [];
