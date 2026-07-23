@@ -1,0 +1,602 @@
+{
+  "20405300": {
+    "allergies": "Peanuts (EpiPen: Yes)",
+    "division": "Cadet Boys",
+    "first": "Simon",
+    "last": "Khadoury"
+  },
+  "10125729": {
+    "allergies": "Artificial Sweeteners",
+    "division": "Cadet Boys",
+    "first": "Chase",
+    "last": "Kristal"
+  },
+  "16458836": {
+    "allergies": "Gluten (EpiPen: Yes)",
+    "division": "Cadet Boys",
+    "first": "Dean",
+    "last": "Solomon"
+  },
+  "15837097": {
+    "allergies": "Peanuts, Sesame, Sunflower seeds (EpiPen: Yes)",
+    "division": "Cadet Girls",
+    "first": "Maya",
+    "last": "Goldie"
+  },
+  "17410524": {
+    "allergies": "Pecans, Almonds, Shellfish (EpiPen: Yes)",
+    "division": "Cadet Girls",
+    "first": "Alexis",
+    "last": "Kalikow"
+  },
+  "13062222": {
+    "allergies": "Peanuts, Almonds, Pecans, Tree Nuts, Sesame (EpiPen: Yes)",
+    "division": "Cadet Girls",
+    "first": "Sienna",
+    "last": "Mirman"
+  },
+  "14294467": {
+    "allergies": "Gluten, Milk",
+    "division": "Cadet Girls",
+    "first": "Mollie",
+    "last": "Perlmutter"
+  },
+  "15783185": {
+    "allergies": "Gluten",
+    "division": "Cadet Girls",
+    "first": "Hailey",
+    "last": "Wolf"
+  },
+  "12109874": {
+    "allergies": "Peanuts, Hazelnut",
+    "division": "CIT Boys",
+    "first": "Liam",
+    "last": "Gohar"
+  },
+  "9665062": {
+    "allergies": "Some fruit skins",
+    "division": "CIT Boys",
+    "first": "Tyler",
+    "last": "Kletz"
+  },
+  "8379836": {
+    "allergies": "Peas, Chickpeas",
+    "division": "CIT Boys",
+    "first": "Shane",
+    "last": "Raifman"
+  },
+  "9625024": {
+    "allergies": "Lactose Intolerant",
+    "division": "CIT Boys",
+    "first": "Dylan",
+    "last": "Wolpov"
+  },
+  "11056817": {
+    "allergies": "Wheat",
+    "division": "CIT Girls",
+    "first": "Gabriele",
+    "last": "Cohen"
+  },
+  "8794525": {
+    "allergies": "Milk",
+    "division": "CIT Girls",
+    "first": "Isabella",
+    "last": "Starr"
+  },
+  "8175237": {
+    "allergies": "Eggs, Milk",
+    "division": "CIT Girls",
+    "first": "Ryan",
+    "last": "Sutton"
+  },
+  "18993838": {
+    "allergies": "Peanuts (EpiPen: Yes)",
+    "division": "Freshmen B Girls",
+    "first": "Brielle",
+    "last": "Mackler"
+  },
+  "18938010": {
+    "allergies": "Almonds (EpiPen: Yes)",
+    "division": "Freshmen B Girls",
+    "first": "Harper",
+    "last": "Western"
+  },
+  "12603837": {
+    "allergies": "Oral Allergy Syndrome to Stone Fruit",
+    "division": "Junior Boys",
+    "first": "Gavin",
+    "last": "Alfred"
+  },
+  "13783819": {
+    "allergies": "Lactose Intolerant",
+    "division": "Junior Boys",
+    "first": "Ashton",
+    "last": "Donzis"
+  },
+  "14347711": {
+    "allergies": "Gluten",
+    "division": "Junior Boys",
+    "first": "Ben",
+    "last": "Geller"
+  },
+  "13743890": {
+    "allergies": "Peanuts (EpiPen: Yes)",
+    "division": "Junior Boys",
+    "first": "Ryan",
+    "last": "Goldstein"
+  },
+  "14279481": {
+    "allergies": "Pineapple",
+    "division": "Junior Boys",
+    "first": "Mason",
+    "last": "Madarash"
+  },
+  "14555512": {
+    "allergies": "Lactose Intolerant",
+    "division": "Junior Boys",
+    "first": "Jack",
+    "last": "McCormack"
+  },
+  "14307421": {
+    "allergies": "Walnuts, Cashews, Pistachios",
+    "division": "Junior Boys",
+    "first": "Ryan",
+    "last": "Rozbruch"
+  },
+  "15787477": {
+    "allergies": "Gluten",
+    "division": "Junior Boys",
+    "first": "Henry",
+    "last": "Stein"
+  },
+  "15443219": {
+    "allergies": "Cashews (EpiPen: Yes)",
+    "division": "Junior Boys",
+    "first": "Spencer",
+    "last": "Weinberg"
+  },
+  "14280085": {
+    "allergies": "Gluten",
+    "division": "Junior Girls",
+    "first": "Madison",
+    "last": "Bender"
+  },
+  "14493237": {
+    "allergies": "Gluten",
+    "division": "Junior Girls",
+    "first": "Reese",
+    "last": "Falkowitz"
+  },
+  "13871078": {
+    "allergies": "Gluten",
+    "division": "Junior Girls",
+    "first": "Falyn",
+    "last": "Feirman"
+  },
+  "11335960": {
+    "allergies": "Gluten",
+    "division": "Junior Girls",
+    "first": "Sophie ",
+    "last": "Goldberg"
+  },
+  "13284555": {
+    "allergies": "Gluten",
+    "division": "Junior Girls",
+    "first": "Sophia ",
+    "last": "Manfredi"
+  },
+  "14321880": {
+    "allergies": "Peanuts, Tree Nuts (EpiPen: Yes)",
+    "division": "Junior Girls",
+    "first": "Brooke",
+    "last": "Weingarten"
+  },
+  "11225759": {
+    "allergies": "Peanuts (EpiPen: Yes)",
+    "division": "Junior Girls",
+    "first": "Francesca",
+    "last": "Zeccardi"
+  },
+  "12985808": {
+    "allergies": "Pecans (EpiPen: Yes)",
+    "division": "Senior Boys",
+    "first": "Sam",
+    "last": "Aranoff"
+  },
+  "12197898": {
+    "allergies": "Walnuts",
+    "division": "Senior Boys",
+    "first": "Hudson",
+    "last": "Flax"
+  },
+  "13062221": {
+    "allergies": "Peanuts, Pecans, Cashew Nut (EpiPen: Yes)",
+    "division": "Senior Boys",
+    "first": "Ryan",
+    "last": "Mirman"
+  },
+  "14368164": {
+    "allergies": "Egg (EpiPen: Yes)",
+    "division": "Senior Boys",
+    "first": "Brandon ",
+    "last": "Schwartz"
+  },
+  "12521075": {
+    "allergies": "Gluten (EpiPen: Yes)",
+    "division": "Senior Girls",
+    "first": "Mila",
+    "last": "Beck"
+  },
+  "13334127": {
+    "allergies": "Walnuts (EpiPen: Yes)",
+    "division": "Senior Girls",
+    "first": "Olivia",
+    "last": "Feigenbaum"
+  },
+  "12109875": {
+    "allergies": "Gluten",
+    "division": "Senior Girls",
+    "first": "Ellah",
+    "last": "Gohar"
+  },
+  "13957066": {
+    "allergies": "Pears",
+    "division": "Senior Girls",
+    "first": "Riley",
+    "last": "Kotkin"
+  },
+  "13669602": {
+    "allergies": "Peanuts (EpiPen: Yes)",
+    "division": "Senior Girls",
+    "first": "Scarlett",
+    "last": "Lalin"
+  },
+  "8794528": {
+    "allergies": "Almonds, Milk (EpiPen: Yes)",
+    "division": "Senior Girls",
+    "first": "Sienna",
+    "last": "Starr"
+  },
+  "12511772": {
+    "allergies": "Gluten",
+    "division": "Senior Girls",
+    "first": "Madison",
+    "last": "Steiner"
+  },
+  "15425858": {
+    "allergies": "All nuts except hazelnut",
+    "division": "Sophomore Boys",
+    "first": "Simon",
+    "last": "Bell"
+  },
+  "14941266": {
+    "allergies": "Pollen",
+    "division": "Sophomore Boys",
+    "first": "Zach",
+    "last": "Friedman"
+  },
+  "14739758": {
+    "allergies": "Tree Nut (EpiPen: Yes)",
+    "division": "Sophomore Boys",
+    "first": "Aiden",
+    "last": "Leon"
+  },
+  "17335110": {
+    "allergies": "Pistachios ,Cashews (EpiPen: Yes)",
+    "division": "Sophomore Boys",
+    "first": "Hunter",
+    "last": "Palance"
+  },
+  "17718364": {
+    "allergies": "DAIRY , Almonds (EpiPen: Yes)",
+    "division": "Sophomore Boys",
+    "first": "Johnny",
+    "last": "Slobotkin"
+  },
+  "14469091": {
+    "allergies": "Fruit",
+    "division": "Sophomore Girls",
+    "first": "Parker",
+    "last": "Fishman"
+  },
+  "11673978": {
+    "allergies": "Sesame (EpiPen: Yes)",
+    "division": "Sophomore Girls",
+    "first": "Lily",
+    "last": "Schepps"
+  },
+  "2688302": {
+    "allergies": "Gluten",
+    "division": "Staff",
+    "first": "Chris ",
+    "last": "Beltz"
+  },
+  "21320267": {
+    "allergies": "Gluten",
+    "division": "Staff",
+    "first": "McKenzie",
+    "last": "Cumbo"
+  },
+  "2089868": {
+    "allergies": "Gluten",
+    "division": "Staff",
+    "first": "Mike ",
+    "last": "Davidowitz"
+  },
+  "20742284": {
+    "allergies": "Banana",
+    "division": "Staff",
+    "first": "Charlene",
+    "last": "Fisher"
+  },
+  "16419371": {
+    "allergies": "Vegetarian",
+    "division": "Staff",
+    "first": "Steve",
+    "last": "Hannis"
+  },
+  "19310193": {
+    "allergies": "Gluten",
+    "division": "Staff",
+    "first": "Grace",
+    "last": "Hinman"
+  },
+  "20333588": {
+    "allergies": "Gluten",
+    "division": "Staff",
+    "first": "Taylah",
+    "last": "Hoffman"
+  },
+  "17278738": {
+    "allergies": "Dairy",
+    "division": "Staff",
+    "first": "Jess ",
+    "last": "Ingram"
+  },
+  "13995328": {
+    "allergies": "Gluten",
+    "division": "Staff",
+    "first": "Kimberly",
+    "last": "Kellogg"
+  },
+  "20691986": {
+    "allergies": "Pork",
+    "division": "Staff",
+    "first": "Naledi",
+    "last": "Matshwi"
+  },
+  "15352114": {
+    "allergies": "Dairy",
+    "division": "Staff",
+    "first": "Lucy ",
+    "last": "Morris"
+  },
+  "21151173": {
+    "allergies": "Dairy",
+    "division": "Staff",
+    "first": "Natalie ",
+    "last": "Mullins"
+  },
+  "20764986": {
+    "allergies": "Gluten",
+    "division": "Staff",
+    "first": "Alanah",
+    "last": "Mutch"
+  },
+  "16877836": {
+    "allergies": "Gluten",
+    "division": "Staff",
+    "first": "Ben",
+    "last": "Ormerod"
+  },
+  "3357862": {
+    "allergies": "Gluten",
+    "division": "Staff",
+    "first": "Sarah",
+    "last": "Pitre"
+  },
+  "17293033": {
+    "allergies": "Gluten",
+    "division": "Staff",
+    "first": "Zosia ",
+    "last": "Plust"
+  },
+  "13591891": {
+    "allergies": "Gluten",
+    "division": "Staff",
+    "first": "Rob",
+    "last": "Rimmer "
+  },
+  "20472578": {
+    "allergies": "Gluten",
+    "division": "Staff",
+    "first": "Alejo ",
+    "last": "Rodriguez"
+  },
+  "14216557": {
+    "allergies": "Gluten",
+    "division": "Staff",
+    "first": "Emmanuel",
+    "last": "Segbedzi"
+  },
+  "9690696": {
+    "allergies": "Pork",
+    "division": "Staff",
+    "first": "Preston",
+    "last": "Sharpe"
+  },
+  "3569997": {
+    "allergies": "Gluten",
+    "division": "Staff",
+    "first": "Haley",
+    "last": "Thomas"
+  },
+  "21235064": {
+    "allergies": "Gluten",
+    "division": "Staff",
+    "first": "Meghan",
+    "last": "Warburton"
+  },
+  "11974301": {
+    "allergies": "Pistachios, Cashews (EpiPen: Yes)",
+    "division": "Super  Girls",
+    "first": "Alexa",
+    "last": "Alfred"
+  },
+  "11775405": {
+    "allergies": "Lactose Intolerant",
+    "division": "Super  Girls",
+    "first": "Emma",
+    "last": "Bakhash"
+  },
+  "12217951": {
+    "allergies": "Gluten",
+    "division": "Super  Girls",
+    "first": "Brooklyn",
+    "last": "Kaplan"
+  },
+  "13320347": {
+    "allergies": "Cashews, Pistachios (EpiPen: Yes)",
+    "division": "Super  Girls",
+    "first": "Alexa",
+    "last": "Miller"
+  },
+  "12707897": {
+    "allergies": "Smoked salmon",
+    "division": "Super  Girls",
+    "first": "Ava",
+    "last": "Zinner"
+  },
+  "11992737": {
+    "allergies": "Seafood",
+    "division": "Super Boys",
+    "first": "Tripp",
+    "last": "Cavuoti"
+  },
+  "11624413": {
+    "allergies": "Fruit",
+    "division": "Super Boys",
+    "first": "Jack",
+    "last": "Lichten"
+  },
+  "9638132": {
+    "allergies": "Peanuts, Almonds, Pecans",
+    "division": "Super Boys",
+    "first": "Levi",
+    "last": "Pochter"
+  },
+  "11487598": {
+    "allergies": "Pecans, All tree nuts",
+    "division": "Super Boys",
+    "first": "Zach",
+    "last": "Pollack"
+  },
+  "12158292": {
+    "allergies": "uncooked Dairy, ALL TREENUTS, uncooked eggs (EpiPen: Yes)",
+    "division": "Super Boys",
+    "first": "Harrison",
+    "last": "Sharpe"
+  },
+  "13327229": {
+    "allergies": "Gluten",
+    "division": "Super Girls",
+    "first": "Lindsay",
+    "last": "Rand"
+  },
+  "11673977": {
+    "allergies": "Peanuts, Gluten (EpiPen: Yes)",
+    "division": "Super Girls",
+    "first": "Remi",
+    "last": "Schepps"
+  },
+  "12286195": {
+    "allergies": "Walnut, cashews",
+    "division": "Teen  Girls",
+    "first": "Liv",
+    "last": "Gradone"
+  },
+  "19835909": {
+    "allergies": "Peanuts, Almonds (EpiPen: Yes)",
+    "division": "Teen Boys",
+    "first": "Will",
+    "last": "Dabbs"
+  },
+  "11012530": {
+    "allergies": "Sesame, Tree nuts, Peanuts, Almonds, coconut, Gluten (EpiPen: Yes)",
+    "division": "Teen Boys",
+    "first": "Landon",
+    "last": "Falkowitz"
+  },
+  "10970715": {
+    "allergies": "Lactose Intolerant",
+    "division": "Teen Boys",
+    "first": "Matthew",
+    "last": "Krull"
+  },
+  "10680976": {
+    "allergies": "Cashew,pistachio",
+    "division": "Teen Girls",
+    "first": "Parker",
+    "last": "Merson"
+  },
+  "9599471": {
+    "allergies": "Gluten, Lactose Intolerant",
+    "division": "Teen Girls",
+    "first": "Piper",
+    "last": "Van Schaick"
+  },
+  "17047986": {
+    "allergies": "Fruit",
+    "division": "Freshmen A Boys",
+    "first": "Slade",
+    "last": "Hanover"
+  },
+  "18914389": {
+    "allergies": "Fruit",
+    "division": "Freshmen A Boys",
+    "first": "Devin",
+    "last": "Perlmutter"
+  },
+  "18851178": {
+    "allergies": "Gluten",
+    "division": "Freshmen A Boys",
+    "first": "Skylar",
+    "last": "Zelouf"
+  },
+  "10067145": {
+    "allergies": "Fruit",
+    "division": "Freshmen A Girls",
+    "first": "Camryn",
+    "last": "Kristal"
+  },
+  "17719986": {
+    "allergies": "Peanuts (EpiPen: Yes)",
+    "division": "Freshmen A Girls",
+    "first": "Winnie",
+    "last": "Slobotkin"
+  },
+  "19667615": {
+    "allergies": "Gluten",
+    "division": "Freshmen A Girls",
+    "first": "Alexa",
+    "last": "Sobie"
+  },
+  "18924754": {
+    "allergies": "Almonds (EpiPen: Yes)",
+    "division": "Freshmen B Boys",
+    "first": "Lucas",
+    "last": "Small"
+  },
+  "18018229": {
+    "allergies": "Fruit",
+    "division": "Freshmen B Girls",
+    "first": "Avery",
+    "last": "Atlas"
+  },
+  "20173929": {
+    "allergies": "Gluten",
+    "division": "Freshmen B Girls",
+    "first": "Serena",
+    "last": "Beyder"
+  }
+}
