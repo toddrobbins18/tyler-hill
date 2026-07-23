@@ -67,11 +67,12 @@ export function shouldRemoveDayOffRecord(record: StaffDayOffScheduleRow): boolea
 /** OD tab = on-duty sign-in only. Off tab = sign-out + sign-in for scheduled off staff. */
 export type OdCheckInOutContext = "on_duty" | "off_duty";
 
-export type OdCheckInOutAction = "in" | "out";
+export type OdCheckInOutAction = "in" | "out" | "undo_in";
 
 export type OdCheckInOutResult =
   | { kind: "insert"; record: OdCheckInOutInsert }
   | { kind: "update"; recordId: string; updates: OdCheckInOutUpdates }
+  | { kind: "delete"; recordId: string }
   | { kind: "noop"; message: string }
   | { kind: "error"; message: string }
   | { kind: "late_override" };
@@ -100,6 +101,33 @@ export function resolveOdCheckInOut(
   if (context === "on_duty") {
     if (action === "out") {
       return { kind: "error", message: "Sign out is only available on the Off tab" };
+    }
+
+    if (action === "undo_in") {
+      if (!existing?.checked_in) {
+        return { kind: "noop", message: "Not signed in" };
+      }
+
+      const afterUndo: StaffDayOffScheduleRow = {
+        ...existing,
+        checked_in: false,
+        checked_in_at: null,
+        checked_in_by: null,
+      };
+
+      if (shouldRemoveDayOffRecord(afterUndo)) {
+        return { kind: "delete", recordId: existing.id };
+      }
+
+      return {
+        kind: "update",
+        recordId: existing.id,
+        updates: {
+          checked_in: false,
+          checked_in_at: null,
+          checked_in_by: null,
+        },
+      };
     }
 
     if (existing?.checked_in) {
@@ -133,6 +161,22 @@ export function resolveOdCheckInOut(
   }
 
   // Off tab: staff with day off / night off
+  if (action === "undo_in") {
+    if (!existing?.checked_in) {
+      return { kind: "noop", message: "Not signed in" };
+    }
+
+    return {
+      kind: "update",
+      recordId: existing.id,
+      updates: {
+        checked_in: false,
+        checked_in_at: null,
+        checked_in_by: null,
+      },
+    };
+  }
+
   if (action === "out") {
     if (!existing || !staffIsScheduledOff(existing)) {
       return { kind: "late_override" };

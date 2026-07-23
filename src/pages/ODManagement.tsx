@@ -671,12 +671,20 @@ export default function ODManagement() {
         if (error) throw error;
         return true;
       }
+      case "delete": {
+        const { error } = await supabase
+          .from("staff_days_off")
+          .delete()
+          .eq("id", result.recordId);
+        if (error) throw error;
+        return true;
+      }
     }
   };
 
   const handleCheckInOut = async (
     staffId: string,
-    type: 'out' | 'in',
+    type: 'out' | 'in' | 'undo_in',
     context: OdCheckInOutContext,
   ) => {
     if (!currentCompany?.id || !user?.id) return;
@@ -701,7 +709,12 @@ export default function ODManagement() {
 
       await fetchData();
       toast({
-        title: type === "out" ? "Signed out successfully" : "Signed in successfully",
+        title:
+          type === "out"
+            ? "Signed out successfully"
+            : type === "undo_in"
+              ? "Sign in cleared"
+              : "Signed in successfully",
       });
     } catch (error) {
       console.error("Error checking in/out:", error);
@@ -1000,7 +1013,14 @@ export default function ODManagement() {
                           )}
                           <TableCell className="text-center">
                             {item.dayOff?.checked_in ? (
-                              <Badge variant="outline" className="bg-green-100 dark:bg-green-900">Signed In</Badge>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={!canManualCheckInOut}
+                                onClick={() => handleCheckInOut(item.staff_id, 'undo_in', 'on_duty')}
+                              >
+                                Undo Sign In
+                              </Button>
                             ) : (
                               <Button
                                 variant="outline"
