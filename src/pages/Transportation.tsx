@@ -27,6 +27,7 @@ import { formatTime12Hour, parseLocalDate } from "@/lib/utils";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { compareByLastName } from "@/lib/nameSortUtils";
+import { hasDocumentedAllergy } from "@/lib/allergyUtils";
 
 export default function Transportation() {
   const { currentSeason } = useSeasonContext();
@@ -160,7 +161,7 @@ export default function Transportation() {
     const { data: roster } = await supabase
       .from("sports_event_roster")
       .select(`
-        child:children(id, name, age, grade, group_name)
+        child:children(id, name, age, grade, group_name, allergies)
       `)
       .eq("event_id", trip.sports_event_id)
       .eq('company_id', currentCompany.id);
@@ -169,7 +170,7 @@ export default function Transportation() {
       .from("sports_event_staff")
       .select(`
         role,
-        staff:staff(id, name, role)
+        staff:staff(id, name, role, allergies)
       `)
       .eq("event_id", trip.sports_event_id)
       .eq('company_id', currentCompany.id);
@@ -789,6 +790,45 @@ export default function Transportation() {
               <DialogTitle>Sports Event Roster: {viewingRoster.name}</DialogTitle>
             </DialogHeader>
             <div className="space-y-6">
+              {(() => {
+                const campersWithAllergies = rosterData.children.filter((c: any) => hasDocumentedAllergy(c.allergies));
+                const staffWithAllergies = [
+                  ...rosterData.coaches.filter((s: any) => hasDocumentedAllergy(s.allergies)),
+                  ...rosterData.refs.filter((s: any) => hasDocumentedAllergy(s.allergies)),
+                ];
+                const totalAllergies = campersWithAllergies.length + staffWithAllergies.length;
+                if (totalAllergies === 0) return null;
+                return (
+                  <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <span className="text-2xl">⚠️</span>
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-destructive mb-1">
+                          ALLERGY ALERT: {totalAllergies} individual{totalAllergies > 1 ? "s" : ""} with documented allergies
+                        </h4>
+                        <details className="mt-2">
+                          <summary className="text-xs cursor-pointer text-destructive/80 hover:text-destructive">
+                            View allergy details
+                          </summary>
+                          <div className="mt-2 space-y-1 text-xs">
+                            {campersWithAllergies.map((child: any) => (
+                              <div key={child.id} className="pl-4">
+                                <span className="font-medium">{child.name} (Camper):</span> {child.allergies}
+                              </div>
+                            ))}
+                            {staffWithAllergies.map((member: any) => (
+                              <div key={member.id} className="pl-4">
+                                <span className="font-medium">{member.name} (Staff):</span> {member.allergies}
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Campers Section */}
               <div>
                 <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
@@ -799,11 +839,19 @@ export default function Transportation() {
                   <div className="space-y-2">
                     {rosterData.children.map((child: any) => (
                       <div key={child.id} className="p-3 bg-muted rounded-lg flex items-center justify-between">
-                        <span className="font-medium">{child.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{child.name}</span>
+                          {hasDocumentedAllergy(child.allergies) && (
+                            <Badge variant="destructive" className="text-xs">
+                              ⚠️ Allergies
+                            </Badge>
+                          )}
+                        </div>
                         <div className="flex gap-4 text-sm text-muted-foreground">
                           {child.age && <span>Age: {child.age}</span>}
                           {child.grade && <span>Grade: {child.grade}</span>}
                           {child.group_name && <span>Group: {child.group_name}</span>}
+                          {hasDocumentedAllergy(child.allergies) && <span className="text-destructive font-medium">{child.allergies}</span>}
                         </div>
                       </div>
                     ))}
@@ -820,7 +868,14 @@ export default function Transportation() {
                   <div className="space-y-2">
                     {rosterData.coaches.map((coach: any) => (
                       <div key={coach.id} className="p-3 bg-muted rounded-lg flex items-center justify-between">
-                        <span className="font-medium">{coach.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{coach.name}</span>
+                          {hasDocumentedAllergy(coach.allergies) && (
+                            <Badge variant="destructive" className="text-xs">
+                              ⚠️ {coach.allergies}
+                            </Badge>
+                          )}
+                        </div>
                         {coach.role && <Badge variant="secondary">{coach.role}</Badge>}
                       </div>
                     ))}
@@ -837,7 +892,14 @@ export default function Transportation() {
                   <div className="space-y-2">
                     {rosterData.refs.map((ref: any) => (
                       <div key={ref.id} className="p-3 bg-muted rounded-lg flex items-center justify-between">
-                        <span className="font-medium">{ref.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{ref.name}</span>
+                          {hasDocumentedAllergy(ref.allergies) && (
+                            <Badge variant="destructive" className="text-xs">
+                              ⚠️ {ref.allergies}
+                            </Badge>
+                          )}
+                        </div>
                         {ref.role && <Badge variant="secondary">{ref.role}</Badge>}
                       </div>
                     ))}

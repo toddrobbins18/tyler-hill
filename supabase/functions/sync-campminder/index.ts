@@ -97,6 +97,20 @@ function normalizeDateOfBirthForDb(value: unknown): string | null {
   return null;
 }
 
+function normalizeAllergyFromCm(person: any): string | null {
+  const raw = person?.MedicalInfo?.Allergies;
+  if (raw == null) return null;
+  const trimmed = String(raw).trim();
+  return trimmed || null;
+}
+
+function normalizeMedicalNotesFromCm(person: any): string | null {
+  const raw = person?.MedicalInfo?.Notes;
+  if (raw == null) return null;
+  const trimmed = String(raw).trim();
+  return trimmed || null;
+}
+
 // Robust name extraction from any CampMinder record format
 function extractName(record: any): { firstName: string; lastName: string } {
   let firstName = '';
@@ -475,7 +489,7 @@ async function fetchPersonById(
 ): Promise<any | null> {
   await acquireRateLimitSlot();
   try {
-    const url = `${CM_PERSONS_URL}/${personId}?clientid=${clientId}&includecamperdetails=true&includecontactdetails=true&includerelatives=true&includestaffdetails=true`;
+    const url = `${CM_PERSONS_URL}/${personId}?clientid=${clientId}&includecamperdetails=true&includecontactdetails=true&includerelatives=true&includestaffdetails=true&includemedicalinfo=true`;
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -691,6 +705,27 @@ const TRACKED_FIELDS: Record<string, string[]> = {
   staff: ['name', 'role', 'email', 'phone', 'date_of_birth', 'status', 'budget_code'],
 };
 
+/** When CampMinder omits MedicalInfo, do not wipe manually-entered Nest values on upsert. */
+const PRESERVE_IF_NULL_FIELDS: Record<string, string[]> = {
+  children: ['allergies', 'medical_notes'],
+};
+
+function mergePreservedFields(table: string, record: any, existingRecord?: any): any {
+  if (!existingRecord) return record;
+  const preserveFields = PRESERVE_IF_NULL_FIELDS[table] || [];
+  if (preserveFields.length === 0) return record;
+
+  const merged = { ...record };
+  for (const field of preserveFields) {
+    const newVal = record[field];
+    const oldVal = existingRecord[field];
+    if ((newVal == null || newVal === '') && oldVal != null && oldVal !== '') {
+      merged[field] = oldVal;
+    }
+  }
+  return merged;
+}
+
 async function batchUpsert(
   supabase: any,
   table: string,
@@ -738,6 +773,8 @@ async function batchUpsert(
   }
 
   const now = new Date().toISOString();
+  let preservedAllergyCount = 0;
+  let preservedMedicalNotesCount = 0;
 
   for (let i = 0; i < data.length; i += batchSize) {
     const batch = data.slice(i, i + batchSize);
@@ -746,6 +783,7 @@ async function batchUpsert(
     // Check each record for changes
     for (const record of batch) {
       const existingRecord = existingRecordsMap.get(record.person_id);
+      const mergedRecord = mergePreservedFields(table, record, existingRecord);
       
       if (existingRecord) {
         // Record exists - check for changes
@@ -753,7 +791,7 @@ async function batchUpsert(
         
         for (const field of trackedFields) {
           const oldVal = existingRecord[field];
-          const newVal = record[field];
+          const newVal = mergedRecord[field];
           
           if (!valuesEqual(oldVal, newVal)) {
             recordChanges.push({
@@ -767,13 +805,13 @@ async function batchUpsert(
         if (recordChanges.length > 0) {
           updated++;
           changes.push({
-            person_id: record.person_id,
-            name: record.name || existingRecord.name,
+            person_id: mergedRecord.person_id,
+            name: mergedRecord.name || existingRecord.name,
             changes: recordChanges,
           });
           
           // Log individual changes
-          console.log(`[${table}] UPDATED: ${record.name} (${record.person_id})`);
+          console.log(`[${table}] UPDATED: ${mergedRecord.name} (${mergedRecord.person_id})`);
           for (const change of recordChanges) {
             console.log(`  - ${change.field}: "${change.old_value}" → "${change.new_value}"`);
           }
@@ -785,11 +823,16 @@ async function batchUpsert(
       }
     }
     
-    // Add updated_at timestamp to all records
-    const batchWithTimestamp = batch.map(record => ({
-      ...record,
-      updated_at: now,
-    }));
+    // Add updated_at timestamp to all records (preserve allergies/medical_notes when CM omits them)
+    const batchWithTimestamp = batch.map(record => {
+      const existingRecord = existingRecordsMap.get(record.person_id);
+      const merged = mergePreservedFields(table, record, existingRecord);
+      if (existingRecord && table === 'children') {
+        if (!record.allergies && merged.allergies && existingRecord.allergies) preservedAllergyCount++;
+        if (!record.medical_notes && merged.medical_notes && existingRecord.medical_notes) preservedMedicalNotesCount++;
+      }
+      return { ...merged, updated_at: now };
+    });
     
     const { error } = await supabase
       .from(table)
@@ -808,6 +851,10 @@ async function batchUpsert(
   console.log(`  - New records: ${inserted}`);
   console.log(`  - Updated records: ${updated}`);
   console.log(`  - Unchanged records: ${data.length - inserted - updated}`);
+  if (table === 'children' && (preservedAllergyCount > 0 || preservedMedicalNotesCount > 0)) {
+    console.log(`  - Preserved existing allergies (CM omitted): ${preservedAllergyCount}`);
+    console.log(`  - Preserved existing medical_notes (CM omitted): ${preservedMedicalNotesCount}`);
+  }
   if (changes.length > 0) {
     console.log(`  - Total field changes: ${changes.reduce((sum, c) => sum + c.changes.length, 0)}`);
   }
@@ -2077,8 +2124,8 @@ async function performFullSync(
         guardian_name: guardianName || null,
         guardian_email: guardianEmail || null,
         guardian_phone: guardianPhone || null,
-        allergies: person.MedicalInfo?.Allergies || null,
-        medical_notes: person.MedicalInfo?.Notes || null,
+        allergies: normalizeAllergyFromCm(person),
+        medical_notes: normalizeMedicalNotesFromCm(person),
         company_id: companyId,
         season: season,
         status: 'active',
@@ -2130,8 +2177,8 @@ async function performFullSync(
         guardian_name: null,
         guardian_email: null,
         guardian_phone: null,
-        allergies: person?.MedicalInfo?.Allergies || null,
-        medical_notes: person?.MedicalInfo?.Notes || null,
+        allergies: normalizeAllergyFromCm(person),
+        medical_notes: normalizeMedicalNotesFromCm(person),
         company_id: companyId,
         season: season,
         status: 'active',

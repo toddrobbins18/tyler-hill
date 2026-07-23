@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { useConflictDetection, Conflict } from "@/hooks/useConflictDetection";
 import ConflictWarningDialog from "./ConflictWarningDialog";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
+import { hasDocumentedAllergy } from "@/lib/allergyUtils";
 
 interface ManageTripAttendanceDialogProps {
   tripId: string | null;
@@ -245,6 +246,9 @@ Please review this conflict and take appropriate action.`;
     ? children
     : children.filter((child) => child.division_id === selectedDivision);
 
+  const selectedChildren = children.filter((child) => attendees.has(child.id));
+  const campersWithAllergies = selectedChildren.filter((child) => hasDocumentedAllergy(child.allergies));
+
   const groupedByDivision = children.reduce((acc, child) => {
     const divName = child.division?.name || "No Division";
     if (!acc[divName]) acc[divName] = [];
@@ -258,6 +262,31 @@ Please review this conflict and take appropriate action.`;
         <DialogHeader>
           <DialogTitle>Manage Roster: {tripName}</DialogTitle>
         </DialogHeader>
+
+        {campersWithAllergies.length > 0 && (
+          <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">⚠️</span>
+              <div className="flex-1">
+                <h4 className="font-semibold text-destructive mb-1">
+                  ALLERGY ALERT: {campersWithAllergies.length} camper{campersWithAllergies.length > 1 ? "s" : ""} with documented allergies
+                </h4>
+                <details className="mt-2">
+                  <summary className="text-xs cursor-pointer text-destructive/80 hover:text-destructive">
+                    View allergy details
+                  </summary>
+                  <div className="mt-2 space-y-1 text-xs">
+                    {campersWithAllergies.map((child) => (
+                      <div key={child.id} className="pl-4">
+                        <span className="font-medium">{child.name}:</span> {child.allergies}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              </div>
+            </div>
+          </div>
+        )}
 
         <Tabs defaultValue="by-division" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
@@ -284,9 +313,16 @@ Please review this conflict and take appropriate action.`;
                       />
                       <label
                         htmlFor={`child-${child.id}`}
-                        className="text-sm cursor-pointer"
+                        className="text-sm cursor-pointer flex items-center gap-2 flex-1"
                       >
-                        {child.name} {child.age ? `(${child.age})` : ""}
+                        <span>
+                          {child.name} {child.age ? `(${child.age})` : ""}
+                        </span>
+                        {hasDocumentedAllergy(child.allergies) && (
+                          <Badge variant="destructive" className="text-[10px] h-4">
+                            ⚠️ Allergies
+                          </Badge>
+                        )}
                       </label>
                     </div>
                   ))}
@@ -327,9 +363,16 @@ Please review this conflict and take appropriate action.`;
                     />
                     <label
                       htmlFor={`filtered-${child.id}`}
-                      className="text-sm cursor-pointer"
+                      className="text-sm cursor-pointer flex items-center gap-2 flex-1"
                     >
-                      {child.name} - {child.division?.name || "No Division"}
+                      <span>
+                        {child.name} - {child.division?.name || "No Division"}
+                      </span>
+                      {hasDocumentedAllergy(child.allergies) && (
+                        <Badge variant="destructive" className="text-[10px] h-4">
+                          ⚠️ Allergies
+                        </Badge>
+                      )}
                     </label>
                   </div>
                 ))}

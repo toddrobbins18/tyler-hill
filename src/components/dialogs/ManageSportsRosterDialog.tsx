@@ -17,6 +17,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useConflictDetection, Conflict } from "@/hooks/useConflictDetection";
 import ConflictWarningDialog from "./ConflictWarningDialog";
 import { compareByLastName } from "@/lib/nameSortUtils";
+import { hasDocumentedAllergy } from "@/lib/allergyUtils";
 
 interface ManageSportsRosterDialogProps {
   eventId: string;
@@ -634,11 +635,11 @@ Please review this conflict and take appropriate action.`;
           {(() => {
             const campersWithAllergies = Array.from(roster)
               .map(childId => children.find(c => c.id === childId))
-              .filter(child => child?.allergies);
+              .filter(child => hasDocumentedAllergy(child?.allergies));
             
             const staffWithAllergies = [...assignedCoaches, ...assignedRefs]
               .map(staffId => staff.find(s => s.id === staffId))
-              .filter(staffMember => staffMember?.allergies);
+              .filter(staffMember => hasDocumentedAllergy(staffMember?.allergies));
             
             const totalAllergies = campersWithAllergies.length + staffWithAllergies.length;
             
@@ -761,7 +762,7 @@ Please review this conflict and take appropriate action.`;
                                     >
                                       <div className="flex items-center gap-2">
                                         <span className="font-medium">{child.name}</span>
-                                        {child.allergies && (
+                                        {hasDocumentedAllergy(child.allergies) && (
                                           <Badge variant="destructive" className="text-[10px] h-4">
                                             ⚠️ Allergies
                                           </Badge>
@@ -814,7 +815,7 @@ Please review this conflict and take appropriate action.`;
                                           <div className="font-medium">{child.name}</div>
                                           <div className="text-[10px] text-muted-foreground">{child.division?.name || "No Division"}</div>
                                         </div>
-                                        {child.allergies && (
+                                        {hasDocumentedAllergy(child.allergies) && (
                                           <Badge variant="destructive" className="text-[10px] h-4">
                                             ⚠️ Allergies
                                           </Badge>
@@ -853,7 +854,7 @@ Please review this conflict and take appropriate action.`;
                         >
                           <div className="flex items-center gap-2">
                             <span className="font-medium">{child.name}</span>
-                            {child.allergies && (
+                            {hasDocumentedAllergy(child.allergies) && (
                               <Badge variant="destructive" className="text-xs">
                                 ⚠️ Allergies
                               </Badge>
@@ -930,7 +931,7 @@ Please review this conflict and take appropriate action.`;
                             <div key={coachId} className="flex items-center justify-between p-2 bg-muted rounded">
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-medium">{coach?.name || "Unknown"}</span>
-                                {coach?.allergies && (
+                                {hasDocumentedAllergy(coach?.allergies) && (
                                   <Badge variant="destructive" className="text-xs">
                                     ⚠️ Allergies: {coach.allergies}
                                   </Badge>
@@ -962,7 +963,7 @@ Please review this conflict and take appropriate action.`;
                           <div key={coachId} className="flex items-center justify-between p-2 bg-muted rounded">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium">{coach?.name || "Unknown"}</span>
-                              {coach?.allergies && (
+                              {hasDocumentedAllergy(coach?.allergies) && (
                                 <Badge variant="destructive" className="text-xs">
                                   ⚠️ Allergies: {coach.allergies}
                                 </Badge>
@@ -1022,7 +1023,7 @@ Please review this conflict and take appropriate action.`;
                             <div key={refId} className="flex items-center justify-between p-2 bg-muted rounded">
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-medium">{ref?.name || "Unknown"}</span>
-                                {ref?.allergies && (
+                                {hasDocumentedAllergy(ref?.allergies) && (
                                   <Badge variant="destructive" className="text-xs">
                                     ⚠️ Allergies: {ref.allergies}
                                   </Badge>
@@ -1054,7 +1055,7 @@ Please review this conflict and take appropriate action.`;
                           <div key={refId} className="flex items-center justify-between p-2 bg-muted rounded">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium">{ref?.name || "Unknown"}</span>
-                              {ref?.allergies && (
+                              {hasDocumentedAllergy(ref?.allergies) && (
                                 <Badge variant="destructive" className="text-xs">
                                   ⚠️ Allergies: {ref.allergies}
                                 </Badge>
