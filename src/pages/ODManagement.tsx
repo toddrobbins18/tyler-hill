@@ -171,15 +171,42 @@ export default function ODManagement() {
     }
   }, [scannerMode, isScanning]);
 
+  const fetchDaysOffRecords = async (): Promise<DayOff[]> => {
+    if (!currentCompany?.id) return [];
+
+    const dateStr = format(selectedDate, "yyyy-MM-dd");
+    const { data, error } = await supabase
+      .from("staff_days_off")
+      .select(`
+        id, staff_id, date, is_day_off, is_night_off, is_sleeping_out, 
+        checked_out, checked_in, checked_out_at, checked_in_at, 
+        checked_out_by, checked_in_by, notes,
+        late_override, late_override_reason, late_override_approved_by, late_override_approved_at,
+        staff:staff_id(id, name, department, role, rfid, gender)
+      `)
+      .eq("company_id", currentCompany.id)
+      .eq("season", currentSeason)
+      .eq("date", dateStr);
+
+    if (error) throw error;
+    return (data as unknown as DayOff[]) || [];
+  };
+
+  /** Refresh sign-in/out state without replacing the table (preserves scroll). */
+  const refreshDaysOff = async () => {
+    try {
+      setDaysOff(await fetchDaysOffRecords());
+    } catch (error) {
+      console.error("Error refreshing days off:", error);
+    }
+  };
+
   const fetchData = async () => {
     if (!currentCompany?.id) return;
     setLoading(true);
 
     try {
-      const dateStr = format(selectedDate, "yyyy-MM-dd");
-
-      // Fetch staff, bunks, bunk_staff, and days_off in parallel
-      const [staffRes, bunksRes, bunkStaffRes, daysOffRes] = await Promise.all([
+      const [staffRes, bunksRes, bunkStaffRes, daysOffData] = await Promise.all([
         supabase
           .from("staff")
           .select("id, name, department, role, rfid, gender")
@@ -203,29 +230,17 @@ export default function ODManagement() {
           `)
           .eq("company_id", currentCompany.id)
           .eq("season", currentSeason),
-        supabase
-          .from("staff_days_off")
-          .select(`
-            id, staff_id, date, is_day_off, is_night_off, is_sleeping_out, 
-            checked_out, checked_in, checked_out_at, checked_in_at, 
-            checked_out_by, checked_in_by, notes,
-            late_override, late_override_reason, late_override_approved_by, late_override_approved_at,
-            staff:staff_id(id, name, department, role, rfid, gender)
-          `)
-          .eq("company_id", currentCompany.id)
-          .eq("season", currentSeason)
-          .eq("date", dateStr)
+        fetchDaysOffRecords(),
       ]);
 
       if (staffRes.error) throw staffRes.error;
       if (bunksRes.error) throw bunksRes.error;
       if (bunkStaffRes.error) throw bunkStaffRes.error;
-      if (daysOffRes.error) throw daysOffRes.error;
 
       if (staffRes.data) setStaff(staffRes.data);
       if (bunksRes.data) setBunks(bunksRes.data as unknown as Bunk[]);
       if (bunkStaffRes.data) setBunkStaff(bunkStaffRes.data as unknown as BunkStaff[]);
-      setDaysOff((daysOffRes.data as unknown as DayOff[]) || []);
+      setDaysOff(daysOffData);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({ title: "Error loading data", variant: "destructive" });
@@ -318,7 +333,7 @@ export default function ODManagement() {
         });
       }
 
-      await fetchData();
+      await refreshDaysOff();
       setRfidInput("");
       setTimeout(() => rfidInputRef.current?.focus(), 100);
 
@@ -384,7 +399,7 @@ export default function ODManagement() {
       setShowLateOverrideDialog(false);
       setLateOverrideStaffId(null);
       setLateOverrideReason("");
-      await fetchData();
+      await refreshDaysOff();
     } catch (error) {
       console.error("Late override error:", error);
       toast({ title: "Failed to apply late override", variant: "destructive" });
@@ -435,7 +450,7 @@ export default function ODManagement() {
         if (error) throw error;
       }
 
-      await fetchData();
+      await refreshDaysOff();
       toast({ title: "Updated successfully" });
     } catch (error) {
       console.error("Error updating day off:", error);
@@ -707,7 +722,7 @@ export default function ODManagement() {
       const applied = await applyCheckInOutResult(staffId, result);
       if (!applied) return;
 
-      await fetchData();
+      await refreshDaysOff();
       toast({
         title:
           type === "out"
