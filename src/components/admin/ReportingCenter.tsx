@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import BirthdayReportTable from "./BirthdayReportTable";
 import { fetchAwardsForReporting } from "@/lib/awardsQueries";
 import { fetchExpandedMedicationSchedule } from "@/lib/medicationReportSchedule";
+import { fetchAsNeededMedicationsForReporting } from "@/lib/medicationAsNeededReport";
 import { parseMedicationMealTimeLabels } from "@/lib/medicationMealTimeDisplay";
 import {
   attachSportsEventSortTime,
@@ -33,7 +34,22 @@ import {
   formatSpecialEventTypeLabel,
 } from "@/lib/specialEventReportUtils";
 
-type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'special_events_activities' | 'conflicts' | 'medications' | 'allergies' | 're_enrollment' | 'appointments' | 'tshirt_sizes' | 'birthdays';
+type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'special_events_activities' | 'conflicts' | 'medications' | 'as_needed_medications' | 'allergies' | 're_enrollment' | 'appointments' | 'tshirt_sizes' | 'birthdays';
+
+type ReportingCenterProps = {
+  /** Limit report dropdown (e.g. Nurse / Health Center). */
+  allowedReportTypes?: ReportType[];
+  defaultReportType?: ReportType;
+  /** Compact layout without "Master Reporting Center" framing. */
+  embedded?: boolean;
+};
+
+const DATELESS_REPORT_TYPES: ReportType[] = [
+  'allergies',
+  'as_needed_medications',
+  're_enrollment',
+  'tshirt_sizes',
+];
 
 type DivisionAwareRow = Record<string, any> & {
   __divisionIds?: string[];
@@ -69,8 +85,12 @@ const getDivisionNamesFromRow = (row: DivisionAwareRow) => {
   );
 };
 
-export default function ReportingCenter() {
-  const [reportType, setReportType] = useState<ReportType>('incidents');
+export default function ReportingCenter({
+  allowedReportTypes,
+  defaultReportType = 'incidents',
+  embedded = false,
+}: ReportingCenterProps = {}) {
+  const [reportType, setReportType] = useState<ReportType>(defaultReportType);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [reportData, setReportData] = useState<any[]>([]);
@@ -85,9 +105,14 @@ export default function ReportingCenter() {
   const { currentCompany } = useCompany();
   const { selectedSeason } = useSeason();
   const { getDivisionFilter, userDivisions, loading: permissionsLoading } = usePermissions();
+  const fetchGenerationRef = useRef(0);
 
   // Get allowed divisions for the current user
   const allowedDivisionIds = getDivisionFilter();
+  const allowedDivisionIdsKey = useMemo(
+    () => (allowedDivisionIds === null ? "all" : allowedDivisionIds.join(",")),
+    [allowedDivisionIds],
+  );
   const selectedDivisionNames = useMemo(
     () => divisions.filter((division) => selectedDivisions.includes(division.id)).map((division) => division.name),
     [divisions, selectedDivisions]
@@ -96,6 +121,16 @@ export default function ReportingCenter() {
   useEffect(() => {
     setSelectedDivisions([]);
   }, [currentCompany?.id]);
+
+  useEffect(() => {
+    if (allowedReportTypes?.length) {
+      setReportType((current) =>
+        allowedReportTypes.includes(current) ? current : defaultReportType,
+      );
+    } else {
+      setReportType(defaultReportType);
+    }
+  }, [allowedReportTypes, defaultReportType, currentCompany?.id]);
 
   useEffect(() => {
     const validDivisionIds = new Set(divisions.map((division) => division.id));
@@ -130,7 +165,7 @@ export default function ReportingCenter() {
     fetchDivisions();
   }, [currentCompany?.id, allowedDivisionIds, permissionsLoading]);
 
-  const fetchReportData = async () => {
+  const fetchReportData = useCallback(async (options?: { bypassCache?: boolean }) => {
     if (!currentCompany?.id) return;
     
     // If user has restricted divisions but none assigned, show no data
@@ -141,6 +176,7 @@ export default function ReportingCenter() {
       return;
     }
 
+    const fetchGeneration = ++fetchGenerationRef.current;
     setLoading(true);
     try {
       let data: any[] = [];
@@ -598,6 +634,56 @@ export default function ReportingCenter() {
             'Different Medications': uniqueMedications.size,
             'Administered': administeredCount,
             'Pending': pendingCount,
+          };
+          break;
+        }
+
+        case 'as_needed_medications': {
+          const prnMeds = await fetchAsNeededMedicationsForReporting(
+            supabase,
+            currentCompany.id,
+            selectedSeason,
+            { bypassCache: options?.bypassCache },
+          );
+
+          const filteredPrn = allowedDivisionIds
+            ? prnMeds.filter(
+                (m) =>
+                  (m as { children?: { division_id?: string } }).children?.division_id &&
+                  allowedDivisionIds.includes(
+                    (m as { children?: { division_id?: string } }).children!.division_id!,
+                  ),
+              )
+            : prnMeds;
+
+          data = filteredPrn.map((m) => {
+            const child = (m as {
+              children?: { name?: string; division_id?: string; divisions?: { name?: string } };
+            }).children;
+            const divisionName = child?.divisions?.name ?? null;
+
+            return withDivisionMeta(
+              {
+                Child: child?.name || 'Unknown',
+                Division: divisionName || 'N/A',
+                Medication: m.medication_name,
+                Dosage: m.dosage || 'N/A',
+                Frequency: (m as { frequency?: string }).frequency || 'As Needed',
+                Notes: (m as { notes?: string }).notes || '',
+                'Profile Date': m.date,
+              },
+              [child?.division_id],
+              [divisionName],
+            );
+          });
+
+          const uniqueChildren = new Set(filteredPrn.map((m) => m.child_id));
+          const uniqueMedications = new Set(filteredPrn.map((m) => m.medication_name));
+
+          summaryData = {
+            'Total PRN Medications': filteredPrn.length,
+            'Unique Children': uniqueChildren.size,
+            'Different Medications': uniqueMedications.size,
           };
           break;
         }
@@ -1081,21 +1167,42 @@ export default function ReportingCenter() {
           break;
       }
 
+      if (fetchGeneration !== fetchGenerationRef.current) return;
+
       setReportData(data);
       setSummary(summaryData);
     } catch (error) {
+      if (fetchGeneration !== fetchGenerationRef.current) return;
       console.error('Error fetching report data:', error);
       toast({ title: "Error loading report data", variant: "destructive" });
     } finally {
-      setLoading(false);
+      if (fetchGeneration === fetchGenerationRef.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, [
+    allowedDivisionIds,
+    currentCompany?.id,
+    reportType,
+    selectedSeason,
+    startDate,
+    endDate,
+    toast,
+  ]);
 
   useEffect(() => {
-    if (currentCompany?.id && !permissionsLoading) {
-      fetchReportData();
-    }
-  }, [reportType, currentCompany, selectedSeason, allowedDivisionIds, permissionsLoading, startDate, endDate, divisions]);
+    if (!currentCompany?.id || permissionsLoading) return;
+    fetchReportData();
+  }, [
+    reportType,
+    currentCompany?.id,
+    selectedSeason,
+    allowedDivisionIdsKey,
+    permissionsLoading,
+    startDate,
+    endDate,
+    fetchReportData,
+  ]);
 
   useEffect(() => {
     setSortColumn(null);
@@ -1216,6 +1323,16 @@ export default function ReportingCenter() {
           'Different Medications': uniqueMedications.size,
           'Administered': filteredReportData.filter((row) => row.Administered === 'Yes').length,
           'Pending': filteredReportData.filter((row) => row.Administered !== 'Yes').length,
+        };
+      }
+      case 'as_needed_medications': {
+        const uniqueChildren = new Set(filteredReportData.map((row) => row.Child));
+        const uniqueMedications = new Set(filteredReportData.map((row) => row.Medication));
+
+        return {
+          'Total PRN Medications': filteredReportData.length,
+          'Unique Children': uniqueChildren.size,
+          'Different Medications': uniqueMedications.size,
         };
       }
       case 'allergies': {
@@ -1437,6 +1554,7 @@ export default function ReportingCenter() {
       special_events_activities: 'SPECIAL EVENTS & EVENING ACTIVITIES',
       conflicts: 'SCHEDULE CONFLICTS',
       medications: 'MEDICATION SCHEDULE',
+      as_needed_medications: 'AS NEEDED (PRN) MEDICATIONS',
       allergies: 'ALLERGY REPORT',
       re_enrollment: 'RE-ENROLLMENT REPORT',
       appointments: 'APPOINTMENTS REPORT',
@@ -1452,10 +1570,11 @@ export default function ReportingCenter() {
   };
 
   const hasVisibleData = reportType === 'birthdays' ? filteredBirthdayData.length > 0 : sortedData.length > 0;
+  const reportUsesDateRange = !DATELESS_REPORT_TYPES.includes(reportType);
 
   // Get report options based on company's available pages
   const reportTypeOptions = useMemo(() => {
-    const baseOptions = [
+    const baseOptions: { value: ReportType; label: string }[] = [
       { value: 'incidents', label: 'Incident Reports' },
       { value: 'staff_evaluations', label: 'Staff Evaluations' },
       { value: 'camper_reports', label: 'Camper Reports' },
@@ -1464,6 +1583,7 @@ export default function ReportingCenter() {
       { value: 'special_events_activities', label: 'Special Events & Evening Activities' },
       { value: 'conflicts', label: 'Schedule Conflicts' },
       { value: 'medications', label: 'Medication Schedule' },
+      { value: 'as_needed_medications', label: 'As Needed (PRN) Medications' },
       { value: 'allergies', label: 'Allergy Report' },
       { value: 're_enrollment', label: 'Re-Enrollment Report' },
       { value: 'tshirt_sizes', label: 'T-Shirt Sizes' },
@@ -1484,8 +1604,12 @@ export default function ReportingCenter() {
       baseOptions.push({ value: 'appointments', label: 'Appointments Report' });
     }
 
+    if (allowedReportTypes?.length) {
+      return baseOptions.filter((option) => allowedReportTypes.includes(option.value));
+    }
+
     return baseOptions;
-  }, [currentCompany?.slug]);
+  }, [allowedReportTypes, currentCompany?.slug]);
 
   return (
     <div className="space-y-6">
@@ -1493,14 +1617,16 @@ export default function ReportingCenter() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            Master Reporting Center
+            {embedded ? 'Health Center Reports' : 'Master Reporting Center'}
           </CardTitle>
           <CardDescription>
-            Generate comprehensive reports and export data
+            {embedded
+              ? 'PRN medications, scheduled meds, and allergy reports for the health center'
+              : 'Generate comprehensive reports and export data'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          <div className={`grid gap-4 md:grid-cols-2 ${reportUsesDateRange ? 'lg:grid-cols-5' : 'lg:grid-cols-3'}`}>
             <div className="space-y-2">
               <Label>Report Type</Label>
               <Select value={reportType} onValueChange={(value) => setReportType(value as ReportType)}>
@@ -1517,23 +1643,27 @@ export default function ReportingCenter() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label>Start Date</Label>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </div>
+            {reportUsesDateRange && (
+              <>
+                <div className="space-y-2">
+                  <Label>Start Date</Label>
+                  <Input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                  />
+                </div>
 
-            <div className="space-y-2">
-              <Label>End Date</Label>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </div>
+                <div className="space-y-2">
+                  <Label>End Date</Label>
+                  <Input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
 
             <div className="space-y-2">
               <Label>Filter by Division</Label>
@@ -1591,7 +1721,11 @@ export default function ReportingCenter() {
 
             <div className="space-y-2">
               <Label>&nbsp;</Label>
-              <Button onClick={fetchReportData} disabled={loading} className="w-full">
+              <Button
+                onClick={() => fetchReportData({ bypassCache: reportType === 'as_needed_medications' })}
+                disabled={loading}
+                className="w-full"
+              >
                 {loading ? 'Loading...' : 'Generate Report'}
               </Button>
             </div>

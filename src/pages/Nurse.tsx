@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList, Hospital, Clock, UserCheck, Search, ArrowUpDown, Users, Loader2, Scan, Pencil, CalendarDays, X, Eye } from "lucide-react";
+import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList, Hospital, Clock, UserCheck, Search, ArrowUpDown, Users, Loader2, Scan, Pencil, CalendarDays, X, Eye, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -56,6 +56,7 @@ import {
   medicationMatchesListVisibility,
 } from "@/lib/medicationMealTimeDisplay";
 import { MedicationMealTimeBadges } from "@/components/nurse/MedicationMealTimeBadges";
+import HealthCenterReportsPanel from "@/components/health/HealthCenterReportsPanel";
 import {
   insertMedicationLog,
   medicationWriteErrorDescription,
@@ -1996,11 +1997,12 @@ export default function Nurse() {
       {viewMode === 'list' && (
         <>
           <Tabs defaultValue="log" className="w-full">
-        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-5">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-6">
           <TabsTrigger value="log">Daily Log</TabsTrigger>
           <TabsTrigger value="today">Today's Medications</TabsTrigger>
           <TabsTrigger value="health-center">Health Center</TabsTrigger>
           <TabsTrigger value="health-log">Health Center Log</TabsTrigger>
+          <TabsTrigger value="reports">Reports</TabsTrigger>
           {canManageMedications && <TabsTrigger value="add">Add Medication</TabsTrigger>}
         </TabsList>
 
@@ -2763,6 +2765,10 @@ export default function Nurse() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="reports">
+          <HealthCenterReportsPanel />
         </TabsContent>
 
         {canManageMedications && (
