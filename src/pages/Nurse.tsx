@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList, Hospital, Clock, UserCheck, Search, ArrowUpDown, Users, Loader2, Scan, Pencil, CalendarDays, X } from "lucide-react";
+import { Pill, AlertCircle, CheckCircle2, Trash2, Calendar as CalendarIcon, LayoutList, Hospital, Clock, UserCheck, Search, ArrowUpDown, Users, Loader2, Scan, Pencil, CalendarDays, X, Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -992,6 +992,7 @@ export default function Nurse() {
       `)
       .eq("company_id", currentCompany.id)
       .eq("season", currentSeason)
+      .eq("visit_type", "admission")
       .is("checked_out_at", null)
       .order("admitted_at", { ascending: false });
 
@@ -1256,41 +1257,67 @@ export default function Nurse() {
     </div>
   );
 
-  const handleAdmit = async (
+  type HealthCenterVisitType = 'admission' | 'observation';
+
+  const promptHealthCenterVisitDetails = (): { reason: string; notes: string } | null => {
+    const reason = prompt("Reason (optional):");
+    if (reason === null) return null;
+    const notes = prompt("Additional notes (optional):");
+    if (notes === null) return null;
+    return { reason: reason || "", notes: notes || "" };
+  };
+
+  const handleHealthCenterVisit = async (
     entityId: string,
     entityType: 'child' | 'staff',
     reason: string,
     notes: string,
+    visitType: HealthCenterVisitType,
     options?: { silent?: boolean },
   ) => {
     if (!currentCompany?.id) {
       toast({ title: "No camp selected", variant: "destructive" });
-      return;
+      return false;
     }
 
     const { data: { user } } = await supabase.auth.getUser();
-    
+    const entityLabel = entityType === 'child' ? 'Child' : 'Staff member';
+
     const checkColumn = entityType === 'child' ? 'child_id' : 'staff_id';
     const { data: existing } = await supabase
       .from("health_center_admissions")
       .select("id")
       .eq("company_id", currentCompany.id)
       .eq(checkColumn, entityId)
+      .eq("visit_type", "admission")
       .is("checked_out_at", null)
       .maybeSingle();
 
     if (existing) {
-      toast({ title: `${entityType === 'child' ? 'Child' : 'Staff member'} is already admitted`, variant: "destructive" });
-      return;
+      toast({
+        title: `${entityLabel} is already admitted`,
+        description: visitType === 'observation'
+          ? "Check them out first, or add notes to the current admission."
+          : undefined,
+        variant: "destructive",
+      });
+      return false;
     }
 
-    const insertData: any = {
+    const now = new Date().toISOString();
+    const insertData: Record<string, unknown> = {
       admitted_by: user?.id,
       reason,
       notes,
       season: currentSeason,
       company_id: currentCompany.id,
+      visit_type: visitType,
     };
+
+    if (visitType === 'observation') {
+      insertData.checked_out_at = now;
+      insertData.checked_out_by = user?.id;
+    }
 
     if (entityType === 'child') {
       insertData.child_id = entityId;
@@ -1303,16 +1330,46 @@ export default function Nurse() {
       .insert(insertData);
 
     if (error) {
-      toast({ title: "Error admitting to Health Center", variant: "destructive" });
+      toast({
+        title: visitType === 'observation'
+          ? "Error logging observation"
+          : "Error admitting to Health Center",
+        variant: "destructive",
+      });
       console.error(error);
-      return;
+      return false;
     }
 
     if (!options?.silent) {
-      toast({ title: `${entityType === 'child' ? 'Child' : 'Staff member'} admitted to Health Center` });
+      toast({
+        title: visitType === 'observation'
+          ? `${entityLabel} observation logged`
+          : `${entityLabel} admitted to Health Center`,
+      });
     }
+
     fetchAdmissions();
+    if (visitType === 'observation') {
+      fetchAdmissionHistory();
+    }
+    return true;
   };
+
+  const handleAdmit = (
+    entityId: string,
+    entityType: 'child' | 'staff',
+    reason: string,
+    notes: string,
+    options?: { silent?: boolean },
+  ) => handleHealthCenterVisit(entityId, entityType, reason, notes, 'admission', options);
+
+  const handleObservation = (
+    entityId: string,
+    entityType: 'child' | 'staff',
+    reason: string,
+    notes: string,
+    options?: { silent?: boolean },
+  ) => handleHealthCenterVisit(entityId, entityType, reason, notes, 'observation', options);
 
   const handleCheckout = async (admissionId: string) => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -1391,6 +1448,7 @@ export default function Nurse() {
         .select("id")
         .eq("company_id", currentCompany.id)
         .eq(checkColumn, entity.id)
+        .eq("visit_type", "admission")
         .is("checked_out_at", null)
         .maybeSingle();
 
@@ -1437,13 +1495,14 @@ export default function Nurse() {
       admissionMedSelection.has(medicationRowKey(med)),
     );
 
-    await handleAdmit(
+    const admitted = await handleAdmit(
       healthCenterScannedEntity.id,
       healthCenterScannedEntity.entityType,
       admissionReason,
       admissionNotes,
       { silent: true },
     );
+    if (!admitted) return;
 
     if (selectedAdmissionMeds.length > 0) {
       for (const med of selectedAdmissionMeds) {
@@ -1461,6 +1520,30 @@ export default function Nurse() {
     }
     
     // Reset form
+    setShowAdmissionForm(false);
+    setAdmissionReason("");
+    setAdmissionNotes("");
+    setAdmissionMedSelection(new Set());
+    setTimeout(() => setHealthCenterScannedEntity(null), 3000);
+  };
+
+  const handleConfirmObservation = async () => {
+    if (!healthCenterScannedEntity) return;
+
+    const logged = await handleObservation(
+      healthCenterScannedEntity.id,
+      healthCenterScannedEntity.entityType,
+      admissionReason,
+      admissionNotes,
+      { silent: true },
+    );
+    if (!logged) return;
+
+    toast({
+      title: "✓ Observation logged",
+      description: `${healthCenterScannedEntity.name} — brief visit recorded (not admitted)`,
+    });
+
     setShowAdmissionForm(false);
     setAdmissionReason("");
     setAdmissionNotes("");
@@ -2279,9 +2362,13 @@ export default function Nurse() {
                         </div>
                       )}
 
-                      <div className="flex gap-2 justify-end">
+                      <div className="flex gap-2 justify-end flex-wrap">
                         <Button variant="outline" onClick={handleCancelAdmission}>
                           Cancel
+                        </Button>
+                        <Button variant="secondary" onClick={handleConfirmObservation}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          Log Observation
                         </Button>
                         <Button onClick={handleConfirmAdmission}>
                           <Hospital className="h-4 w-4 mr-2" />
@@ -2452,20 +2539,34 @@ export default function Nurse() {
                                 <p className="text-xs text-muted-foreground">{child.medical_notes}</p>
                               )}
                             </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                const reason = prompt("Reason for admission (optional):");
-                                const notes = prompt("Additional notes (optional):");
-                                if (reason !== null) {
-                                  handleAdmit(child.id, 'child', reason || "", notes || "");
-                                }
-                              }}
-                            >
-                              <Hospital className="h-4 w-4 mr-2" />
-                              Admit
-                            </Button>
+                            <div className="flex gap-2 shrink-0">
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                  const details = promptHealthCenterVisitDetails();
+                                  if (details) {
+                                    handleObservation(child.id, 'child', details.reason, details.notes);
+                                  }
+                                }}
+                              >
+                                <Eye className="h-4 w-4 mr-2" />
+                                Observation
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  const details = promptHealthCenterVisitDetails();
+                                  if (details) {
+                                    handleAdmit(child.id, 'child', details.reason, details.notes);
+                                  }
+                                }}
+                              >
+                                <Hospital className="h-4 w-4 mr-2" />
+                                Admit
+                              </Button>
+                            </div>
                           </div>
                         ))}
                     </div>
@@ -2492,20 +2593,34 @@ export default function Nurse() {
                                 <p className="text-xs text-destructive font-medium">⚠️ Allergies: {member.allergies}</p>
                               )}
                             </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                const reason = prompt("Reason for admission (optional):");
-                                const notes = prompt("Additional notes (optional):");
-                                if (reason !== null) {
-                                  handleAdmit(member.id, 'staff', reason || "", notes || "");
-                                }
-                              }}
-                            >
-                              <Hospital className="h-4 w-4 mr-2" />
-                              Admit
-                            </Button>
+                            <div className="flex gap-2 shrink-0">
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                  const details = promptHealthCenterVisitDetails();
+                                  if (details) {
+                                    handleObservation(member.id, 'staff', details.reason, details.notes);
+                                  }
+                                }}
+                              >
+                                <Eye className="h-4 w-4 mr-2" />
+                                Observation
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  const details = promptHealthCenterVisitDetails();
+                                  if (details) {
+                                    handleAdmit(member.id, 'staff', details.reason, details.notes);
+                                  }
+                                }}
+                              >
+                                <Hospital className="h-4 w-4 mr-2" />
+                                Admit
+                              </Button>
+                            </div>
                           </div>
                         ))}
                     </div>
@@ -2565,7 +2680,7 @@ export default function Nurse() {
                               <div className="flex items-center gap-4">
                                 <div className="text-right">
                                   <Badge variant="secondary" className="mb-1">
-                                    {entityAdmissions.length} {entityAdmissions.length === 1 ? 'admission' : 'admissions'}
+                                    {entityAdmissions.length} {entityAdmissions.length === 1 ? 'visit' : 'visits'}
                                   </Badge>
                                   <p className="text-xs text-muted-foreground">
                                     Last: {formatCampDateTime(entityAdmissions[0].admitted_at)}
@@ -2591,9 +2706,19 @@ export default function Nurse() {
                                   <div key={admission.id} className="border-l-2 border-primary/30 pl-4 py-2">
                                     <div className="flex items-start justify-between mb-2">
                                       <div>
-                                        <p className="font-medium text-sm">
-                                          Admission #{entityAdmissions.length - index}
-                                        </p>
+                                        <div className="flex items-center gap-2">
+                                          <p className="font-medium text-sm">
+                                            {admission.visit_type === 'observation'
+                                              ? `Observation #${entityAdmissions.length - index}`
+                                              : `Admission #${entityAdmissions.length - index}`}
+                                          </p>
+                                          <Badge
+                                            variant={admission.visit_type === 'observation' ? 'secondary' : 'default'}
+                                            className="text-xs"
+                                          >
+                                            {admission.visit_type === 'observation' ? 'Observation' : 'Admission'}
+                                          </Badge>
+                                        </div>
                                         <p className="text-xs text-muted-foreground">
                                           {formatCampDateTime(admission.admitted_at)}
                                           {admission.checked_out_at
@@ -2602,7 +2727,9 @@ export default function Nurse() {
                                         </p>
                                       </div>
                                       <Badge variant="outline">
-                                        {getAdmissionDuration(admission.admitted_at, admission.checked_out_at)}
+                                        {admission.visit_type === 'observation'
+                                          ? 'Brief visit'
+                                          : getAdmissionDuration(admission.admitted_at, admission.checked_out_at)}
                                       </Badge>
                                     </div>
                                     

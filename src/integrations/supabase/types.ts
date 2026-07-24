@@ -1546,6 +1546,7 @@ export type Database = {
           season: string
           staff_id: string | null
           updated_at: string
+          visit_type: string
         }
         Insert: {
           admitted_at?: string
@@ -1561,6 +1562,7 @@ export type Database = {
           season?: string
           staff_id?: string | null
           updated_at?: string
+          visit_type?: string
         }
         Update: {
           admitted_at?: string
@@ -1576,6 +1578,7 @@ export type Database = {
           season?: string
           staff_id?: string | null
           updated_at?: string
+          visit_type?: string
         }
         Relationships: [
           {
