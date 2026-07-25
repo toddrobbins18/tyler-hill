@@ -109,6 +109,7 @@ export default function Nurse() {
   const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null);
   const [editingNoteDraft, setEditingNoteDraft] = useState("");
   const [savingNoteEdit, setSavingNoteEdit] = useState(false);
+  const [savingAdmissionNoteId, setSavingAdmissionNoteId] = useState<string | null>(null);
   const [unadministerTarget, setUnadministerTarget] = useState<any | null>(null);
   const [refuseTarget, setRefuseTarget] = useState<any | null>(null);
   const [checkoutConfirmTarget, setCheckoutConfirmTarget] = useState<{
@@ -138,10 +139,14 @@ export default function Nurse() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   
   const { toast } = useToast();
-  const { userRole, isSuperAdmin } = usePermissions();
+  const { userRole, userRoles, isSuperAdmin } = usePermissions();
   
   // Check if user can edit/delete medications (admin or health_center)
   const canManageMedications = isSuperAdmin || userRole === 'admin' || userRole === 'health_center';
+
+  const canManageHealthCenterNotes =
+    isSuperAdmin ||
+    userRoles.some((role) => ['admin', 'health_center', 'staff'].includes(role));
 
   const [formData, setFormData] = useState({
     medication_name: "",
@@ -1076,6 +1081,11 @@ export default function Nurse() {
 
     if (error) {
       console.warn("Admission notes unavailable (run migration if needed):", error.message);
+      toast({
+        title: "Could not load admission notes",
+        description: error.message,
+        variant: "destructive",
+      });
       return;
     }
 
@@ -1094,28 +1104,38 @@ export default function Nurse() {
 
   const handleAddAdmissionNote = async (admissionId: string) => {
     const text = (newAdmissionNote[admissionId] || "").trim();
-    if (!text || !currentCompany?.id) return;
+    if (!text || !currentCompany?.id || savingAdmissionNoteId) return;
 
-    const { data: { user } } = await supabase.auth.getUser();
-    const { error } = await supabase.from("health_center_admission_notes").insert({
-      admission_id: admissionId,
-      company_id: currentCompany.id,
-      note: text,
-      created_by: user?.id ?? null,
-    });
+    setSavingAdmissionNoteId(admissionId);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: inserted, error } = await supabase.from("health_center_admission_notes").insert({
+        admission_id: admissionId,
+        company_id: currentCompany.id,
+        note: text,
+        created_by: user?.id ?? null,
+      }).select("id, admission_id, note, created_at, updated_at").single();
 
-    if (error) {
-      toast({
-        title: "Could not save note",
-        description: error.message,
-        variant: "destructive",
-      });
-      return;
+      if (error) {
+        toast({
+          title: "Could not save note",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setNewAdmissionNote((prev) => ({ ...prev, [admissionId]: "" }));
+      if (inserted) {
+        setAdmissionNotesByAdmission((prev) => ({
+          ...prev,
+          [admissionId]: [...(prev[admissionId] || []), inserted],
+        }));
+      }
+      toast({ title: "Note added" });
+    } finally {
+      setSavingAdmissionNoteId(null);
     }
-
-    setNewAdmissionNote((prev) => ({ ...prev, [admissionId]: "" }));
-    toast({ title: "Note added" });
-    fetchAdmissionNotes();
   };
 
   const startEditingNote = (key: string, currentText: string) => {
@@ -1208,7 +1228,7 @@ export default function Nurse() {
             </span>
           )}
         </div>
-        {canManageMedications && (
+        {canManageHealthCenterNotes && (
           <Button
             type="button"
             size="icon"
@@ -1232,7 +1252,7 @@ export default function Nurse() {
       {(admissionNotesByAdmission[admission.id] || []).map((note) =>
         renderEditableNote(`note:${note.id}`, note.note, note.created_at, note.updated_at),
       )}
-      {canManageMedications && (
+      {canManageHealthCenterNotes && (
         <div className="flex flex-col gap-2 sm:flex-row pt-1">
           <Textarea
             placeholder="Add a follow-up note..."
@@ -1247,11 +1267,13 @@ export default function Nurse() {
             className="text-sm"
           />
           <Button
+            type="button"
             size="sm"
             className="shrink-0"
+            disabled={savingAdmissionNoteId === admission.id || !(newAdmissionNote[admission.id] || "").trim()}
             onClick={() => handleAddAdmissionNote(admission.id)}
           >
-            Add note
+            {savingAdmissionNoteId === admission.id ? "Saving..." : "Add note"}
           </Button>
         </div>
       )}

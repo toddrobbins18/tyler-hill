@@ -1611,6 +1611,51 @@ export type Database = {
           },
         ]
       }
+      health_center_admission_notes: {
+        Row: {
+          admission_id: string
+          company_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          note: string
+          updated_at: string | null
+        }
+        Insert: {
+          admission_id: string
+          company_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note: string
+          updated_at?: string | null
+        }
+        Update: {
+          admission_id?: string
+          company_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "health_center_admission_notes_admission_id_fkey"
+            columns: ["admission_id"]
+            isOneToOne: false
+            referencedRelation: "health_center_admissions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "health_center_admission_notes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       incident_children: {
         Row: {
           child_id: string
