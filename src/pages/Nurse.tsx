@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -102,9 +102,19 @@ export default function Nurse() {
   const [sortBy, setSortBy] = useState<'name' | 'division'>('name');
   const [medSortBy, setMedSortBy] = useState<'meal_time' | 'name' | 'status' | 'division' | 'gender'>('meal_time');
   const [medMealFilter, setMedMealFilter] = useState<string>("all");
-  const [admissionNotesByAdmission, setAdmissionNotesByAdmission] = useState<
-    Record<string, { id: string; note: string; created_at: string; updated_at?: string | null }[]>
-  >({});
+  const [admissionNoteRows, setAdmissionNoteRows] = useState<
+    {
+      id: string;
+      admission_id: string;
+      child_id?: string | null;
+      staff_id?: string | null;
+      season?: string | null;
+      note: string;
+      created_at: string;
+      updated_at?: string | null;
+    }[]
+  >([]);
+  const admissionNotesFetchGen = useRef(0);
   const [newAdmissionNote, setNewAdmissionNote] = useState<Record<string, string>>({});
   const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null);
   const [editingNoteDraft, setEditingNoteDraft] = useState("");
@@ -169,7 +179,15 @@ export default function Nurse() {
     fetchMedications(selectedDate);
     fetchAdmissions();
     fetchAdmissionHistory();
+  }, [selectedDate, currentSeason, currentCompany?.id, permissionsLoading, userDivisionsKey]);
+
+  useEffect(() => {
+    if (permissionsLoading || !currentCompany?.id) return;
     fetchAdmissionNotes();
+  }, [currentCompany?.id, currentSeason, permissionsLoading]);
+
+  useEffect(() => {
+    if (permissionsLoading) return;
 
     // Realtime subscription for medication logs and health center admissions
     const channel = supabase
@@ -1070,39 +1088,75 @@ export default function Nurse() {
     }
   };
 
+  const getFollowUpNotesForAdmission = useCallback((
+    admission: { id: string; child_id?: string | null; staff_id?: string | null },
+  ) => {
+    return admissionNoteRows
+      .filter((row) => {
+        if (row.admission_id === admission.id) return true;
+        if (admission.child_id && row.child_id === admission.child_id) {
+          return !row.season || row.season === currentSeason;
+        }
+        if (admission.staff_id && row.staff_id === admission.staff_id) {
+          return !row.season || row.season === currentSeason;
+        }
+        return false;
+      })
+      .sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      );
+  }, [admissionNoteRows, currentSeason]);
+
   const fetchAdmissionNotes = async () => {
     if (!currentCompany?.id) return;
 
-    const { data, error } = await supabase
-      .from("health_center_admission_notes")
-      .select("id, admission_id, note, created_at, updated_at")
-      .eq("company_id", currentCompany.id)
-      .order("created_at", { ascending: true });
+    const fetchGen = ++admissionNotesFetchGen.current;
+    const { data: rpcData, error: rpcError } = await supabase.rpc(
+      "list_health_center_admission_notes",
+      { _company_id: currentCompany.id },
+    );
 
-    if (error) {
-      console.warn("Admission notes unavailable (run migration if needed):", error.message);
+    if (fetchGen !== admissionNotesFetchGen.current) return;
+
+    if (rpcError) {
+      console.warn("Admission notes RPC failed:", rpcError.message);
       toast({
         title: "Could not load admission notes",
-        description: error.message,
+        description: rpcError.message,
         variant: "destructive",
       });
       return;
     }
 
-    const grouped: Record<string, { id: string; note: string; created_at: string; updated_at?: string | null }[]> = {};
-    (data || []).forEach((row: { id: string; admission_id: string; note: string; created_at: string; updated_at?: string | null }) => {
-      if (!grouped[row.admission_id]) grouped[row.admission_id] = [];
-      grouped[row.admission_id].push({
+    const rows = (rpcData || []) as {
+      id: string;
+      admission_id: string;
+      child_id?: string | null;
+      staff_id?: string | null;
+      season?: string | null;
+      note: string;
+      created_at: string;
+      updated_at?: string | null;
+    }[];
+
+    setAdmissionNoteRows(
+      rows.map((row) => ({
         id: row.id,
+        admission_id: row.admission_id,
+        child_id: row.child_id ?? null,
+        staff_id: row.staff_id ?? null,
+        season: row.season ?? null,
         note: row.note,
         created_at: row.created_at,
         updated_at: row.updated_at ?? null,
-      });
-    });
-    setAdmissionNotesByAdmission(grouped);
+      })),
+    );
   };
 
-  const handleAddAdmissionNote = async (admissionId: string) => {
+  const handleAddAdmissionNote = async (
+    admission: { id: string; child_id?: string | null; staff_id?: string | null },
+  ) => {
+    const admissionId = admission.id;
     const text = (newAdmissionNote[admissionId] || "").trim();
     if (!text || !currentCompany?.id || savingAdmissionNoteId) return;
 
@@ -1127,10 +1181,16 @@ export default function Nurse() {
 
       setNewAdmissionNote((prev) => ({ ...prev, [admissionId]: "" }));
       if (inserted) {
-        setAdmissionNotesByAdmission((prev) => ({
+        setAdmissionNoteRows((prev) => [
           ...prev,
-          [admissionId]: [...(prev[admissionId] || []), inserted],
-        }));
+          {
+            ...inserted,
+            child_id: admission.child_id ?? null,
+            staff_id: admission.staff_id ?? null,
+            season: currentSeason,
+            updated_at: inserted.updated_at ?? null,
+          },
+        ]);
       }
       toast({ title: "Note added" });
     } finally {
@@ -1244,12 +1304,17 @@ export default function Nurse() {
     );
   };
 
-  const renderAdmissionNotesBlock = (admission: { id: string; notes?: string | null }) => (
+  const renderAdmissionNotesBlock = (admission: {
+    id: string;
+    child_id?: string | null;
+    staff_id?: string | null;
+    notes?: string | null;
+  }) => (
     <div className="mt-2 space-y-2">
       <p className="text-xs font-medium text-muted-foreground">Notes</p>
       {admission.notes &&
         renderEditableNote(`initial:${admission.id}`, admission.notes, undefined, null)}
-      {(admissionNotesByAdmission[admission.id] || []).map((note) =>
+      {getFollowUpNotesForAdmission(admission).map((note) =>
         renderEditableNote(`note:${note.id}`, note.note, note.created_at, note.updated_at),
       )}
       {canManageHealthCenterNotes && (
@@ -1271,7 +1336,7 @@ export default function Nurse() {
             size="sm"
             className="shrink-0"
             disabled={savingAdmissionNoteId === admission.id || !(newAdmissionNote[admission.id] || "").trim()}
-            onClick={() => handleAddAdmissionNote(admission.id)}
+            onClick={() => handleAddAdmissionNote(admission)}
           >
             {savingAdmissionNoteId === admission.id ? "Saving..." : "Add note"}
           </Button>

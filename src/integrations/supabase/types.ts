@@ -4108,6 +4108,19 @@ export type Database = {
       }
       is_specialist: { Args: { _user_id: string }; Returns: boolean }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
+      list_health_center_admission_notes: {
+        Args: { _company_id: string }
+        Returns: {
+          id: string
+          admission_id: string
+          child_id: string | null
+          staff_id: string | null
+          season: string | null
+          note: string
+          created_at: string
+          updated_at: string | null
+        }[]
+      }
       set_current_company: { Args: { company_id: string }; Returns: undefined }
       trigger_campminder_sync: { Args: never; Returns: undefined }
     }

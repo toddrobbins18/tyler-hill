@@ -133,3 +133,54 @@ CREATE POLICY "Health center and admins can manage health admissions"
     public.is_super_admin(auth.uid())
     OR public.user_can_manage_health_center_admissions(auth.uid(), company_id)
   );
+
+DROP FUNCTION IF EXISTS public.list_health_center_admission_notes(uuid);
+
+CREATE OR REPLACE FUNCTION public.list_health_center_admission_notes(_company_id uuid)
+RETURNS TABLE (
+  id uuid,
+  admission_id uuid,
+  child_id uuid,
+  staff_id uuid,
+  season text,
+  note text,
+  created_at timestamptz,
+  updated_at timestamptz
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    n.id,
+    n.admission_id,
+    hca.child_id,
+    hca.staff_id,
+    hca.season,
+    n.note,
+    n.created_at,
+    n.updated_at
+  FROM public.health_center_admission_notes n
+  JOIN public.health_center_admissions hca ON hca.id = n.admission_id
+  WHERE n.company_id = _company_id
+    AND (
+      public.is_super_admin(auth.uid())
+      OR public.user_can_manage_health_center(auth.uid(), _company_id)
+      OR EXISTS (
+        SELECT 1
+        FROM public.health_center_admissions hca2
+        WHERE hca2.id = n.admission_id
+          AND hca2.company_id = _company_id
+          AND hca2.child_id IS NOT NULL
+          AND public.can_access_child(hca2.child_id)
+          AND (
+            public.has_role(auth.uid(), 'division_leader'::app_role)
+            OR public.has_role(auth.uid(), 'viewer'::app_role)
+          )
+      )
+    )
+  ORDER BY n.created_at ASC;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.list_health_center_admission_notes(uuid) TO authenticated;
