@@ -115,11 +115,23 @@ export default function Nurse() {
     }[]
   >([]);
   const admissionNotesFetchGen = useRef(0);
+  const admissionNotesFetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const admissionsRef = useRef<any[]>([]);
+  const admissionHistoryRef = useRef<any[]>([]);
   const [newAdmissionNote, setNewAdmissionNote] = useState<Record<string, string>>({});
   const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null);
   const [editingNoteDraft, setEditingNoteDraft] = useState("");
   const [savingNoteEdit, setSavingNoteEdit] = useState(false);
   const [savingAdmissionNoteId, setSavingAdmissionNoteId] = useState<string | null>(null);
+  const [deleteNoteTarget, setDeleteNoteTarget] = useState<{
+    kind: "initial" | "followup";
+    admissionId: string;
+    noteId?: string;
+    preview: string;
+  } | null>(null);
+  const [deletingNote, setDeletingNote] = useState(false);
+  const [notesExpandedByAdmission, setNotesExpandedByAdmission] = useState<Record<string, boolean>>({});
+  const NOTES_COLLAPSED_COUNT = 4;
   const [unadministerTarget, setUnadministerTarget] = useState<any | null>(null);
   const [refuseTarget, setRefuseTarget] = useState<any | null>(null);
   const [checkoutConfirmTarget, setCheckoutConfirmTarget] = useState<{
@@ -171,20 +183,31 @@ export default function Nurse() {
   });
 
   useEffect(() => {
+    admissionsRef.current = admissions;
+  }, [admissions]);
+
+  useEffect(() => {
+    admissionHistoryRef.current = admissionHistory;
+  }, [admissionHistory]);
+
+  useEffect(() => {
+    if (!currentCompany?.id || admissionHistory.length === 0) return;
+    void appendAdmissionNotesForIds(admissionHistory.map((row) => row.id));
+  }, [admissionHistory, currentCompany?.id]);
+
+  useEffect(() => {
     // Wait for permissions to load before fetching
     if (permissionsLoading) return;
     fetchChildren();
     fetchStaff();
     fetchDivisions();
     fetchMedications(selectedDate);
-    fetchAdmissions();
-    fetchAdmissionHistory();
+    void (async () => {
+      const active = await fetchAdmissions();
+      await fetchAdmissionNotes(getAdmissionIdsForNotes(active || [], []));
+      void fetchAdmissionHistory();
+    })();
   }, [selectedDate, currentSeason, currentCompany?.id, permissionsLoading, userDivisionsKey]);
-
-  useEffect(() => {
-    if (permissionsLoading || !currentCompany?.id) return;
-    fetchAdmissionNotes();
-  }, [currentCompany?.id, currentSeason, permissionsLoading]);
 
   useEffect(() => {
     if (permissionsLoading) return;
@@ -201,15 +224,17 @@ export default function Nurse() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'health_center_admissions' },
         () => {
-          fetchAdmissions();
-          fetchAdmissionHistory();
-          fetchAdmissionNotes();
+          void (async () => {
+            const active = await fetchAdmissions();
+            await fetchAdmissionNotes(getAdmissionIdsForNotes(active || [], []));
+          })();
+          void fetchAdmissionHistory();
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'health_center_admission_notes' },
-        () => fetchAdmissionNotes()
+        () => scheduleAdmissionNotesFetch()
       )
       .subscribe();
 
@@ -989,10 +1014,162 @@ export default function Nurse() {
     fetchMedications();
   };
 
+  const scheduleAdmissionNotesFetch = () => {
+    if (admissionNotesFetchTimer.current) {
+      clearTimeout(admissionNotesFetchTimer.current);
+    }
+    admissionNotesFetchTimer.current = setTimeout(() => {
+      void fetchAdmissionNotes(
+        getAdmissionIdsForNotes(admissionsRef.current, []),
+      );
+    }, 300);
+  };
+
+  const getAdmissionIdsForNotes = (
+    active: { id: string }[],
+    _history: { id: string }[],
+  ) => [...new Set(active.map((row) => row.id).filter(Boolean))];
+
+  type AdmissionNoteRow = {
+    id: string;
+    admission_id: string;
+    child_id?: string | null;
+    staff_id?: string | null;
+    season?: string | null;
+    note: string;
+    created_at: string;
+    updated_at?: string | null;
+  };
+
+  const mapAdmissionNoteRows = (
+    rows: {
+      id: string;
+      admission_id: string;
+      note: string;
+      created_at: string;
+      updated_at?: string | null;
+    }[],
+    admissionMetaSource: { id: string; child_id?: string | null; staff_id?: string | null; season?: string | null }[],
+  ): AdmissionNoteRow[] => {
+    const admissionMeta = new Map(admissionMetaSource.map((row) => [row.id, row]));
+    return rows.map((row) => {
+      const meta = admissionMeta.get(row.admission_id);
+      return {
+        id: row.id,
+        admission_id: row.admission_id,
+        child_id: meta?.child_id ?? null,
+        staff_id: meta?.staff_id ?? null,
+        season: meta?.season ?? null,
+        note: row.note,
+        created_at: row.created_at,
+        updated_at: row.updated_at ?? null,
+      };
+    });
+  };
+
+  const fetchAdmissionNotes = async (admissionIds?: string[]) => {
+    if (!currentCompany?.id) return;
+
+    const ids = admissionIds ?? getAdmissionIdsForNotes(admissionsRef.current, []);
+    if (ids.length === 0) {
+      setAdmissionNoteRows([]);
+      return;
+    }
+
+    const fetchGen = ++admissionNotesFetchGen.current;
+    const uniqueIds = [...new Set(ids)];
+    const loaded: {
+      id: string;
+      admission_id: string;
+      note: string;
+      created_at: string;
+      updated_at?: string | null;
+    }[] = [];
+
+    for (let i = 0; i < uniqueIds.length; i += 100) {
+      const chunk = uniqueIds.slice(i, i + 100);
+      const { data, error } = await supabase
+        .from("health_center_admission_notes")
+        .select("id, admission_id, note, created_at, updated_at")
+        .eq("company_id", currentCompany.id)
+        .in("admission_id", chunk)
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        if (fetchGen !== admissionNotesFetchGen.current) return;
+        console.warn("Admission notes query failed:", error.message);
+        toast({
+          title: "Could not load admission notes",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      loaded.push(...(data || []));
+    }
+
+    if (fetchGen !== admissionNotesFetchGen.current) return;
+
+    setAdmissionNoteRows(
+      mapAdmissionNoteRows(loaded, [
+        ...admissionsRef.current,
+        ...admissionHistoryRef.current,
+      ]),
+    );
+  };
+
+  const appendAdmissionNotesForIds = async (admissionIds: string[]) => {
+    if (!currentCompany?.id || admissionIds.length === 0) return;
+
+    const uniqueIds = [...new Set(admissionIds.filter(Boolean))];
+    const loaded: {
+      id: string;
+      admission_id: string;
+      note: string;
+      created_at: string;
+      updated_at?: string | null;
+    }[] = [];
+
+    for (let i = 0; i < uniqueIds.length; i += 100) {
+      const chunk = uniqueIds.slice(i, i + 100);
+      const { data, error } = await supabase
+        .from("health_center_admission_notes")
+        .select("id, admission_id, note, created_at, updated_at")
+        .eq("company_id", currentCompany.id)
+        .in("admission_id", chunk)
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        console.warn("History admission notes query failed:", error.message);
+        return;
+      }
+
+      loaded.push(...(data || []));
+    }
+
+    const mapped = mapAdmissionNoteRows(loaded, [
+      ...admissionsRef.current,
+      ...admissionHistoryRef.current,
+    ]);
+
+    setAdmissionNoteRows((prev) => {
+      const seen = new Set(prev.map((row) => row.id));
+      const merged = [...prev];
+      for (const row of mapped) {
+        if (!seen.has(row.id)) {
+          seen.add(row.id);
+          merged.push(row);
+        }
+      }
+      return merged;
+    });
+  };
+
   const fetchAdmissions = async () => {
     if (!currentCompany?.id) {
       setAdmissions([]);
-      return;
+      return [];
     }
 
     const { data, error } = await supabase
@@ -1022,7 +1199,7 @@ export default function Nurse() {
 
     if (error) {
       toast({ title: "Error fetching admissions", variant: "destructive" });
-      return;
+      return [];
     }
     
     // Filter child admissions by allowed divisions; staff admissions stay camp-scoped above
@@ -1033,15 +1210,18 @@ export default function Nurse() {
         return admission.children?.division_id && divisionFilter.includes(admission.children.division_id);
       });
       setAdmissions(filtered);
-    } else {
-      setAdmissions(data || []);
+      return filtered;
     }
+
+    const rows = data || [];
+    setAdmissions(rows);
+    return rows;
   };
 
   const fetchAdmissionHistory = async (childId?: string) => {
     if (!currentCompany?.id) {
       setAdmissionHistory([]);
-      return;
+      return [];
     }
 
     let query = supabase
@@ -1074,84 +1254,33 @@ export default function Nurse() {
 
     const { data, error } = await query;
     
-    if (!error && data) {
-      const divisionFilter = getDivisionFilter();
-      if (divisionFilter !== null && divisionFilter.length > 0) {
-        const filtered = data.filter(admission => {
-          if (!admission.child_id) return true;
-          return admission.children?.division_id && divisionFilter.includes(admission.children.division_id);
-        });
-        setAdmissionHistory(filtered);
-      } else {
-        setAdmissionHistory(data);
-      }
+    if (error || !data) {
+      return [];
     }
+
+    const divisionFilter = getDivisionFilter();
+    if (divisionFilter !== null && divisionFilter.length > 0) {
+      const filtered = data.filter(admission => {
+        if (!admission.child_id) return true;
+        return admission.children?.division_id && divisionFilter.includes(admission.children.division_id);
+      });
+      setAdmissionHistory(filtered);
+      return filtered;
+    }
+
+    setAdmissionHistory(data);
+    return data;
   };
 
   const getFollowUpNotesForAdmission = useCallback((
-    admission: { id: string; child_id?: string | null; staff_id?: string | null },
+    admission: { id: string },
   ) => {
     return admissionNoteRows
-      .filter((row) => {
-        if (row.admission_id === admission.id) return true;
-        if (admission.child_id && row.child_id === admission.child_id) {
-          return !row.season || row.season === currentSeason;
-        }
-        if (admission.staff_id && row.staff_id === admission.staff_id) {
-          return !row.season || row.season === currentSeason;
-        }
-        return false;
-      })
+      .filter((row) => row.admission_id === admission.id)
       .sort(
         (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       );
-  }, [admissionNoteRows, currentSeason]);
-
-  const fetchAdmissionNotes = async () => {
-    if (!currentCompany?.id) return;
-
-    const fetchGen = ++admissionNotesFetchGen.current;
-    const { data: rpcData, error: rpcError } = await supabase.rpc(
-      "list_health_center_admission_notes",
-      { _company_id: currentCompany.id },
-    );
-
-    if (fetchGen !== admissionNotesFetchGen.current) return;
-
-    if (rpcError) {
-      console.warn("Admission notes RPC failed:", rpcError.message);
-      toast({
-        title: "Could not load admission notes",
-        description: rpcError.message,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const rows = (rpcData || []) as {
-      id: string;
-      admission_id: string;
-      child_id?: string | null;
-      staff_id?: string | null;
-      season?: string | null;
-      note: string;
-      created_at: string;
-      updated_at?: string | null;
-    }[];
-
-    setAdmissionNoteRows(
-      rows.map((row) => ({
-        id: row.id,
-        admission_id: row.admission_id,
-        child_id: row.child_id ?? null,
-        staff_id: row.staff_id ?? null,
-        season: row.season ?? null,
-        note: row.note,
-        created_at: row.created_at,
-        updated_at: row.updated_at ?? null,
-      })),
-    );
-  };
+  }, [admissionNoteRows]);
 
   const handleAddAdmissionNote = async (
     admission: { id: string; child_id?: string | null; staff_id?: string | null },
@@ -1226,13 +1355,28 @@ export default function Nurse() {
         await fetchAdmissionHistory();
       } else if (editingNoteKey.startsWith("note:")) {
         const noteId = editingNoteKey.slice("note:".length);
-        const { error } = await supabase
+        const { data: updated, error } = await supabase
           .from("health_center_admission_notes")
           .update({ note: text, updated_at: new Date().toISOString() })
           .eq("id", noteId)
-          .eq("company_id", currentCompany.id);
+          .eq("company_id", currentCompany.id)
+          .select("id, admission_id, note, created_at, updated_at")
+          .maybeSingle();
         if (error) throw error;
-        await fetchAdmissionNotes();
+        if (!updated) {
+          throw new Error("Note was not updated. You may not have permission to edit this note.");
+        }
+        setAdmissionNoteRows((prev) =>
+          prev.map((row) =>
+            row.id === noteId
+              ? {
+                  ...row,
+                  note: updated.note,
+                  updated_at: updated.updated_at ?? row.updated_at ?? null,
+                }
+              : row,
+          ),
+        );
       }
 
       toast({ title: "Note updated" });
@@ -1245,6 +1389,71 @@ export default function Nurse() {
       });
     } finally {
       setSavingNoteEdit(false);
+    }
+  };
+
+  const handleConfirmDeleteNote = async () => {
+    if (!deleteNoteTarget || !currentCompany?.id) return;
+
+    setDeletingNote(true);
+    try {
+      if (deleteNoteTarget.kind === "initial") {
+        const { error } = await supabase
+          .from("health_center_admissions")
+          .update({ notes: null })
+          .eq("id", deleteNoteTarget.admissionId)
+          .eq("company_id", currentCompany.id);
+        if (error) throw error;
+        await fetchAdmissions();
+        await fetchAdmissionHistory();
+      } else if (deleteNoteTarget.noteId) {
+        const { error } = await supabase
+          .from("health_center_admission_notes")
+          .delete()
+          .eq("id", deleteNoteTarget.noteId)
+          .eq("company_id", currentCompany.id);
+        if (error) throw error;
+        setAdmissionNoteRows((prev) =>
+          prev.filter((row) => row.id !== deleteNoteTarget.noteId),
+        );
+      }
+
+      if (
+        editingNoteKey === `initial:${deleteNoteTarget.admissionId}` ||
+        editingNoteKey === `note:${deleteNoteTarget.noteId}`
+      ) {
+        cancelEditingNote();
+      }
+
+      toast({ title: "Note deleted" });
+      setDeleteNoteTarget(null);
+    } catch (error: any) {
+      toast({
+        title: "Could not delete note",
+        description: error?.message || "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingNote(false);
+    }
+  };
+
+  const promptDeleteNote = (key: string, noteText: string) => {
+    if (key.startsWith("initial:")) {
+      setDeleteNoteTarget({
+        kind: "initial",
+        admissionId: key.slice("initial:".length),
+        preview: noteText,
+      });
+      return;
+    }
+    if (key.startsWith("note:")) {
+      setDeleteNoteTarget({
+        kind: "followup",
+        admissionId: "",
+        noteId: key.slice("note:".length),
+        preview: noteText,
+      });
     }
   };
 
@@ -1289,16 +1498,28 @@ export default function Nurse() {
           )}
         </div>
         {canManageHealthCenterNotes && (
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8 shrink-0"
-            aria-label="Edit note"
-            onClick={() => startEditingNote(key, noteText)}
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              aria-label="Edit note"
+              onClick={() => startEditingNote(key, noteText)}
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 text-destructive hover:text-destructive"
+              aria-label="Delete note"
+              onClick={() => promptDeleteNote(key, noteText)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
         )}
       </div>
     );
@@ -1309,41 +1530,95 @@ export default function Nurse() {
     child_id?: string | null;
     staff_id?: string | null;
     notes?: string | null;
-  }) => (
-    <div className="mt-2 space-y-2">
-      <p className="text-xs font-medium text-muted-foreground">Notes</p>
-      {admission.notes &&
-        renderEditableNote(`initial:${admission.id}`, admission.notes, undefined, null)}
-      {getFollowUpNotesForAdmission(admission).map((note) =>
-        renderEditableNote(`note:${note.id}`, note.note, note.created_at, note.updated_at),
-      )}
-      {canManageHealthCenterNotes && (
-        <div className="flex flex-col gap-2 sm:flex-row pt-1">
-          <Textarea
-            placeholder="Add a follow-up note..."
-            value={newAdmissionNote[admission.id] || ""}
-            onChange={(e) =>
-              setNewAdmissionNote((prev) => ({
-                ...prev,
-                [admission.id]: e.target.value,
-              }))
-            }
-            rows={2}
-            className="text-sm"
-          />
-          <Button
-            type="button"
-            size="sm"
-            className="shrink-0"
-            disabled={savingAdmissionNoteId === admission.id || !(newAdmissionNote[admission.id] || "").trim()}
-            onClick={() => handleAddAdmissionNote(admission)}
-          >
-            {savingAdmissionNoteId === admission.id ? "Saving..." : "Add note"}
-          </Button>
+  }) => {
+    const followUpNotes = getFollowUpNotesForAdmission(admission);
+    const totalNoteCount = (admission.notes ? 1 : 0) + followUpNotes.length;
+    const isExpanded = notesExpandedByAdmission[admission.id] ?? false;
+    const shouldCollapse = followUpNotes.length > NOTES_COLLAPSED_COUNT;
+    const visibleFollowUpNotes =
+      shouldCollapse && !isExpanded
+        ? followUpNotes.slice(-NOTES_COLLAPSED_COUNT)
+        : followUpNotes;
+    const hiddenNoteCount = followUpNotes.length - visibleFollowUpNotes.length;
+
+    return (
+      <div className="mt-2 space-y-2 min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-xs font-medium text-muted-foreground">Notes</p>
+          {totalNoteCount > 0 && (
+            <Badge variant="secondary" className="text-xs">
+              {totalNoteCount}
+            </Badge>
+          )}
+          {shouldCollapse && (
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto p-0 text-xs"
+              onClick={() =>
+                setNotesExpandedByAdmission((prev) => ({
+                  ...prev,
+                  [admission.id]: !isExpanded,
+                }))
+              }
+            >
+              {isExpanded
+                ? "Show fewer"
+                : `Show all ${followUpNotes.length} notes`}
+            </Button>
+          )}
         </div>
-      )}
-    </div>
-  );
+
+        {totalNoteCount === 0 ? (
+          <p className="text-xs text-muted-foreground">No notes yet</p>
+        ) : (
+          <div
+            className={`space-y-2 rounded-md border bg-background/60 p-2 ${
+              totalNoteCount > 3 ? "max-h-72 overflow-y-auto pr-1" : ""
+            }`}
+          >
+            {admission.notes &&
+              renderEditableNote(`initial:${admission.id}`, admission.notes, undefined, null)}
+            {visibleFollowUpNotes.map((note) =>
+              renderEditableNote(`note:${note.id}`, note.note, note.created_at, note.updated_at),
+            )}
+            {hiddenNoteCount > 0 && !isExpanded && (
+              <p className="text-xs text-muted-foreground text-center py-1">
+                + {hiddenNoteCount} older note{hiddenNoteCount === 1 ? "" : "s"} — click Show all to view
+              </p>
+            )}
+          </div>
+        )}
+
+        {canManageHealthCenterNotes && (
+          <div className="flex flex-col gap-2 sm:flex-row pt-1">
+            <Textarea
+              placeholder="Add a follow-up note..."
+              value={newAdmissionNote[admission.id] || ""}
+              onChange={(e) =>
+                setNewAdmissionNote((prev) => ({
+                  ...prev,
+                  [admission.id]: e.target.value,
+                }))
+              }
+              rows={2}
+              className="text-sm"
+            />
+            <Button
+              type="button"
+              size="sm"
+              className="shrink-0"
+              disabled={savingAdmissionNoteId === admission.id || !(newAdmissionNote[admission.id] || "").trim()}
+              onClick={() => handleAddAdmissionNote(admission)}
+            >
+              {savingAdmissionNoteId === admission.id ? "Saving..." : "Add note"}
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   type HealthCenterVisitType = 'admission' | 'observation';
 
@@ -2551,9 +2826,9 @@ export default function Nurse() {
                       
                       return (
                         <div key={admission.id} className="border rounded-lg p-4 bg-destructive/5">
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
+                          <div className="flex items-start justify-between gap-3 mb-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
                                 <h4 className="font-semibold text-lg">{entity?.name || 'Unknown'}</h4>
                                 <Badge variant={child ? "outline" : "secondary"} className="text-xs">
                                   {entityType}
@@ -2570,7 +2845,7 @@ export default function Nurse() {
                                   <span className="text-destructive text-sm">{entity.allergies}</span>
                                 </div>
                               )}
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1 flex-wrap">
                                 <Clock className="h-4 w-4" />
                                 <span>Admitted {formatCampDateTime(admission.admitted_at)}</span>
                                 <Badge variant="outline" className="ml-2">
@@ -2580,7 +2855,6 @@ export default function Nurse() {
                               {admission.reason && (
                                 <p className="text-sm mt-2"><strong>Reason:</strong> {admission.reason}</p>
                               )}
-                              {renderAdmissionNotesBlock(admission)}
                             </div>
                             <Button
                               size="sm"
@@ -2591,6 +2865,7 @@ export default function Nurse() {
                               Check Out
                             </Button>
                           </div>
+                          {renderAdmissionNotesBlock(admission)}
                         </div>
                       );
                     })}
@@ -3187,6 +3462,32 @@ export default function Nurse() {
               }}
             >
               Yes, check out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!deleteNoteTarget}
+        onOpenChange={(open) => !open && !deletingNote && setDeleteNoteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this note?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteNoteTarget?.preview
+                ? `"${deleteNoteTarget.preview.length > 120 ? `${deleteNoteTarget.preview.slice(0, 120)}…` : deleteNoteTarget.preview}" will be permanently removed.`
+                : "This note will be permanently removed."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingNote}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deletingNote}
+              onClick={handleConfirmDeleteNote}
+            >
+              {deletingNote ? "Deleting..." : "Delete note"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

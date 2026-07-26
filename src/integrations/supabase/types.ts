@@ -4109,7 +4109,11 @@ export type Database = {
       is_specialist: { Args: { _user_id: string }; Returns: boolean }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       list_health_center_admission_notes: {
-        Args: { _company_id: string }
+        Args: {
+          _admission_ids?: string[] | null
+          _company_id: string
+          _season?: string | null
+        }
         Returns: {
           id: string
           admission_id: string
