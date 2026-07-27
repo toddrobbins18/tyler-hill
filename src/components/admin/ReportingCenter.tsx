@@ -33,6 +33,13 @@ import {
   formatSpecialEventReportTime,
   formatSpecialEventTypeLabel,
 } from "@/lib/specialEventReportUtils";
+import {
+  divisionsMatchForFilter,
+  expandDivisionIdsForRosterFilter,
+  getDivisionDropdownLabel,
+  normalizeDivisionNameForFilter,
+  resolvePermissionDivisionIds,
+} from "@/lib/divisionFilterUtils";
 
 type ReportType = 'incidents' | 'staff_evaluations' | 'camper_reports' | 'awards' | 'sports_events' | 'trips' | 'activities' | 'special_events_activities' | 'conflicts' | 'medications' | 'as_needed_medications' | 'allergies' | 're_enrollment' | 'appointments' | 'tshirt_sizes' | 'birthdays';
 
@@ -72,18 +79,71 @@ const withDivisionMeta = <T extends Record<string, any>>(
   return row as T & DivisionAwareRow;
 };
 
-const getDivisionNamesFromRow = (row: DivisionAwareRow) => {
-  if (row.__divisionNames?.length) return row.__divisionNames;
+function resolveChildDivisionName(
+  child: { division_id?: string | null; divisions?: { name?: string | null } | null } | null | undefined,
+  catalog: { id: string; name?: string | null }[],
+): string | null {
+  if (!child) return null;
+  if (child.divisions?.name) return child.divisions.name;
+  if (!child.division_id) return null;
+  return catalog.find((division) => division.id === child.division_id)?.name ?? null;
+}
 
-  return Array.from(
-    new Set(
-      [row['Division'], row['Latest Division']]
-        .flatMap((value) => (typeof value === 'string' ? value.split(',') : []))
-        .map((value) => value.trim())
-        .filter(Boolean)
-    )
-  );
+function childMatchesExpandedDivisionIds(
+  divisionId: string | null | undefined,
+  divisionName: string | null | undefined,
+  expandedIds: string[],
+  catalog: { id: string; name?: string | null }[],
+): boolean {
+  if (!divisionId) return false;
+  if (expandedIds.includes(divisionId)) return true;
+  const allowedNames = expandedIds
+    .map((id) => catalog.find((division) => division.id === id)?.name)
+    .filter(Boolean);
+  return allowedNames.some((name) => divisionsMatchForFilter(divisionName, name));
+}
+
+const getDivisionNamesFromRow = (row: DivisionAwareRow) => {
+  const names = new Set<string>();
+
+  for (const name of row.__divisionNames ?? []) {
+    if (name) names.add(name);
+  }
+
+  for (const value of [row["Division"], row["Latest Division"]]) {
+    if (typeof value !== "string") continue;
+    for (const part of value.split(",")) {
+      const trimmed = part.trim();
+      if (trimmed && trimmed !== "N/A") names.add(trimmed);
+    }
+  }
+
+  return [...names];
 };
+
+function rowMatchesSelectedDivisionBuckets(
+  row: DivisionAwareRow,
+  selectedBuckets: Set<string>,
+  catalog: { id: string; name?: string | null }[],
+  expandedIds: string[],
+): boolean {
+  if (selectedBuckets.size === 0) return true;
+
+  for (const divisionId of row.__divisionIds ?? []) {
+    if (expandedIds.includes(divisionId)) return true;
+    const bucket = normalizeDivisionNameForFilter(
+      catalog.find((division) => division.id === divisionId)?.name,
+    );
+    if (bucket && selectedBuckets.has(bucket)) return true;
+  }
+
+  for (const name of getDivisionNamesFromRow(row)) {
+    const bucket = normalizeDivisionNameForFilter(name);
+    if (bucket && selectedBuckets.has(bucket)) return true;
+  }
+
+  return false;
+}
 
 export default function ReportingCenter({
   allowedReportTypes,
@@ -100,6 +160,8 @@ export default function ReportingCenter({
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [divisions, setDivisions] = useState<any[]>([]);
+  /** Active + inactive rows — needed to match Teen TN1 / Super Senior aliases. */
+  const [divisionCatalog, setDivisionCatalog] = useState<any[]>([]);
   const [selectedDivisions, setSelectedDivisions] = useState<string[]>([]);
   const { toast } = useToast();
   const { currentCompany } = useCompany();
@@ -117,6 +179,47 @@ export default function ReportingCenter({
     () => divisions.filter((division) => selectedDivisions.includes(division.id)).map((division) => division.name),
     [divisions, selectedDivisions]
   );
+  const expandedAllowedDivisionIds = useMemo(() => {
+    if (allowedDivisionIds === null) return null;
+    if (allowedDivisionIds.length === 0) return [];
+    return resolvePermissionDivisionIds(allowedDivisionIds, divisionCatalog);
+  }, [allowedDivisionIds, divisionCatalog]);
+  const expandedSelectedDivisionIds = useMemo(
+    () => expandDivisionIdsForRosterFilter(selectedDivisions, divisionCatalog),
+    [selectedDivisions, divisionCatalog],
+  );
+  const selectedDivisionBuckets = useMemo(() => {
+    return new Set(
+      selectedDivisions
+        .map((id) => {
+          const division =
+            divisionCatalog.find((entry) => entry.id === id) ??
+            divisions.find((entry) => entry.id === id);
+          return normalizeDivisionNameForFilter(division?.name);
+        })
+        .filter(Boolean),
+    );
+  }, [selectedDivisions, divisionCatalog, divisions]);
+  /** One dropdown row per roster bucket (Teen Boys = Teen TN1 Boys, etc.). */
+  const dropdownDivisions = useMemo(() => {
+    const canonicalRank = (name: string) => {
+      const lower = name.toLowerCase();
+      if (lower === "teen boys" || lower === "teen girls" || lower === "super boys" || lower === "super girls") {
+        return 0;
+      }
+      return 1;
+    };
+    const byBucket = new Map<string, (typeof divisions)[number]>();
+    for (const division of divisions) {
+      const bucket = normalizeDivisionNameForFilter(division.name);
+      if (!bucket) continue;
+      const existing = byBucket.get(bucket);
+      if (!existing || canonicalRank(division.name) < canonicalRank(existing.name)) {
+        byBucket.set(bucket, division);
+      }
+    }
+    return sortDivisionsAlternatingGender([...byBucket.values()]);
+  }, [divisions]);
 
   useEffect(() => {
     setSelectedDivisions([]);
@@ -154,10 +257,18 @@ export default function ReportingCenter({
       } else if (allowedDivisionIds !== null && allowedDivisionIds.length === 0) {
         // User has no division access
         setDivisions([]);
+        setDivisionCatalog([]);
         return;
       }
-      
-      const { data } = await query;
+
+      const [{ data }, { data: catalogData }] = await Promise.all([
+        query,
+        supabase.from("divisions").select("*").eq("company_id", currentCompany.id),
+      ]);
+
+      if (catalogData) {
+        setDivisionCatalog(catalogData);
+      }
       if (data) {
         setDivisions(sortDivisionsAlternatingGender(data));
       }
@@ -589,28 +700,32 @@ export default function ReportingCenter({
             endDate,
           );
 
-          const filteredMeds = allowedDivisionIds
-            ? expandedMeds.filter(
-                (m) =>
-                  (m as { children?: { division_id?: string } }).children?.division_id &&
-                  allowedDivisionIds.includes(
-                    (m as { children?: { division_id?: string } }).children!.division_id!,
-                  ),
-              )
+          const filteredMeds = expandedAllowedDivisionIds
+            ? expandedMeds.filter((m) => {
+                const child = (m as {
+                  children?: { division_id?: string; divisions?: { name?: string } };
+                }).children;
+                return childMatchesExpandedDivisionIds(
+                  child?.division_id,
+                  resolveChildDivisionName(child, divisionCatalog),
+                  expandedAllowedDivisionIds,
+                  divisionCatalog,
+                );
+              })
             : expandedMeds;
 
           data = filteredMeds.map((m) => {
             const child = (m as {
               children?: { name?: string; division_id?: string; divisions?: { name?: string } };
             }).children;
-            const divisionName = child?.divisions?.name ?? null;
+            const divisionName = resolveChildDivisionName(child, divisionCatalog);
             const mealLabel = parseMedicationMealTimeLabels(m.meal_time, divisionName).join(", ");
 
             return withDivisionMeta(
               {
                 Date: m._displayDate || m.date,
                 Child: child?.name || 'Unknown',
-                Division: divisionName || 'N/A',
+                Division: getDivisionDropdownLabel(divisionName) || 'N/A',
                 Medication: m.medication_name,
                 Dosage: m.dosage || 'N/A',
                 'Meal Time': mealLabel || 'N/A',
@@ -646,26 +761,30 @@ export default function ReportingCenter({
             { bypassCache: options?.bypassCache },
           );
 
-          const filteredPrn = allowedDivisionIds
-            ? prnMeds.filter(
-                (m) =>
-                  (m as { children?: { division_id?: string } }).children?.division_id &&
-                  allowedDivisionIds.includes(
-                    (m as { children?: { division_id?: string } }).children!.division_id!,
-                  ),
-              )
+          const filteredPrn = expandedAllowedDivisionIds
+            ? prnMeds.filter((m) => {
+                const child = (m as {
+                  children?: { division_id?: string; divisions?: { name?: string } };
+                }).children;
+                return childMatchesExpandedDivisionIds(
+                  child?.division_id,
+                  resolveChildDivisionName(child, divisionCatalog),
+                  expandedAllowedDivisionIds,
+                  divisionCatalog,
+                );
+              })
             : prnMeds;
 
           data = filteredPrn.map((m) => {
             const child = (m as {
               children?: { name?: string; division_id?: string; divisions?: { name?: string } };
             }).children;
-            const divisionName = child?.divisions?.name ?? null;
+            const divisionName = resolveChildDivisionName(child, divisionCatalog);
 
             return withDivisionMeta(
               {
                 Child: child?.name || 'Unknown',
-                Division: divisionName || 'N/A',
+                Division: getDivisionDropdownLabel(divisionName) || 'N/A',
                 Medication: m.medication_name,
                 Dosage: m.dosage || 'N/A',
                 Frequency: (m as { frequency?: string }).frequency || 'As Needed',
@@ -1183,6 +1302,8 @@ export default function ReportingCenter({
   }, [
     allowedDivisionIds,
     currentCompany?.id,
+    divisionCatalog,
+    expandedAllowedDivisionIds,
     reportType,
     selectedSeason,
     startDate,
@@ -1210,19 +1331,13 @@ export default function ReportingCenter({
   }, [reportData]);
 
   const matchesSelectedDivisions = useCallback((row: DivisionAwareRow) => {
-    if (selectedDivisions.length === 0) return true;
-
-    if (row.__divisionIds?.length) {
-      return row.__divisionIds.some((divisionId) => selectedDivisions.includes(divisionId));
-    }
-
-    const rowDivisionNames = getDivisionNamesFromRow(row);
-    if (rowDivisionNames.length > 0) {
-      return rowDivisionNames.some((divisionName) => selectedDivisionNames.includes(divisionName));
-    }
-
-    return true;
-  }, [selectedDivisions, selectedDivisionNames]);
+    return rowMatchesSelectedDivisionBuckets(
+      row,
+      selectedDivisionBuckets,
+      divisionCatalog,
+      expandedSelectedDivisionIds,
+    );
+  }, [divisionCatalog, expandedSelectedDivisionIds, selectedDivisionBuckets]);
 
   const handleSort = (column: string) => {
     if (sortColumn === column) {
@@ -1692,7 +1807,7 @@ export default function ReportingCenter({
                       )}
                     </div>
                     <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                      {divisions.map((div) => (
+                      {dropdownDivisions.map((div) => (
                         <div key={div.id} className="flex items-center gap-2">
                           <Checkbox
                             id={`report-div-${div.id}`}
@@ -1709,7 +1824,7 @@ export default function ReportingCenter({
                             htmlFor={`report-div-${div.id}`} 
                             className="text-sm cursor-pointer flex-1"
                           >
-                            {div.name}
+                            {getDivisionDropdownLabel(div.name)}
                           </label>
                         </div>
                       ))}
@@ -1739,7 +1854,7 @@ export default function ReportingCenter({
                 const div = divisions.find(d => d.id === divId);
                 return div ? (
                   <Badge key={divId} variant="secondary" className="flex items-center gap-1">
-                    {div.name}
+                    {getDivisionDropdownLabel(div.name)}
                     <button
                       onClick={() => setSelectedDivisions(selectedDivisions.filter(id => id !== divId))}
                       className="ml-1 hover:text-destructive"
