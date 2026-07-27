@@ -1311,6 +1311,11 @@ export default function ReportingCenter({
     toast,
   ]);
 
+  const divisionCatalogKey = useMemo(
+    () => divisionCatalog.map((division) => division.id).sort().join(","),
+    [divisionCatalog],
+  );
+
   useEffect(() => {
     if (!currentCompany?.id || permissionsLoading) return;
     fetchReportData();
@@ -1322,6 +1327,7 @@ export default function ReportingCenter({
     permissionsLoading,
     startDate,
     endDate,
+    divisionCatalogKey,
     fetchReportData,
   ]);
 
@@ -1331,13 +1337,17 @@ export default function ReportingCenter({
   }, [reportData]);
 
   const matchesSelectedDivisions = useCallback((row: DivisionAwareRow) => {
+    if (selectedDivisions.length === 0) return true;
+    // Wait for full division catalog (includes inactive aliases) before filtering.
+    if (divisionCatalog.length === 0) return true;
+
     return rowMatchesSelectedDivisionBuckets(
       row,
       selectedDivisionBuckets,
       divisionCatalog,
       expandedSelectedDivisionIds,
     );
-  }, [divisionCatalog, expandedSelectedDivisionIds, selectedDivisionBuckets]);
+  }, [divisionCatalog, expandedSelectedDivisionIds, selectedDivisionBuckets, selectedDivisions.length]);
 
   const handleSort = (column: string) => {
     if (sortColumn === column) {

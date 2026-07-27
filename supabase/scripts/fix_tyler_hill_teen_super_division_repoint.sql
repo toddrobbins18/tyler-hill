@@ -1,4 +1,5 @@
--- Repoint Tyler Hill campers stuck on inactive Teen TN1 / Super Senior alias divisions
+-- Tyler Hill only — prefer fix_all_camps_division_alias_repoint.sql for all three camps.
+-- Repoint campers stuck on inactive Teen TN1 / Super Senior alias divisions
 -- to the canonical active division rows (Teen Boys/Girls, Super Boys/Girls).
 -- Safe to re-run.
 
