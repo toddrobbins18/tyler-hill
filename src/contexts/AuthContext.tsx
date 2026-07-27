@@ -36,6 +36,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasInitializedRef = useRef(false);
 
   const fetchAuthData = useCallback(async () => {
+    // Keep auth in a loading state until roles are resolved. Otherwise CompanyContext
+    // can see `user` with `isSuperAdmin === false` and load only one camp.
+    setLoading(true);
     try {
       // Single auth call for the entire app
       const { data: { user: currentUser } } = await supabase.auth.getUser();
@@ -52,9 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      setUser(currentUser);
-
-      // Fetch roles first (small + needed to scope the rest)
+      // Fetch roles before publishing user so dependents never race on isSuperAdmin.
       const rolesResult = await supabase
         .from('user_roles')
         .select('role')
@@ -68,6 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ? 'admin'
           : roles[0] || null;
 
+      setUser(currentUser);
       setUserRoles(roles);
       setUserRole(effectiveRole);
       setIsSuperAdmin(isSuperAdminUser);

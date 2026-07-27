@@ -38,7 +38,9 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   // Track if a company switch is in progress to prevent race conditions
   const isSwitchingRef = useRef(false);
 
-  // Load company data when auth is ready
+  // Load company data when auth is ready.
+  // Include authIsSuperAdmin: on login, user can appear before roles resolve; without this
+  // dependency the camp switcher stays hidden until a full page refresh.
   useEffect(() => {
     if (!authLoading && user) {
       loadCompanyData(true);
@@ -50,7 +52,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       hasInitializedRef.current = false;
       sessionStorage.removeItem('viewing_company_id');
     }
-  }, [authLoading, user?.id]);
+  }, [authLoading, user?.id, authIsSuperAdmin]);
 
   // Listen for auth state changes (for sign out)
   useEffect(() => {
@@ -96,32 +98,33 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         .eq('id', user.id)
         .single();
         
-      // Also get all distinct companies the user has a role in to support camp switching for non-super-admins
-      const userRolesPromise = !authIsSuperAdmin 
-        ? supabase
-            .from('user_roles')
-            .select('company_id')
-            .eq('user_id', user.id)
-        : Promise.resolve({ data: null, error: null });
+      // Resolve roles here (not only from AuthContext) so a stale isSuperAdmin=false
+      // after login cannot permanently hide the multi-camp switcher.
+      const rolesPromise = supabase
+        .from('user_roles')
+        .select('role, company_id')
+        .eq('user_id', user.id);
 
-      const [profileResult, userRolesResult] = await Promise.all([profilePromise, userRolesPromise]);
+      const [profileResult, rolesResult] = await Promise.all([profilePromise, rolesPromise]);
       const profile = profileResult.data;
-      
+      const roleRows = rolesResult.data || [];
+      const isSuperAdminUser =
+        authIsSuperAdmin || roleRows.some((r) => String(r.role).toLowerCase() === 'super_admin');
+
       // Determine which companies the user should have access to in the switcher
       let allowedCompanyIds: string[] = [];
-      if (!authIsSuperAdmin && userRolesResult.data) {
-        // Extract unique company IDs from user_roles
+      if (!isSuperAdminUser) {
         const uniqueIds = new Set(
-          userRolesResult.data
-            .map(r => r.company_id)
-            .filter(id => id !== null)
+          roleRows
+            .map((r) => r.company_id)
+            .filter((id): id is string => id !== null)
         );
-        
+
         // Always include their primary profile company if set
         if (profile?.company_id) {
           uniqueIds.add(profile.company_id);
         }
-        
+
         allowedCompanyIds = Array.from(uniqueIds);
       }
 
@@ -131,10 +134,10 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         .select('id, name, slug, logo_url, theme_color, zip_code, owl_pay_enabled')
         .eq('is_active', true)
         .order('name');
-        
-      if (!authIsSuperAdmin && allowedCompanyIds.length > 0) {
+
+      if (!isSuperAdminUser && allowedCompanyIds.length > 0) {
         companiesQuery = companiesQuery.in('id', allowedCompanyIds);
-      } else if (!authIsSuperAdmin) {
+      } else if (!isSuperAdminUser) {
         // If not super admin and no roles found, they only get their primary company (handled below)
         companiesQuery = supabase.from('companies').select('id').eq('id', '00000000-0000-0000-0000-000000000000'); // Returns empty
       }
