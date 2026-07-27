@@ -25,7 +25,7 @@ import {
   formatNightOffScheduleLabel,
   mergeNightOffScheduleEntries,
   type NightOffScheduleEntry,
-  staffIsScheduledOff,
+  staffIsEligibleForOdOff,
   shouldRemoveDayOffRecord,
   resolveOdCheckInOut,
   resolveOdRfidScan,
@@ -36,6 +36,7 @@ import { lookupStaffByRfid, normalizeRfidInput } from "@/lib/rfidUtils";
 import {
   bunkMatchesOdGenderFilter,
   isOdGirlsBunk,
+  isOdSupportBunk,
   odGenderSortRank,
   sortOdRowsByGenderThenBunkNumber,
   type OdGenderFilter,
@@ -256,6 +257,7 @@ export default function ODManagement() {
       .map(d => d.staff_id);
 
     const uncovered = bunks.filter(bunk => {
+      if (isOdSupportBunk(bunk)) return false;
       const assignedStaff = bunkStaff.filter(bs => bs.bunk_id === bunk.id);
       if (assignedStaff.length === 0) return true; // No staff assigned
       return assignedStaff.every(bs => staffOffIds.includes(bs.staff_id));
@@ -263,6 +265,16 @@ export default function ODManagement() {
 
     setUncoveredBunks(uncovered);
   };
+
+  const getBunkForStaffId = (staffId: string) => {
+    const assignment = bunkStaff.find((bs) => bs.staff_id === staffId);
+    return assignment?.bunk || bunks.find((bunk) => bunk.id === assignment?.bunk_id);
+  };
+
+  const isSupportStaffId = (staffId: string) => isOdSupportBunk(getBunkForStaffId(staffId));
+
+  const staffRowIsEligibleForOff = (item: { staff_id: string; bunk?: Bunk; dayOff?: DayOff }) =>
+    staffIsEligibleForOdOff(item.dayOff, isOdSupportBunk(item.bunk));
 
   const getStaffWithBunk = () => {
     const rows = bunkStaff.map(bs => {
@@ -320,7 +332,9 @@ export default function ODManagement() {
 
       const existingDayOff = daysOff.find(d => d.staff_id === staffMember.id);
 
-      const rfidResult = resolveOdRfidScan(existingDayOff, user?.id || "");
+      const rfidResult = resolveOdRfidScan(existingDayOff, user?.id || "", new Date().toISOString(), {
+        isSupportStaff: isSupportStaffId(staffMember.id),
+      });
       const applied = await applyCheckInOutResult(staffMember.id, rfidResult);
       if (!applied) return;
 
@@ -716,7 +730,9 @@ export default function ODManagement() {
     }
 
     const existing = daysOff.find(d => d.staff_id === staffId);
-    const result = resolveOdCheckInOut(context, type, existing, user.id);
+    const result = resolveOdCheckInOut(context, type, existing, user.id, new Date().toISOString(), {
+      isSupportStaff: isSupportStaffId(staffId),
+    });
 
     try {
       const applied = await applyCheckInOutResult(staffId, result);
@@ -788,9 +804,7 @@ export default function ODManagement() {
 
   // Filter for sign-in status in Off tab
   const getFilteredOffStaff = () => {
-    const offStaff = filteredStaffWithBunk.filter(item =>
-      item.dayOff?.is_day_off || item.dayOff?.is_night_off
-    );
+    const offStaff = filteredStaffWithBunk.filter(item => staffRowIsEligibleForOff(item));
     
     if (signInStatusFilter === "all") return offStaff;
     if (signInStatusFilter === "signed_out") return offStaff.filter(item => item.dayOff?.checked_out && !item.dayOff?.checked_in);
@@ -803,7 +817,7 @@ export default function ODManagement() {
   // Get staff who are due back (checked out but not checked in)
   const getDueBackStaff = () => {
     return filteredStaffWithBunk.filter(item =>
-      staffIsScheduledOff(item.dayOff) &&
+      staffRowIsEligibleForOff(item) &&
       item.dayOff?.checked_out &&
       !item.dayOff?.checked_in
     );
@@ -997,7 +1011,7 @@ export default function ODManagement() {
                   </TableHeader>
                   <TableBody>
                     {filteredStaffWithBunk
-                      .filter(item => !staffIsScheduledOff(item.dayOff))
+                      .filter(item => !staffRowIsEligibleForOff(item))
                       .map((item) => (
                         <TableRow key={item.id}>
                           <TableCell className="font-medium">
@@ -1075,7 +1089,7 @@ export default function ODManagement() {
                           </TableCell>
                         </TableRow>
                       ))}
-                    {filteredStaffWithBunk.filter(item => !staffIsScheduledOff(item.dayOff)).length === 0 && (
+                    {filteredStaffWithBunk.filter(item => !staffRowIsEligibleForOff(item)).length === 0 && (
                       <TableRow>
                         <TableCell colSpan={showFreePlay ? 5 : 4} className="text-center text-muted-foreground py-8">
                           {bunks.length === 0 
@@ -1157,6 +1171,9 @@ export default function ODManagement() {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               {item.staff?.name}
+                              {isOdSupportBunk(item.bunk) && (
+                                <Badge variant="secondary" className="text-xs">Support</Badge>
+                              )}
                               {item.staff?.rfid && (
                                 <Badge variant="outline" className="text-xs">RFID</Badge>
                               )}

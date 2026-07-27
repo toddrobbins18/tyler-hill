@@ -54,6 +54,13 @@ export function staffIsScheduledOff(row?: Pick<StaffDayOffScheduleRow, "is_day_o
   return !!(row?.is_day_off || row?.is_night_off);
 }
 
+export function staffIsEligibleForOdOff(
+  row?: Pick<StaffDayOffScheduleRow, "is_day_off" | "is_night_off"> | null,
+  isSupportStaff = false,
+): boolean {
+  return isSupportStaff || staffIsScheduledOff(row);
+}
+
 export function shouldRemoveDayOffRecord(record: StaffDayOffScheduleRow): boolean {
   return (
     !record.is_day_off &&
@@ -91,13 +98,20 @@ export type OdCheckInOutInsert = {
 
 export type OdCheckInOutUpdates = Partial<OdCheckInOutInsert>;
 
+export type OdCheckInOutOptions = {
+  /** Male/Female Support bunks may sign out any night without a pre-set pattern. */
+  isSupportStaff?: boolean;
+};
+
 export function resolveOdCheckInOut(
   context: OdCheckInOutContext,
   action: OdCheckInOutAction,
   existing: StaffDayOffScheduleRow | null | undefined,
   userId: string,
   nowIso = new Date().toISOString(),
+  options?: OdCheckInOutOptions,
 ): OdCheckInOutResult {
+  const isSupportStaff = options?.isSupportStaff ?? false;
   if (context === "on_duty") {
     if (action === "out") {
       return { kind: "error", message: "Sign out is only available on the Off tab" };
@@ -178,7 +192,26 @@ export function resolveOdCheckInOut(
   }
 
   if (action === "out") {
-    if (!existing || !staffIsScheduledOff(existing)) {
+    if (!staffIsEligibleForOdOff(existing, isSupportStaff)) {
+      return { kind: "late_override" };
+    }
+
+    if (!existing && isSupportStaff) {
+      return {
+        kind: "insert",
+        record: {
+          is_day_off: false,
+          is_night_off: true,
+          is_sleeping_out: false,
+          checked_out: true,
+          checked_out_at: nowIso,
+          checked_out_by: userId,
+          checked_in: false,
+        },
+      };
+    }
+
+    if (!existing) {
       return { kind: "late_override" };
     }
 
@@ -202,8 +235,12 @@ export function resolveOdCheckInOut(
   }
 
   // Sign in on Off tab
-  if (!existing || !staffIsScheduledOff(existing)) {
+  if (!staffIsEligibleForOdOff(existing, isSupportStaff)) {
     return { kind: "error", message: "Please set day off first" };
+  }
+
+  if (!existing) {
+    return { kind: "error", message: "Please sign out first" };
   }
 
   if (existing.checked_in) {
@@ -226,21 +263,27 @@ export function resolveOdRfidScan(
   existing: StaffDayOffScheduleRow | null | undefined,
   userId: string,
   nowIso = new Date().toISOString(),
+  options?: OdCheckInOutOptions,
 ): OdCheckInOutResult {
-  if (!staffIsScheduledOff(existing)) {
-    return resolveOdCheckInOut("on_duty", "in", existing, userId, nowIso);
+  const isSupportStaff = options?.isSupportStaff ?? false;
+
+  if (!staffIsEligibleForOdOff(existing, isSupportStaff)) {
+    return resolveOdCheckInOut("on_duty", "in", existing, userId, nowIso, options);
   }
 
   if (!existing) {
+    if (isSupportStaff) {
+      return resolveOdCheckInOut("off_duty", "out", existing, userId, nowIso, options);
+    }
     return { kind: "late_override" };
   }
 
   if (!existing.checked_out) {
-    return resolveOdCheckInOut("off_duty", "out", existing, userId, nowIso);
+    return resolveOdCheckInOut("off_duty", "out", existing, userId, nowIso, options);
   }
 
   if (!existing.checked_in) {
-    return resolveOdCheckInOut("off_duty", "in", existing, userId, nowIso);
+    return resolveOdCheckInOut("off_duty", "in", existing, userId, nowIso, options);
   }
 
   return { kind: "noop", message: "Already signed out and back in for today" };

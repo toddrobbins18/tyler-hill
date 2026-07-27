@@ -1,11 +1,22 @@
 export type OdGenderFilter = "all" | "girls" | "boys";
 
-type BunkWithDivision = {
+type BunkWithName = {
+  bunk_name?: string | null;
+  bunk_number?: string | null;
+};
+
+type BunkWithDivision = BunkWithName & {
   divisions?:
     | { gender?: string | null; name?: string | null }
     | { gender?: string | null; name?: string | null }[]
     | null;
 };
+
+/** Male Support / Female Support bunks use flexible nightly off (no fixed pattern). */
+export function isOdSupportBunk(bunk: BunkWithName | undefined | null): boolean {
+  const label = bunk?.bunk_name?.trim().toLowerCase() ?? "";
+  return label === "male support" || label === "female support";
+}
 
 /** Resolve bunk gender from linked division (handles Supabase array joins + name fallback). */
 export function resolveBunkDivisionGender(
