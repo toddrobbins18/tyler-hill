@@ -14,9 +14,10 @@ export type PersonOutlookItem = {
   meta?: string | null;
 };
 
+/** Next 3 calendar days after today (tomorrow through today + 3). */
 export function getPersonOutlookWindow(today = new Date()): { start: string; end: string } {
-  const start = format(today, "yyyy-MM-dd");
-  const end = format(addDays(today, 2), "yyyy-MM-dd");
+  const start = format(addDays(today, 1), "yyyy-MM-dd");
+  const end = format(addDays(today, 3), "yyyy-MM-dd");
   return { start, end };
 }
 
