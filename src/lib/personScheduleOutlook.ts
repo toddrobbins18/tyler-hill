@@ -21,6 +21,25 @@ export function getPersonOutlookWindow(today = new Date()): { start: string; end
   return { start, end };
 }
 
+/** Group multi-day items under the first day inside the outlook window (never today). */
+export function finalizeOutlookItemsForWindow(
+  items: PersonOutlookItem[],
+  windowStart: string,
+  windowEnd: string,
+): PersonOutlookItem[] {
+  const normalized = items
+    .map((item) => {
+      const itemEnd = item.endDate || item.date;
+      if (itemEnd < windowStart || item.date > windowEnd) return null;
+      const displayDate = item.date < windowStart ? windowStart : item.date;
+      if (displayDate > windowEnd) return null;
+      return displayDate === item.date ? item : { ...item, date: displayDate };
+    })
+    .filter((item): item is PersonOutlookItem => item !== null);
+
+  return sortOutlookItems(normalized);
+}
+
 export function normalizeOutlookYmd(date: string | null | undefined): string | null {
   if (!date) return null;
   const trimmed = String(date).trim();
@@ -244,7 +263,7 @@ export async function fetchChildScheduleOutlook(
     });
   }
 
-  return sortOutlookItems(items);
+  return finalizeOutlookItemsForWindow(items, start, end);
 }
 
 export async function fetchStaffScheduleOutlook(
@@ -362,7 +381,7 @@ export async function fetchStaffScheduleOutlook(
     });
   }
 
-  return sortOutlookItems(items);
+  return finalizeOutlookItemsForWindow(items, start, end);
 }
 
 export type SupervisorOutlookScope = {
@@ -688,5 +707,5 @@ export async function fetchSupervisorScheduleOutlook(
     });
   }
 
-  return sortOutlookItems(items);
+  return finalizeOutlookItemsForWindow(items, start, end);
 }
