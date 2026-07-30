@@ -118,6 +118,21 @@ export function resolveMasterCalendarColor(
   return bgColor || SOURCE_DEFAULTS[source] || "#6b7280";
 }
 
+/** Solid fill + text color for calendar blocks and badges (matches Tyler Hill grid). */
+export function getMasterCalendarEventStyle(
+  source: MasterCalendarEventSource,
+  customColors: Record<string, string>,
+  originalData?: Record<string, unknown> | null,
+): { backgroundColor: string; color: string } {
+  const backgroundColor = resolveMasterCalendarColor(source, customColors, originalData);
+  const isNeonGreen = backgroundColor === "#39ff14";
+  const isDark = backgroundColor === "#000000" || backgroundColor === "#7f1d1d";
+  return {
+    backgroundColor,
+    color: isNeonGreen ? "#000000" : isDark ? "#ffffff" : "#ffffff",
+  };
+}
+
 export const MASTER_CALENDAR_VIEW_STORAGE_KEY = "nest-master-calendar-view";
 
 export function readStoredMasterCalendarView(): "month" | "week" | "day" | "agenda" {

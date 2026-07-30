@@ -34,7 +34,7 @@ import {
 import {
   loadMasterCalendarColors,
   readStoredMasterCalendarView,
-  resolveMasterCalendarColor,
+  getMasterCalendarEventStyle,
   storeMasterCalendarView,
   type MasterCalendarEventSource,
 } from "@/lib/masterCalendarColors";
@@ -86,6 +86,10 @@ export default function MasterCalendar() {
   const loadAggregatedColors = () => loadMasterCalendarColors();
 
   const [customColors, setCustomColors] = useState<Record<string, string>>(loadAggregatedColors);
+
+  useEffect(() => {
+    setCustomColors(loadAggregatedColors());
+  }, [currentCompany?.id]);
 
   // Listen for color changes from individual calendars
   useEffect(() => {
@@ -506,22 +510,8 @@ export default function MasterCalendar() {
     }
   };
 
-  const getSourceColor = (source: EventSource) => {
-    switch (source) {
-      case 'sports_calendar': return "bg-blue-500/20 text-blue-700 border-blue-500/30";
-      case 'activities_field_trips': return "bg-green-500/20 text-green-700 border-green-500/30";
-      case 'special_events_activities': return "bg-purple-500/20 text-purple-700 border-purple-500/30";
-      case 'tiger_times': return "bg-amber-500/20 text-amber-700 border-amber-500/30";
-      case 'daily_wolf': return "bg-sky-500/20 text-sky-700 border-sky-500/30";
-    }
-  };
-
-  const getSubCategoryColor = (eventType: string, subCategory: string): string | undefined => {
-    const colorMap: Record<string, Record<string, string>> = {
-      "field-trip": { "Teen Trip": "bg-gray-500 text-white", "Collegiate Trip": "bg-teal-500 text-white", "Senior Trip": "bg-red-900 text-white", "Junior Trip": "bg-purple-600 text-white" },
-    };
-    return colorMap[eventType]?.[subCategory];
-  };
+  const getEventStyle = (event: UnifiedEvent) =>
+    getMasterCalendarEventStyle(event.source, customColors, event.originalData);
 
   const getSourceLabel = (source: EventSource) => {
     switch (source) {
@@ -534,14 +524,16 @@ export default function MasterCalendar() {
   };
 
   const eventPropGetter = (event: any) => {
-    const source = event.resource.source as EventSource;
-    const finalBg = resolveMasterCalendarColor(source, customColors, event.resource.originalData);
-    const isNeonGreen = finalBg === "#39ff14";
+    const style = getMasterCalendarEventStyle(
+      event.resource.source as EventSource,
+      customColors,
+      event.resource.originalData,
+    );
 
     return {
       style: {
-        backgroundColor: finalBg,
-        color: isNeonGreen ? "#000000" : "white",
+        backgroundColor: style.backgroundColor,
+        color: style.color,
         borderRadius: "4px",
         padding: "2px 5px",
       },
@@ -785,7 +777,8 @@ export default function MasterCalendar() {
                 {monthEvents.map((event) => (
                   <Card 
                     key={event.id} 
-                    className="hover:shadow-lg transition-shadow cursor-pointer"
+                    className="hover:shadow-lg transition-shadow cursor-pointer border-l-4"
+                    style={{ borderLeftColor: getEventStyle(event).backgroundColor }}
                     onClick={() => setSelectedEvent(event)}
                   >
                     <CardHeader>
@@ -803,12 +796,12 @@ export default function MasterCalendar() {
                     </CardHeader>
                     <CardContent className="space-y-2">
                       <div className="flex gap-2 flex-wrap">
-                        <Badge className={getSourceColor(event.source)}>
+                        <Badge style={getEventStyle(event)} className="border-0">
                           {getSourceLabel(event.source)}
                         </Badge>
                         <Badge variant="outline">{event.type}</Badge>
                         {event.originalData?.sub_category && (
-                          <Badge className={getSubCategoryColor(event.originalData?.event_type, event.originalData.sub_category) || ""}>
+                          <Badge style={getEventStyle(event)} className="border-0">
                             {event.originalData.sub_category}
                           </Badge>
                         )}
@@ -851,12 +844,12 @@ export default function MasterCalendar() {
             <div className="space-y-4">
               {/* Event Type & Source Badge */}
               <div className="flex gap-2 flex-wrap">
-                <Badge className={getSourceColor(selectedEvent.source)}>
+                <Badge style={getEventStyle(selectedEvent)} className="border-0">
                   {getSourceLabel(selectedEvent.source)}
                 </Badge>
                 <Badge variant="outline">{selectedEvent.type}</Badge>
                 {selectedEvent.originalData?.sub_category && (
-                  <Badge className={getSubCategoryColor(selectedEvent.originalData?.event_type, selectedEvent.originalData.sub_category) || ""}>
+                  <Badge style={getEventStyle(selectedEvent)} className="border-0">
                     {selectedEvent.originalData.sub_category}
                   </Badge>
                 )}
