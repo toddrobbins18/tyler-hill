@@ -181,10 +181,19 @@ export function AppSidebar() {
     permissionOptions,
   );
 
-  const isAdmin = useMemo(
-    () => userRoles.includes("admin") || userRoles.includes("super_admin"),
-    [userRoles]
-  );
+  const showAdministration = useMemo(() => {
+    if (!currentCompany?.id) return false;
+    if (isSuperAdmin) return true;
+    const adminMenuItems = [
+      "admin",
+      "evaluation-questions",
+      "role-permissions",
+      "division-permissions",
+      "specialist-sport-assignments",
+      "user-approvals",
+    ];
+    return adminMenuItems.some((item) => hasPagePermission(currentCompany.id, item));
+  }, [currentCompany?.id, isSuperAdmin, hasPagePermission]);
 
   const showCampSwitcher = availableCompanies.length > 1;
 
@@ -324,7 +333,7 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        {isAdmin && (
+        {showAdministration && (
           <SidebarGroup>
             <SidebarGroupLabel>Administration</SidebarGroupLabel>
             <SidebarGroupContent>

@@ -113,10 +113,11 @@ export default function RolePermissions() {
   const { currentCompany } = useCompany();
 
   useEffect(() => {
-    if (currentCompany) {
-      setMenuItems(getCompanyMenuItems(currentCompany));
-      fetchPermissions();
-    }
+    if (!currentCompany?.id) return;
+
+    setLoading(true);
+    setMenuItems(getCompanyMenuItems(currentCompany));
+    fetchPermissions();
 
     const channel = supabase
       .channel('role-permissions-changes')
@@ -126,7 +127,7 @@ export default function RolePermissions() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentCompany]);
+  }, [currentCompany?.id]);
 
   const fetchPermissions = async () => {
     const { data, error } = await supabase

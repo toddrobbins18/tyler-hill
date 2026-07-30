@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCompany } from "@/contexts/CompanyContext";
+import { isTylerHillCamp } from "@/lib/camps";
 import { Plus, Pencil, Trash2, ClipboardList, Shield, Building2, Upload, ChevronDown, ChevronUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -147,7 +148,7 @@ export default function EvaluationQuestions() {
   };
 
   const handleImportSpecialist = async () => {
-    if (currentCompany?.id !== '0d0b7f4f-327e-4497-83ff-3aa501ffc295') return;
+    if (!isTylerHillCamp(currentCompany?.slug)) return;
     
     setImporting(true);
     const specialistQuestions = [
@@ -185,7 +186,7 @@ export default function EvaluationQuestions() {
   };
 
   const handleImportGeneralCounselor = async () => {
-    if (currentCompany?.id !== '0d0b7f4f-327e-4497-83ff-3aa501ffc295') return;
+    if (!isTylerHillCamp(currentCompany?.slug)) return;
     
     setImporting(true);
     const counselorQuestions = [
@@ -259,7 +260,7 @@ export default function EvaluationQuestions() {
       )}
 
       {/* Tyler Hill Camp Import Section */}
-      {currentCompany?.id === '0d0b7f4f-327e-4497-83ff-3aa501ffc295' && (
+      {isTylerHillCamp(currentCompany?.slug) && (
         <Card className="p-6 border-2 border-dashed">
           <div className="flex items-start gap-4">
             <Upload className="h-6 w-6 text-primary mt-1" />

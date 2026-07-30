@@ -138,7 +138,7 @@ Incorporate into a **Day Camp** section/dropdown — e.g. Sunshine Report, Trans
 
 ---
 
-## Phase 3 — Nest carryover (reuse) ⏳ NEXT
+## Phase 3 — Nest carryover (reuse) ✅ DONE
 
 **Goal:** Existing Nest pages work for North Shore with camp-scoped data.
 
@@ -148,7 +148,7 @@ Incorporate into a **Day Camp** section/dropdown — e.g. Sunshine Report, Trans
 | 3.2 | Enable Master Calendar, Menu, Daily news | ✅ Done |
 | 3.3 | Enable Activities, Special Events, Rainy Day | ✅ Done |
 | 3.4 | Enable Appointments, Incident Reports, Reports | ✅ Done |
-| 3.5 | Enable Admin (panel, roles, divisions) | ⬜ |
+| 3.5 | Enable Admin (panel, roles, divisions) | ✅ Done |
 
 **Exit criteria:** Todd’s listed Nest modules usable on North Shore (with data).
 
@@ -177,6 +177,15 @@ Incorporate into a **Day Camp** section/dropdown — e.g. Sunshine Report, Trans
 - Incident Reports already company-scoped on web and mobile.
 - Mobile: permission guards on Appointments, Incident Reports, Reports; appointments report option uses shared helper.
 - SQL verify: `supabase/scripts/north_shore_phase_3_4_enable_modules.sql`
+- SQL fix: `supabase/scripts/fix_appointment_notification_trigger_url.sql` (Vault URL for notify trigger).
+
+**Phase 3.5 notes (Jul 31):**
+- Admin Panel, Role Permissions, Division Permissions, User Approvals, Evaluation Questions already company-scoped — permissions in foundation SQL.
+- Web: removed duplicate global admin gate on Admin Panel (ProtectedRoute + role_permissions handle access).
+- Web: Administration sidebar uses per-company `hasPagePermission` instead of global admin role.
+- Web: Role Permissions refetches on camp switch (`currentCompany?.id` in effect deps).
+- Mobile: permission guards on all Administration screens; drawer items gated by `hasMenuAccess`.
+- SQL verify + specialist-sport-assignments seed: `supabase/scripts/north_shore_phase_3_5_enable_modules.sql`
 
 ---
 
@@ -294,14 +303,15 @@ Build in this order (Todd priority):
 | Jul 31, 2026 | Phase 3.2 — Calendar, Menu, Daily news | Phase 3.3 |
 | Jul 31, 2026 | Phase 3.3 — Activities, Special Events, Rainy Day | Phase 3.4 |
 | Jul 31, 2026 | Phase 3.4 — Appointments, Incident Reports, Reports | Phase 3.5 |
+| Jul 31, 2026 | Phase 3.5 — Admin (panel, roles, divisions) | Phase 4 |
 
 ---
 
 ## Quick reference — what to say each session
 
-**Completed:** Phases 0–2, Phase 3.1–3.4  
-**Previous step:** Phase 3.4 — Appointments, Incident Reports, Reports  
-**Current step:** Phase 3.5 — Admin (panel, roles, divisions)  
+**Completed:** Phases 0–2, Phase 3.1–3.5 (Nest carryover complete)  
+**Previous step:** Phase 3.5 — Admin (panel, roles, divisions)  
+**Current step:** Phase 4 — New day-camp features (Sunshine, Swim, etc.)  
 **Future:** Phases 5–8  
 
 **Rules:** No step starts without Ansar’s OK. **Web + mobile ship together** for every day-camp step.

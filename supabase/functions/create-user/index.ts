@@ -130,14 +130,17 @@ serve(async (req) => {
         company_id: targetCompanyId,
       }, { onConflict: 'id' });
 
-    // Assign role
+    // Assign role (upsert in case a trigger left a placeholder row)
     const { error: roleError } = await supabaseAdmin
       .from('user_roles')
-      .insert({
-        user_id: newUser.user.id,
-        role: normalizedRole,
-        company_id: targetCompanyId,
-      });
+      .upsert(
+        {
+          user_id: newUser.user.id,
+          role: normalizedRole,
+          company_id: targetCompanyId,
+        },
+        { onConflict: 'user_id,company_id' },
+      );
 
     if (roleError) {
       console.error('Error assigning role:', roleError);
