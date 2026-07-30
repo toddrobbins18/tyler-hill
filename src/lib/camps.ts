@@ -42,6 +42,21 @@ export function isOvernightCampCompany(company: CampLike): boolean {
   return !isDayCampCompany(company);
 }
 
+const APPOINTMENTS_ENABLED_OVERNIGHT_SLUGS = [
+  CAMP_SLUG.TYLER_HILL_CAMP,
+  CAMP_SLUG.TIMBER_LAKE_CAMP,
+  CAMP_SLUG.TIMBER_LAKE_WEST,
+  "trails-end-camp",
+] as const;
+
+/** Appointments module — overnight slugs + all day camps (North Shore, etc.). */
+export function appointmentsEnabledForCompany(company: CampLike): boolean {
+  if (!company) return false;
+  if (isDayCampCompany(company)) return true;
+  const slug = company.slug ?? "";
+  return APPOINTMENTS_ENABLED_OVERNIGHT_SLUGS.includes(slug as (typeof APPOINTMENTS_ENABLED_OVERNIGHT_SLUGS)[number]);
+}
+
 /** Timber Lake West — slug first, then company name fallback if slug was misconfigured. */
 export function isTimberLakeWestCompany(company: CampLike): boolean {
   if (!company) return false;

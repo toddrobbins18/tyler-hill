@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { appointmentsEnabledForCompany } from "@/lib/camps";
 import { Download, FileText, Calendar, ArrowUpDown, ArrowUp, ArrowDown, Filter, X } from "lucide-react";
 import { exportToCSV, exportToPDF } from "@/lib/reportExports";
 import { format } from "date-fns";
@@ -1724,8 +1725,7 @@ export default function ReportingCenter({
     }
 
     // Add appointments report for camps that have appointments enabled
-    const appointmentCamps = ['tyler-hill-camp', 'timber-lake-camp', 'timber-lake-west', 'trails-end-camp'];
-    if (currentCompany?.slug && appointmentCamps.includes(currentCompany.slug)) {
+    if (appointmentsEnabledForCompany(currentCompany)) {
       baseOptions.push({ value: 'appointments', label: 'Appointments Report' });
     }
 

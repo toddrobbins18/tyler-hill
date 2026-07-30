@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CalendarIcon, Plus, Search, Edit2, Trash2, Clock, User, MapPin, Stethoscope } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { appointmentsEnabledForCompany } from "@/lib/camps";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
 
 /** Base list shared by all camps with appointments enabled. */
@@ -117,10 +118,7 @@ export default function Appointments() {
   const [followUpRequired, setFollowUpRequired] = useState<boolean>(false);
   const [followUpDate, setFollowUpDate] = useState<Date | undefined>(undefined);
 
-  // Check if this is Tyler Hill Camp
-  // Appointments are available for Tyler Hill, Timber Lake, Timber Lake West, and Trails End
-  const allowedCamps = ['tyler-hill-camp', 'timber-lake-camp', 'timber-lake-west', 'trails-end-camp'];
-  const isAllowedCamp = currentCompany?.slug && allowedCamps.includes(currentCompany.slug);
+  const isAllowedCamp = appointmentsEnabledForCompany(currentCompany);
 
   useEffect(() => {
     if (currentCompany?.id) {

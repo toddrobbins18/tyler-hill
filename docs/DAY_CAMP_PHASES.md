@@ -147,7 +147,7 @@ Incorporate into a **Day Camp** section/dropdown — e.g. Sunshine Report, Trans
 | 3.1 | Enable Camper, Staff, Messages | ✅ Done |
 | 3.2 | Enable Master Calendar, Menu, Daily news | ✅ Done |
 | 3.3 | Enable Activities, Special Events, Rainy Day | ✅ Done |
-| 3.4 | Enable Appointments, Incident Reports, Reports | ⬜ |
+| 3.4 | Enable Appointments, Incident Reports, Reports | ✅ Done |
 | 3.5 | Enable Admin (panel, roles, divisions) | ⬜ |
 
 **Exit criteria:** Todd’s listed Nest modules usable on North Shore (with data).
@@ -170,6 +170,13 @@ Incorporate into a **Day Camp** section/dropdown — e.g. Sunshine Report, Trans
 - Web: fixed Special Events refetch on camp switch (`currentCompany?.id` in effect deps).
 - Mobile: permission guards on Activities, Special Events, Rainy Day screens.
 - SQL verify: `supabase/scripts/north_shore_phase_3_3_enable_modules.sql`
+
+**Phase 3.4 notes (Jul 31):**
+- Web: removed overnight-only slug whitelist for Appointments — `appointmentsEnabledForCompany()` in `camps.ts` enables all day camps + legacy overnight slugs.
+- Web: Appointments Report in Reporting Center uses same helper.
+- Incident Reports already company-scoped on web and mobile.
+- Mobile: permission guards on Appointments, Incident Reports, Reports; appointments report option uses shared helper.
+- SQL verify: `supabase/scripts/north_shore_phase_3_4_enable_modules.sql`
 
 ---
 
@@ -286,14 +293,15 @@ Build in this order (Todd priority):
 | Jul 31, 2026 | Phase 3.1 — Camper, Staff, Messages | Phase 3.2 |
 | Jul 31, 2026 | Phase 3.2 — Calendar, Menu, Daily news | Phase 3.3 |
 | Jul 31, 2026 | Phase 3.3 — Activities, Special Events, Rainy Day | Phase 3.4 |
+| Jul 31, 2026 | Phase 3.4 — Appointments, Incident Reports, Reports | Phase 3.5 |
 
 ---
 
 ## Quick reference — what to say each session
 
-**Completed:** Phases 0–2, Phase 3.1–3.3  
-**Previous step:** Phase 3.3 — Activities, Special Events, Rainy Day  
-**Current step:** Phase 3.4 — Appointments, Incident Reports, Reports  
+**Completed:** Phases 0–2, Phase 3.1–3.4  
+**Previous step:** Phase 3.4 — Appointments, Incident Reports, Reports  
+**Current step:** Phase 3.5 — Admin (panel, roles, divisions)  
 **Future:** Phases 5–8  
 
 **Rules:** No step starts without Ansar’s OK. **Web + mobile ship together** for every day-camp step.
