@@ -114,7 +114,7 @@ export default function SpecialEventsActivities() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedDate, selectedSeason]);
+  }, [selectedDate, selectedSeason, currentCompany?.id]);
 
   /** Prefill new-event date from the list filter (left column), including after picking a future day there. */
   useEffect(() => {

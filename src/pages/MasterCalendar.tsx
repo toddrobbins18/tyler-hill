@@ -31,11 +31,18 @@ import {
   TIGER_TIMES_CALENDAR_FIELDS,
   dailyContentFieldValue,
 } from "@/lib/dailyWolfCalendarFields";
+import {
+  loadMasterCalendarColors,
+  readStoredMasterCalendarView,
+  resolveMasterCalendarColor,
+  storeMasterCalendarView,
+  type MasterCalendarEventSource,
+} from "@/lib/masterCalendarColors";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
 
-type EventSource = 'sports_calendar' | 'activities_field_trips' | 'special_events_activities' | 'tiger_times' | 'daily_wolf';
+type EventSource = MasterCalendarEventSource;
 
 interface UnifiedEvent {
   id: string;
@@ -68,7 +75,7 @@ export default function MasterCalendar() {
   const [sortBy, setSortBy] = useState<"date" | "division" | "source">("date");
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
-  const [calendarView, setCalendarView] = useState<View>('month');
+  const [calendarView, setCalendarView] = useState<View>(() => readStoredMasterCalendarView());
   const [currentDate, setCurrentDate] = useState(new Date());
   const calendarContainerRef = useRef<HTMLDivElement>(null);
   const [calendarAutoHeight, setCalendarAutoHeight] = useState(600);
@@ -76,61 +83,7 @@ export default function MasterCalendar() {
   const [selectedEvent, setSelectedEvent] = useState<UnifiedEvent | null>(null);
   const { toast } = useToast();
   // Aggregate colors from individual calendar settings in localStorage
-  const loadAggregatedColors = () => {
-    const defaultColors: Record<string, string> = {
-      "Sports (Default)": "#3b82f6",
-      "Field Trip (Default)": "#22c55e",
-      "Special Event (Default)": "#a855f7",
-      "Tiger Times (Default)": "#f59e0b",
-      // Activity types (activities_field_trips.activity_type) — distinct color per type
-      "field-trip": "#22c55e",
-      "arts-crafts": "#ec4899",
-      "nature": "#16a34a",
-      "water": "#0ea5e9",
-      "outdoor": "#d97706",
-      "cultural": "#8b5cf6",
-      "staff-bus": "#6b7280",
-      "sporting-event": "#3b82f6",
-      "other": "#64748b",
-      "Teen Trip": "#6b7280",
-      "Collegiate Trip": "#14b8a6",
-      "Senior Trip": "#7f1d1d",
-      "Junior Trip": "#9333ea",
-      "Olympics": "#000000",
-      "Wacky Wednesday": "#000000",
-      "Divisional Night": "#bf00ff",
-      "Campus Night": "#4d4dff",
-      "Full Camp": "#ff6600",
-      "Rookie Day": "#22c55e",
-      "Tour": "#000000",
-      "Away (Sports)": "#1e3a5f",
-      "Home (Sports)": "#166534",
-      "Gordon": "#39ff14",
-      "Jacobs": "#39ff14",
-      "Bocian/Melter Bowl": "#39ff14",
-      "TT: Laundry": "#3b82f6",
-      "TT: Phone Calls": "#ef4444",
-      "TT: Movie / Entertainment": "#eab308",
-      "TT: Outside Events": "#eab308",
-      "TT: Staff Days Off": "#93c5fd",
-      "TT: OD Notes": "#ec4899",
-      "Daily Wolf (Default)": "#0ea5e9",
-      "DW: Super OD": "#6366f1",
-      "DW: Quote": "#d97706",
-      "DW: Laundry": "#3b82f6",
-      "DW: Phone Calls": "#ef4444",
-      "DW: Notes": "#a855f7",
-    };
-    const merged = { ...defaultColors };
-    const sources = ["sports-calendar", "activities-field-trips", "special-events", "tiger-times"];
-    sources.forEach((id) => {
-      try {
-        const stored = localStorage.getItem(`calendar-colors-${id}`);
-        if (stored) Object.assign(merged, JSON.parse(stored));
-      } catch {}
-    });
-    return merged;
-  };
+  const loadAggregatedColors = () => loadMasterCalendarColors();
 
   const [customColors, setCustomColors] = useState<Record<string, string>>(loadAggregatedColors);
 
@@ -581,50 +534,23 @@ export default function MasterCalendar() {
   };
 
   const eventPropGetter = (event: any) => {
-    const source = event.resource.source;
-    const subCategory = event.resource.originalData?.sub_category;
-    const eventType = event.resource.originalData?.event_type || event.resource.originalData?.activity_type;
-    const homeAway = event.resource.originalData?.home_away;
+    const source = event.resource.source as EventSource;
+    const finalBg = resolveMasterCalendarColor(source, customColors, event.resource.originalData);
+    const isNeonGreen = finalBg === "#39ff14";
 
-    // Trip colors - use customColors (which includes user overrides)
-    const cc = customColors;
-
-    let bgColor: string | undefined;
-    if (subCategory && cc[subCategory]) bgColor = cc[subCategory];
-    if (!bgColor && eventType && cc[eventType]) bgColor = cc[eventType];
-    // Sports calendar home/away and Gordon/Jacobs/Bocian colors
-    if (source === 'sports_calendar' && (homeAway === 'away' || event.resource.originalData?.event_type === 'Away')) bgColor = cc["Away (Sports)"] || '#1e3a5f';
-    if (source === 'sports_calendar' && (homeAway === 'home' || event.resource.originalData?.event_type === 'Home')) bgColor = cc["Home (Sports)"] || '#166534';
-    if (source === 'sports_calendar' && ['Gordon', 'Jacobs', 'Bocian/Melter Bowl'].includes(event.resource.originalData?.event_type)) bgColor = cc[event.resource.originalData?.event_type] || '#39ff14';
-    // Tiger Times category colors
-    if (source === 'tiger_times') {
-      const ttCategory = event.resource.originalData?.tiger_times_category;
-      if (ttCategory && cc[ttCategory]) bgColor = cc[ttCategory];
-    }
-    if (source === 'daily_wolf') {
-      const dwCategory = event.resource.originalData?.daily_wolf_category;
-      if (dwCategory && cc[dwCategory]) bgColor = cc[dwCategory];
-    }
-
-    const sourceColors: Record<EventSource, string> = {
-      'sports_calendar': cc["Sports (Default)"] || '#3b82f6',
-      'activities_field_trips': cc["Field Trip (Default)"] || '#22c55e',
-      'special_events_activities': cc["Special Event (Default)"] || '#a855f7',
-      'tiger_times': cc["Tiger Times (Default)"] || '#f59e0b',
-      'daily_wolf': cc["Daily Wolf (Default)"] || '#0ea5e9',
-    };
-    
-    const finalBg = bgColor || sourceColors[source];
-    const isNeonGreen = finalBg === '#39ff14';
-    
     return {
       style: {
         backgroundColor: finalBg,
-        color: isNeonGreen ? '#000000' : 'white',
-        borderRadius: '4px',
-        padding: '2px 5px',
-      }
+        color: isNeonGreen ? "#000000" : "white",
+        borderRadius: "4px",
+        padding: "2px 5px",
+      },
     };
+  };
+
+  const handleCalendarViewChange = (view: View) => {
+    setCalendarView(view);
+    storeMasterCalendarView(view);
   };
 
   return (
@@ -840,7 +766,7 @@ export default function MasterCalendar() {
                 endAccessor="end"
                 style={{ height: effectiveCalendarHeight }}
                 view={calendarView}
-                onView={setCalendarView}
+                onView={handleCalendarViewChange}
                 date={currentDate}
                 onNavigate={setCurrentDate}
                 onSelectEvent={(event: any) => setSelectedEvent(event.resource)}
