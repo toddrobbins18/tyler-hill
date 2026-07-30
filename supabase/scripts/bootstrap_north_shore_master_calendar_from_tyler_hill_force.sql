@@ -1,7 +1,5 @@
--- Bootstrap North Shore Master Calendar from Tyler Hill (UAT / demo parity).
--- Copies sports, activities/field trips, and special events for season 2026.
--- Safe to re-run: skips if North Shore already has any calendar rows.
--- Run in Supabase SQL Editor while logged in as service role / SQL editor.
+-- Force re-copy Tyler Hill 2026 calendar → North Shore (replaces existing NS calendar rows).
+-- Run in Supabase SQL Editor when North Shore only has test data and you want Tyler Hill parity.
 
 DO $$
 DECLARE
@@ -10,9 +8,6 @@ DECLARE
   ns_division_id uuid;
   src record;
   new_id uuid;
-  copied_sports int := 0;
-  copied_activities int := 0;
-  copied_special int := 0;
 BEGIN
   SELECT id INTO th_company_id FROM public.companies WHERE slug = 'tyler-hill-camp';
   SELECT id INTO ns_company_id FROM public.companies WHERE slug = 'north-shore-day-camp';
@@ -27,24 +22,16 @@ BEGIN
   ORDER BY d.sort_order NULLS LAST, d.name
   LIMIT 1;
 
-  IF EXISTS (
-    SELECT 1 FROM public.sports_calendar WHERE company_id = ns_company_id
-    UNION ALL
-    SELECT 1 FROM public.activities_field_trips WHERE company_id = ns_company_id
-    UNION ALL
-    SELECT 1 FROM public.special_events_activities WHERE company_id = ns_company_id
-    LIMIT 1
-  ) THEN
-    RAISE NOTICE 'North Shore already has calendar data — bootstrap skipped.';
-    RETURN;
-  END IF;
+  DELETE FROM public.sports_calendar_divisions WHERE company_id = ns_company_id;
+  DELETE FROM public.activities_field_trips_divisions WHERE company_id = ns_company_id;
+  DELETE FROM public.special_events_divisions WHERE company_id = ns_company_id;
+  DELETE FROM public.sports_calendar WHERE company_id = ns_company_id;
+  DELETE FROM public.activities_field_trips WHERE company_id = ns_company_id;
+  DELETE FROM public.special_events_activities WHERE company_id = ns_company_id;
 
-  -- Activities & field trips
   FOR src IN
-    SELECT *
-    FROM public.activities_field_trips
-    WHERE company_id = th_company_id
-      AND (season = '2026' OR season IS NULL)
+    SELECT * FROM public.activities_field_trips
+    WHERE company_id = th_company_id AND (season = '2026' OR season IS NULL)
   LOOP
     new_id := gen_random_uuid();
     INSERT INTO public.activities_field_trips (
@@ -57,21 +44,15 @@ BEGIN
       ns_company_id, COALESCE(src.season, '2026'), src.meal_options, src.meal_notes,
       src.emoji, src.sub_category, src.is_multi_day, src.end_date
     );
-    copied_activities := copied_activities + 1;
-
     IF ns_division_id IS NOT NULL THEN
       INSERT INTO public.activities_field_trips_divisions (activity_id, division_id, company_id)
-      VALUES (new_id, ns_division_id, ns_company_id)
-      ON CONFLICT DO NOTHING;
+      VALUES (new_id, ns_division_id, ns_company_id) ON CONFLICT DO NOTHING;
     END IF;
   END LOOP;
 
-  -- Special events
   FOR src IN
-    SELECT *
-    FROM public.special_events_activities
-    WHERE company_id = th_company_id
-      AND (season = '2026' OR season IS NULL)
+    SELECT * FROM public.special_events_activities
+    WHERE company_id = th_company_id AND (season = '2026' OR season IS NULL)
   LOOP
     new_id := gen_random_uuid();
     INSERT INTO public.special_events_activities (
@@ -82,21 +63,15 @@ BEGIN
       src.location, ns_division_id, src.created_by, ns_company_id,
       COALESCE(src.season, '2026'), src.start_time, src.end_time, src.sub_category, src.emoji
     );
-    copied_special := copied_special + 1;
-
     IF ns_division_id IS NOT NULL THEN
       INSERT INTO public.special_events_divisions (event_id, division_id, company_id)
-      VALUES (new_id, ns_division_id, ns_company_id)
-      ON CONFLICT DO NOTHING;
+      VALUES (new_id, ns_division_id, ns_company_id) ON CONFLICT DO NOTHING;
     END IF;
   END LOOP;
 
-  -- Sports calendar
   FOR src IN
-    SELECT *
-    FROM public.sports_calendar
-    WHERE company_id = th_company_id
-      AND (season = '2026' OR season IS NULL)
+    SELECT * FROM public.sports_calendar
+    WHERE company_id = th_company_id AND (season = '2026' OR season IS NULL)
   LOOP
     new_id := gen_random_uuid();
     INSERT INTO public.sports_calendar (
@@ -110,17 +85,11 @@ BEGIN
       src.opponent, src.home_away, ns_division_id, src.division_provides_coach, src.division_provides_ref,
       src.created_by, ns_company_id, COALESCE(src.season, '2026'), src.meal_options, src.meal_notes, src.emoji
     );
-    copied_sports := copied_sports + 1;
-
     IF ns_division_id IS NOT NULL THEN
       INSERT INTO public.sports_calendar_divisions (sports_event_id, division_id, company_id)
-      VALUES (new_id, ns_division_id, ns_company_id)
-      ON CONFLICT DO NOTHING;
+      VALUES (new_id, ns_division_id, ns_company_id) ON CONFLICT DO NOTHING;
     END IF;
   END LOOP;
-
-  RAISE NOTICE 'Bootstrap complete — sports: %, activities: %, special events: %',
-    copied_sports, copied_activities, copied_special;
 END $$;
 
 SELECT
