@@ -8,11 +8,16 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { Shield, Users, Eye, UserCog, Trophy, Building2, Heart } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { isTimberLakeWestCompany, isTylerHillCamp, shouldShowTigerTimes } from "@/lib/camps";
+import { isTimberLakeWestCompany, isTylerHillCamp, isDayCampCompany, shouldShowTigerTimes } from "@/lib/camps";
+import { getDayCampRolePermissionMenuItems } from "@/lib/dayCampMenu";
 
-type MenuCompany = { slug?: string; name?: string } | null | undefined;
+type MenuCompany = { slug?: string; name?: string; camp_type?: string | null } | null | undefined;
 
 const getCompanyMenuItems = (company?: MenuCompany) => {
+  if (isDayCampCompany(company)) {
+    return getDayCampRolePermissionMenuItems();
+  }
+
   const companySlug = company?.slug;
   const isWest = isTimberLakeWestCompany(company);
   const isCamp = shouldShowTigerTimes(company);

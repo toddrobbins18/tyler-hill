@@ -1,0 +1,50 @@
+import { useParams } from "react-router-dom";
+import DayCampPlaceholder from "./DayCampPlaceholder";
+
+const DAY_CAMP_MODULES: Record<string, { title: string; description: string }> = {
+  "sunshine-report": {
+    title: "Sunshine Report",
+    description:
+      "Daily camper tracking for Nursery Campers division, grouped like Airtable, with P1 email. Waiting on Todd's API.",
+  },
+  "swim-bracelets": {
+    title: "Swim Bracelets",
+    description:
+      "Reports for all campers with group and P1 email. Send only when approved; admins can bulk send.",
+  },
+  "swim-progress": {
+    title: "Swim Progress",
+    description:
+      "Progress tied to division leaders, shown on the child record, with email to the leader on updates.",
+  },
+  "health-center": {
+    title: "Health Center",
+    description:
+      "Day camp health module — separate from sleepaway Nurse. Emails to division leaders and directors when a child is sent home.",
+  },
+  "office-changes": {
+    title: "Office Changes",
+    description: "Schedule changes that notify transportation when entered.",
+  },
+  "parent-portal": {
+    title: "Parent Portal",
+    description:
+      "Parent single sign-on for swim lessons and transportation requests.",
+  },
+};
+
+export default function DayCampModulePage() {
+  const { moduleId } = useParams<{ moduleId: string }>();
+  const config = moduleId ? DAY_CAMP_MODULES[moduleId] : undefined;
+
+  if (!config) {
+    return (
+      <DayCampPlaceholder
+        title="Day Camp"
+        description="This module was not found."
+      />
+    );
+  }
+
+  return <DayCampPlaceholder title={config.title} description={config.description} />;
+}

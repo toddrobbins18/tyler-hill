@@ -21,7 +21,7 @@ import timberLakeCampHero from "@/assets/tember-camp.jpeg";
 import { addDays, format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { isActiveRosterStatus, isBirthdayTodayCalendar, parseBirthdayCalendarParts } from "@/lib/birthdayCalendar";
-import { isTimberLakeCamp, isTimberLakeWestCompany, isTylerHillCamp, shouldShowTigerTimes } from "@/lib/camps";
+import { isTimberLakeCamp, isTimberLakeWestCompany, isTylerHillCamp, isDayCampCompany, shouldShowTigerTimes } from "@/lib/camps";
 import { formatTime12Hour } from "@/lib/utils";
 import { dedupeMenuItemsForDisplay } from "@/lib/csvRosterSync";
 import {
@@ -531,6 +531,7 @@ export default function Dashboard() {
   const showTigerTimes = shouldShowTigerTimes(currentCompany);
   const isTimberLakeWest = isTimberLakeWestCompany(currentCompany);
   const isTylerHill = isTylerHillCamp(currentCompany?.slug);
+  const isDayCamp = isDayCampCompany(currentCompany);
   const hasDashboardAerialBg = isTimberLakeWest || isTylerHill || showTigerTimes;
   const dashboardAerialBgSrc = isTylerHill
     ? tylerHillDashboardBg
@@ -604,7 +605,7 @@ export default function Dashboard() {
       </div>
 
       {!showTigerTimes && !isTylerHill && !isTimberLakeWest && (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <div className={`grid gap-6 md:grid-cols-2 ${isDayCamp ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}>
           <StatCard
             title="Total Children"
             value={stats.totalChildren}
@@ -626,6 +627,7 @@ export default function Dashboard() {
             trend="3 pending review"
             variant="info"
           />
+          {!isDayCamp && (
           <StatCard
             title="Achievements"
             value={stats.weekAwards}
@@ -633,6 +635,7 @@ export default function Dashboard() {
             trend="This week"
             variant="warning"
           />
+          )}
         </div>
       )}
 
@@ -861,7 +864,8 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Athletics Schedule */}
+        {/* Athletics Schedule — overnight camps only */}
+        {!isDayCamp && (
         <Card className={`shadow-card ${glassCardClass}`}>
           <CardHeader className={widgetHeaderClass}>
             <div className="flex min-w-0 items-center gap-2">
@@ -900,6 +904,7 @@ export default function Dashboard() {
             )}
           </CardContent>
         </Card>
+        )}
 
         <SupervisorThreeDayOutlook
           className={glassCardClass}

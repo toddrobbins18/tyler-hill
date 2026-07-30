@@ -21,12 +21,18 @@ import {
 } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { isTimberLakeWestCompany, isTylerHillCamp, shouldShowTigerTimes } from "@/lib/camps";
+import { isTimberLakeWestCompany, isTylerHillCamp, isDayCampCompany, shouldShowTigerTimes } from "@/lib/camps";
+import {
+  getDayCampMainMenuItems,
+  getDayCampMenuPocItemsSorted,
+} from "@/lib/dayCampMenu";
+import { DayCampSidebarMenuList } from "@/components/daycamp/DayCampSidebarMenuList";
+import { useDayCampMenuVisibility } from "@/hooks/useDayCampMenuVisibility";
 
-type MenuCompany = { slug?: string; name?: string } | null | undefined;
+type MenuCompany = { slug?: string; name?: string; camp_type?: string | null } | null | undefined;
 
 // Items that need conditional rendering will be handled in the component
-const getMenuItems = (company?: MenuCompany) => {
+const getOvernightMenuItems = (company?: MenuCompany) => {
   const companySlug = company?.slug;
   const isWest = isTimberLakeWestCompany(company);
   const isCamp = shouldShowTigerTimes(company);
@@ -149,7 +155,31 @@ export function AppSidebar() {
     loading: companyLoading,
   } = useCompany();
 
-  const items = useMemo(() => getMenuItems(currentCompany), [currentCompany?.slug, currentCompany?.name]);
+  const isDayCamp = isDayCampCompany(currentCompany);
+
+  const dayCampMainItems = useMemo(() => getDayCampMainMenuItems(), []);
+  const dayCampPocItems = useMemo(() => getDayCampMenuPocItemsSorted(), []);
+
+  const overnightItems = useMemo(
+    () => getOvernightMenuItems(currentCompany),
+    [currentCompany?.slug, currentCompany?.name, currentCompany?.camp_type],
+  );
+
+  const items = isDayCamp ? dayCampMainItems : overnightItems;
+
+  const permissionOptions = {
+    currentCompany,
+    authLoading,
+    userRolesLength: userRoles.length,
+    isSuperAdmin,
+    hasPagePermission,
+  };
+
+  const visibleItems = useDayCampMenuVisibility(items, permissionOptions);
+  const visibleDayCampPocItems = useDayCampMenuVisibility(
+    isDayCamp ? dayCampPocItems : [],
+    permissionOptions,
+  );
 
   const isAdmin = useMemo(
     () => userRoles.includes("admin") || userRoles.includes("super_admin"),
@@ -157,16 +187,6 @@ export function AppSidebar() {
   );
 
   const showCampSwitcher = availableCompanies.length > 1;
-
-  const visibleItems = useMemo(() => {
-    // While auth/company are still loading, show the full menu (routes are still protected)
-    if (!currentCompany || authLoading || userRoles.length === 0) return items;
-
-    // Super admins see everything
-    if (isSuperAdmin) return items;
-
-    return items.filter((item) => hasPagePermission(currentCompany.id, item.menuId));
-  }, [items, currentCompany?.id, authLoading, userRoles.length, isSuperAdmin, hasPagePermission]);
 
   const handleLogout = async () => {
     sessionStorage.removeItem('viewing_company_id');
@@ -256,6 +276,9 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel>Main Menu</SidebarGroupLabel>
           <SidebarGroupContent>
+            {isDayCamp ? (
+              <DayCampSidebarMenuList items={visibleItems} />
+            ) : (
             <SidebarMenu>
               {visibleItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
@@ -288,8 +311,18 @@ export function AppSidebar() {
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
+            )}
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {isDayCamp && visibleDayCampPocItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Day Camp</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <DayCampSidebarMenuList items={visibleDayCampPocItems} />
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {isAdmin && (
           <SidebarGroup>

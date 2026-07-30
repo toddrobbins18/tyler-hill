@@ -800,17 +800,20 @@ export type Database = {
           campminder_last_sync_at: string | null
           campminder_subscription_key_encrypted: string | null
           campminder_sync_enabled: boolean | null
+          camp_type: string
           created_at: string | null
           id: string
           is_active: boolean
           logo_url: string | null
           name: string
+          owl_pay_enabled: boolean
           slug: string
           theme_color: string
           updated_at: string | null
           zip_code: string | null
         }
         Insert: {
+          camp_type?: string
           campminder_api_key_encrypted?: string | null
           campminder_last_sync_at?: string | null
           campminder_subscription_key_encrypted?: string | null
@@ -820,12 +823,14 @@ export type Database = {
           is_active?: boolean
           logo_url?: string | null
           name: string
+          owl_pay_enabled?: boolean
           slug: string
           theme_color?: string
           updated_at?: string | null
           zip_code?: string | null
         }
         Update: {
+          camp_type?: string
           campminder_api_key_encrypted?: string | null
           campminder_last_sync_at?: string | null
           campminder_subscription_key_encrypted?: string | null
@@ -835,6 +840,7 @@ export type Database = {
           is_active?: boolean
           logo_url?: string | null
           name?: string
+          owl_pay_enabled?: boolean
           slug?: string
           theme_color?: string
           updated_at?: string | null

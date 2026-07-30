@@ -24,6 +24,9 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   // Extract page name from path
   const menuItem = useMemo(() => {
     const path = location.pathname;
+    if (path.startsWith("/day-camp/")) {
+      return path.slice("/day-camp/".length).split("/")[0];
+    }
     let pageName = path.substring(1) || "dashboard";
     pageName = pageName.split('/')[0];
     return routeToMenuMap[pageName] || pageName;

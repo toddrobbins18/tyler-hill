@@ -51,6 +51,7 @@ import Appointments from "./pages/Appointments";
 import NotificationPreferences from "./pages/NotificationPreferences";
 import ElectiveSignUp from "./pages/ElectiveSignUp";
 import OwlPay from "./pages/OwlPay";
+import DayCampModulePage from "./pages/daycamp/DayCampModulePage";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 import UpdatePassword from "./pages/UpdatePassword";
@@ -165,6 +166,7 @@ function AppContent() {
                                 <Route path="/daily-schedule" element={<DailySchedule />} />
                                 <Route path="/elective-signup" element={<ElectiveSignUp />} />
                                 <Route path="/owl-pay" element={<OwlPay />} />
+                                <Route path="/day-camp/:moduleId" element={<DayCampModulePage />} />
                                 <Route path="/notification-preferences" element={<NotificationPreferences />} />
                                 <Route path="*" element={<NotFound />} />
                               </Routes>

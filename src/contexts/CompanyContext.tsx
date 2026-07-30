@@ -11,6 +11,7 @@ interface Company {
   logo_url: string | null;
   theme_color: string;
   zip_code?: string | null;
+  camp_type?: 'overnight' | 'day_camp' | null;
   /** When false, Owl Pay is not offered for this camp (see migration `companies.owl_pay_enabled`). */
   owl_pay_enabled?: boolean | null;
 }
@@ -94,7 +95,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       // Users with multiple role assignments across camps (like Welsford) need to see all their camps
       const profilePromise = supabase
         .from('profiles')
-        .select('company_id, companies(id, name, slug, logo_url, theme_color, zip_code, owl_pay_enabled)')
+        .select('company_id, companies(id, name, slug, logo_url, theme_color, zip_code, owl_pay_enabled, camp_type)')
         .eq('id', user.id)
         .single();
         
@@ -131,7 +132,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       // Only fetch the companies the user has access to (or all if super admin)
       let companiesQuery = supabase
         .from('companies')
-        .select('id, name, slug, logo_url, theme_color, zip_code, owl_pay_enabled')
+        .select('id, name, slug, logo_url, theme_color, zip_code, owl_pay_enabled, camp_type')
         .eq('is_active', true)
         .order('name');
 
