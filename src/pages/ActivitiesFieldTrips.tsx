@@ -121,7 +121,7 @@ export default function ActivitiesFieldTrips() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentSeason]);
+  }, [currentSeason, currentCompany?.id]);
 
   const fetchEvents = async () => {
     // Fetch events and division associations in parallel

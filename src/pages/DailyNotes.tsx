@@ -8,6 +8,11 @@ import { format } from 'date-fns';
 import { usePermissions } from '@/hooks/usePermissions';
 import { isActiveRosterStatus, isBirthdayTodayCalendar } from '@/lib/birthdayCalendar';
 import { formatTime12Hour } from '@/lib/utils';
+import {
+  getDailyNewsCampLabel,
+  getDailyNewsPrintHeadline,
+  getDailyNewsSubtitle,
+} from '@/lib/camps';
 
 interface BirthdayRow {
   id: string;
@@ -202,13 +207,9 @@ export default function DailyNotes() {
   };
 
   const today = format(new Date(), 'EEEE, MMMM d, yyyy');
-  const campName =
-    currentCompany?.slug === 'tyler-hill-camp'
-      ? 'Tyler Hill'
-      : currentCompany?.slug === 'timber-lake-west'
-        ? 'Timber Lake West'
-        : 'Timber Lake Camp';
-  const campSubtitle = currentCompany?.slug === 'tyler-hill-camp' ? 'HOME OF THE BEARS' : '';
+  const campName = getDailyNewsCampLabel(currentCompany);
+  const campSubtitle = getDailyNewsSubtitle(currentCompany);
+  const printHeadline = getDailyNewsPrintHeadline(currentCompany);
 
   return (
     <div className="container mx-auto p-4">
@@ -334,7 +335,7 @@ export default function DailyNotes() {
       <div className="print-content">
         {/* Newspaper Header */}
         <div className="newspaper-header">
-          <div className="newspaper-title">{campName.toUpperCase()} DAILY NEWS</div>
+          <div className="newspaper-title">{printHeadline}</div>
           {campSubtitle && <div className="newspaper-subtitle">{campSubtitle}</div>}
           <div className="newspaper-date">{today}</div>
         </div>

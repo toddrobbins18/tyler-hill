@@ -162,7 +162,7 @@ export default function MasterCalendar() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentSeason]);
+  }, [currentSeason, currentCompany?.id]);
 
   useEffect(() => {
     const updateCalendarHeight = () => {

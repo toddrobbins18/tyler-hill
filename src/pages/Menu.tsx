@@ -79,7 +79,7 @@ export default function Menu() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [selectedSeason]);
+  }, [selectedSeason, currentCompany?.id]);
 
   const fetchMenuItems = async () => {
     if (!currentCompany?.id) {

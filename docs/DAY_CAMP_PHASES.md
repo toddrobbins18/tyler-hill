@@ -144,13 +144,26 @@ Incorporate into a **Day Camp** section/dropdown — e.g. Sunshine Report, Trans
 
 | Step | Description | Status |
 |------|-------------|--------|
-| 3.1 | Enable Camper, Staff, Messages | ⬜ |
-| 3.2 | Enable Master Calendar, Menu, Daily news | ⬜ |
+| 3.1 | Enable Camper, Staff, Messages | ✅ Done |
+| 3.2 | Enable Master Calendar, Menu, Daily news | ✅ Done |
 | 3.3 | Enable Activities, Special Events, Rainy Day | ⬜ |
 | 3.4 | Enable Appointments, Incident Reports, Reports | ⬜ |
 | 3.5 | Enable Admin (panel, roles, divisions) | ⬜ |
 
 **Exit criteria:** Todd’s listed Nest modules usable on North Shore (with data).
+
+**Phase 3.1 notes (Jul 31):**
+- Camper (`/roster`), Staff, Messages already company-scoped on web — no slug hardcoding.
+- Mobile: added `useMenuAccess` + `MenuPermissionGate` (parity with web `ProtectedRoute`).
+- SQL: `supabase/scripts/north_shore_phase_3_1_enable_modules.sql` — division_leader Staff access + verify queries.
+- **Your action:** Run Phase 3.1 SQL if foundation was already applied; assign users to North Shore via `user_roles`.
+- Pages work empty until Phase 5 data import or CSV bootstrap.
+
+**Phase 3.2 notes (Jul 31):**
+- Master Calendar, Menu, Daily news already company-scoped — no slug blocks.
+- Web/mobile: Daily news branding uses `company.name` for day camps (was defaulting to Tyler Hill / Timber Lake).
+- Mobile: permission guards on Calendar, Menu, Daily news; Bear PDFs hidden except Tyler Hill.
+- SQL verify: `supabase/scripts/north_shore_phase_3_2_enable_modules.sql`
 
 ---
 
@@ -264,14 +277,16 @@ Build in this order (Todd priority):
 | Jul 31, 2026 | Phase 0 — planning docs | — |
 | Jul 31, 2026 | Phase 1 — migration run + foundation | Phase 2 UI shell |
 | Jul 31, 2026 | Phase 2 — day camp UI shell | Phase 3 / 4 (with permission) |
+| Jul 31, 2026 | Phase 3.1 — Camper, Staff, Messages | Phase 3.2 |
+| Jul 31, 2026 | Phase 3.2 — Calendar, Menu, Daily news | Phase 3.3 |
 
 ---
 
 ## Quick reference — what to say each session
 
-**Completed:** Phases 0–2  
-**Previous step:** Day camp UI shell (sidebar, dashboard, placeholders)  
-**Current step:** Phase 3 — verify Nest carryover on North Shore, then Phase 4 — Sunshine Report  
+**Completed:** Phases 0–2, Phase 3.1–3.2  
+**Previous step:** Phase 3.2 — Master Calendar, Menu, Daily news  
+**Current step:** Phase 3.3 — Activities, Special Events, Rainy Day  
 **Future:** Phases 5–8  
 
 **Rules:** No step starts without Ansar’s OK. **Web + mobile ship together** for every day-camp step.

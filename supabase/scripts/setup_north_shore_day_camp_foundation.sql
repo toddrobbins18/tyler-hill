@@ -120,6 +120,7 @@ BEGIN
     (ns_company_id, 'division_leader', 'notes', true),
     (ns_company_id, 'division_leader', 'rainy-day', true),
     (ns_company_id, 'division_leader', 'roster', true),
+    (ns_company_id, 'division_leader', 'staff', true),
     (ns_company_id, 'division_leader', 'special-events', true),
     (ns_company_id, 'division_leader', 'sunshine-report', true),
     (ns_company_id, 'division_leader', 'swim-progress', true),

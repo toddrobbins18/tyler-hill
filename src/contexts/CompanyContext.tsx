@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { applyThemeColor } from '@/utils/themeUtils';
 import { useAuth } from './AuthContext';
+import { invalidateCampScopedQueries } from '@/lib/queryClient';
 
 interface Company {
   id: string;
@@ -229,6 +230,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       
       // Update state synchronously
       setCurrentCompany(company);
+      invalidateCampScopedQueries();
       
       // Apply theme color immediately
       if (company.theme_color) {

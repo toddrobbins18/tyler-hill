@@ -1,4 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -9,7 +10,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { SeasonProvider } from "@/contexts/SeasonContext";
-import { CompanyProvider } from "@/contexts/CompanyContext";
+import { CompanyProvider, useCompany } from "@/contexts/CompanyContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useSessionInitialization } from "@/hooks/useSessionInitialization";
 import { useEffect } from "react";
@@ -58,24 +59,6 @@ import UpdatePassword from "./pages/UpdatePassword";
 import Privacy from "./pages/Privacy";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      // Reduce stale cross-screen data without changing product workflows.
-      staleTime: 5000,
-      gcTime: 5 * 60 * 1000,
-      refetchOnWindowFocus: true,
-      refetchOnReconnect: true,
-      refetchInterval: 15000,
-      refetchIntervalInBackground: false,
-      retry: 1,
-    },
-    mutations: {
-      retry: 1,
-    },
-  },
-});
-
 // Hook to handle password recovery redirects at app level
 function usePasswordRecoveryRedirect() {
   const navigate = useNavigate();
@@ -99,6 +82,54 @@ function usePasswordRecoveryRedirect() {
 
     return () => subscription.unsubscribe();
   }, [navigate, location.pathname]);
+}
+
+function CompanyScopedMainRoutes() {
+  const { currentCompany } = useCompany();
+
+  return (
+    <Routes key={currentCompany?.id ?? "no-company"}>
+      <Route path="/" element={<Dashboard />} />
+      <Route path="/roster" element={<Roster />} />
+      <Route path="/staff" element={<Staff />} />
+      <Route path="/staff/:id" element={<StaffProfile />} />
+      <Route path="/menu" element={<Menu />} />
+      <Route path="/special-meals" element={<SpecialMeals />} />
+      <Route path="/rainy-day" element={<RainyDaySchedule />} />
+      <Route path="/evaluation-questions" element={<EvaluationQuestions />} />
+      <Route path="/role-permissions" element={<RolePermissions />} />
+      <Route path="/division-permissions" element={<DivisionPermissions />} />
+      <Route path="/specialist-sport-assignments" element={<SpecialistSportAssignments />} />
+      <Route path="/transportation" element={<Transportation />} />
+      <Route path="/notes" element={<DailyNotes />} />
+      <Route path="/daily-wolf-printable" element={<DailyWolfPrintable />} />
+      <Route path="/daily-wolf-management" element={<DailyWolfManagement />} />
+      <Route path="/calendar" element={<MasterCalendar />} />
+      <Route path="/athletics" element={<SportsCalendar />} />
+      <Route path="/activities" element={<ActivitiesFieldTrips />} />
+      <Route path="/special-events" element={<SpecialEventsActivities />} />
+      <Route path="/tutoring-therapy" element={<TutoringTherapy />} />
+      <Route path="/messages" element={<Messages />} />
+      <Route path="/child/:id" element={<ChildProfile />} />
+      <Route path="/admin" element={<Admin />} />
+      <Route path="/user-approvals" element={<UserApprovals />} />
+      <Route path="/awards" element={<Awards />} />
+      <Route path="/incidents" element={<IncidentReports />} />
+      <Route path="/nurse" element={<Nurse />} />
+      <Route path="/sports-academy" element={<SportsAcademy />} />
+      <Route path="/sports-academy-calendar" element={<SportsAcademyCalendar />} />
+      <Route path="/reports" element={<Reports />} />
+      <Route path="/roster-templates" element={<RosterTemplates />} />
+      <Route path="/od-management" element={<ODManagement />} />
+      <Route path="/appointments" element={<Appointments />} />
+      <Route path="/daily-schedule" element={<DailySchedule />} />
+      <Route path="/elective-signup" element={<ElectiveSignUp />} />
+      <Route path="/owl-pay" element={<OwlPay />} />
+      <Route path="/day-camp/:moduleId" element={<DayCampModulePage />} />
+      <Route path="/notification-preferences" element={<NotificationPreferences />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
 }
 
 function AppContent() {
@@ -129,47 +160,7 @@ function AppContent() {
                               </div>
                             </header>
                             <main className="flex-1 p-6 md:p-8 bg-background">
-                              <Routes>
-                                <Route path="/" element={<Dashboard />} />
-                                <Route path="/roster" element={<Roster />} />
-                                <Route path="/staff" element={<Staff />} />
-                                <Route path="/staff/:id" element={<StaffProfile />} />
-                                <Route path="/menu" element={<Menu />} />
-                                <Route path="/special-meals" element={<SpecialMeals />} />
-                                <Route path="/rainy-day" element={<RainyDaySchedule />} />
-                                <Route path="/evaluation-questions" element={<EvaluationQuestions />} />
-                                <Route path="/role-permissions" element={<RolePermissions />} />
-                                <Route path="/division-permissions" element={<DivisionPermissions />} />
-                                <Route path="/specialist-sport-assignments" element={<SpecialistSportAssignments />} />
-                                <Route path="/transportation" element={<Transportation />} />
-                                <Route path="/notes" element={<DailyNotes />} />
-                                <Route path="/daily-wolf-printable" element={<DailyWolfPrintable />} />
-                                <Route path="/daily-wolf-management" element={<DailyWolfManagement />} />
-                                <Route path="/calendar" element={<MasterCalendar />} />
-                                <Route path="/athletics" element={<SportsCalendar />} />
-                                <Route path="/activities" element={<ActivitiesFieldTrips />} />
-                                <Route path="/special-events" element={<SpecialEventsActivities />} />
-                                <Route path="/tutoring-therapy" element={<TutoringTherapy />} />
-                                <Route path="/messages" element={<Messages />} />
-                                <Route path="/child/:id" element={<ChildProfile />} />
-                                <Route path="/admin" element={<Admin />} />
-                                <Route path="/user-approvals" element={<UserApprovals />} />
-                                <Route path="/awards" element={<Awards />} />
-                                <Route path="/incidents" element={<IncidentReports />} />
-                                <Route path="/nurse" element={<Nurse />} />
-                                <Route path="/sports-academy" element={<SportsAcademy />} />
-                                <Route path="/sports-academy-calendar" element={<SportsAcademyCalendar />} />
-                                <Route path="/reports" element={<Reports />} />
-                                <Route path="/roster-templates" element={<RosterTemplates />} />
-                                <Route path="/od-management" element={<ODManagement />} />
-                                <Route path="/appointments" element={<Appointments />} />
-                                <Route path="/daily-schedule" element={<DailySchedule />} />
-                                <Route path="/elective-signup" element={<ElectiveSignUp />} />
-                                <Route path="/owl-pay" element={<OwlPay />} />
-                                <Route path="/day-camp/:moduleId" element={<DayCampModulePage />} />
-                                <Route path="/notification-preferences" element={<NotificationPreferences />} />
-                                <Route path="*" element={<NotFound />} />
-                              </Routes>
+                              <CompanyScopedMainRoutes />
                             </main>
                           </div>
                         </div>
