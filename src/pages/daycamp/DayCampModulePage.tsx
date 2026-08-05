@@ -4,6 +4,8 @@ import SunshineReport from "./SunshineReport";
 import OfficeTransportChanges from "./OfficeTransportChanges";
 import SwimProgram from "./SwimProgram";
 
+import Nurse from "./Nurse";
+
 const DAY_CAMP_MODULES: Record<string, { title: string; description: string }> = {
   "sunshine-report": {
     title: "Sunshine Report",
@@ -14,10 +16,9 @@ const DAY_CAMP_MODULES: Record<string, { title: string; description: string }> =
     title: "Swim",
     description: "Swim Bracelets and Level Reports.",
   },
-  "health-center": {
-    title: "Health Center",
-    description:
-      "Day camp health module — separate from sleepaway Nurse. Emails to division leaders and directors when a child is sent home.",
+  "nurse": {
+    title: "Nurse",
+    description: "Track incidents and treatments.",
   },
   "office-changes": {
     title: "Office Changes",
@@ -53,6 +54,10 @@ export default function DayCampModulePage() {
 
   if (moduleId === "swim") {
     return <SwimProgram />;
+  }
+
+  if (moduleId === "nurse") {
+    return <Nurse />;
   }
 
   return <DayCampPlaceholder title={config.title} description={config.description} />;

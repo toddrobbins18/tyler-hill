@@ -40,7 +40,7 @@ export function getDayCampNestCarryoverItems(): DayCampMenuItem[] {
     { title: "Master Calendar", url: "/calendar", icon: Calendar, menuId: "calendar" },
     { title: "Menu", url: "/menu", icon: Utensils, menuId: "menu" },
     { title: "Messages", url: "/messages", icon: Mail, menuId: "messages" },
-    { title: "Health Center", url: "/day-camp/health-center", icon: HeartPulse, menuId: "health-center" },
+    { title: "Health Center", url: "/day-camp/nurse", icon: HeartPulse, menuId: "nurse" },
     { title: "Rainy Day Schedule", url: "/rainy-day", icon: CloudRain, menuId: "rainy-day" },
     { title: "Special Events", url: "/special-events", icon: Calendar, menuId: "special-events" },
     { title: "Staff", url: "/staff", icon: UserCog, menuId: "staff" },
