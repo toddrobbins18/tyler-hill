@@ -55,8 +55,7 @@ export function getDayCampPocItems(): DayCampMenuItem[] {
     { title: "Sunshine Report", url: "/day-camp/sunshine-report", icon: Sun, menuId: "sunshine-report" },
     { title: "Transportation", url: "/transportation", icon: Truck, menuId: "transportation" },
     { title: "Office Changes", url: "/day-camp/office-changes", icon: ClipboardEdit, menuId: "office-changes" },
-    { title: "Swim Bracelets", url: "/day-camp/swim-bracelets", icon: Waves, menuId: "swim-bracelets" },
-    { title: "Swim Progress", url: "/day-camp/swim-progress", icon: FileBarChart, menuId: "swim-progress" },
+    { title: "Swim", url: "/day-camp/swim", icon: Waves, menuId: "swim" },
     { title: "Parent Portal", url: "/day-camp/parent-portal", icon: UserCircle, menuId: "parent-portal" },
   ];
 }

@@ -2,6 +2,7 @@ import { useParams } from "react-router-dom";
 import DayCampPlaceholder from "./DayCampPlaceholder";
 import SunshineReport from "./SunshineReport";
 import OfficeTransportChanges from "./OfficeTransportChanges";
+import SwimProgram from "./SwimProgram";
 
 const DAY_CAMP_MODULES: Record<string, { title: string; description: string }> = {
   "sunshine-report": {
@@ -9,15 +10,9 @@ const DAY_CAMP_MODULES: Record<string, { title: string; description: string }> =
     description:
       "Daily camper tracking for Nursery Campers division, grouped like Airtable, with P1 email. Waiting on Todd's API.",
   },
-  "swim-bracelets": {
-    title: "Swim Bracelets",
-    description:
-      "Reports for all campers with group and P1 email. Send only when approved; admins can bulk send.",
-  },
-  "swim-progress": {
-    title: "Swim Progress",
-    description:
-      "Progress tied to division leaders, shown on the child record, with email to the leader on updates.",
+  "swim": {
+    title: "Swim",
+    description: "Swim Bracelets and Level Reports.",
   },
   "health-center": {
     title: "Health Center",
@@ -54,6 +49,10 @@ export default function DayCampModulePage() {
 
   if (moduleId === "office-changes") {
     return <OfficeTransportChanges />;
+  }
+
+  if (moduleId === "swim") {
+    return <SwimProgram />;
   }
 
   return <DayCampPlaceholder title={config.title} description={config.description} />;
