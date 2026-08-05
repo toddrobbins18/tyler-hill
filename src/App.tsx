@@ -154,8 +154,8 @@ function AppContent() {
                           <AppSidebar />
                           <div className="flex-1 flex flex-col">
                             <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-4 border-b bg-background/95 backdrop-blur px-6">
-                              <SidebarTrigger />
-                              <div className="flex-1 flex items-center justify-center max-w-2xl mx-auto">
+                              <div className="flex items-center gap-4 flex-1">
+                                <SidebarTrigger />
                                 <GlobalSearch />
                               </div>
                               <div className="flex items-center gap-1">
