@@ -16,6 +16,7 @@ import { useSessionInitialization } from "@/hooks/useSessionInitialization";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import Dashboard from "./pages/Dashboard";
+import Bunking from "./pages/Bunking";
 import Roster from "./pages/Roster";
 import Staff from "./pages/Staff";
 import StaffProfile from "./pages/StaffProfile";
@@ -91,6 +92,7 @@ function CompanyScopedMainRoutes() {
   return (
     <Routes key={currentCompany?.id ?? "no-company"}>
       <Route path="/" element={<Dashboard />} />
+      <Route path="/day-camp/bunking" element={<Bunking />} />
       <Route path="/roster" element={<Roster />} />
       <Route path="/staff" element={<Staff />} />
       <Route path="/staff/:id" element={<StaffProfile />} />

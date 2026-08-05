@@ -18,6 +18,7 @@ import {
   Stethoscope,
   AlertTriangle,
   UserCircle,
+  BedDouble,
 } from "lucide-react";
 
 export type DayCampMenuItem = {
@@ -49,6 +50,7 @@ export function getDayCampNestCarryoverItems(): DayCampMenuItem[] {
 /** Nest 2.0 / Airtable POC — Day Camp features (Jul 30 North Shore priorities). */
 export function getDayCampPocItems(): DayCampMenuItem[] {
   return [
+    { title: "Bunking", url: "/day-camp/bunking", icon: BedDouble, menuId: "bunking" },
     { title: "Sunshine Report", url: "/day-camp/sunshine-report", icon: Sun, menuId: "sunshine-report" },
     { title: "Transportation", url: "/transportation", icon: Truck, menuId: "transportation" },
     { title: "Office Changes", url: "/day-camp/office-changes", icon: ClipboardEdit, menuId: "office-changes" },
