@@ -51,6 +51,7 @@ export function getDayCampNestCarryoverItems(): DayCampMenuItem[] {
 export function getDayCampPocItems(): DayCampMenuItem[] {
   return [
     { title: "Bunking", url: "/day-camp/bunking", icon: BedDouble, menuId: "bunking" },
+    { title: "Swim Lessons", url: "/day-camp/swim-lessons", icon: Waves, menuId: "swim-lessons" },
     { title: "Sunshine Report", url: "/day-camp/sunshine-report", icon: Sun, menuId: "sunshine-report" },
     { title: "Transportation", url: "/transportation", icon: Truck, menuId: "transportation" },
     { title: "Office Changes", url: "/day-camp/office-changes", icon: ClipboardEdit, menuId: "office-changes" },
