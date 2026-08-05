@@ -197,10 +197,10 @@ Build in this order (Todd priority):
 
 | Step | Description | Status |
 |------|-------------|--------|
-| 4A.1 | Sunshine UI — Nursery Campers division only | ⬜ |
-| 4A.2 | Groups sorted like Airtable | ⬜ |
-| 4A.3 | Pull P1 Email per camper | ⬜ |
-| 4A.4 | API / import integration (when Todd provides) | ⬜ |
+| 4A.1 | Sunshine UI — Nursery Campers division only | ✅ Written |
+| 4A.2 | Groups sorted like Airtable | ✅ Written |
+| 4A.3 | Pull P1 Email per camper | ✅ Written |
+| 4A.4 | API / import integration (when Todd provides) | ⏳ Pending |
 
 ### 4B — Swim Bracelets report
 
@@ -304,6 +304,7 @@ Build in this order (Todd priority):
 | Jul 31, 2026 | Phase 3.3 — Activities, Special Events, Rainy Day | Phase 3.4 |
 | Jul 31, 2026 | Phase 3.4 — Appointments, Incident Reports, Reports | Phase 3.5 |
 | Jul 31, 2026 | Phase 3.5 — Admin (panel, roles, divisions) | Phase 4 |
+| Aug 5, 2026 | Phase 4A — Sunshine Report (UI built) | 4A.4 API integration |
 
 ---
 

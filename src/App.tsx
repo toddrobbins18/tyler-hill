@@ -57,6 +57,7 @@ import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 import UpdatePassword from "./pages/UpdatePassword";
 import Privacy from "./pages/Privacy";
+import { GlobalSearch } from "@/components/GlobalSearch";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // Hook to handle password recovery redirects at app level
@@ -154,6 +155,9 @@ function AppContent() {
                           <div className="flex-1 flex flex-col">
                             <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-4 border-b bg-background/95 backdrop-blur px-6">
                               <SidebarTrigger />
+                              <div className="flex-1 flex items-center justify-center max-w-2xl mx-auto">
+                                <GlobalSearch />
+                              </div>
                               <div className="flex items-center gap-1">
                                 <NotificationBell />
                                 <UserProfileDropdown />

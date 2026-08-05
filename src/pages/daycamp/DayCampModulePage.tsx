@@ -1,5 +1,7 @@
 import { useParams } from "react-router-dom";
 import DayCampPlaceholder from "./DayCampPlaceholder";
+import SunshineReport from "./SunshineReport";
+import OfficeTransportChanges from "./OfficeTransportChanges";
 
 const DAY_CAMP_MODULES: Record<string, { title: string; description: string }> = {
   "sunshine-report": {
@@ -44,6 +46,14 @@ export default function DayCampModulePage() {
         description="This module was not found."
       />
     );
+  }
+
+  if (moduleId === "sunshine-report") {
+    return <SunshineReport />;
+  }
+
+  if (moduleId === "office-changes") {
+    return <OfficeTransportChanges />;
   }
 
   return <DayCampPlaceholder title={config.title} description={config.description} />;
