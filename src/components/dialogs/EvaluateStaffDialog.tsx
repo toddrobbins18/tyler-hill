@@ -14,6 +14,7 @@ import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { dedupeEvaluationQuestions, staffTypesForEvaluation } from "@/lib/evaluationQuestions";
 
 interface EvaluateStaffDialogProps {
   open: boolean;
@@ -104,12 +105,8 @@ export function EvaluateStaffDialog({
       }
     }
 
-    const staffTypes: string[] = [];
-    if (staffType === "both") {
-      staffTypes.push("general_counselor", "specialist");
-    } else if (staffType) {
-      staffTypes.push(staffType);
-    }
+    const staffTypes = staffTypesForEvaluation(staffType);
+    if (staffTypes.length === 0) return;
 
     const { data: questionsData, error } = await supabase
       .from("evaluation_questions")
@@ -145,6 +142,8 @@ export function EvaluateStaffDialog({
         }
       }
     }
+
+    filteredQuestions = dedupeEvaluationQuestions(filteredQuestions);
 
     setQuestions(filteredQuestions);
     

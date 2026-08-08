@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCompany } from "@/contexts/CompanyContext";
 import { isTylerHillCamp } from "@/lib/camps";
+import { dedupeEvaluationQuestions, evaluationQuestionKey } from "@/lib/evaluationQuestions";
 import { Plus, Pencil, Trash2, ClipboardList, Shield, Building2, Upload, ChevronDown, ChevronUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -64,6 +65,16 @@ export default function EvaluationQuestions() {
     }
     setQuestions(data || []);
     setLoading(false);
+  };
+
+  const loadExistingQuestionKeys = async () => {
+    const { data } = await supabase
+      .from("evaluation_questions")
+      .select("question_text, evaluated_by, category")
+      .eq("company_id", currentCompany?.id)
+      .eq("is_active", true);
+
+    return new Set((data || []).map((q) => evaluationQuestionKey(q)));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -151,6 +162,8 @@ export default function EvaluationQuestions() {
     if (!isTylerHillCamp(currentCompany?.slug)) return;
     
     setImporting(true);
+    const existingKeys = await loadExistingQuestionKeys();
+    let added = 0;
     const specialistQuestions = [
       { text: "Complies with camp rules and policies (rules/standards/routines/curfew/language/uniform/etc.)", guidance: "• Ensures cell phone usage is not visible to campers\n• Signs in for curfew, on time\n• Models appropriate language, behavior, and dress code\n• Follows rest hour / quiet time procedures", category: "Professionalism", evaluator: "Division Leader", order: 1 },
       { text: "Cooperates with Division Leader and other staff members", guidance: "• Maintains positive, professional relationships with staff\n• Willingly assists peers when help is needed\n• Participates constructively in staff meetings\n• Respects Division Leader's decisions and direction", category: "Teamwork", evaluator: "Division Leader", order: 2 },
@@ -167,6 +180,13 @@ export default function EvaluationQuestions() {
     ];
 
     for (const q of specialistQuestions) {
+      const key = evaluationQuestionKey({
+        question_text: q.text,
+        evaluated_by: q.evaluator,
+        category: q.category,
+      });
+      if (existingKeys.has(key)) continue;
+
       await supabase.from("evaluation_questions").insert({
         question_text: q.text,
         question_type: "rating",
@@ -178,9 +198,14 @@ export default function EvaluationQuestions() {
         guidance_text: q.guidance,
         display_order: q.order,
       });
+      existingKeys.add(key);
+      added += 1;
     }
 
-    toast({ title: "Specialist evaluation imported", description: "12 questions added successfully" });
+    toast({
+      title: "Specialist evaluation imported",
+      description: added > 0 ? `${added} question(s) added` : "All specialist questions already exist",
+    });
     setImporting(false);
     fetchQuestions();
   };
@@ -189,6 +214,8 @@ export default function EvaluationQuestions() {
     if (!isTylerHillCamp(currentCompany?.slug)) return;
     
     setImporting(true);
+    const existingKeys = await loadExistingQuestionKeys();
+    let added = 0;
     const counselorQuestions = [
       { text: "Complies with camp rules and policies (rules/standards/routines/curfew/language/uniform/etc.)", guidance: "• Ensures cell phone usage is not visible to campers\n• Signs in for curfew, on time\n• Models appropriate language, behavior, and dress code\n• Follows rest hour / quiet time procedures", category: "Professionalism", order: 1 },
       { text: "Cooperates with Division Leader and other staff members", guidance: "• Maintains positive, professional relationships with staff\n• Willingly assists peers when help is needed\n• Participates constructively in staff meetings\n• Respects Division Leader's decisions and direction", category: "Teamwork", order: 2 },
@@ -203,6 +230,13 @@ export default function EvaluationQuestions() {
     ];
 
     for (const q of counselorQuestions) {
+      const key = evaluationQuestionKey({
+        question_text: q.text,
+        evaluated_by: "Division Leader",
+        category: q.category,
+      });
+      if (existingKeys.has(key)) continue;
+
       await supabase.from("evaluation_questions").insert({
         question_text: q.text,
         question_type: "rating",
@@ -214,14 +248,19 @@ export default function EvaluationQuestions() {
         guidance_text: q.guidance,
         display_order: q.order,
       });
+      existingKeys.add(key);
+      added += 1;
     }
 
-    toast({ title: "General counselor evaluation imported", description: "10 questions added successfully" });
+    toast({
+      title: "General counselor evaluation imported",
+      description: added > 0 ? `${added} question(s) added` : "All general counselor questions already exist",
+    });
     setImporting(false);
     fetchQuestions();
   };
 
-  const groupedQuestions = questions.reduce((acc, question) => {
+  const groupedQuestions = dedupeEvaluationQuestions(questions).reduce((acc, question) => {
     const staffType = question.staff_type || "both";
     const category = question.category || "Uncategorized";
     const key = `${staffType}:${category}`;

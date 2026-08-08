@@ -640,7 +640,7 @@ export default function Dashboard() {
       )}
 
       {/* Unified Dashboard Grid */}
-      <DashboardWidgetGrid balanced={hasDashboardAerialBg}>
+      <DashboardWidgetGrid>
 
         {/* Weather Widget */}
         {currentCompany?.zip_code && (
