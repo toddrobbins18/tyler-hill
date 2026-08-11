@@ -56,7 +56,7 @@ export function getDayCampPocItems(): DayCampMenuItem[] {
     { title: "Media", url: "/day-camp/media", icon: Camera, menuId: "media" },
     { title: "Swim Lessons", url: "/day-camp/swim-lessons", icon: Waves, menuId: "swim-lessons" },
     { title: "Sunshine Report", url: "/day-camp/sunshine-report", icon: Sun, menuId: "sunshine-report" },
-    { title: "Transportation", url: "/transportation", icon: Truck, menuId: "transportation" },
+    { title: "Transportation", url: "/day-camp/transport", icon: Truck, menuId: "transport" },
     { title: "Office Changes", url: "/day-camp/office-changes", icon: ClipboardEdit, menuId: "office-changes" },
     { title: "Swim", url: "/day-camp/swim", icon: Waves, menuId: "swim" },
   ];

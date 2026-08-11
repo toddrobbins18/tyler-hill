@@ -1,6 +1,7 @@
 import { useParams } from "react-router-dom";
 import DayCampPlaceholder from "./DayCampPlaceholder";
 import SunshineReport from "./SunshineReport";
+import Transport from "./Transport";
 import OfficeTransportChanges from "./OfficeTransportChanges";
 import SwimProgram from "./SwimProgram";
 
@@ -19,6 +20,10 @@ const DAY_CAMP_MODULES: Record<string, { title: string; description: string }> =
   "nurse": {
     title: "Nurse",
     description: "Track incidents and treatments.",
+  },
+  "transport": {
+    title: "Transport",
+    description: "Bus routes, maps, coordination, and travel reports",
   },
   "office-changes": {
     title: "Office Changes",
@@ -41,6 +46,10 @@ export default function DayCampModulePage() {
 
   if (moduleId === "sunshine-report") {
     return <SunshineReport />;
+  }
+
+  if (moduleId === "transport") {
+    return <Transport />;
   }
 
   if (moduleId === "office-changes") {
