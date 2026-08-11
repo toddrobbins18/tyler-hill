@@ -160,3 +160,13 @@ All colors MUST be HSL.
 .rbc-row-content-scrollable .rbc-row-content-scroll-container {
   overflow-y: auto !important;
 }
+
+@layer utilities {
+  .page-header {
+    @apply text-2xl font-bold tracking-tight text-foreground;
+  }
+
+  .page-subheader {
+    @apply text-sm text-muted-foreground mt-0.5;
+  }
+}

@@ -17,6 +17,7 @@ import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import Dashboard from "./pages/Dashboard";
 import Hiring from "./pages/Hiring";
+import Media from "./pages/Media";
 import Bunking from "./pages/Bunking";
 import SwimLessons from "./pages/daycamp/SwimLessons";
 import Roster from "./pages/Roster";
@@ -97,6 +98,8 @@ function CompanyScopedMainRoutes() {
       <Route path="/day-camp/bunking" element={<Bunking />} />
       <Route path="/day-camp/hiring" element={<Hiring />} />
       <Route path="/hiring" element={<Hiring />} />
+      <Route path="/day-camp/media" element={<Media />} />
+      <Route path="/media" element={<Media />} />
       <Route path="/day-camp/swim-lessons" element={<SwimLessons />} />
       <Route path="/roster" element={<Roster />} />
       <Route path="/staff" element={<Staff />} />

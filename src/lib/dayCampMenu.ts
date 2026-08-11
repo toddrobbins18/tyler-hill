@@ -20,6 +20,7 @@ import {
   UserCircle,
   Briefcase,
   BedDouble,
+  Camera,
 } from "lucide-react";
 
 export type DayCampMenuItem = {
@@ -53,6 +54,7 @@ export function getDayCampPocItems(): DayCampMenuItem[] {
   return [
     { title: "Bunking", url: "/day-camp/bunking", icon: BedDouble, menuId: "bunking" },
     { title: "Hiring", url: "/day-camp/hiring", icon: Briefcase, menuId: "hiring" },
+    { title: "Media", url: "/day-camp/media", icon: Camera, menuId: "media" },
     { title: "Swim Lessons", url: "/day-camp/swim-lessons", icon: Waves, menuId: "swim-lessons" },
     { title: "Sunshine Report", url: "/day-camp/sunshine-report", icon: Sun, menuId: "sunshine-report" },
     { title: "Transportation", url: "/transportation", icon: Truck, menuId: "transportation" },
