@@ -10,7 +10,7 @@ const DAY_CAMP_MODULES: Record<string, { title: string; description: string }> =
   "sunshine-report": {
     title: "Sunshine Report",
     description:
-      "Daily camper tracking for Nursery Campers division, grouped like Airtable, with P1 email. Waiting on Todd's API.",
+      "Daily camper tracking — fill out throughout the day, then send to parents at the end of day.",
   },
   "swim": {
     title: "Swim",
@@ -23,11 +23,6 @@ const DAY_CAMP_MODULES: Record<string, { title: string; description: string }> =
   "office-changes": {
     title: "Office Changes",
     description: "Schedule changes that notify transportation when entered.",
-  },
-  "parent-portal": {
-    title: "Parent Portal",
-    description:
-      "Parent single sign-on for swim lessons and transportation requests.",
   },
 };
 

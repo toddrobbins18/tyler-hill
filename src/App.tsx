@@ -18,8 +18,12 @@ import { supabase } from "@/integrations/supabase/client";
 import Dashboard from "./pages/Dashboard";
 import Hiring from "./pages/Hiring";
 import Media from "./pages/Media";
+import ParentAuth from "./pages/ParentAuth";
+import ParentPortal from "./pages/ParentPortal";
+import { ParentProtectedRoute } from "./components/ParentProtectedRoute";
 import Bunking from "./pages/Bunking";
 import SwimLessons from "./pages/daycamp/SwimLessons";
+import SunshineReport from "./pages/daycamp/SunshineReport";
 import Roster from "./pages/Roster";
 import Staff from "./pages/Staff";
 import StaffProfile from "./pages/StaffProfile";
@@ -101,6 +105,8 @@ function CompanyScopedMainRoutes() {
       <Route path="/day-camp/media" element={<Media />} />
       <Route path="/media" element={<Media />} />
       <Route path="/day-camp/swim-lessons" element={<SwimLessons />} />
+      <Route path="/day-camp/sunshine-report" element={<SunshineReport />} />
+      <Route path="/sunshine-report" element={<SunshineReport />} />
       <Route path="/roster" element={<Roster />} />
       <Route path="/staff" element={<Staff />} />
       <Route path="/staff/:id" element={<StaffProfile />} />
@@ -155,6 +161,15 @@ function AppContent() {
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/update-password" element={<UpdatePassword />} />
                 <Route path="/privacy" element={<Privacy />} />
+                <Route path="/parents" element={<ParentAuth />} />
+                <Route
+                  path="/parents/portal"
+                  element={
+                    <ParentProtectedRoute>
+                      <ParentPortal />
+                    </ParentProtectedRoute>
+                  }
+                />
                 <Route
                   path="*"
                   element={

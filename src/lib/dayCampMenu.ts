@@ -17,7 +17,6 @@ import {
   CloudRain,
   Stethoscope,
   AlertTriangle,
-  UserCircle,
   Briefcase,
   BedDouble,
   Camera,
@@ -60,7 +59,6 @@ export function getDayCampPocItems(): DayCampMenuItem[] {
     { title: "Transportation", url: "/transportation", icon: Truck, menuId: "transportation" },
     { title: "Office Changes", url: "/day-camp/office-changes", icon: ClipboardEdit, menuId: "office-changes" },
     { title: "Swim", url: "/day-camp/swim", icon: Waves, menuId: "swim" },
-    { title: "Parent Portal", url: "/day-camp/parent-portal", icon: UserCircle, menuId: "parent-portal" },
   ];
 }
 

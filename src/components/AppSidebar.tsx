@@ -1,5 +1,5 @@
-import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, ClipboardEdit, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree, BookOpen, Building2, LogOut, BarChart3, ListChecks, ClipboardCheck, Stethoscope, ExternalLink, ClipboardPen, CreditCard } from "lucide-react";
-import { NavLink } from "react-router-dom";
+import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, ClipboardEdit, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree, BookOpen, Building2, LogOut, BarChart3, ListChecks, ClipboardCheck, Stethoscope, ExternalLink, ClipboardPen, CreditCard, ChevronDown } from "lucide-react";
+import { NavLink, useLocation } from "react-router-dom";
 import { useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
@@ -28,6 +28,12 @@ import {
 } from "@/lib/dayCampMenu";
 import { DayCampSidebarMenuList } from "@/components/daycamp/DayCampSidebarMenuList";
 import { useDayCampMenuVisibility } from "@/hooks/useDayCampMenuVisibility";
+import { parentPortalUrl } from "@/hooks/useParentCompany";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 type MenuCompany = { slug?: string; name?: string; camp_type?: string | null } | null | undefined;
 
@@ -144,6 +150,7 @@ const getOvernightMenuItems = (company?: MenuCompany) => {
 
 export function AppSidebar() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
 
@@ -329,6 +336,63 @@ export function AppSidebar() {
             <SidebarGroupLabel>Day Camp</SidebarGroupLabel>
             <SidebarGroupContent>
               <DayCampSidebarMenuList items={visibleDayCampPocItems} />
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {isDayCamp && currentCompany?.slug && hasPagePermission(currentCompany.id, "parent-portal") && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Parent Facing</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <Collapsible defaultOpen={location.pathname.startsWith("/parents")}>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton className="w-full">
+                        <Users className="h-4 w-4" />
+                        {!isCollapsed && (
+                          <>
+                            <span>Parent Portal</span>
+                            <ChevronDown className="ml-auto h-4 w-4 transition-transform data-[state=open]:rotate-180" />
+                          </>
+                        )}
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                  </SidebarMenuItem>
+                  <CollapsibleContent>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={location.pathname === "/parents"}>
+                        <NavLink
+                          to={parentPortalUrl(currentCompany.slug, "/parents")}
+                          end
+                          className={({ isActive }) =>
+                            isActive
+                              ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                              : "hover:bg-sidebar-accent/50"
+                          }
+                        >
+                          <span className="ml-6 text-sm">Login / Signup</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={location.pathname === "/parents/portal"}>
+                        <NavLink
+                          to={parentPortalUrl(currentCompany.slug, "/parents/portal")}
+                          end
+                          className={({ isActive }) =>
+                            isActive
+                              ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                              : "hover:bg-sidebar-accent/50"
+                          }
+                        >
+                          <span className="ml-6 text-sm">Portal Dashboard</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </CollapsibleContent>
+                </SidebarMenu>
+              </Collapsible>
             </SidebarGroupContent>
           </SidebarGroup>
         )}

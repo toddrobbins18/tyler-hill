@@ -28,41 +28,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, X, Check, Mail, Trash2, Upload, Download, UserPlus, FolderPlus } from "lucide-react";
+import { Plus, Check, Mail, Trash2, Upload, Download, UserPlus, FolderPlus } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-
-// Helper to safely parse CSV in browser (simple version for this component)
-function parseCSV(text: string): Record<string, string>[] {
-  if (!text) return [];
-  const lines = text.split("\n").filter(l => l.trim().length > 0);
-  if (lines.length < 2) return [];
-  const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
-  const rows = [];
-  for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(",").map(v => v.trim());
-    const row: Record<string, string> = {};
-    headers.forEach((h, idx) => {
-      row[h] = values[idx] || "";
-    });
-    rows.push(row);
-  }
-  return rows;
-}
-function pickFirst(row: Record<string, string>, keys: string[]) {
-  for (const k of keys) {
-    if (row[k] !== undefined) return row[k];
-  }
-  return "";
-}
-function readFileAsText(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => resolve(e.target?.result as string);
-    reader.onerror = reject;
-    reader.readAsText(file);
-  });
-}
+import { parseCSV, pickFirst, readFileAsText } from "@/lib/csv";
 
 type Group = { id: string; name: string; sort_order: number };
 type Camper = { id: string; full_name: string; group_id: string | null; parent_email: string | null; sort_order: number };
@@ -507,9 +476,9 @@ export default function SunshineReport() {
       {/* Group tabs */}
       {groups.length > 0 && (
         <Tabs value={activeGroupId} onValueChange={setActiveGroupId}>
-          <TabsList className="bg-transparent border-b w-full justify-start rounded-none h-auto p-0 space-x-6">
+          <TabsList>
             {groups.map((g) => (
-              <TabsTrigger key={g.id} value={g.id} className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 pt-1 border-b-2 border-transparent">
+              <TabsTrigger key={g.id} value={g.id}>
                 {g.name}
               </TabsTrigger>
             ))}
@@ -592,7 +561,7 @@ export default function SunshineReport() {
                     </td>
                     <td className="px-4 py-2 text-xs text-muted-foreground">
                       {r?.email_sent_at ? (
-                        <span className="inline-flex items-center gap-1 text-green-600">
+                        <span className="inline-flex items-center gap-1 text-success">
                           <Check className="h-3 w-3" />
                           {new Date(r.email_sent_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                         </span>
