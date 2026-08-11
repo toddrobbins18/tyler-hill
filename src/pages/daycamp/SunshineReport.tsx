@@ -130,12 +130,28 @@ export default function SunshineReport() {
       supabase.from("sunshine_campers").select("*").eq("company_id", currentCompany.id).order("sort_order"),
       supabase.from("sunshine_tag_options").select("*").eq("company_id", currentCompany.id).order("sort_order"),
     ]);
+    if (g.error) {
+      console.error("sunshine_groups load failed:", g.error);
+      toast.error("Could not load groups: " + g.error.message);
+      setGroups([]);
+      setActiveGroupId("");
+      return;
+    }
     if (g.data) {
       setGroups(g.data);
-      if (g.data.length && !activeGroupId) setActiveGroupId(g.data[0].id);
+      setActiveGroupId(g.data.length ? g.data[0].id : "");
     }
-    if (c.data) setCampers(c.data);
-    if (t.data) setTagOptions(t.data as TagOption[]);
+    if (c.error) {
+      console.error("sunshine_campers load failed:", c.error);
+      toast.error("Could not load campers: " + c.error.message);
+    } else if (c.data) {
+      setCampers(c.data);
+    }
+    if (t.error) {
+      console.error("sunshine_tag_options load failed:", t.error);
+    } else if (t.data) {
+      setTagOptions(t.data as TagOption[]);
+    }
   }
 
   // Load reports when date changes
