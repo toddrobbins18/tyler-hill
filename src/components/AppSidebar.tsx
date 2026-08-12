@@ -24,7 +24,7 @@ import { toast } from "sonner";
 import { isTimberLakeWestCompany, isTylerHillCamp, isDayCampCompany, shouldShowTigerTimes } from "@/lib/camps";
 import {
   getDayCampMainMenuItems,
-  getDayCampMenuPocItemsSorted,
+  getDayCampPocItemsForCompany,
 } from "@/lib/dayCampMenu";
 import { DayCampSidebarMenuList } from "@/components/daycamp/DayCampSidebarMenuList";
 import { useDayCampMenuVisibility } from "@/hooks/useDayCampMenuVisibility";
@@ -165,7 +165,10 @@ export function AppSidebar() {
   const isDayCamp = isDayCampCompany(currentCompany);
 
   const dayCampMainItems = useMemo(() => getDayCampMainMenuItems(), []);
-  const dayCampPocItems = useMemo(() => getDayCampMenuPocItemsSorted(), []);
+  const dayCampPocItems = useMemo(
+    () => getDayCampPocItemsForCompany(currentCompany),
+    [currentCompany?.slug, currentCompany?.camp_type],
+  );
 
   const overnightItems = useMemo(
     () => getOvernightMenuItems(currentCompany),

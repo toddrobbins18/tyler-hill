@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import { isNorthShoreDayCamp, type CampLike } from "@/lib/camps";
 import {
   Home,
   Sun,
@@ -70,6 +71,13 @@ export function getDayCampMainMenuItems(): DayCampMenuItem[] {
 /** Day Camp POC items — sorted for Day Camp menu section. */
 export function getDayCampMenuPocItemsSorted(): DayCampMenuItem[] {
   return [...getDayCampPocItems()].sort((a, b) => a.title.localeCompare(b.title));
+}
+
+/** Day Camp POC items scoped to the active company (North Shore bus routes are North Shore only). */
+export function getDayCampPocItemsForCompany(company: CampLike): DayCampMenuItem[] {
+  const items = getDayCampMenuPocItemsSorted();
+  if (isNorthShoreDayCamp(company?.slug)) return items;
+  return items.filter((item) => item.menuId !== "transport");
 }
 
 /** Role permission rows for day camps — mirrors AppSidebar Main Menu + Day Camp sections. */

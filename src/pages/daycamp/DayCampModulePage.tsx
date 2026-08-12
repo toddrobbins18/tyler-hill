@@ -1,4 +1,6 @@
-import { useParams } from "react-router-dom";
+import { useParams, Navigate } from "react-router-dom";
+import { useCompany } from "@/contexts/CompanyContext";
+import { northShoreBusTransportEnabled } from "@/lib/camps";
 import DayCampPlaceholder from "./DayCampPlaceholder";
 import SunshineReport from "./SunshineReport";
 import Transport from "./Transport";
@@ -33,7 +35,12 @@ const DAY_CAMP_MODULES: Record<string, { title: string; description: string }> =
 
 export default function DayCampModulePage() {
   const { moduleId } = useParams<{ moduleId: string }>();
+  const { currentCompany } = useCompany();
   const config = moduleId ? DAY_CAMP_MODULES[moduleId] : undefined;
+
+  if (moduleId === "transport" && !northShoreBusTransportEnabled(currentCompany)) {
+    return <Navigate to="/transportation" replace />;
+  }
 
   if (!config) {
     return (

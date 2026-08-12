@@ -22,13 +22,18 @@ export function isTylerHillCamp(slug: string | null | undefined): boolean {
   return slug === CAMP_SLUG.TYLER_HILL_CAMP;
 }
 
-type CampLike =
+export type CampLike =
   | { slug?: string | null; name?: string | null; camp_type?: CampType | string | null }
   | null
   | undefined;
 
 export function isNorthShoreDayCamp(slug: string | null | undefined): boolean {
   return slug === CAMP_SLUG.NORTH_SHORE_DAY_CAMP;
+}
+
+/** North Shore bus-route map transport — not used by Tyler Hill, Timber Lake, or other overnight camps. */
+export function northShoreBusTransportEnabled(company: CampLike): boolean {
+  return isNorthShoreDayCamp(company?.slug);
 }
 
 /** Day camps use CampHub-style UI (North Shore first; Hampton/Southampton later). */

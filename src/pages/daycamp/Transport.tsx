@@ -16,6 +16,8 @@ import { Bus, MapPin, Users, Plus, FileText, Car, Plane, ClipboardList, Map as M
 import { parseCSV, pickFirst, readFileAsText } from "@/lib/csv";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
+import { northShoreBusTransportEnabled } from "@/lib/camps";
+import { Navigate } from "react-router-dom";
 
 const ROUTE_COLORS = [
   "#3eb8a0", "#4a9eff", "#f59e0b", "#ef4444", "#a855f7",
@@ -1456,6 +1458,9 @@ export default function Transport() {
   };
 
   if (!currentCompany) return null;
+  if (!northShoreBusTransportEnabled(currentCompany)) {
+    return <Navigate to="/transportation" replace />;
+  }
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
