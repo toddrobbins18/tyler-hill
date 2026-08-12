@@ -170,3 +170,12 @@ All colors MUST be HSL.
     @apply text-sm text-muted-foreground mt-0.5;
   }
 }
+
+/* Ensure Radix dialogs/popovers/tooltips render above Leaflet map panes (which use z-index up to 700) */
+[data-radix-popper-content-wrapper] { z-index: 1000 !important; }
+[role="dialog"] { z-index: 1000; }
+[data-state][data-radix-portal] { z-index: 1000; }
+.leaflet-pane,
+.leaflet-top,
+.leaflet-bottom { z-index: 1 !important; }
+.leaflet-control { z-index: 2 !important; }

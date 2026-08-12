@@ -1533,7 +1533,9 @@ export default function Transport() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <Button className="gap-2" onClick={() => setAddRouteOpen(true)}><Plus className="h-4 w-4" /> Add Route</Button>
+          <Button className="gap-2" onClick={() => setAddRouteOpen(true)}>
+            <Plus className="h-4 w-4" /> Add Route
+          </Button>
         </div>
       </div>
 
@@ -1606,60 +1608,56 @@ export default function Transport() {
                     onClick={() => toggleRouteVisibility(r.id)}
                   >
                     <CardContent className="p-3">
-                      <div className="flex items-start gap-2">
+                      <div className="flex items-center gap-3">
                         <div
-                          className="w-3 h-3 mt-1 rounded-full shrink-0 border-2 border-background"
+                          className="w-3 h-3 rounded-full shrink-0 border-2 border-background"
                           style={{ backgroundColor: r.color, boxShadow: isVisible ? `0 0 8px ${r.color}60` : "none" }}
                         />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{r.bus}</p>
-                          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
-                            <span className="text-[10px] text-muted-foreground truncate max-w-[80px]">{r.name}</span>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{r.name}</span>
                             <span className="text-muted-foreground/30">·</span>
-                            <span className="text-[10px] text-muted-foreground shrink-0">{core.length} stops</span>
+                            <span className="text-[10px] text-muted-foreground whitespace-nowrap">{core.length} stops</span>
                             <span className="text-muted-foreground/30">·</span>
-                            <span className={`text-[10px] shrink-0 ${r.campers > r.capacity ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
+                            <span className={`text-[10px] whitespace-nowrap ${r.campers > r.capacity ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
                               {r.campers} / {r.capacity} campers
                               {r.campers > r.capacity && " ⚠"}
                             </span>
                           </div>
                         </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <Badge variant="secondary" className={`text-[9px] px-1.5 py-0 ${statusColors[r.status]}`}>{r.status}</Badge>
-                          <div className="flex items-center">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleShowDirections(r);
-                              }}
-                              className="text-muted-foreground hover:text-primary p-1 rounded transition-colors"
-                              title="Turn-by-turn directions"
-                            >
-                              <RouteIcon className="h-3 w-3" />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOptimizeRoutes(r.id);
-                              }}
-                              disabled={optimizing}
-                              className="text-muted-foreground hover:text-primary p-1 rounded transition-colors disabled:opacity-50"
-                              title="Optimize this route"
-                            >
-                              <Sparkles className={`h-3 w-3 ${optimizing ? "animate-pulse" : ""}`} />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditRoute({ id: r.id, name: r.name, bus: r.bus, departure: r.departure, status: r.status, color: r.color, capacity: r.capacity });
-                              }}
-                              className="text-muted-foreground hover:text-primary p-1 rounded transition-colors"
-                              title="Edit route"
-                            >
-                              <Pencil className="h-3 w-3" />
-                            </button>
-                          </div>
-                        </div>
+                        <Badge variant="secondary" className={`text-[9px] whitespace-nowrap ${statusColors[r.status]}`}>{r.status}</Badge>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleShowDirections(r);
+                          }}
+                          className="text-muted-foreground hover:text-primary p-1 rounded transition-colors"
+                          title="Turn-by-turn directions"
+                        >
+                          <RouteIcon className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOptimizeRoutes(r.id);
+                          }}
+                          disabled={optimizing}
+                          className="text-muted-foreground hover:text-primary p-1 rounded transition-colors disabled:opacity-50"
+                          title="Optimize this route"
+                        >
+                          <Sparkles className={`h-3 w-3 ${optimizing ? "animate-pulse" : ""}`} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditRoute({ id: r.id, name: r.name, bus: r.bus, departure: r.departure, status: r.status, color: r.color, capacity: r.capacity });
+                          }}
+                          className="text-muted-foreground hover:text-primary p-1 rounded transition-colors"
+                          title="Edit route"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
                       </div>
                       {isVisible && r.stops.length > 0 && (
                         <div className="mt-2 pl-6 border-l-2 space-y-1.5" style={{ borderColor: r.color + "40" }}>
