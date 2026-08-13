@@ -44,6 +44,9 @@ serve(async (req) => {
     let totalEmailsSent = 0;
 
     for (const company of companies) {
+      // Tyler Hill closed — Daily News only (see enable_tyler_hill_daily_news_only.sql)
+      if (company.slug === "tyler-hill-camp") continue;
+
       // 2. Fetch all tutoring/therapy sessions for this company that happen today
       // For Timber Lake Camp, we check 'weekdays'. For others, we check start_date/end_date.
       const isTimberLake = company.slug === 'timber-lake-camp';

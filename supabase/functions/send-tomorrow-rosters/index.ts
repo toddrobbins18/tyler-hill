@@ -43,6 +43,9 @@ serve(async (req) => {
     let emailsSent = 0;
 
     for (const company of companies || []) {
+      // Tyler Hill closed — Daily News only (see enable_tyler_hill_daily_news_only.sql)
+      if (company.slug === "tyler-hill-camp") continue;
+
       const companyId = company.id;
 
       // 1. Fetch all sports events for tomorrow

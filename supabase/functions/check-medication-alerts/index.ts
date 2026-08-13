@@ -61,7 +61,7 @@ serve(async (req) => {
 
     const { data: companies, error: companiesError } = await supabase
       .from("companies")
-      .select("id, name")
+      .select("id, name, slug")
       .eq("is_active", true);
 
     if (companiesError) throw companiesError;
@@ -69,6 +69,9 @@ serve(async (req) => {
     let alertsSent = 0;
 
     for (const company of companies || []) {
+      // Tyler Hill closed — Daily News only (see enable_tyler_hill_daily_news_only.sql)
+      if (company.slug === "tyler-hill-camp") continue;
+
       const [dateResult, recurringResult] = await Promise.all([
         supabase
           .from("medication_logs")

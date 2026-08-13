@@ -30,6 +30,7 @@ import {
   getOwlPayDailyRowsForChart,
   getOwlPayDailyRowsForDisplay,
   getOwlPayReportFetchBounds,
+  isOwlPayAllTimeRange,
   type OwlPayReportAudience,
 } from "@/lib/owlPayReports";
 
@@ -103,6 +104,7 @@ const OwlPayReports = () => {
           purchases: bundle.purchases.length,
           paidItems: bundle.stats.totalItems,
           revenue: bundle.stats.totalRevenue,
+          seasonCamperRevenue: bundle.stats.seasonCamperRevenue,
           buyerSummaries: bundle.buyerSummaries.length,
         });
       }
@@ -128,6 +130,15 @@ const OwlPayReports = () => {
   const filteredBuyerSummaries =
     data?.buyerSummaries?.filter((s) => s.name.toLowerCase().includes(searchTerm.toLowerCase())) || [];
 
+  const periodSpentTotal = data?.buyerSummaries?.reduce((sum, s) => sum + s.period_spent, 0) ?? 0;
+  const showSeasonRevenue = reportAudience !== "staff";
+  const revenueMatchesSeason =
+    showSeasonRevenue &&
+    isOwlPayAllTimeRange(fromYmd, toYmd) &&
+    reportAudience === "campers" &&
+    data != null &&
+    Math.abs(data.stats.totalRevenue - data.stats.seasonCamperRevenue) <= 0.01;
+
   const exportReportsCsv = () => {
     if (!data || !currentCompany?.id) {
       toast({ title: "Nothing to export", variant: "destructive" });
@@ -142,7 +153,10 @@ const OwlPayReports = () => {
       ["Season", currentSeason],
       ["Date range (camp time / US Eastern)", `${formatCampYmdDisplay(fromYmd)} to ${formatCampYmdDisplay(toYmd)}`],
       ["Audience", reportAudience],
-      ["Total revenue (paid items)", data.stats.totalRevenue.toFixed(2)],
+      ["Period revenue (paid items)", data.stats.totalRevenue.toFixed(2)],
+      ...(showSeasonRevenue
+        ? [["Season revenue (campers)", data.stats.seasonCamperRevenue.toFixed(2)]]
+        : []),
       ["Paid items sold", data.stats.totalItems],
       ["Free daily items", data.stats.freeItems],
       ["Total purchase lines (paid + free)", data.stats.totalPurchaseLines],
@@ -171,6 +185,17 @@ const OwlPayReports = () => {
         s.cm_deposits != null ? s.cm_deposits.toFixed(2) : "",
         s.full_balance != null ? s.full_balance.toFixed(2) : s.current_balance != null ? s.current_balance.toFixed(2) : "",
       ]),
+      [
+        "TOTALS",
+        "",
+        "",
+        "",
+        periodSpentTotal.toFixed(2),
+        showSeasonRevenue ? data.stats.seasonCamperRevenue.toFixed(2) : "",
+        data.stats.totalItems,
+        "",
+        "",
+      ],
       [],
       ["Daily summary — Camp date", "Revenue (paid)", "Paid items", "Free items", "Total lines"],
       ...dailyRowsForDisplay.map((d) => [
@@ -337,8 +362,29 @@ const OwlPayReports = () => {
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Revenue (paid)</p>
+                <p className="text-xs text-muted-foreground">Period revenue</p>
                 <p className="text-xl font-bold">${data?.stats.totalRevenue.toFixed(2) || "0.00"}</p>
+                {showSeasonRevenue && (
+                  <>
+                    <p className="text-xs text-muted-foreground mt-2">Season revenue (campers)</p>
+                    <p className="text-lg font-semibold">${data?.stats.seasonCamperRevenue.toFixed(2) || "0.00"}</p>
+                  </>
+                )}
+                {revenueMatchesSeason && (
+                  <p className="text-[11px] text-green-600 mt-1">Matches balance report Column F total</p>
+                )}
+                {showSeasonRevenue &&
+                  isOwlPayAllTimeRange(fromYmd, toYmd) &&
+                  reportAudience === "campers" &&
+                  data &&
+                  !revenueMatchesSeason && (
+                    <p className="text-[11px] text-amber-600 mt-1">Period and season totals differ — review filters</p>
+                  )}
+                {reportAudience === "all" && showSeasonRevenue && data && (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Period includes staff; season total is campers only
+                  </p>
+                )}
               </div>
               <DollarSign className="h-6 w-6 text-primary opacity-50" />
             </div>

@@ -19,7 +19,10 @@ export type OwlPayReportTransaction = {
 };
 
 export type OwlPayReportStats = {
+  /** Paid purchases in the selected date range (and audience). */
   totalRevenue: number;
+  /** Sum of season_spent for all active campers — matches balance-report Column F total. */
+  seasonCamperRevenue: number;
   /** Paid (non-free) item lines */
   totalItems: number;
   freeItems: number;
@@ -254,6 +257,15 @@ export function getOwlPayQuickRangeYmd(range: "today" | "week" | "month" | "all"
   return { fromYmd: "2020-01-01", toYmd: today };
 }
 
+export function isOwlPayAllTimeRange(fromYmd: string, toYmd: string): boolean {
+  const allTime = getOwlPayQuickRangeYmd("all");
+  return fromYmd === allTime.fromYmd && toYmd === allTime.toYmd;
+}
+
+export function sumSeasonCamperRevenue(camperFinancials: OwlPayCamperFinancial[]): number {
+  return camperFinancials.reduce((sum, camper) => sum + camper.season_spent, 0);
+}
+
 /** Exact camp-calendar UTC bounds for the selected report range. */
 export function getOwlPayReportFetchBounds(fromYmd: string, toYmd: string): {
   startISO: string;
@@ -465,6 +477,7 @@ export function aggregateOwlPayReports(
     purchases,
     stats: {
       totalRevenue,
+      seasonCamperRevenue: 0,
       totalItems,
       freeItems,
       totalPurchaseLines: purchases.length,
@@ -614,8 +627,13 @@ export async function fetchOwlPayReportBundle(
     fetchOwlPayCamperFinancials(supabase, companyId, season),
   ]);
   const aggregated = aggregateOwlPayReports(transactions, audience, fromYmd, toYmd);
+  const seasonCamperRevenue = sumSeasonCamperRevenue(camperFinancials);
   return {
     ...aggregated,
+    stats: {
+      ...aggregated.stats,
+      seasonCamperRevenue,
+    },
     buyerSummaries: buildOwlPayBuyerSummaries(aggregated.purchases, camperFinancials),
   };
 }

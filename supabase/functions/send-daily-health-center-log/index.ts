@@ -103,7 +103,7 @@ serve(async (req) => {
 
     const { data: companies, error: companiesError } = await supabase
       .from("companies")
-      .select("id, name")
+      .select("id, name, slug")
       .eq("is_active", true);
 
     if (companiesError) throw companiesError;
@@ -111,6 +111,9 @@ serve(async (req) => {
     let emailsSent = 0;
 
     for (const company of companies || []) {
+      // Tyler Hill closed — Daily News only (see enable_tyler_hill_daily_news_only.sql)
+      if (company.slug === "tyler-hill-camp") continue;
+
       const recipients = await getRecipientsForEmailType(supabase, EMAIL_TYPE, company.id);
       if (!recipients.length) {
         console.log(`No recipients configured for ${EMAIL_TYPE} in ${company.name}`);
