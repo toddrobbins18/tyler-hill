@@ -10,6 +10,7 @@ import {
   buildTylerHillBulletinHtml,
   fetchTylerHillBulletinData,
 } from "../_shared/tylerHillBulletinEmail.ts";
+import { isAllEmailsStoppedCamp } from "../_shared/campEmailPolicy.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -54,6 +55,11 @@ serve(async (req) => {
     let emailsSent = 0;
 
     for (const company of companies || []) {
+      if (isAllEmailsStoppedCamp(company.slug)) {
+        console.log(`Skipping daily bulletin for closed camp: ${company.slug}`);
+        continue;
+      }
+
       const companyId = company.id;
       const isTylerHill = company.slug === 'tyler-hill-camp';
       const isTimberLakeWest = company.slug === 'timber-lake-west';

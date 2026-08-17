@@ -12,6 +12,7 @@ import {
   medicationAlreadyAlerted,
   type MedicationLogRow,
 } from "../_shared/medicationAlertUtils.ts";
+import { isDailyBulletinOnlyCamp } from "../_shared/campEmailPolicy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -69,8 +70,7 @@ serve(async (req) => {
     let alertsSent = 0;
 
     for (const company of companies || []) {
-      // Tyler Hill closed — Daily News only (see enable_tyler_hill_daily_news_only.sql)
-      if (company.slug === "tyler-hill-camp") continue;
+      if (isDailyBulletinOnlyCamp(company.slug)) continue;
 
       const [dateResult, recurringResult] = await Promise.all([
         supabase

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendEmailNotifications } from "../_shared/emailHelpers.ts";
+import { isDailyBulletinOnlyCamp } from "../_shared/campEmailPolicy.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -44,8 +45,7 @@ serve(async (req) => {
     let totalEmailsSent = 0;
 
     for (const company of companies) {
-      // Tyler Hill closed — Daily News only (see enable_tyler_hill_daily_news_only.sql)
-      if (company.slug === "tyler-hill-camp") continue;
+      if (isDailyBulletinOnlyCamp(company.slug)) continue;
 
       // 2. Fetch all tutoring/therapy sessions for this company that happen today
       // For Timber Lake Camp, we check 'weekdays'. For others, we check start_date/end_date.
