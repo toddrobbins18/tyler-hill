@@ -1,3 +1,5 @@
+-- SUPERSEDED: use disable_tyler_hill_all_notifications.sql (Daily News email off too).
+--
 -- Tyler Hill is closed EXCEPT Daily News emails (birthdays, schedule, etc.).
 -- All other automated emails stay off.
 --

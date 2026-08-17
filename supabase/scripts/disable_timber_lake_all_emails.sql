@@ -1,14 +1,13 @@
 -- Timber Lake Camp + Timber Lake West — stop ALL automated emails (including Tiger Times / Daily Wolf).
 -- Run in Supabase SQL Editor. Safe to re-run.
 --
--- IMPORTANT: Daily Wolf / Tiger Times use companies.is_active + company_email_config,
--- NOT automated_email_config. You must run the full script (BEGIN…COMMIT), not just the verify queries.
+-- Does NOT set companies.is_active = false (that hides camps from the admin switcher).
+-- Email stop uses company_email_config + automated_email_config + send-daily-dashboard skip.
 --
 -- What this does for timber-lake-camp and timber-lake-west:
---   1. Marks each company inactive (cron jobs skip inactive companies)
---   2. Disables every automated_email_config row
---   3. Disables M365 outbound email
---   4. Clears pending scheduled notification emails
+--   1. Disables every automated_email_config row
+--   2. Disables M365 outbound email (blocks daily bulletin + event emails)
+--   3. Clears pending scheduled notification emails
 --
 -- Tyler Hill and other camps are unchanged.
 
@@ -29,12 +28,6 @@ BEGIN
   END IF;
   RAISE NOTICE 'Updating % Timber Lake camp(s)', v_count;
 END $$;
-
-UPDATE public.companies c
-SET is_active = false,
-    updated_at = now()
-FROM _tl
-WHERE c.id = _tl.id;
 
 UPDATE public.automated_email_config aec
 SET enabled = false,
@@ -85,8 +78,7 @@ WHERE c.slug IN ('timber-lake-camp', 'timber-lake-west')
 GROUP BY c.slug
 ORDER BY c.slug;
 
--- REVERT (when camps reopen — run manually, adjust as needed):
--- UPDATE public.companies SET is_active = true WHERE slug IN ('timber-lake-camp', 'timber-lake-west');
+-- REVERT (when camps reopen):
 -- UPDATE public.automated_email_config aec SET enabled = true
 --   FROM public.companies c WHERE c.id = aec.company_id AND c.slug IN ('timber-lake-camp', 'timber-lake-west');
 -- UPDATE public.company_email_config cec SET is_active = true

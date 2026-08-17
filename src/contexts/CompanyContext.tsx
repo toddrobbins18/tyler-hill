@@ -130,12 +130,16 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         allowedCompanyIds = Array.from(uniqueIds);
       }
 
-      // Only fetch the companies the user has access to (or all if super admin)
+      // Only fetch the companies the user has access to (or all if super admin).
+      // Super admins see inactive camps too (is_active=false is for email/cron only).
       let companiesQuery = supabase
         .from('companies')
         .select('id, name, slug, logo_url, theme_color, zip_code, owl_pay_enabled, camp_type')
-        .eq('is_active', true)
         .order('name');
+
+      if (!isSuperAdminUser) {
+        companiesQuery = companiesQuery.eq('is_active', true);
+      }
 
       if (!isSuperAdminUser && allowedCompanyIds.length > 0) {
         companiesQuery = companiesQuery.in('id', allowedCompanyIds);

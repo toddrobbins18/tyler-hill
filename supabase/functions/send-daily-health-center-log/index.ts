@@ -8,7 +8,7 @@ import {
   formatBulletinDisplayDate,
   formatEasternDateTime,
 } from "../_shared/dailyDashboardFormat.ts";
-import { isDailyBulletinOnlyCamp } from "../_shared/campEmailPolicy.ts";
+import { isAllEmailsStoppedCamp } from "../_shared/campEmailPolicy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -112,7 +112,7 @@ serve(async (req) => {
     let emailsSent = 0;
 
     for (const company of companies || []) {
-      if (isDailyBulletinOnlyCamp(company.slug)) continue;
+      if (isAllEmailsStoppedCamp(company.slug)) continue;
 
       const recipients = await getRecipientsForEmailType(supabase, EMAIL_TYPE, company.id);
       if (!recipients.length) {

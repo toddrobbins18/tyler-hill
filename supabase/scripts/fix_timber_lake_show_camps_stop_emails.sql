@@ -1,11 +1,24 @@
--- Stop Daily Wolf / Tiger Times without hiding camps from the switcher.
--- Use fix_timber_lake_show_camps_stop_emails.sql instead (restores is_active + keeps email off).
+-- Restore Timber Lake camps in the camp switcher while keeping ALL emails off.
+-- is_active=false hides camps from the dropdown; email stop uses company_email_config instead.
+-- Run in Supabase SQL Editor.
+
+UPDATE public.companies
+SET is_active = true,
+    updated_at = now()
+WHERE slug IN ('timber-lake-camp', 'timber-lake-west');
 
 UPDATE public.company_email_config cec
 SET is_active = false,
     updated_at = now()
 FROM public.companies c
 WHERE c.id = cec.company_id
+  AND c.slug IN ('timber-lake-camp', 'timber-lake-west');
+
+UPDATE public.automated_email_config aec
+SET enabled = false,
+    updated_at = now()
+FROM public.companies c
+WHERE c.id = aec.company_id
   AND c.slug IN ('timber-lake-camp', 'timber-lake-west');
 
 SELECT 'company' AS check, c.slug, c.is_active

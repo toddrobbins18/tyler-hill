@@ -1,3 +1,8 @@
+import {
+  isAllEmailsStoppedCamp,
+  isInAppAutomatedNotificationsStoppedCamp,
+} from "./campEmailPolicy.ts";
+
 /**
  * Get recipients based on user notification preferences with division filtering
  * This ensures users only get alerts for children in their assigned divisions
@@ -347,29 +352,52 @@ export async function sendEmailNotifications(
     console.log('No recipients to send to');
     return;
   }
-  
-  const messages = recipients.map(recipient => ({
-    recipient_id: recipient.id,
-    sender_id: senderId || null,
-    subject,
-    content,
-    read: false,
-    notification_type: senderId ? 'notification' : 'automated',
-    sender_display_name: senderId ? null : 'Camp notification',
-  }));
 
-  const BATCH_SIZE = 50;
-  for (let i = 0; i < messages.length; i += BATCH_SIZE) {
-    const batch = messages.slice(i, i + BATCH_SIZE);
-    const insertResult = await supabase.from('messages').insert(batch);
-    const insertError = insertResult?.error;
-    if (insertError) {
-      console.error('Error sending messages:', insertError);
-      throw new Error(insertError.message || 'Failed to insert in-app messages');
-    }
+  const isAutomated = !senderId;
+  let companySlug: string | null = null;
+
+  if (companyId) {
+    const { data: company } = await supabase
+      .from("companies")
+      .select("slug")
+      .eq("id", companyId)
+      .maybeSingle();
+    companySlug = company?.slug ?? null;
   }
-  
-  console.log(`Successfully sent ${messages.length} in-app messages`);
+
+  if (isAutomated && isAllEmailsStoppedCamp(companySlug)) {
+    console.log(`Skipping all automated notifications for closed camp: ${companySlug}`);
+    return;
+  }
+
+  const skipInApp = isAutomated && isInAppAutomatedNotificationsStoppedCamp(companySlug);
+
+  if (!skipInApp) {
+    const messages = recipients.map(recipient => ({
+      recipient_id: recipient.id,
+      sender_id: senderId || null,
+      subject,
+      content,
+      read: false,
+      notification_type: senderId ? 'notification' : 'automated',
+      sender_display_name: senderId ? null : 'Camp notification',
+    }));
+
+    const BATCH_SIZE = 50;
+    for (let i = 0; i < messages.length; i += BATCH_SIZE) {
+      const batch = messages.slice(i, i + BATCH_SIZE);
+      const insertResult = await supabase.from('messages').insert(batch);
+      const insertError = insertResult?.error;
+      if (insertError) {
+        console.error('Error sending messages:', insertError);
+        throw new Error(insertError.message || 'Failed to insert in-app messages');
+      }
+    }
+
+    console.log(`Successfully sent ${messages.length} in-app messages`);
+  } else {
+    console.log(`Skipping in-app messages for camp: ${companySlug}`);
+  }
 
   // --- Real Email Sending via Microsoft 365 ---
   if (!companyId) {
