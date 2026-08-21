@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,6 +70,7 @@ function todayISO() {
 
 export default function SunshineReport() {
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const [date, setDate] = useState(todayISO());
   const [groups, setGroups] = useState<Group[]>([]);
   const [activeGroupId, setActiveGroupId] = useState<string>("");
@@ -110,6 +112,7 @@ export default function SunshineReport() {
       .from("sunshine_groups")
       .select("*")
       .eq("company_id", currentCompany.id)
+      .eq("season", currentSeason)
       .ilike("name", trimmedName)
       .limit(1)
       .maybeSingle();
@@ -121,13 +124,13 @@ export default function SunshineReport() {
   // Initial load
   useEffect(() => {
     if (currentCompany) refreshAll();
-  }, [currentCompany]);
+  }, [currentCompany, currentSeason]);
 
   async function refreshAll() {
     if (!currentCompany) return;
     const [g, c, t] = await Promise.all([
-      supabase.from("sunshine_groups").select("*").eq("company_id", currentCompany.id).order("sort_order"),
-      supabase.from("sunshine_campers").select("*").eq("company_id", currentCompany.id).order("sort_order"),
+      supabase.from("sunshine_groups").select("*").eq("company_id", currentCompany.id).eq("season", currentSeason).order("sort_order"),
+      supabase.from("sunshine_campers").select("*").eq("company_id", currentCompany.id).eq("season", currentSeason).order("sort_order"),
       supabase.from("sunshine_tag_options").select("*").eq("company_id", currentCompany.id).order("sort_order"),
     ]);
     if (g.error) {
@@ -268,6 +271,7 @@ export default function SunshineReport() {
         parent_email: newCamper.parent_email.trim() || null,
         group_id: groupId,
         sort_order: maxOrder + 1,
+        season: currentSeason,
       })
       .select()
       .single();
@@ -295,7 +299,7 @@ export default function SunshineReport() {
     const maxOrder = Math.max(0, ...groups.map((g) => g.sort_order));
     const { data, error } = await supabase
       .from("sunshine_groups")
-      .insert({ company_id: currentCompany.id, name: trimmedName, sort_order: maxOrder + 1 })
+      .insert({ company_id: currentCompany.id, name: trimmedName, sort_order: maxOrder + 1, season: currentSeason })
       .select()
       .single();
 
@@ -347,7 +351,7 @@ export default function SunshineReport() {
       // Build group lookup by lowercase name
       const groupByName = new Map(groups.map((g) => [normalizeGroupName(g.name), g]));
       let createdGroupCount = 0;
-      const newCampersPayload: Array<{ company_id: string; full_name: string; parent_email: string | null; group_id: string; sort_order: number }> = [];
+      const newCampersPayload: Array<{ company_id: string; full_name: string; parent_email: string | null; group_id: string; sort_order: number; season: string }> = [];
 
       // Pre-create any missing groups
       const wantedGroupNames = new Set<string>();
@@ -361,7 +365,7 @@ export default function SunshineReport() {
         const normalizedName = normalizeGroupName(name);
         const { data, error } = await supabase
           .from("sunshine_groups")
-          .insert({ company_id: currentCompany.id, name, sort_order: nextOrder })
+          .insert({ company_id: currentCompany.id, name, sort_order: nextOrder, season: currentSeason })
           .select()
           .single();
 
@@ -405,6 +409,7 @@ export default function SunshineReport() {
           parent_email: email || null,
           group_id: group.id,
           sort_order: next,
+          season: currentSeason,
         });
       }
 

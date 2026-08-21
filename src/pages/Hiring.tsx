@@ -6,6 +6,7 @@ import { KanbanBoard } from "@/components/hiring/KanbanBoard";
 import { Input } from "@/components/ui/input";
 import { Search, Briefcase } from "lucide-react";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 
 const STORAGE_KEY_PREFIX = "hiring-board-state-v1";
 
@@ -24,7 +25,8 @@ const loadInitial = (storageKey: string): StaffMember[] => {
 
 export default function Hiring() {
   const { currentCompany } = useCompany();
-  const storageKey = `${STORAGE_KEY_PREFIX}-${currentCompany?.id ?? "default"}`;
+  const { currentSeason } = useSeasonContext();
+  const storageKey = `${STORAGE_KEY_PREFIX}-${currentCompany?.id ?? "default"}-${currentSeason}`;
   const [staff, setStaff] = useState<StaffMember[]>(() => loadInitial(storageKey));
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -55,7 +57,7 @@ export default function Hiring() {
             <Briefcase className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Staff Hiring 2026</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Staff Hiring {currentSeason}</h1>
             <p className="text-sm text-muted-foreground">Hiring pipeline & budget management</p>
           </div>
         </div>
