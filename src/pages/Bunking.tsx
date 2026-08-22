@@ -8,13 +8,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Lock, Unlock, BarChart3, Users, GripVertical, X, Upload, Download, UserPlus, Home, Trash2, Pencil, Sparkles } from "lucide-react";
+import { Lock, Unlock, BarChart3, Users, GripVertical, X, Upload, Download, UserPlus, Home, Trash2, Pencil, Sparkles, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { parseCSV, pickFirst, readFileAsText } from "@/lib/csv";
 import { optimizeCabins, type OptCamper } from "@/lib/bunking-optimizer";
+import { fetchBunkingCampersFromRoster } from "@/lib/bunkingRoster";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 
 type Camper = { id: string; name: string; town?: string; gender?: string; division?: string; requests?: string[]; disrequests?: string[] };
 
@@ -49,50 +51,21 @@ function isCabin(value: unknown): value is Cabin {
 }
 
 function loadSavedCabins(): Cabin[] {
-  if (typeof window === "undefined") return initialCabins;
-
-  try {
-    const raw = window.localStorage.getItem(BUNKING_STORAGE_KEY);
-    if (!raw) return initialCabins;
-
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.every(isCabin) ? parsed : initialCabins;
-  } catch {
-    return initialCabins;
-  }
+  return [];
 }
 
 function splitList(s: string): string[] {
   return s.split(/[,;|]/).map((x) => x.trim()).filter(Boolean);
 }
 
-const initialCabins: Cabin[] = [
-  { id: "a", name: "Cabin A — Pine Lodge", capacity: 8, gender: "Girls", ageGroup: "10-12", campers: [
-    { id: "c1", name: "Emma J." }, { id: "c2", name: "Sophia C." }, { id: "c3", name: "Ava M." },
-    { id: "c4", name: "Mia T." }, { id: "c5", name: "Isabella D." }, { id: "c6", name: "Olivia W." },
-  ]},
-  { id: "b", name: "Cabin B — Oak House", capacity: 8, gender: "Boys", ageGroup: "10-12", campers: [
-    { id: "c7", name: "Liam P." }, { id: "c8", name: "Noah W." }, { id: "c9", name: "Oliver B." },
-    { id: "c10", name: "Lucas A." }, { id: "c11", name: "Mason W." },
-  ]},
-  { id: "c", name: "Cabin C — Cedar Hall", capacity: 6, gender: "Boys", ageGroup: "13-15", campers: [
-    { id: "c12", name: "Ethan R." }, { id: "c13", name: "James K." }, { id: "c14", name: "Benjamin L." },
-    { id: "c15", name: "Henry S." }, { id: "c16", name: "Alexander M." }, { id: "c17", name: "Daniel G." },
-  ]},
-  { id: "d", name: "Cabin D — Birch Bunkhouse", capacity: 8, gender: "Girls", ageGroup: "13-15", campers: [
-    { id: "c18", name: "Charlotte H." }, { id: "c19", name: "Amelia F." },
-  ]},
-  { id: "e", name: "Cabin E — Maple Ridge", capacity: 6, gender: "Boys", ageGroup: "8-10", campers: [
-    { id: "c20", name: "Jack T." }, { id: "c21", name: "William R." }, { id: "c22", name: "Owen P." }, { id: "c23", name: "Sebastian C." },
-  ]},
-  { id: "f", name: "Cabin F — Spruce Nest", capacity: 8, gender: "Girls", ageGroup: "8-10", campers: [] },
-];
-
 export default function Bunking() {
   const { user } = useAuth();
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const [cabins, setCabins] = useState<Cabin[]>(loadSavedCabins);
   const [hydrated, setHydrated] = useState(false);
+  const [loadingRoster, setLoadingRoster] = useState(false);
+  const [rosterCount, setRosterCount] = useState<number | null>(null);
   const [locked, setLocked] = useState(false);
   const [dragItem, setDragItem] = useState<{ camperId: string; fromCabinId: string } | null>(null);
   const [dragOverCabin, setDragOverCabin] = useState<string | null>(null);
@@ -132,13 +105,28 @@ export default function Bunking() {
         lastWrittenRef.current = JSON.stringify(next);
         setCabins(next);
       } else if (!data) {
-        // If no row exists yet for this company, set default but don't error.
-        setCabins(initialCabins);
+        setCabins([]);
       }
       setHydrated(true);
     })();
     return () => { cancelled = true; };
   }, [user, currentCompany]);
+
+  useEffect(() => {
+    if (!currentCompany?.id || !currentSeason) {
+      setRosterCount(null);
+      return;
+    }
+    let cancelled = false;
+    fetchBunkingCampersFromRoster(currentCompany.id, currentSeason)
+      .then((campers) => {
+        if (!cancelled) setRosterCount(campers.length);
+      })
+      .catch(() => {
+        if (!cancelled) setRosterCount(null);
+      });
+    return () => { cancelled = true; };
+  }, [currentCompany?.id, currentSeason]);
 
   // Realtime: subscribe to shared board changes from other users
   useEffect(() => {
@@ -231,6 +219,27 @@ export default function Bunking() {
     if (!confirm(`Delete cabin "${name}"? Any assigned campers will be removed.`)) return;
     setCabins((prev) => prev.filter((c) => c.id !== id));
     toast.success("Cabin deleted.");
+  };
+
+  const handleLoadFromRoster = async () => {
+    if (!currentCompany?.id) return;
+    setLoadingRoster(true);
+    try {
+      const campers = await fetchBunkingCampersFromRoster(currentCompany.id, currentSeason);
+      if (!campers.length) {
+        toast.error(`No active campers found for ${currentSeason}.`);
+        return;
+      }
+      setRosterCount(campers.length);
+      setPendingImport(campers);
+      setOptimizeOpen(true);
+      toast.success(`Loaded ${campers.length} campers from ${currentSeason} roster.`);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      toast.error(`Could not load roster: ${message}`);
+    } finally {
+      setLoadingRoster(false);
+    }
   };
 
   const handleCSVImport = async (file: File) => {
@@ -423,9 +432,22 @@ export default function Bunking() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Bunking Boards</h1>
-          <p className="text-muted-foreground mt-1">Drag-and-drop cabin assignments — Session 1</p>
+          <p className="text-muted-foreground mt-1">
+            Group campers into cabins — season {currentSeason}
+            {rosterCount != null ? ` · ${rosterCount} on roster` : ""}
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleLoadFromRoster}
+            disabled={loadingRoster || locked}
+            className="gap-1.5 text-xs"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loadingRoster ? "animate-spin" : ""}`} />
+            Load from Roster
+          </Button>
           <input
             ref={fileInputRef}
             type="file"
@@ -513,6 +535,22 @@ export default function Bunking() {
       </div>
 
       {/* Cabin boards */}
+      {cabins.length === 0 ? (
+        <Card className="border-dashed">
+          <CardContent className="py-12 text-center space-y-3">
+            <Users className="h-10 w-10 mx-auto text-muted-foreground" />
+            <p className="font-medium">No cabins yet</p>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto">
+              Click <strong>Load from Roster</strong> to pull {currentSeason} campers from North Shore, then run the optimizer.
+              Or add cabins manually / import a CSV.
+            </p>
+            <Button onClick={handleLoadFromRoster} disabled={loadingRoster} className="gap-2">
+              <RefreshCw className={`h-4 w-4 ${loadingRoster ? "animate-spin" : ""}`} />
+              Load from Roster
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {cabins.map((cabin) => {
           const pct = Math.round((cabin.campers.length / cabin.capacity) * 100);
@@ -613,6 +651,7 @@ export default function Bunking() {
           );
         })}
       </div>
+      )}
 
       {/* Add Cabin dialog */}
       <Dialog open={addCabinOpen} onOpenChange={setAddCabinOpen}>

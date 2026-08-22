@@ -15,9 +15,6 @@ import { TransportRouteMap } from "@/components/TransportRouteMap";
 import { Bus, MapPin, Users, Plus, FileText, Car, Plane, ClipboardList, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2 } from "lucide-react";
 import { parseCSV, pickFirst, readFileAsText } from "@/lib/csv";
 import { supabase } from "@/integrations/supabase/client";
-import { useCompany } from "@/contexts/CompanyContext";
-import { northShoreBusTransportEnabled } from "@/lib/camps";
-import { Navigate } from "react-router-dom";
 
 const ROUTE_COLORS = [
   "#3eb8a0", "#4a9eff", "#f59e0b", "#ef4444", "#a855f7",
@@ -233,9 +230,7 @@ const statusColors: Record<string, string> = {
 };
 
 export default function Transport() {
-  const { currentCompany } = useCompany();
   const { toast } = useToast();
-
   // Core stops are the source of truth (without camp stop)
   const [coreStops, setCoreStops] = useState<Record<number, RouteStop[]>>(initialCoreStops);
   const [routeMeta, setRouteMeta] = useState(initialRouteMeta);
@@ -322,17 +317,14 @@ export default function Transport() {
 
   // Persist transport board (routes + stops + unplotted campers) to Supabase so uploads survive refresh
   const [persistLoaded, setPersistLoaded] = useState(false);
-
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!currentCompany) return;
       try {
         const { data, error } = await supabase
           .from("transport_boards")
           .select("data")
-          .eq("company_id", currentCompany.id)
-          .eq("id", `shared_${currentCompany.id}`)
+          .eq("id", "shared")
           .maybeSingle();
         if (cancelled) return;
         if (!error && data?.data && typeof data.data === "object") {
@@ -367,10 +359,8 @@ export default function Transport() {
     const handle = setTimeout(async () => {
       try {
         const { data: userRes } = await supabase.auth.getUser();
-        if (!currentCompany) return;
         await supabase.from("transport_boards").upsert({
-          id: `shared_${currentCompany.id}`,
-          company_id: currentCompany.id,
+          id: "shared",
           data: { coreStops, routeMeta, unplottedCampers } as any,
           updated_by: userRes.user?.id ?? null,
           updated_at: new Date().toISOString(),
@@ -378,7 +368,7 @@ export default function Transport() {
       } catch { /* ignore */ }
     }, 600);
     return () => clearTimeout(handle);
-  }, [coreStops, routeMeta, unplottedCampers, persistLoaded, currentCompany?.id]);
+  }, [coreStops, routeMeta, unplottedCampers, persistLoaded]);
 
 
   const downloadBulkTemplate = (target: "campers" | "stops" | "staff") => {
@@ -1457,11 +1447,6 @@ export default function Transport() {
     toast({ title: `${reportName} generated`, description: `Downloaded ${filename}` });
   };
 
-  if (!currentCompany) return null;
-  if (!northShoreBusTransportEnabled(currentCompany)) {
-    return <Navigate to="/transportation" replace />;
-  }
-
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
       <div className="flex items-center justify-between">
@@ -1538,9 +1523,7 @@ export default function Transport() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <Button className="gap-2" onClick={() => setAddRouteOpen(true)}>
-            <Plus className="h-4 w-4" /> Add Route
-          </Button>
+          <Button className="gap-2" onClick={() => setAddRouteOpen(true)}><Plus className="h-4 w-4" /> Add Route</Button>
         </div>
       </div>
 
@@ -1621,17 +1604,17 @@ export default function Transport() {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{r.bus}</p>
                           <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{r.name}</span>
+                            <span className="text-[10px] text-muted-foreground">{r.name}</span>
                             <span className="text-muted-foreground/30">·</span>
-                            <span className="text-[10px] text-muted-foreground whitespace-nowrap">{core.length} stops</span>
+                            <span className="text-[10px] text-muted-foreground">{core.length} stops</span>
                             <span className="text-muted-foreground/30">·</span>
-                            <span className={`text-[10px] whitespace-nowrap ${r.campers > r.capacity ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
+                            <span className={`text-[10px] ${r.campers > r.capacity ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
                               {r.campers} / {r.capacity} campers
                               {r.campers > r.capacity && " ⚠"}
                             </span>
                           </div>
                         </div>
-                        <Badge variant="secondary" className={`text-[9px] whitespace-nowrap ${statusColors[r.status]}`}>{r.status}</Badge>
+                        <Badge variant="secondary" className={`text-[9px] ${statusColors[r.status]}`}>{r.status}</Badge>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();

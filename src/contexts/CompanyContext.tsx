@@ -29,7 +29,7 @@ interface CompanyContextType {
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 
 export function CompanyProvider({ children }: { children: ReactNode }) {
-  const { user, isSuperAdmin: authIsSuperAdmin, loading: authLoading } = useAuth();
+  const { user, isSuperAdmin: authIsSuperAdmin, loading: authLoading, refetch: refetchAuth } = useAuth();
   const [currentCompany, setCurrentCompany] = useState<Company | null>(null);
   const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
@@ -235,6 +235,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       // Update state synchronously
       setCurrentCompany(company);
       invalidateCampScopedQueries();
+      await refetchAuth();
       
       // Apply theme color immediately
       if (company.theme_color) {

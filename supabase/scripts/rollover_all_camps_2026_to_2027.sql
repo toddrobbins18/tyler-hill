@@ -16,13 +16,11 @@
 -- =============================================================================
 SELECT
   c.slug,
-  COUNT(*) FILTER (WHERE ch.season = '2026') AS children_2026,
-  COUNT(*) FILTER (WHERE ch.season = '2027') AS children_2027,
-  COUNT(*) FILTER (WHERE s.season = '2026') AS staff_2026,
-  COUNT(*) FILTER (WHERE s.season = '2027') AS staff_2027
+  (SELECT COUNT(*) FROM public.children ch WHERE ch.company_id = c.id AND ch.season = '2026') AS children_2026,
+  (SELECT COUNT(*) FROM public.children ch WHERE ch.company_id = c.id AND ch.season = '2027') AS children_2027,
+  (SELECT COUNT(*) FROM public.staff s WHERE s.company_id = c.id AND s.season = '2026') AS staff_2026,
+  (SELECT COUNT(*) FROM public.staff s WHERE s.company_id = c.id AND s.season = '2027') AS staff_2027
 FROM public.companies c
-LEFT JOIN public.children ch ON ch.company_id = c.id
-LEFT JOIN public.staff s ON s.company_id = c.id
 WHERE c.slug IN (
   'tyler-hill-camp',
   'timber-lake-camp',
@@ -308,13 +306,11 @@ COMMIT;
 -- =============================================================================
 SELECT
   c.slug,
-  COUNT(*) FILTER (WHERE ch.season = '2026') AS children_2026,
-  COUNT(*) FILTER (WHERE ch.season = '2027') AS children_2027,
-  COUNT(*) FILTER (WHERE s.season = '2026') AS staff_2026,
-  COUNT(*) FILTER (WHERE s.season = '2027') AS staff_2027
+  (SELECT COUNT(*) FROM public.children ch WHERE ch.company_id = c.id AND ch.season = '2026') AS children_2026,
+  (SELECT COUNT(*) FROM public.children ch WHERE ch.company_id = c.id AND ch.season = '2027') AS children_2027,
+  (SELECT COUNT(*) FROM public.staff s WHERE s.company_id = c.id AND s.season = '2026') AS staff_2026,
+  (SELECT COUNT(*) FROM public.staff s WHERE s.company_id = c.id AND s.season = '2027') AS staff_2027
 FROM public.companies c
-LEFT JOIN public.children ch ON ch.company_id = c.id
-LEFT JOIN public.staff s ON s.company_id = c.id
 WHERE c.slug IN (
   'tyler-hill-camp',
   'timber-lake-camp',

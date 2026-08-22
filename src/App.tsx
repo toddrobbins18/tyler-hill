@@ -67,7 +67,6 @@ import UpdatePassword from "./pages/UpdatePassword";
 import Privacy from "./pages/Privacy";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { northShoreBusTransportEnabled } from "@/lib/camps";
 
 // Hook to handle password recovery redirects at app level
 function usePasswordRecoveryRedirect() {
@@ -96,18 +95,6 @@ function usePasswordRecoveryRedirect() {
 
 function CompanyScopedMainRoutes() {
   const { currentCompany } = useCompany();
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (
-      location.pathname === "/day-camp/transport" &&
-      currentCompany &&
-      !northShoreBusTransportEnabled(currentCompany)
-    ) {
-      navigate("/transportation", { replace: true });
-    }
-  }, [currentCompany?.id, currentCompany?.slug, location.pathname, navigate]);
 
   return (
     <Routes key={currentCompany?.id ?? "no-company"}>
@@ -120,7 +107,6 @@ function CompanyScopedMainRoutes() {
       <Route path="/day-camp/swim-lessons" element={<SwimLessons />} />
       <Route path="/day-camp/sunshine-report" element={<SunshineReport />} />
       <Route path="/sunshine-report" element={<SunshineReport />} />
-      <Route path="/day-camp/:moduleId" element={<DayCampModulePage />} />
       <Route path="/roster" element={<Roster />} />
       <Route path="/staff" element={<Staff />} />
       <Route path="/staff/:id" element={<StaffProfile />} />
@@ -156,6 +142,7 @@ function CompanyScopedMainRoutes() {
       <Route path="/daily-schedule" element={<DailySchedule />} />
       <Route path="/elective-signup" element={<ElectiveSignUp />} />
       <Route path="/owl-pay" element={<OwlPay />} />
+      <Route path="/day-camp/:moduleId" element={<DayCampModulePage />} />
       <Route path="/notification-preferences" element={<NotificationPreferences />} />
       <Route path="*" element={<NotFound />} />
     </Routes>

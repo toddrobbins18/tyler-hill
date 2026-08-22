@@ -380,7 +380,7 @@ export default function SwimProgram() {
   const totalCompleteLevels = levelData.reduce((acc, r) => acc + [r.goldfishLevel, r.minnowLevel, r.tadpoleLevel, r.redCross, r.redCross2, r.redCross3, r.redCross4, r.frog].filter(s => s === "Complete").length, 0);
 
   return (
-    <div className="space-y-6 min-w-0 max-w-full">
+    <div className="space-y-6 p-6">
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -423,20 +423,20 @@ export default function SwimProgram() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="bracelets" className="w-full min-w-0">
+      <Tabs defaultValue="bracelets" className="w-full">
         <TabsList>
           <TabsTrigger value="bracelets">Swim Bracelets</TabsTrigger>
           <TabsTrigger value="levels">Swim Level Report</TabsTrigger>
         </TabsList>
 
         {/* ─── Bracelets ─── */}
-        <TabsContent value="bracelets" className="mt-4 min-w-0">
-          <Card className="overflow-hidden">
+        <TabsContent value="bracelets" className="mt-4">
+          <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Current bracelet status & test history</CardTitle>
             </CardHeader>
-            <CardContent className="p-0 overflow-x-auto max-w-full">
-              <Table className="min-w-max">
+            <CardContent className="p-0 overflow-x-auto">
+              <Table>
                 <TableHeader>
                   <TableRow>
                     <SortableHeader label="Name" sortKey="name" currentSort={braceletSort} onSort={requestBraceletSort} />
@@ -487,16 +487,16 @@ export default function SwimProgram() {
         </TabsContent>
 
         {/* ─── Level Report ─── */}
-        <TabsContent value="levels" className="mt-4 min-w-0">
-          <Card className="overflow-hidden">
+        <TabsContent value="levels" className="mt-4">
+          <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center justify-between">
                 <span>Skill checklist by level</span>
                 <span className="text-xs font-normal text-muted-foreground">Click a row for full breakdown</span>
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-0 overflow-x-auto max-w-full">
-              <Table className="min-w-max">
+            <CardContent className="p-0 overflow-x-auto">
+              <Table>
                 <TableHeader>
                   <TableRow>
                     <SortableHeader label="Child's Name" sortKey="name" currentSort={levelSort} onSort={requestLevelSort} />

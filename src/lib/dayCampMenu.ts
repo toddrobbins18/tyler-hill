@@ -1,5 +1,4 @@
 import type { LucideIcon } from "lucide-react";
-import { isNorthShoreDayCamp, type CampLike } from "@/lib/camps";
 import {
   Home,
   Sun,
@@ -22,6 +21,8 @@ import {
   BedDouble,
   Camera,
 } from "lucide-react";
+import type { CampLike } from "@/lib/camps";
+import { isNorthShoreDayCamp, northShoreBusTransportEnabled } from "@/lib/camps";
 
 export type DayCampMenuItem = {
   title: string;
@@ -57,10 +58,26 @@ export function getDayCampPocItems(): DayCampMenuItem[] {
     { title: "Media", url: "/day-camp/media", icon: Camera, menuId: "media" },
     { title: "Swim Lessons", url: "/day-camp/swim-lessons", icon: Waves, menuId: "swim-lessons" },
     { title: "Sunshine Report", url: "/day-camp/sunshine-report", icon: Sun, menuId: "sunshine-report" },
-    { title: "Transportation", url: "/day-camp/transport", icon: Truck, menuId: "transport" },
+    { title: "Transportation", url: "/transportation", icon: Truck, menuId: "transportation" },
     { title: "Office Changes", url: "/day-camp/office-changes", icon: ClipboardEdit, menuId: "office-changes" },
     { title: "Swim", url: "/day-camp/swim", icon: Waves, menuId: "swim" },
   ];
+}
+
+/** North Shore Phase 1 — hide Hiring, Media per Todd (Jul 30). Bunking enabled for roster grouping. */
+const NORTH_SHORE_SKIP_POC_MENU_IDS = new Set(["hiring", "media"]);
+
+/** Day Camp POC items scoped to the active company. */
+export function getDayCampPocItemsForCompany(company: CampLike): DayCampMenuItem[] {
+  return getDayCampPocItems().filter((item) => {
+    if (isNorthShoreDayCamp(company?.slug) && NORTH_SHORE_SKIP_POC_MENU_IDS.has(item.menuId)) {
+      return false;
+    }
+    if (item.menuId === "transportation" && !northShoreBusTransportEnabled(company)) {
+      return false;
+    }
+    return true;
+  });
 }
 
 /** Todd carryover — sorted for Main Menu (same Nest sidebar style). */
@@ -71,13 +88,6 @@ export function getDayCampMainMenuItems(): DayCampMenuItem[] {
 /** Day Camp POC items — sorted for Day Camp menu section. */
 export function getDayCampMenuPocItemsSorted(): DayCampMenuItem[] {
   return [...getDayCampPocItems()].sort((a, b) => a.title.localeCompare(b.title));
-}
-
-/** Day Camp POC items scoped to the active company (North Shore bus routes are North Shore only). */
-export function getDayCampPocItemsForCompany(company: CampLike): DayCampMenuItem[] {
-  const items = getDayCampMenuPocItemsSorted();
-  if (isNorthShoreDayCamp(company?.slug)) return items;
-  return items.filter((item) => item.menuId !== "transport");
 }
 
 /** Role permission rows for day camps — mirrors AppSidebar Main Menu + Day Camp sections. */
