@@ -64,8 +64,8 @@ export function getDayCampPocItems(): DayCampMenuItem[] {
   ];
 }
 
-/** North Shore Phase 1 — hide Hiring, Media per Todd (Jul 30). Bunking enabled for roster grouping. */
-const NORTH_SHORE_SKIP_POC_MENU_IDS = new Set(["hiring", "media"]);
+/** North Shore Phase 1 — hide Media per Todd (Jul 30). Bunking + Hiring enabled for roster. */
+const NORTH_SHORE_SKIP_POC_MENU_IDS = new Set(["media"]);
 
 /** Day Camp POC items scoped to the active company. */
 export function getDayCampPocItemsForCompany(company: CampLike): DayCampMenuItem[] {

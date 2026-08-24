@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import SearchableChildSelect from "@/components/SearchableChildSelect";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -28,12 +31,39 @@ type Change = {
   created_at: string;
 };
 
+type Camper = { id: string; name: string; group_name: string | null };
+
+type FormDraft = {
+  camperId: string;
+  camperSearch: string;
+  group: string;
+  note: string;
+  date: string;
+};
+
+const DRAFT_KEY_PREFIX = "office-changes-draft-v1";
+
+function readFormDraft(key: string): FormDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as FormDraft) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function OfficeTransportChanges() {
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
+  const draftKey = `${DRAFT_KEY_PREFIX}-${currentCompany?.id ?? "none"}-${currentSeason}`;
   const [rows, setRows] = useState<Change[]>([]);
+  const [campers, setCampers] = useState<Camper[]>([]);
   const [loading, setLoading] = useState(true);
+  const [draftLoaded, setDraftLoaded] = useState(false);
   const [date, setDate] = useState<Date>(new Date());
-  const [camper, setCamper] = useState("");
+  const [camperId, setCamperId] = useState("");
+  const [camperSearch, setCamperSearch] = useState("");
   const [group, setGroup] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
@@ -50,17 +80,84 @@ export default function OfficeTransportChanges() {
     setLoading(false);
   };
 
-  useEffect(() => { 
+  useEffect(() => {
     if (currentCompany) {
-      load(); 
+      load();
     }
   }, [currentCompany]);
+
+  useEffect(() => {
+    if (!currentCompany?.id) return;
+    setDraftLoaded(false);
+    const draft = readFormDraft(draftKey);
+    if (draft) {
+      setCamperId(draft.camperId ?? "");
+      setCamperSearch(draft.camperSearch ?? "");
+      setGroup(draft.group ?? "");
+      setNote(draft.note ?? "");
+      setDate(draft.date ? new Date(`${draft.date}T12:00:00`) : new Date());
+    } else {
+      setCamperId("");
+      setCamperSearch("");
+      setGroup("");
+      setNote("");
+      setDate(new Date());
+    }
+    setDraftLoaded(true);
+  }, [draftKey, currentCompany?.id]);
+
+  useEffect(() => {
+    if (!currentCompany?.id || !draftLoaded) return;
+    const draft: FormDraft = {
+      camperId,
+      camperSearch,
+      group,
+      note,
+      date: format(date, "yyyy-MM-dd"),
+    };
+    sessionStorage.setItem(draftKey, JSON.stringify(draft));
+  }, [draftKey, draftLoaded, currentCompany?.id, camperId, camperSearch, group, note, date]);
+
+  useEffect(() => {
+    if (!currentCompany?.id) return;
+    const loadCampers = async () => {
+      const { data } = await supabase
+        .from("children")
+        .select("id, name, group_name")
+        .eq("company_id", currentCompany.id)
+        .eq("season", currentSeason)
+        .order("name");
+      setCampers((data ?? []) as Camper[]);
+    };
+    void loadCampers();
+  }, [currentCompany?.id, currentSeason]);
+
+  const handleCamperChange = (id: string) => {
+    setCamperId(id);
+    const selected = campers.find((c) => c.id === id);
+    if (selected) {
+      setCamperSearch(selected.name);
+      if (selected.group_name?.trim()) {
+        setGroup(selected.group_name.trim());
+      }
+    }
+  };
+
+  const clearDraft = () => {
+    sessionStorage.removeItem(draftKey);
+    setCamperId("");
+    setCamperSearch("");
+    setGroup("");
+    setNote("");
+    setDate(new Date());
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentCompany) return;
-    if (!camper.trim() || !note.trim()) {
-      toast.error("Camper name and note are required");
+    const selectedCamper = campers.find((c) => c.id === camperId);
+    if (!selectedCamper || !note.trim()) {
+      toast.error("Select a camper from the list and enter a note");
       return;
     }
     setSaving(true);
@@ -70,8 +167,9 @@ export default function OfficeTransportChanges() {
       .insert({
         company_id: currentCompany.id,
         change_date: format(date, "yyyy-MM-dd"),
-        camper_name: camper.trim(),
-        group_division: group.trim() || null,
+        camper_id: selectedCamper.id,
+        camper_name: selectedCamper.name,
+        group_division: group.trim() || selectedCamper.group_name?.trim() || null,
         note: note.trim(),
         logged_by: userData.user?.id ?? null,
       })
@@ -98,7 +196,7 @@ export default function OfficeTransportChanges() {
     */
 
     toast.success("Change logged and transport team notified");
-    setCamper(""); setGroup(""); setNote(""); setDate(new Date());
+    clearDraft();
     setSaving(false);
     load();
   };
@@ -160,7 +258,15 @@ export default function OfficeTransportChanges() {
             </div>
             <div className="md:col-span-3 space-y-2">
               <Label>Camper</Label>
-              <Input value={camper} onChange={e => setCamper(e.target.value)} placeholder="First and last name" />
+              <SearchableChildSelect
+                children={campers}
+                value={camperId}
+                onValueChange={handleCamperChange}
+                searchText={camperSearch}
+                onSearchTextChange={setCamperSearch}
+                placeholder="Type to search campers…"
+                required
+              />
             </div>
             <div className="md:col-span-2 space-y-2">
               <Label>Group / Division</Label>

@@ -16,6 +16,9 @@ interface SearchableChildSelectProps {
   onValueChange: (value: string) => void;
   placeholder?: string;
   required?: boolean;
+  /** When set, keeps typed search text (e.g. draft restore after tab switch). */
+  searchText?: string;
+  onSearchTextChange?: (text: string) => void;
 }
 
 export default function SearchableChildSelect({
@@ -24,9 +27,21 @@ export default function SearchableChildSelect({
   onValueChange,
   placeholder = "Type to search...",
   required = false,
+  searchText,
+  onSearchTextChange,
 }: SearchableChildSelectProps) {
-  const [search, setSearch] = useState("");
+  const isControlledSearch = onSearchTextChange != null;
+  const [internalSearch, setInternalSearch] = useState(searchText ?? "");
   const [isOpen, setIsOpen] = useState(false);
+  const search = isControlledSearch ? (searchText ?? "") : internalSearch;
+
+  const setSearch = (next: string) => {
+    if (isControlledSearch) {
+      onSearchTextChange(next);
+    } else {
+      setInternalSearch(next);
+    }
+  };
 
   // Get the selected child's name for display
   const selectedChild = children.find((c) => c.id === value);
@@ -68,6 +83,7 @@ export default function SearchableChildSelect({
     // Delay closing to allow click on option
     setTimeout(() => {
       setIsOpen(false);
+      if (isControlledSearch) return;
       // Reset to selected value if nothing new was selected
       if (selectedChild) {
         setSearch(selectedChild.name);

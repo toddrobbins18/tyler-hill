@@ -2,6 +2,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  buildMapsFromSessionAttendees,
+  ensureDivisionsForAgeGroupLabels,
+  loadDayCampCamperCustomFields,
+  resolveDivisionIdFromAgeGroupLabel,
+} from '../_shared/campminderCustomFields.ts';
 
 // @ts-ignore
 declare const Deno: any;
@@ -109,6 +115,42 @@ function normalizeMedicalNotesFromCm(person: any): string | null {
   if (raw == null) return null;
   const trimmed = String(raw).trim();
   return trimmed || null;
+}
+
+/** North Shore day camp: FULLSUMMERGROUP custom field → children.group_name */
+function extractFullSummerGroup(person: any): string | null {
+  const direct = [
+    person?.FULLSUMMERGROUP,
+    person?.FullSummerGroup,
+    person?.FullSummerGROUP,
+    person?.fullSummerGroup,
+  ];
+  for (const value of direct) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+
+  const fieldLists = [
+    person?.CustomFields,
+    person?.UserDefinedFields,
+    person?.CamperDetails?.CustomFields,
+    person?.ExtendedFields,
+    person?.Attributes,
+  ];
+
+  for (const list of fieldLists) {
+    if (!Array.isArray(list)) continue;
+    for (const field of list) {
+      const name = String(field?.Name || field?.FieldName || field?.Key || field?.Code || '')
+        .trim()
+        .toUpperCase()
+        .replace(/[\s_-]+/g, '');
+      if (name !== 'FULLSUMMERGROUP') continue;
+      const value = field?.Value ?? field?.FieldValue ?? field?.Text ?? field?.DisplayValue;
+      if (value != null && String(value).trim()) return String(value).trim();
+    }
+  }
+
+  return null;
 }
 
 // Robust name extraction from any CampMinder record format
@@ -414,6 +456,38 @@ function mergeSessionAttendee(existing: any | undefined, attendee: any): any {
   };
 }
 
+function resolveCamperDivisionAndGroup(
+  personId: string,
+  cmDivisionId: number | null | undefined,
+  cmDivisionIdMap: Map<number, string>,
+  isDayCamp: boolean,
+  ageGroupByPerson: Map<string, string>,
+  ageGroupDivisionMap: Map<string, string>,
+  fullSummerGroupByPerson: Map<string, string>,
+  cmBunkId?: number | null,
+  cmBunkNameByCmId?: Map<number, string>,
+): { division_id: string | null; group_name: string | null } {
+  const cmDivision = cmDivisionId ? cmDivisionIdMap.get(cmDivisionId) ?? null : null;
+  if (!isDayCamp) {
+    return { division_id: cmDivision, group_name: null };
+  }
+
+  const ageGroupDivision = resolveDivisionIdFromAgeGroupLabel(
+    ageGroupByPerson.get(personId),
+    ageGroupDivisionMap,
+  );
+
+  let groupName = fullSummerGroupByPerson.get(personId) ?? null;
+  if (!groupName && cmBunkId && cmBunkNameByCmId?.has(cmBunkId)) {
+    groupName = cmBunkNameByCmId.get(cmBunkId) ?? null;
+  }
+
+  return {
+    division_id: ageGroupDivision ?? cmDivision,
+    group_name: groupName,
+  };
+}
+
 /**
  * Build the enrolled camper list for a season.
  * The status=2 filter alone can under-count (e.g. Timber Lake Camp ~351 vs ~462 in CampMinder UI)
@@ -701,7 +775,7 @@ function valuesEqual(a: any, b: any): boolean {
 
 // Fields to track changes for each table
 const TRACKED_FIELDS: Record<string, string[]> = {
-  children: ['name', 'gender', 'date_of_birth', 'grade', 'guardian_name', 'guardian_email', 'guardian_phone', 'allergies', 'medical_notes', 'division_id', 'session', 'status'],
+  children: ['name', 'gender', 'date_of_birth', 'grade', 'guardian_name', 'guardian_email', 'guardian_phone', 'allergies', 'medical_notes', 'division_id', 'session', 'status', 'group_name'],
   staff: ['name', 'role', 'email', 'phone', 'date_of_birth', 'status', 'budget_code'],
 };
 
@@ -1280,6 +1354,21 @@ async function performFullSync(
 
     const season = seasonId ? String(seasonId) : '2026';
     console.log(`\n[Season] Using season: ${season}\n`);
+
+    const { data: companyMeta } = await supabase
+      .from('companies')
+      .select('slug, camp_type')
+      .eq('id', companyId)
+      .maybeSingle();
+    const isDayCamp =
+      companyMeta?.camp_type === 'day_camp' ||
+      companyMeta?.slug === 'north-shore-day-camp';
+    if (isDayCamp) {
+      console.log(`[Day Camp] Custom field sync enabled for ${companyMeta?.slug ?? companyId}`);
+    }
+
+    let dayCampCustomFieldStats: Record<string, unknown> | null = null;
+    const cmBunkNameByCmId = new Map<number, string>();
     
     await updateSyncJob(supabase, jobId, {
       progress: { step: 'Season detected', season, syncType: isIncremental ? 'incremental' : 'full' },
@@ -1534,11 +1623,18 @@ async function performFullSync(
       let bunksUpdated = 0;
       
       for (const cmBunk of cmBunks) {
-        const cmBunkId = cmBunk.ID || cmBunk.BunkID;
-        const bunkName = cmBunk.Name || cmBunk.BunkName || `Bunk ${cmBunkId}`;
+        const bunkCmId = cmBunk.ID ?? cmBunk.BunkID;
+        if (bunkCmId == null) {
+          console.warn('[Bunks] Skipping bunk with no ID:', JSON.stringify(cmBunk));
+          continue;
+        }
+        const bunkName = cmBunk.Name || cmBunk.BunkName || `Bunk ${bunkCmId}`;
+        if (isDayCamp) {
+          cmBunkNameByCmId.set(Number(bunkCmId), bunkName);
+        }
         
         // Try to find existing bunk by cm_bunk_id first, then by name
-        let existingBunk: ExistingBunk | undefined = existingBunkByCmId.get(cmBunkId);
+        let existingBunk: ExistingBunk | undefined = existingBunkByCmId.get(bunkCmId);
         if (!existingBunk) {
           existingBunk = existingBunkByName.get(bunkName.toLowerCase());
         }
@@ -1549,11 +1645,11 @@ async function performFullSync(
         
         if (existingBunk) {
           // Update existing bunk with cm_bunk_id if not already set
-          if (!existingBunk.cm_bunk_id || existingBunk.cm_bunk_id !== cmBunkId) {
+          if (!existingBunk.cm_bunk_id || existingBunk.cm_bunk_id !== bunkCmId) {
             await supabase
               .from('bunks')
               .update({ 
-                cm_bunk_id: cmBunkId,
+                cm_bunk_id: bunkCmId,
                 bunk_name: bunkName,
                 division_id: ourDivisionId || existingBunk.division_id,
               })
@@ -1561,15 +1657,15 @@ async function performFullSync(
             bunksUpdated++;
           }
           // Store mapping
-          cmBunkIdMap.set(cmBunkId, existingBunk.id);
+          cmBunkIdMap.set(bunkCmId, existingBunk.id);
         } else {
           // Create new bunk
           const { data: newBunk, error } = await supabase
             .from('bunks')
             .insert({
-              bunk_number: cmBunkId, // Use CM ID as bunk number
+              bunk_number: bunkCmId, // Use CM ID as bunk number
               bunk_name: bunkName,
-              cm_bunk_id: cmBunkId,
+              cm_bunk_id: bunkCmId,
               company_id: companyId,
               season: season,
               division_id: ourDivisionId,
@@ -1579,7 +1675,7 @@ async function performFullSync(
             .single();
           
           if (newBunk) {
-            cmBunkIdMap.set(cmBunkId, newBunk.id);
+            cmBunkIdMap.set(bunkCmId, newBunk.id);
             bunksCreated++;
           } else if (error) {
             console.error(`[Bunks] Error creating bunk ${bunkName}:`, error.message);
@@ -1627,6 +1723,9 @@ async function performFullSync(
     // Camper and staff data arrays - declared here for cleanup phase access
     let camperData: { person_id: string; [key: string]: any }[] = [];
     let staffData: { person_id: string; [key: string]: any }[] = [];
+    let ageGroupDivisionMap = new Map<string, string>();
+    let fullSummerGroupByPerson = new Map<string, string>();
+    let ageGroupByPerson = new Map<string, string>();
 
     // =====================================================
     // PHASE 2: Fetch enrolled attendees (for CAMPER sync)
@@ -1691,6 +1790,116 @@ async function performFullSync(
         enrolledAttendees.map((a: any) => String(a.PersonID))
       );
       enrolledPersonIdArray = Array.from(enrolledPersonIds);
+
+      let fromAttendeesGroupCount = 0;
+      let fromAttendeesAgeGroupCount = 0;
+
+      if (isDayCamp && enrolledAttendees.length > 0) {
+        console.log(
+          `[Day Camp] Session attendee sample keys: ${Object.keys(enrolledAttendees[0] || {}).join(', ')}`,
+        );
+        const fromAttendees = buildMapsFromSessionAttendees(enrolledAttendees);
+        fromAttendeesGroupCount = fromAttendees.fullSummerGroupByPerson.size;
+        fromAttendeesAgeGroupCount = fromAttendees.ageGroupByPerson.size;
+        for (const [pid, val] of fromAttendees.fullSummerGroupByPerson) {
+          fullSummerGroupByPerson.set(pid, val);
+        }
+        for (const [pid, val] of fromAttendees.ageGroupByPerson) {
+          ageGroupByPerson.set(pid, val);
+        }
+        console.log(
+          `[Day Camp] From session attendees: ${fromAttendeesGroupCount} groups, ${fromAttendeesAgeGroupCount} age groups`,
+        );
+      }
+
+      if (isDayCamp && enrolledPersonIdArray.length > 0) {
+        console.log('\n--- FETCHING DAY CAMP CUSTOM FIELDS (Age Group + FULLSUMMERGROUP) ---');
+        await updateSyncJob(supabase, jobId, {
+          progress: { step: 'Fetching day camp custom fields', enrolledCampers: enrolledPersonIdArray.length, season },
+        });
+        try {
+          const custom = await loadDayCampCamperCustomFields(
+            enrolledPersonIdArray,
+            season,
+            token,
+            subscriptionKey,
+            clientId,
+            acquireRateLimitSlot,
+          );
+          for (const [pid, val] of custom.fullSummerGroupByPerson) {
+            fullSummerGroupByPerson.set(pid, val);
+          }
+          for (const [pid, val] of custom.ageGroupByPerson) {
+            ageGroupByPerson.set(pid, val);
+          }
+
+          if (ageGroupByPerson.size > 0) {
+            const uniqueAgeGroups = [...new Set(ageGroupByPerson.values())];
+            ageGroupDivisionMap = await ensureDivisionsForAgeGroupLabels(
+              supabase,
+              companyId,
+              uniqueAgeGroups,
+            );
+          }
+
+          console.log(
+            `[Custom Fields] Divisions from age groups: ${ageGroupDivisionMap.size}, groups mapped: ${fullSummerGroupByPerson.size}`,
+          );
+          dayCampCustomFieldStats = {
+            fullSummerGroupField: custom.matchedFields.fullSummerGroup ?? null,
+            ageGroupField: custom.matchedFields.ageGroup ?? null,
+            fullSummerGroupCount: fullSummerGroupByPerson.size,
+            ageGroupCount: ageGroupByPerson.size,
+            divisionCount: ageGroupDivisionMap.size,
+            fromAttendeesGroups: fromAttendeesGroupCount,
+            fromAttendeesAgeGroups: fromAttendeesAgeGroupCount,
+            fieldDefCount: custom.debug.fieldDefCount,
+            fieldDefSample: custom.debug.fieldDefSample.slice(0, 15),
+            groupCandidateFields: custom.debug.groupCandidateFields ?? [],
+            ageGroupCandidates: custom.debug.ageGroupCandidates ?? [],
+            firstBatchContainerCount: custom.debug.firstBatchContainerCount ?? null,
+            apiBase: custom.debug.apiBaseUsed ?? null,
+            bunkNameCount: cmBunkNameByCmId.size,
+            errors: custom.debug.dataFetchErrors,
+          };
+          await updateSyncJob(supabase, jobId, {
+            progress: {
+              step: 'Day camp custom fields loaded',
+              customFields: dayCampCustomFieldStats,
+              season,
+            },
+          });
+        } catch (customFieldError) {
+          console.error('[Custom Fields] Day camp custom field sync failed:', customFieldError);
+          await updateSyncJob(supabase, jobId, {
+            progress: {
+              step: 'Day camp custom fields failed',
+              customFieldError: customFieldError instanceof Error ? customFieldError.message : String(customFieldError),
+              season,
+            },
+          });
+        }
+
+        if (ageGroupByPerson.size > 0 && ageGroupDivisionMap.size === 0) {
+          const uniqueAgeGroups = [...new Set(ageGroupByPerson.values())];
+          ageGroupDivisionMap = await ensureDivisionsForAgeGroupLabels(
+            supabase,
+            companyId,
+            uniqueAgeGroups,
+          );
+        }
+
+        if (!dayCampCustomFieldStats) {
+          dayCampCustomFieldStats = {
+            fullSummerGroupCount: fullSummerGroupByPerson.size,
+            ageGroupCount: ageGroupByPerson.size,
+            divisionCount: ageGroupDivisionMap.size,
+            fromAttendeesGroups: fromAttendeesGroupCount,
+            fromAttendeesAgeGroups: fromAttendeesAgeGroupCount,
+            bunkNameCount: cmBunkNameByCmId.size,
+          };
+        }
+      }
 
       // Fetch sessions for session NAME lookup
       console.log('\n--- FETCHING SESSIONS FOR NAME LOOKUP ---');
@@ -2102,17 +2311,29 @@ async function performFullSync(
 
       // Prefer CamperDetails.DivisionID; fall back to session attendee when CamperDetails is absent.
       const cmDivisionId = person.CamperDetails?.DivisionID ?? attendeeRow?.DivisionID;
-      const divisionId = cmDivisionId ? cmDivisionIdMap.get(cmDivisionId) : null;
+
+      const attendeeBunkId = attendeeRow?.BunkID ?? null;
+      const bunkId =
+        attendeeBunkId != null ? (cmBunkIdMap.get(attendeeBunkId) ?? null) : null;
+
+      const { division_id: divisionId, group_name: groupName } = resolveCamperDivisionAndGroup(
+        String(person.ID),
+        cmDivisionId,
+        cmDivisionIdMap,
+        isDayCamp,
+        ageGroupByPerson,
+        ageGroupDivisionMap,
+        fullSummerGroupByPerson,
+        attendeeBunkId,
+        cmBunkNameByCmId,
+      );
 
       if (!divisionId && cmDivisionId) {
         console.log(`[Division Warning] Camper ${name} has DivisionID=${cmDivisionId} but no matching division in our DB`);
       }
 
-      const cmBunkId = attendeeRow?.BunkID;
-      const bunkId = cmBunkId ? cmBunkIdMap.get(cmBunkId) : null;
-      
-      if (cmBunkId && !bunkId) {
-        console.log(`[Bunk Warning] Camper ${name} has BunkID=${cmBunkId} but no matching bunk in our DB`);
+      if (attendeeBunkId != null && !bunkId) {
+        console.log(`[Bunk Warning] Camper ${name} has BunkID=${attendeeBunkId} but no matching bunk in our DB`);
       }
 
       camperData.push({
@@ -2131,6 +2352,7 @@ async function performFullSync(
         status: 'active',
         division_id: divisionId,
         bunk_id: bunkId,
+        group_name: groupName ?? extractFullSummerGroup(person),
       });
     }
     
@@ -2164,9 +2386,21 @@ async function performFullSync(
       else if (genderSource?.GenderID === 1) gender = 'Male';
 
       const cmDivisionId = person?.CamperDetails?.DivisionID ?? fallbackData?.DivisionID;
-      const divisionId = cmDivisionId ? cmDivisionIdMap.get(cmDivisionId) : null;
-      const cmBunkId = fallbackData?.BunkID;
-      const bunkId = cmBunkId ? cmBunkIdMap.get(cmBunkId) : null;
+      const fallbackBunkId = fallbackData?.BunkID ?? null;
+      const bunkId =
+        fallbackBunkId != null ? (cmBunkIdMap.get(fallbackBunkId) ?? null) : null;
+
+      const { division_id: divisionId, group_name: groupName } = resolveCamperDivisionAndGroup(
+        personIdStr,
+        cmDivisionId,
+        cmDivisionIdMap,
+        isDayCamp,
+        ageGroupByPerson,
+        ageGroupDivisionMap,
+        fullSummerGroupByPerson,
+        fallbackBunkId,
+        cmBunkNameByCmId,
+      );
 
       camperData.push({
         person_id: personIdStr,
@@ -2184,6 +2418,7 @@ async function performFullSync(
         status: 'active',
         division_id: divisionId,
         bunk_id: bunkId,
+        group_name: groupName ?? extractFullSummerGroup(person),
       });
 
       camperDataPersonIds.add(personIdStr);
@@ -2609,8 +2844,8 @@ async function performFullSync(
 
         for (const bunkAssignment of bunkAssignments) {
           // The bunk assignment contains an ID field (the CM BunkID)
-          const cmBunkId = bunkAssignment.ID || bunkAssignment.BunkID || bunkAssignment;
-          const ourBunkId = cmBunkIdMap.get(cmBunkId);
+          const staffBunkCmId = bunkAssignment.ID ?? bunkAssignment.BunkID ?? bunkAssignment;
+          const ourBunkId = cmBunkIdMap.get(staffBunkCmId);
           
           if (ourBunkId) {
             bunkAssignmentsToSync.push({
@@ -2621,7 +2856,7 @@ async function performFullSync(
           } else {
             unmappedBunks++;
             if (unmappedBunks <= 5) {
-              console.log(`[Staff Bunks] Warning: CM BunkID ${cmBunkId} not mapped to our bunks`);
+              console.log(`[Staff Bunks] Warning: CM BunkID ${staffBunkCmId} not mapped to our bunks`);
             }
           }
         }
@@ -2952,6 +3187,7 @@ async function performFullSync(
       },
       changes_summary: allChanges.slice(0, 50), // Limit to first 50 changes to avoid huge payloads
       total_changes: allChanges.length,
+      ...(dayCampCustomFieldStats ? { customFields: dayCampCustomFieldStats } : {}),
     };
 
     await updateSyncJob(supabase, jobId, {

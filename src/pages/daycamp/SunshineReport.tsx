@@ -29,10 +29,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Check, Mail, Trash2, Upload, Download, UserPlus, FolderPlus } from "lucide-react";
+import { Plus, Check, Mail, Trash2, Upload, Download, UserPlus, FolderPlus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { parseCSV, pickFirst, readFileAsText } from "@/lib/csv";
+import { syncSunshineFromRoster } from "@/lib/sunshineRoster";
 
 type Group = { id: string; name: string; sort_order: number };
 type Camper = { id: string; full_name: string; group_id: string | null; parent_email: string | null; sort_order: number };
@@ -78,6 +79,7 @@ export default function SunshineReport() {
   const [tagOptions, setTagOptions] = useState<TagOption[]>([]);
   const [reports, setReports] = useState<Record<string, Report>>({});
   const [loading, setLoading] = useState(true);
+  const [syncingRoster, setSyncingRoster] = useState(false);
 
   // Dialog state
   const [addCamperOpen, setAddCamperOpen] = useState(false);
@@ -121,13 +123,34 @@ export default function SunshineReport() {
     return (data as Group | null) ?? null;
   }
 
-  // Initial load
+  // Initial load + roster sync
   useEffect(() => {
-    if (currentCompany) refreshAll();
+    if (currentCompany) {
+      void refreshAll({ syncRoster: true });
+    }
   }, [currentCompany, currentSeason]);
 
-  async function refreshAll() {
+  async function refreshAll(options?: { syncRoster?: boolean }) {
     if (!currentCompany) return;
+    if (options?.syncRoster) {
+      setSyncingRoster(true);
+      try {
+        const result = await syncSunshineFromRoster(currentCompany.id, currentSeason);
+        if (result.campers === 0) {
+          toast.message(
+            result.skippedNoGroup > 0
+              ? `No groups found — ${result.skippedNoGroup} campers missing FULLSUMMERGROUP. Run CampMinder sync.`
+              : "No campers on roster for this season.",
+          );
+        }
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        toast.error(`Could not load roster groups: ${message}`);
+      } finally {
+        setSyncingRoster(false);
+      }
+    }
+
     const [g, c, t] = await Promise.all([
       supabase.from("sunshine_groups").select("*").eq("company_id", currentCompany.id).eq("season", currentSeason).order("sort_order"),
       supabase.from("sunshine_campers").select("*").eq("company_id", currentCompany.id).eq("season", currentSeason).order("sort_order"),
@@ -455,7 +478,7 @@ export default function SunshineReport() {
         <div>
           <h1 className="text-3xl font-bold mb-1 text-foreground">Sunshine Report</h1>
           <p className="text-muted-foreground">
-            Daily camper tracking — fill out throughout the day, then send to parents at the end of day.
+            Daily camper tracking — groups and campers load from roster (FULLSUMMERGROUP) for {currentSeason}.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -476,6 +499,16 @@ export default function SunshineReport() {
               if (e.target) e.target.value = "";
             }}
           />
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={syncingRoster}
+            onClick={() => void refreshAll({ syncRoster: true })}
+            className="gap-1.5"
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", syncingRoster && "animate-spin")} />
+            {syncingRoster ? "Loading…" : "Reload from Roster"}
+          </Button>
           <Button variant="outline" size="sm" onClick={handleCSVDownloadTemplate} className="gap-1.5">
             <Download className="h-3.5 w-3.5" /> Template
           </Button>
