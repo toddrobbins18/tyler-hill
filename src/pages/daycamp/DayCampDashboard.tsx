@@ -22,7 +22,7 @@ const quickActions = [
     title: "Transport",
     description: "Manage routes and pickups",
     icon: Truck,
-    url: "/transportation",
+    url: "/day-camp/transport",
     buttonLabel: "Open Transport",
     className: "bg-sky-600 hover:bg-sky-700 text-white border-0",
   },

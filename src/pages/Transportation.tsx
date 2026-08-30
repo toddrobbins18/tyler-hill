@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
+import { Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import AddTripDialog from "@/components/dialogs/AddTripDialog";
@@ -34,6 +35,7 @@ import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { compareByLastName } from "@/lib/nameSortUtils";
 import { hasDocumentedAllergy } from "@/lib/allergyUtils";
+import { northShoreBusTransportEnabled } from "@/lib/camps";
 
 export default function Transportation() {
   const { currentSeason } = useSeasonContext();
@@ -373,6 +375,10 @@ export default function Transportation() {
     setFilterTransportType("all");
     setFilterStatus("all");
   };
+
+  if (northShoreBusTransportEnabled(currentCompany)) {
+    return <Navigate to="/day-camp/transport" replace />;
+  }
 
   return (
     <div className="space-y-6">

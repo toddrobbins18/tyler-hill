@@ -11,6 +11,7 @@ const routeToMenuMap: Record<string, string> = {
   'child': 'roster',
   'staff-profile': 'staff',
   'parent-portal-dashboard': 'parent-portal',
+  'transport': 'transportation',
 };
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
