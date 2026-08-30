@@ -379,9 +379,9 @@ export function AppSidebar() {
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                     <SidebarMenuItem>
-                      <SidebarMenuButton asChild isActive={location.pathname === "/parents/portal"}>
+                      <SidebarMenuButton asChild isActive={location.pathname === "/day-camp/parent-portal-dashboard"}>
                         <NavLink
-                          to={parentPortalUrl(currentCompany.slug, "/parents/portal")}
+                          to="/day-camp/parent-portal-dashboard"
                           end
                           className={({ isActive }) =>
                             isActive

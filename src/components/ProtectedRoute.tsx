@@ -10,6 +10,7 @@ const routeToMenuMap: Record<string, string> = {
   'athletics': 'sports-calendar',
   'child': 'roster',
   'staff-profile': 'staff',
+  'parent-portal-dashboard': 'parent-portal',
 };
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -25,7 +26,8 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   const menuItem = useMemo(() => {
     const path = location.pathname;
     if (path.startsWith("/day-camp/")) {
-      return path.slice("/day-camp/".length).split("/")[0];
+      const segment = path.slice("/day-camp/".length).split("/")[0];
+      return routeToMenuMap[segment] || segment;
     }
     let pageName = path.substring(1) || "dashboard";
     pageName = pageName.split('/')[0];
