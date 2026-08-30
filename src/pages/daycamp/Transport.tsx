@@ -1580,9 +1580,9 @@ export default function Transport() {
             </Button>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-[320px,1fr]">
+          <div className="grid gap-4 lg:grid-cols-[360px,1fr]">
             {/* Route sidebar */}
-            <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1 min-w-0">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                 {timeOfDay === "am" ? "AM Routes (→ Camp)" : "PM Routes (Camp →)"}
               </p>
@@ -1596,56 +1596,59 @@ export default function Transport() {
                     onClick={() => toggleRouteVisibility(r.id)}
                   >
                     <CardContent className="p-3">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-start gap-2.5">
                         <div
-                          className="w-3 h-3 rounded-full shrink-0 border-2 border-background"
+                          className="w-3 h-3 rounded-full shrink-0 mt-1 border-2 border-background"
                           style={{ backgroundColor: r.color, boxShadow: isVisible ? `0 0 8px ${r.color}60` : "none" }}
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{r.bus}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[10px] text-muted-foreground">{r.name}</span>
-                            <span className="text-muted-foreground/30">·</span>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-medium truncate">{r.bus}</p>
+                            <div className="flex items-center gap-0.5 shrink-0">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleShowDirections(r);
+                                }}
+                                className="text-muted-foreground hover:text-primary p-1 rounded transition-colors"
+                                title="Turn-by-turn directions"
+                              >
+                                <RouteIcon className="h-3 w-3" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOptimizeRoutes(r.id);
+                                }}
+                                disabled={optimizing}
+                                className="text-muted-foreground hover:text-primary p-1 rounded transition-colors disabled:opacity-50"
+                                title="Optimize this route"
+                              >
+                                <Sparkles className={`h-3 w-3 ${optimizing ? "animate-pulse" : ""}`} />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditRoute({ id: r.id, name: r.name, bus: r.bus, departure: r.departure, status: r.status, color: r.color, capacity: r.capacity });
+                                }}
+                                className="text-muted-foreground hover:text-primary p-1 rounded transition-colors"
+                                title="Edit route"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="text-[10px] text-muted-foreground truncate max-w-full">{r.name}</span>
                             <span className="text-[10px] text-muted-foreground">{core.length} stops</span>
-                            <span className="text-muted-foreground/30">·</span>
                             <span className={`text-[10px] ${r.campers > r.capacity ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
-                              {r.campers} / {r.capacity} campers
-                              {r.campers > r.capacity && " ⚠"}
+                              {r.campers}/{r.capacity} campers{r.campers > r.capacity ? " ⚠" : ""}
                             </span>
+                            <Badge variant="secondary" className={`text-[9px] px-1.5 py-0 h-4 ${statusColors[r.status]}`}>
+                              {r.status}
+                            </Badge>
                           </div>
                         </div>
-                        <Badge variant="secondary" className={`text-[9px] ${statusColors[r.status]}`}>{r.status}</Badge>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleShowDirections(r);
-                          }}
-                          className="text-muted-foreground hover:text-primary p-1 rounded transition-colors"
-                          title="Turn-by-turn directions"
-                        >
-                          <RouteIcon className="h-3 w-3" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOptimizeRoutes(r.id);
-                          }}
-                          disabled={optimizing}
-                          className="text-muted-foreground hover:text-primary p-1 rounded transition-colors disabled:opacity-50"
-                          title="Optimize this route"
-                        >
-                          <Sparkles className={`h-3 w-3 ${optimizing ? "animate-pulse" : ""}`} />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditRoute({ id: r.id, name: r.name, bus: r.bus, departure: r.departure, status: r.status, color: r.color, capacity: r.capacity });
-                          }}
-                          className="text-muted-foreground hover:text-primary p-1 rounded transition-colors"
-                          title="Edit route"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </button>
                       </div>
                       {isVisible && r.stops.length > 0 && (
                         <div className="mt-2 pl-6 border-l-2 space-y-1.5" style={{ borderColor: r.color + "40" }}>
@@ -1680,20 +1683,22 @@ export default function Transport() {
                                   setReorderDrag(null);
                                 }}
                                 onDragEnd={() => setReorderDrag(null)}
-                                className={`flex items-center justify-between text-[10px] rounded px-1 py-0.5 transition-all ${
+                                className={`flex items-start justify-between gap-2 text-[10px] rounded px-1 py-0.5 transition-all ${
                                   !isCamp ? "cursor-grab active:cursor-grabbing hover:bg-muted/40" : ""
                                 } ${isDragging ? "opacity-40" : ""}`}
                               >
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 min-w-0 flex-1">
                                   <div
-                                    className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                                    className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-0.5"
                                     style={{ backgroundColor: isCamp ? "#16a34a" : r.color }}
                                   />
-                                  <span className={isCamp ? "text-foreground font-medium" : "text-muted-foreground"}>
+                                  <span className={`truncate ${isCamp ? "text-foreground font-medium" : "text-muted-foreground"}`}>
                                     {isCamp ? stop.name : (stop.camperNames && stop.camperNames.length > 0 ? stop.camperNames.join(", ") : stop.name)}
                                   </span>
                                 </div>
-                                <span className="text-muted-foreground">{stop.pickupTime}</span>
+                                {stop.pickupTime ? (
+                                  <span className="text-muted-foreground shrink-0 whitespace-nowrap">{stop.pickupTime}</span>
+                                ) : null}
                               </div>
                             );
                           })}
