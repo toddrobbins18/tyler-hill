@@ -1,6 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { format, parse, isValid } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
+import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
+import { compareByLastName } from "@/lib/nameSortUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,8 +25,15 @@ type BraceletColor = "Red" | "Orange" | "Yellow" | "Green" | "Blue";
 type SkillStatus = "Achieved" | "Working Towards" | "—";
 type LevelStatus = "Complete" | "Incomplete" | "—";
 
+interface RosterChild {
+  id: string;
+  name: string;
+  group_name: string | null;
+  leader: { name: string } | null;
+}
+
 interface BraceletRecord {
-  id: number;
+  id: string;
   name: string;
   group: string;
   divisionLeader: string;
@@ -34,7 +45,7 @@ interface BraceletRecord {
 }
 
 interface LevelRecord {
-  id: number;
+  id: string;
   name: string;
   group: string;
   goldfish: SkillStatus[]; // 4 sub-skills
@@ -51,74 +62,109 @@ interface LevelRecord {
   lastModified: string;
 }
 
-// ─── Mock data context: Long Island, NY ───
-const GROUPS = ["Everest", "Fiji", "Bunnies", "Blue Jays", "Cheetahs", "Dolphins"];
-const DIVISION_LEADERS = ["Alyssa Greene", "Marcus Chen", "Priya Patel", "Jordan Ruiz"];
 const PROCTORS = ["MF", "JT", "VS", "KL", "AR"];
 const BRACELETS: BraceletColor[] = ["Red", "Orange", "Yellow", "Green", "Blue"];
+const CAMPERS_PAGE_SIZE = 1000;
 
-const FIRST_NAMES = ["Kellan", "Leo", "Mason", "Matthew", "Nitai", "Noah", "Oliver", "Peter", "Salvatore", "Tommy", "Tristan", "Vincenzo", "Zachary", "Adelyne", "Ariella", "Athena", "Ava", "Avery", "Brielle", "Camille", "Chloe", "Daniella", "Benjamin", "Charlotte", "Cole", "Felix", "Jace", "Journey", "Simon", "Amelianna", "Eliana", "Kitson", "Theo"];
-const LAST_NAMES = ["Trautmann", "Blanco", "Fishkind", "Madura", "Meron", "Kleinman", "Orr", "Economou", "Mirra", "Einhorn", "Higdon", "Consolazio", "Harris", "Starr", "Goziker", "Espinosa", "Reyes", "Sherman", "Berman", "Eisenberg", "Harding", "Chorny", "Martin", "Lytle", "Chiang", "Levine", "Moore", "Lichtenstein", "Izzo", "McCalla", "Kelly", "Kassoff"];
-
-const seeded = (i: number, max: number) => Math.abs(Math.sin(i * 9.17) * 1e4) % max | 0;
-
-const bracelets: BraceletRecord[] = Array.from({ length: 28 }, (_, i) => {
-  const fn = FIRST_NAMES[seeded(i, FIRST_NAMES.length)];
-  const ln = LAST_NAMES[seeded(i + 3, LAST_NAMES.length)];
-  const color = BRACELETS[seeded(i + 1, BRACELETS.length)];
-  const dates = ["June 30, 2025", "July 2, 2025", "July 7, 2025", "July 14, 2025", "July 21, 2025", "August 4, 2025"];
-  return {
-    id: i + 267,
-    name: `${fn} ${ln}`,
-    group: GROUPS[seeded(i, GROUPS.length)],
-    divisionLeader: DIVISION_LEADERS[seeded(i + 2, DIVISION_LEADERS.length)],
-    currentBracelet: i % 11 === 0 ? "" : "Orange",
-    proctor1: PROCTORS[seeded(i, PROCTORS.length)],
-    date1: dates[seeded(i, dates.length)],
-    note1: i % 7 === 0 ? "" : "PASSED",
-    proctor2: i % 3 === 0 ? PROCTORS[seeded(i + 5, PROCTORS.length)] : "",
-    date2: i % 3 === 0 ? dates[seeded(i + 1, dates.length)] : "",
-    note2: i % 3 === 0 ? "PASSED" : "",
-    proctor3: i % 6 === 0 ? PROCTORS[seeded(i + 8, PROCTORS.length)] : "",
-    date3: i % 6 === 0 ? dates[seeded(i + 2, dates.length)] : "",
-    note3: i % 6 === 0 ? "PASSED" : "",
-    emailSent: i % 13 !== 0,
-  };
-});
-
-const skillFor = (i: number, off: number): SkillStatus => {
-  const r = seeded(i + off, 10);
-  if (r < 6) return "Achieved";
-  if (r < 9) return "Working Towards";
-  return "—";
-};
 const levelFromSkills = (skills: SkillStatus[]): LevelStatus => {
   if (skills.every(s => s === "Achieved")) return "Complete";
   if (skills.some(s => s !== "—")) return "Incomplete";
   return "—";
 };
 
-const levelRecords: LevelRecord[] = Array.from({ length: 24 }, (_, i) => {
-  const fn = FIRST_NAMES[seeded(i + 4, FIRST_NAMES.length)];
-  const ln = LAST_NAMES[seeded(i + 7, LAST_NAMES.length)];
-  const goldfish = [skillFor(i, 1), skillFor(i, 2), skillFor(i, 3), skillFor(i, 4)];
-  const minnow = [skillFor(i, 11), skillFor(i, 12), skillFor(i, 13), skillFor(i, 14), skillFor(i, 15), skillFor(i, 16)];
-  const tadpole = [skillFor(i, 21), skillFor(i, 22), skillFor(i, 23), skillFor(i, 24)];
+const emptySkills4 = (): SkillStatus[] => ["—", "—", "—", "—"];
+const emptySkills6 = (): SkillStatus[] => ["—", "—", "—", "—", "—", "—"];
+
+function rosterGroup(child: RosterChild): string {
+  return child.group_name?.trim() || "—";
+}
+
+function rosterDivisionLeader(child: RosterChild): string {
+  return child.leader?.name?.trim() || "—";
+}
+
+function braceletFromChild(child: RosterChild): BraceletRecord {
   return {
-    id: i + 1,
-    name: `${fn} ${ln}`,
-    group: GROUPS[seeded(i + 2, GROUPS.length)],
-    goldfish, goldfishLevel: levelFromSkills(goldfish),
-    minnow, minnowLevel: levelFromSkills(minnow),
-    tadpole, tadpoleLevel: levelFromSkills(tadpole),
-    redCross: i % 5 === 0 ? "Complete" : "—",
-    redCross2: i % 6 === 0 ? "Complete" : i % 4 === 0 ? "Incomplete" : "—",
-    redCross3: i % 9 === 0 ? "Complete" : i % 7 === 0 ? "Incomplete" : "—",
-    redCross4: i % 12 === 0 ? "Complete" : "—",
-    frog: i % 8 === 0 ? "Complete" : "—",
-    lastModified: "8/27/2025 · 12:10pm",
+    id: child.id,
+    name: child.name,
+    group: rosterGroup(child),
+    divisionLeader: rosterDivisionLeader(child),
+    currentBracelet: "",
+    proctor1: "", date1: "", note1: "",
+    proctor2: "", date2: "", note2: "",
+    proctor3: "", date3: "", note3: "",
+    emailSent: false,
   };
-});
+}
+
+function levelFromChild(child: RosterChild): LevelRecord {
+  const goldfish = emptySkills4();
+  const minnow = emptySkills6();
+  const tadpole = emptySkills4();
+  return {
+    id: child.id,
+    name: child.name,
+    group: rosterGroup(child),
+    goldfish,
+    goldfishLevel: levelFromSkills(goldfish),
+    minnow,
+    minnowLevel: levelFromSkills(minnow),
+    tadpole,
+    tadpoleLevel: levelFromSkills(tadpole),
+    redCross: "—",
+    redCross2: "—",
+    redCross3: "—",
+    redCross4: "—",
+    frog: "—",
+    lastModified: "—",
+  };
+}
+
+function mergeBracelets(existing: Map<string, BraceletRecord>, children: RosterChild[]): BraceletRecord[] {
+  return children.map((child) => {
+    const prev = existing.get(child.id);
+    const rosterFields = {
+      name: child.name,
+      group: rosterGroup(child),
+      divisionLeader: rosterDivisionLeader(child),
+    };
+    return prev ? { ...prev, ...rosterFields } : braceletFromChild(child);
+  });
+}
+
+function mergeLevels(existing: Map<string, LevelRecord>, children: RosterChild[]): LevelRecord[] {
+  return children.map((child) => {
+    const prev = existing.get(child.id);
+    const rosterFields = { name: child.name, group: rosterGroup(child) };
+    return prev ? { ...prev, ...rosterFields } : levelFromChild(child);
+  });
+}
+
+async function fetchRosterChildren(companyId: string, season: string): Promise<RosterChild[]> {
+  const rows: RosterChild[] = [];
+  let from = 0;
+
+  for (;;) {
+    const to = from + CAMPERS_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from("children")
+      .select("id, name, group_name, leader:leader_id(name)")
+      .eq("company_id", companyId)
+      .eq("season", season)
+      .neq("status", "inactive")
+      .order("name")
+      .range(from, to);
+
+    if (error) throw error;
+    const batch = (data ?? []) as RosterChild[];
+    rows.push(...batch);
+    if (batch.length < CAMPERS_PAGE_SIZE) break;
+    from += CAMPERS_PAGE_SIZE;
+  }
+
+  rows.sort(compareByLastName);
+  return rows;
+}
 
 // ─── UI helpers ───
 const BRACELET_STYLES: Record<BraceletColor, string> = {
@@ -330,20 +376,52 @@ function LevelPill({ status }: { status: LevelStatus }) {
 // ─── Page ───
 export default function SwimProgram() {
   const { toast } = useToast();
+  const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const [search, setSearch] = useState("");
-  const [braceletData, setBraceletData] = useState<BraceletRecord[]>(bracelets);
-  const [levelData, setLevelData] = useState<LevelRecord[]>(levelRecords);
-  const [selectedBraceletId, setSelectedBraceletId] = useState<number | null>(null);
-  const [selectedLevelId, setSelectedLevelId] = useState<number | null>(null);
+  const [braceletData, setBraceletData] = useState<BraceletRecord[]>([]);
+  const [levelData, setLevelData] = useState<LevelRecord[]>([]);
+  const [selectedBraceletId, setSelectedBraceletId] = useState<string | null>(null);
+  const [selectedLevelId, setSelectedLevelId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!currentCompany?.id) {
+      setBraceletData([]);
+      setLevelData([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    fetchRosterChildren(currentCompany.id, currentSeason)
+      .then((children) => {
+        if (cancelled) return;
+        setBraceletData((prev) => {
+          const existing = new Map(prev.map((b) => [b.id, b]));
+          return mergeBracelets(existing, children);
+        });
+        setLevelData((prev) => {
+          const existing = new Map(prev.map((l) => [l.id, l]));
+          return mergeLevels(existing, children);
+        });
+      })
+      .catch((err) => {
+        console.error("Swim roster load error:", err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentCompany?.id, currentSeason]);
 
   const selectedBracelet = braceletData.find(b => b.id === selectedBraceletId) || null;
   const selectedLevel = levelData.find(l => l.id === selectedLevelId) || null;
 
-  const updateBracelet = (id: number, patch: Partial<BraceletRecord>) => {
+  const updateBracelet = (id: string, patch: Partial<BraceletRecord>) => {
     setBraceletData(prev => prev.map(b => b.id === id ? { ...b, ...patch } : b));
   };
 
-  const updateLevel = (id: number, patch: Partial<LevelRecord> | ((r: LevelRecord) => Partial<LevelRecord>)) => {
+  const updateLevel = (id: string, patch: Partial<LevelRecord> | ((r: LevelRecord) => Partial<LevelRecord>)) => {
     setLevelData(prev => prev.map(r => {
       if (r.id !== id) return r;
       const p = typeof patch === "function" ? patch(r) : patch;
@@ -351,7 +429,7 @@ export default function SwimProgram() {
     }));
   };
 
-  const updateSkill = (id: number, group: "goldfish" | "minnow" | "tadpole", idx: number, value: SkillStatus) => {
+  const updateSkill = (id: string, group: "goldfish" | "minnow" | "tadpole", idx: number, value: SkillStatus) => {
     updateLevel(id, r => {
       const next = [...r[group]];
       next[idx] = value;

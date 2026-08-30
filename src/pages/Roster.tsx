@@ -22,6 +22,7 @@ import {
   normalizeDivisionNameForFilter,
 } from "@/lib/divisionFilterUtils";
 import { compareByLastName } from "@/lib/nameSortUtils";
+import { isDayCampCompany } from "@/lib/camps";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,7 +51,8 @@ export default function Roster() {
   const [divisions, setDivisions] = useState<any[]>([]);
   const [selectedDivision, setSelectedDivision] = useState<string>("all");
   const [selectedSession, setSelectedSession] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<"name" | "division">("name");
+  const [sortBy, setSortBy] = useState<"name" | "division" | "group">("name");
+  const isDayCamp = isDayCampCompany(currentCompany);
   const [loading, setLoading] = useState(true);
   const [editingChild, setEditingChild] = useState<string | null>(null);
   const [deletingChild, setDeletingChild] = useState<string | null>(null);
@@ -184,6 +186,16 @@ export default function Roster() {
       return matchesSearch && matchesDivision && matchesSession && matchesSeason;
     })
     .sort((a, b) => {
+      if (sortBy === "group") {
+        const groupA = (a.group_name || "").trim().toLowerCase();
+        const groupB = (b.group_name || "").trim().toLowerCase();
+        if (groupA !== groupB) {
+          if (!groupA) return 1;
+          if (!groupB) return -1;
+          return groupA.localeCompare(groupB);
+        }
+        return compareByLastName(a, b);
+      }
       if (sortBy === "division") {
         const divA = a.division?.sort_order || 999;
         const divB = b.division?.sort_order || 999;
@@ -195,6 +207,19 @@ export default function Roster() {
       }
       return compareByLastName(a, b);
     });
+
+  const cycleSortBy = () => {
+    if (isDayCamp) {
+      setSortBy((prev) =>
+        prev === "name" ? "division" : prev === "division" ? "group" : "name",
+      );
+      return;
+    }
+    setSortBy((prev) => (prev === "name" ? "division" : "name"));
+  };
+
+  const sortByLabel =
+    sortBy === "name" ? "Name" : sortBy === "division" ? "Division" : "Group";
 
   const totalPages = Math.ceil(filteredChildren.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -417,10 +442,10 @@ export default function Roster() {
         )}
         <Button
           variant="outline"
-          onClick={() => setSortBy(sortBy === "name" ? "division" : "name")}
+          onClick={cycleSortBy}
         >
           <ArrowUpDown className="h-4 w-4 mr-2" />
-          Sort by {sortBy === "name" ? "Division" : "Name"}
+          Sort by {sortByLabel}
         </Button>
       </div>
 

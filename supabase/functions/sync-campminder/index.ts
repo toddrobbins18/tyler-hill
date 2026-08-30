@@ -8,6 +8,7 @@ import {
   loadDayCampCamperCustomFields,
   resolveDivisionIdFromAgeGroupLabel,
 } from '../_shared/campminderCustomFields.ts';
+import { syncFullSummerGroupsFromTelegraph } from '../_shared/campminderTelegraphReports.ts';
 
 // @ts-ignore
 declare const Deno: any;
@@ -1368,6 +1369,7 @@ async function performFullSync(
     }
 
     let dayCampCustomFieldStats: Record<string, unknown> | null = null;
+    let telegraphGroupStats: Record<string, unknown> | null = null;
     const cmBunkNameByCmId = new Map<number, string>();
     
     await updateSyncJob(supabase, jobId, {
@@ -2968,6 +2970,62 @@ async function performFullSync(
     }
 
     // =====================================================
+    // PHASE 8b: Telegraph saved report — FULLSUMMERGROUP + Age Group (day camps)
+    // =====================================================
+    if (
+      isDayCamp &&
+      (syncType === 'full' || syncType === 'campers') &&
+      token &&
+      subscriptionKey &&
+      clientId
+    ) {
+      console.log('\n--- TELEGRAPH: Full Summer Groups saved report ---');
+      await updateSyncJob(supabase, jobId, {
+        progress: {
+          step: 'Syncing full summer groups (Telegraph report)',
+          season,
+          ...(dayCampCustomFieldStats ? { customFields: dayCampCustomFieldStats } : {}),
+        },
+      });
+
+      try {
+        const telegraph = await syncFullSummerGroupsFromTelegraph(
+          supabase,
+          companyId,
+          season,
+          token,
+          subscriptionKey,
+          clientId,
+          acquireRateLimitSlot,
+        );
+        telegraphGroupStats = { ...telegraph };
+        await updateSyncJob(supabase, jobId, {
+          progress: {
+            step: telegraph.skippedReason
+              ? 'Telegraph report skipped'
+              : 'Telegraph full summer groups applied',
+            season,
+            telegraph: telegraphGroupStats,
+            ...(dayCampCustomFieldStats ? { customFields: dayCampCustomFieldStats } : {}),
+          },
+        });
+      } catch (telegraphError) {
+        console.error('[Telegraph] Full summer group sync failed:', telegraphError);
+        telegraphGroupStats = {
+          errors: [telegraphError instanceof Error ? telegraphError.message : String(telegraphError)],
+        };
+        await updateSyncJob(supabase, jobId, {
+          progress: {
+            step: 'Telegraph report failed',
+            season,
+            telegraph: telegraphGroupStats,
+            ...(dayCampCustomFieldStats ? { customFields: dayCampCustomFieldStats } : {}),
+          },
+        });
+      }
+    }
+
+    // =====================================================
     // PHASE 9: Cleanup - Remove records not in CampMinder
     // =====================================================
     console.log('\n--- CLEANUP: Removing records not in CampMinder ---');
@@ -3188,6 +3246,7 @@ async function performFullSync(
       changes_summary: allChanges.slice(0, 50), // Limit to first 50 changes to avoid huge payloads
       total_changes: allChanges.length,
       ...(dayCampCustomFieldStats ? { customFields: dayCampCustomFieldStats } : {}),
+      ...(telegraphGroupStats ? { telegraph: telegraphGroupStats } : {}),
     };
 
     await updateSyncJob(supabase, jobId, {
