@@ -113,13 +113,19 @@ export async function syncSunshineFromRoster(
     });
   }
 
+  // Replace season roster (avoids upsert — prod may lack unique index on company_id,season,child_id)
+  const { error: deleteError } = await supabase
+    .from("sunshine_campers")
+    .delete()
+    .eq("company_id", companyId)
+    .eq("season", season);
+  if (deleteError) throw deleteError;
+
   const BATCH = 100;
   for (let i = 0; i < camperPayload.length; i += BATCH) {
     const batch = camperPayload.slice(i, i + BATCH);
-    const { error: upsertError } = await supabase
-      .from("sunshine_campers")
-      .upsert(batch, { onConflict: "company_id,season,child_id" });
-    if (upsertError) throw upsertError;
+    const { error: insertError } = await supabase.from("sunshine_campers").insert(batch);
+    if (insertError) throw insertError;
   }
 
   return {

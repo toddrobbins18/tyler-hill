@@ -28,8 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Check, Mail, Trash2, Upload, Download, UserPlus, FolderPlus, RefreshCw } from "lucide-react";
+import { Plus, Check, Mail, Trash2, Upload, Download, UserPlus, FolderPlus, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { parseCSV, pickFirst, readFileAsText } from "@/lib/csv";
@@ -80,6 +79,7 @@ export default function SunshineReport() {
   const [reports, setReports] = useState<Record<string, Report>>({});
   const [loading, setLoading] = useState(true);
   const [syncingRoster, setSyncingRoster] = useState(false);
+  const [groupSearch, setGroupSearch] = useState("");
 
   // Dialog state
   const [addCamperOpen, setAddCamperOpen] = useState(false);
@@ -123,10 +123,10 @@ export default function SunshineReport() {
     return (data as Group | null) ?? null;
   }
 
-  // Initial load + roster sync
+  // Initial load (roster sync only via "Reload from Roster" button)
   useEffect(() => {
     if (currentCompany) {
-      void refreshAll({ syncRoster: true });
+      void refreshAll({ syncRoster: false });
     }
   }, [currentCompany, currentSeason]);
 
@@ -142,9 +142,18 @@ export default function SunshineReport() {
               ? `No groups found — ${result.skippedNoGroup} campers missing FULLSUMMERGROUP. Run CampMinder sync.`
               : "No campers on roster for this season.",
           );
+        } else {
+          toast.success(
+            `Loaded ${result.campers} campers across ${result.groups} groups.`,
+          );
         }
       } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : String(e);
+        const message =
+          e instanceof Error
+            ? e.message
+            : typeof e === "object" && e !== null && "message" in e
+              ? String((e as { message: unknown }).message)
+              : String(e);
         toast.error(`Could not load roster groups: ${message}`);
       } finally {
         setSyncingRoster(false);
@@ -204,6 +213,20 @@ export default function SunshineReport() {
     () => campers.filter((c) => c.group_id === activeGroupId),
     [campers, activeGroupId]
   );
+
+  const camperCountByGroup = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const camper of campers) {
+      counts[camper.group_id] = (counts[camper.group_id] ?? 0) + 1;
+    }
+    return counts;
+  }, [campers]);
+
+  const filteredGroups = useMemo(() => {
+    const query = groupSearch.trim().toLowerCase();
+    if (!query) return groups;
+    return groups.filter((g) => g.name.toLowerCase().includes(query));
+  }, [groups, groupSearch]);
 
   const sportOptions = tagOptions.filter((t) => t.category === "sport");
   const activityOptions = tagOptions.filter((t) => t.category === "activity");
@@ -527,17 +550,67 @@ export default function SunshineReport() {
         </div>
       </div>
 
-      {/* Group tabs */}
+      {/* Group picker — searchable list + chips */}
       {groups.length > 0 && (
-        <Tabs value={activeGroupId} onValueChange={setActiveGroupId}>
-          <TabsList>
-            {groups.map((g) => (
-              <TabsTrigger key={g.id} value={g.id}>
-                {g.name}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative w-full sm:max-w-sm">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={groupSearch}
+                onChange={(e) => setGroupSearch(e.target.value)}
+                placeholder="Search groups…"
+                className="pl-9"
+                aria-label="Search groups"
+              />
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {activeGroup?.name ?? "Group"} · {groupCampers.length} campers
+              {groupSearch.trim()
+                ? ` · ${filteredGroups.length} of ${groups.length} shown`
+                : ` · ${groups.length} groups`}
+            </span>
+          </div>
+          <div className="rounded-lg border bg-muted/30 p-2 max-h-[8.5rem] overflow-y-auto overflow-x-hidden">
+            {filteredGroups.length === 0 ? (
+              <p className="py-3 text-center text-xs text-muted-foreground">
+                No groups match &ldquo;{groupSearch.trim()}&rdquo;
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5 pb-0.5">
+                {filteredGroups.map((g) => {
+                  const selected = g.id === activeGroupId;
+                  const count = camperCountByGroup[g.id] ?? 0;
+                  return (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => setActiveGroupId(g.id)}
+                      className={cn(
+                        "inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+                        selected
+                          ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                          : "border-transparent bg-background text-foreground hover:bg-muted",
+                      )}
+                    >
+                      <span>{g.name}</span>
+                      {count > 0 && (
+                        <span
+                          className={cn(
+                            "tabular-nums text-[10px]",
+                            selected ? "text-primary-foreground/80" : "text-muted-foreground",
+                          )}
+                        >
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Spreadsheet */}
