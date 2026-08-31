@@ -33,6 +33,11 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { parseCSV, pickFirst, readFileAsText } from "@/lib/csv";
 import { syncSunshineFromRoster } from "@/lib/sunshineRoster";
+import { isNorthShoreDayCamp } from "@/lib/camps";
+import {
+  isNorthShoreSunshineGroup,
+  sunshineGroupSortOrder,
+} from "@/lib/sunshineGroups";
 
 type Group = { id: string; name: string; sort_order: number };
 type Camper = { id: string; full_name: string; group_id: string | null; parent_email: string | null; sort_order: number };
@@ -135,7 +140,9 @@ export default function SunshineReport() {
     if (options?.syncRoster) {
       setSyncingRoster(true);
       try {
-        const result = await syncSunshineFromRoster(currentCompany.id, currentSeason);
+        const result = await syncSunshineFromRoster(currentCompany.id, currentSeason, {
+          northShoreSunshineOnly: isNorthShoreDayCamp(currentCompany.slug),
+        });
         if (result.campers === 0) {
           toast.message(
             result.skippedNoGroup > 0
@@ -160,6 +167,8 @@ export default function SunshineReport() {
       }
     }
 
+    const northShoreSunshineOnly = isNorthShoreDayCamp(currentCompany.slug);
+
     const [g, c, t] = await Promise.all([
       supabase.from("sunshine_groups").select("*").eq("company_id", currentCompany.id).eq("season", currentSeason).order("sort_order"),
       supabase.from("sunshine_campers").select("*").eq("company_id", currentCompany.id).eq("season", currentSeason).order("sort_order"),
@@ -173,14 +182,33 @@ export default function SunshineReport() {
       return;
     }
     if (g.data) {
-      setGroups(g.data);
-      setActiveGroupId(g.data.length ? g.data[0].id : "");
+      const visibleGroups = northShoreSunshineOnly
+        ? g.data
+            .filter((group) => isNorthShoreSunshineGroup(group.name))
+            .sort((a, b) => sunshineGroupSortOrder(a.name) - sunshineGroupSortOrder(b.name))
+        : g.data;
+      setGroups(visibleGroups);
+      setActiveGroupId((prev) =>
+        visibleGroups.some((group) => group.id === prev)
+          ? prev
+          : visibleGroups.length
+            ? visibleGroups[0].id
+            : "",
+      );
     }
     if (c.error) {
       console.error("sunshine_campers load failed:", c.error);
       toast.error("Could not load campers: " + c.error.message);
     } else if (c.data) {
-      setCampers(c.data);
+      const visibleGroupIds = new Set(
+        (g.data ?? [])
+          .filter((group) => !northShoreSunshineOnly || isNorthShoreSunshineGroup(group.name))
+          .map((group) => group.id),
+      );
+      const visibleCampers = northShoreSunshineOnly
+        ? c.data.filter((camper) => camper.group_id && visibleGroupIds.has(camper.group_id))
+        : c.data;
+      setCampers(visibleCampers);
     }
     if (t.error) {
       console.error("sunshine_tag_options load failed:", t.error);
