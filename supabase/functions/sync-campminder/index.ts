@@ -1861,6 +1861,8 @@ async function performFullSync(
             ageGroupCandidates: custom.debug.ageGroupCandidates ?? [],
             firstBatchContainerCount: custom.debug.firstBatchContainerCount ?? null,
             apiBase: custom.debug.apiBaseUsed ?? null,
+            apiSource: custom.debug.apiSource ?? null,
+            personsFetched: custom.debug.personsFetched ?? null,
             bunkNameCount: cmBunkNameByCmId.size,
             errors: custom.debug.dataFetchErrors,
           };
