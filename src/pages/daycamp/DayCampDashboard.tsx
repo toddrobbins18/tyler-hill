@@ -58,7 +58,8 @@ export default function DayCampDashboard() {
       let query = supabase
         .from("children")
         .select("id", { count: "exact", head: true })
-        .eq("company_id", currentCompany.id);
+        .eq("company_id", currentCompany.id)
+        .eq("status", "active");
 
       if (currentSeason) {
         query = query.eq("season", currentSeason);
@@ -87,7 +88,9 @@ export default function DayCampDashboard() {
             <Users className="h-8 w-8 text-primary" />
             <div>
               <p className="text-2xl font-bold leading-none">{totalCampers}</p>
-              <p className="text-sm text-muted-foreground">Total campers in system</p>
+              <p className="text-sm text-muted-foreground">
+                Active campers{currentSeason ? ` (${currentSeason})` : ""}
+              </p>
             </div>
           </CardContent>
         </Card>

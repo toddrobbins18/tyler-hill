@@ -198,12 +198,16 @@ export default function Dashboard() {
     // Check if user has full access (no division restrictions)
     const hasFullAccess = divisionFilter === null;
 
-    // Fetch children count with division filtering
+    // Fetch children count with division filtering (active + current season only)
     let childrenQuery = supabase
       .from('children')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'active')
       .eq('company_id', currentCompany.id);
+
+    if (currentSeason) {
+      childrenQuery = childrenQuery.eq('season', currentSeason);
+    }
     
     if (divisionFilter !== null && divisionFilter.length > 0) {
       childrenQuery = childrenQuery.in('division_id', divisionFilter);
@@ -236,6 +240,8 @@ export default function Dashboard() {
         .from('children')
         .select('id')
         .eq('company_id', currentCompany.id)
+        .eq('status', 'active')
+        .eq('season', currentSeason)
         .in('division_id', divisionFilter);
       
       const childIds = (childrenInDivisions || []).map(c => c.id);
@@ -258,6 +264,8 @@ export default function Dashboard() {
         .from('children')
         .select('id')
         .eq('company_id', currentCompany.id)
+        .eq('status', 'active')
+        .eq('season', currentSeason)
         .in('division_id', divisionFilter);
       
       const childIds = (childrenInDivisions || []).map(c => c.id);
@@ -607,10 +615,10 @@ export default function Dashboard() {
       {!showTigerTimes && !isTylerHill && !isTimberLakeWest && (
         <div className={`grid gap-6 md:grid-cols-2 ${isDayCamp ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}>
           <StatCard
-            title="Total Children"
+            title="Active Campers"
             value={stats.totalChildren}
             icon={Users}
-            trend="+12 this month"
+            trend={`Season ${currentSeason}`}
             variant="default"
           />
           <StatCard

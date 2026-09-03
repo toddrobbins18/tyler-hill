@@ -4,6 +4,9 @@ import { useToast } from '@/hooks/use-toast';
 import { applyThemeColor } from '@/utils/themeUtils';
 import { useAuth } from './AuthContext';
 import { invalidateCampScopedQueries } from '@/lib/queryClient';
+import { COMPANY_BOOTSTRAP_VERSION, DEFAULT_COMPANY_SLUG } from '@/lib/camps';
+
+const COMPANY_BOOTSTRAP_KEY = 'companyBootstrapVersion';
 
 interface Company {
   id: string;
@@ -89,7 +92,14 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // Read saved viewing company early
+      // One-time bootstrap: default to North Shore (clears stale Tyler Hill session pick).
+      const bootstrapDone = localStorage.getItem(COMPANY_BOOTSTRAP_KEY);
+      if (bootstrapDone !== COMPANY_BOOTSTRAP_VERSION) {
+        sessionStorage.removeItem('viewing_company_id');
+        localStorage.setItem(COMPANY_BOOTSTRAP_KEY, COMPANY_BOOTSTRAP_VERSION);
+      }
+
+      // Read saved viewing company early (per browser tab session).
       const savedViewingId = sessionStorage.getItem('viewing_company_id');
 
       // Fetch profile + company data in parallel with companies list for super admins or multi-camp users
@@ -163,17 +173,22 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       let targetCompany: Company | null = null;
 
       if (savedViewingId && companies) {
-        // Any user with multiple camps and a saved viewing company
+        // User switched camp this session — keep their choice.
         targetCompany = companies.find(c => c.id === savedViewingId) || null;
       }
 
+      if (!targetCompany && companies && companies.length > 0) {
+        // Default opening camp: North Shore Day Camp when available.
+        targetCompany =
+          companies.find(c => c.slug === DEFAULT_COMPANY_SLUG) ?? null;
+      }
+
       if (!targetCompany && companies && profile?.company_id) {
-        // Fallback to their primary company
+        // Fallback to profile home company
         targetCompany = companies.find(c => c.id === profile.company_id) || null;
       }
 
       if (!targetCompany && companies && companies.length > 0) {
-        // Fallback to first active camp
         targetCompany = companies[0];
       }
 
@@ -184,6 +199,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
       if (targetCompany) {
         setCurrentCompany(targetCompany);
+        sessionStorage.setItem('viewing_company_id', targetCompany.id);
         if (targetCompany.theme_color) {
           applyThemeColor(targetCompany.theme_color, { companySlug: targetCompany.slug });
         }

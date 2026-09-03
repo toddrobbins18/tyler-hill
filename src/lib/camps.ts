@@ -6,6 +6,12 @@ export const CAMP_SLUG = {
   NORTH_SHORE_DAY_CAMP: "north-shore-day-camp",
 } as const;
 
+/** Default camp when opening The Nest (North Shore day-camp focus). */
+export const DEFAULT_COMPANY_SLUG = CAMP_SLUG.NORTH_SHORE_DAY_CAMP;
+
+/** Bump to reset saved camp selection once (localStorage bootstrap). */
+export const COMPANY_BOOTSTRAP_VERSION = "north-shore-default-v1";
+
 export type CampSlug = (typeof CAMP_SLUG)[keyof typeof CAMP_SLUG];
 
 export type CampType = "overnight" | "day_camp";
