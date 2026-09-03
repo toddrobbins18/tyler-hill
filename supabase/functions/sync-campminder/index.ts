@@ -23,6 +23,9 @@ const CM_FAMILIES_URL = 'https://api.campminder.com/families';
 const CM_FINANCIALS_URL = 'https://api.campminder.com/financials/transactionreporting/transactiondetails';
 
 
+/** Default CampMinder season when sync request omits season_id (must match Nest DEFAULT_SEASON). */
+const DEFAULT_SYNC_SEASON = '2027';
+
 // Rate limiting: 300ms between calls (~3.3 calls/sec = ~200/min)
 // CampMinder enforces strict rate limits - 429 errors occur at higher rates
 const RATE_LIMIT_DELAY_MS = 300;
@@ -782,7 +785,7 @@ const TRACKED_FIELDS: Record<string, string[]> = {
 
 /** When CampMinder omits MedicalInfo, do not wipe manually-entered Nest values on upsert. */
 const PRESERVE_IF_NULL_FIELDS: Record<string, string[]> = {
-  children: ['allergies', 'medical_notes'],
+  children: ['allergies', 'medical_notes', 'group_name', 'division_id'],
 };
 
 function mergePreservedFields(table: string, record: any, existingRecord?: any): any {
@@ -1353,7 +1356,7 @@ async function performFullSync(
       progress: { step: 'Starting sync', syncType: syncType, isIncremental },
     });
 
-    const season = seasonId ? String(seasonId) : '2026';
+    const season = seasonId ? String(seasonId) : DEFAULT_SYNC_SEASON;
     console.log(`\n[Season] Using season: ${season}\n`);
 
     const { data: companyMeta } = await supabase
@@ -3302,7 +3305,11 @@ serve(async (req: Request) => {
   }
 
   try {
-  const { company_id, season_id, incremental, sync_type } = await req.json().catch(() => ({}));
+  const body = await req.json().catch(() => ({}));
+  const { company_id, incremental, sync_type } = body;
+  const season_id = body.season_id != null && body.season_id !== ''
+    ? body.season_id
+    : DEFAULT_SYNC_SEASON;
     
     // sync_type can be: 'campers', 'staff', 'financials', or 'full' (default).
     // Cron schedule (Eastern): campers 6/18, staff 7/19, financials 8/20.

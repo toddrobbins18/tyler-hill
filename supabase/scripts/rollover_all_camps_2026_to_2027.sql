@@ -1,15 +1,15 @@
--- Roll over 2026 → 2027 for ALL camps (safe copy — never updates 2026 rows).
+-- Roll over 2026 → 2027 for ALL camps (DEPRECATED bulk copy — use merge + CM sync instead).
 --
--- Copies:
---   • staff (active) + remaps leader_id
---   • children (enrolled/active) + remaps leader_id, fresh owl_pay_balance
---   • sunshine_groups + sunshine_campers (North Shore / any camp using Sunshine)
+-- Todd requirement: 2027 enrolled/hired lists come from CampMinder season 2027 ONLY.
+-- 2026 rows are never modified.
 --
--- Prerequisites:
---   1) Run migration 20260821120000_season_2027_default.sql (or season columns on sunshine)
---   2) Review PREVIEW queries below
+-- Preferred flow:
+--   1) merge_2026_profiles_into_2027.sql  (profile fields for matching person_id)
+--   2) CampMinder sync season 2027          (creates roster + inactivates non-enrolled)
+--   3) Sunshine: Reload from Roster in UI  (after groups sync)
 --
--- Safe to re-run: skips rows that already exist for 2027.
+-- The bulk INSERT below copies 2026 lists into 2027 — DO NOT RUN unless intentionally
+-- bootstrapping before CM 2027 enrollment exists. It causes "2026 data in 2027" issues.
 
 -- =============================================================================
 -- PREVIEW (run first)

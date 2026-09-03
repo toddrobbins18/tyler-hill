@@ -10,6 +10,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { DEFAULT_SEASON } from "@/lib/seasonConstants";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 
 interface ImportResults {
   campersImported: number;
@@ -35,6 +37,7 @@ interface CompanyWithCampMinder {
 
 export default function CampDataImporter() {
   const { currentCompany, isSuperAdmin } = useCompany();
+  const { currentSeason } = useSeasonContext();
   
   // CampMinder sync state
   const [companies, setCompanies] = useState<CompanyWithCampMinder[]>([]);
@@ -96,10 +99,11 @@ export default function CampDataImporter() {
       const syncLabel = syncType === 'full' ? 'full' : `${syncType}-only`;
       toast.info(`${syncLabel} CampMinder sync queued for ${companyName}. Check sync_jobs in Supabase for progress.`);
 
+      const syncSeason = currentSeason || DEFAULT_SEASON;
       const response = await supabase.functions.invoke('sync-campminder', {
         body: {
           company_id: companyId,
-          season_id: 2026,
+          season_id: syncSeason,
           sync_type: syncType,
         },
       });
