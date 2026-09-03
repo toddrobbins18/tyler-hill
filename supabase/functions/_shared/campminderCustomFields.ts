@@ -40,6 +40,7 @@ export type DayCampCustomFieldMaps = {
     apiBaseUsed?: string;
     apiSource?: "persons" | "entity";
     personsFetched?: number;
+    personsDefsAttempt?: string[];
     dataFetchErrors: string[];
     firstBatchContainerCount?: number;
   };
@@ -53,13 +54,52 @@ type FieldDef = {
   Options?: unknown[];
 };
 
-/** Known North Shore sunshine group values — used to identify FULLSUMMERGROUP field defs. */
+/** Known North Shore group values — sunshine animals + full roster names (for field discovery). */
 const KNOWN_SUMMER_GROUP_LABELS = [
   "bunnies",
   "ducklings",
   "giraffes",
   "koalas",
   "pandas",
+  "blue jays",
+  "barcelona",
+  "cheetahs",
+  "chicago",
+  "columbia",
+  "cornell",
+  "dolphins",
+  "dublin",
+  "everest",
+  "fiji",
+  "flamingos",
+  "himalayas",
+  "honolulu",
+  "hummingbirds",
+  "indiana",
+  "lions",
+  "london",
+  "madrid",
+  "manatees",
+  "miami",
+  "michigan",
+  "milan",
+  "panthers",
+  "paris",
+  "penguins",
+  "phoenix",
+  "princeton",
+  "robins",
+  "rockies",
+  "rome",
+  "sea lions",
+  "stingrays",
+  "syracuse",
+  "tahiti",
+  "turtles",
+  "uconn",
+  "villanova",
+  "wisconsin",
+  "cit",
 ];
 
 const AGE_GROUP_DEF_EXCLUDE =
@@ -157,22 +197,45 @@ function extractApiResult(payload: any): any[] {
     payload.items,
     payload.CustomFields,
     payload.customFields,
+    payload.CustomFieldDefinitions,
+    payload.customFieldDefinitions,
+    payload.FieldDefinitions,
+    payload.fieldDefinitions,
+    payload.fields,
+    payload.Fields,
+    payload.value,
+    payload.values,
   ];
   for (const c of candidates) {
     if (Array.isArray(c)) return c;
+  }
+  if (payload && typeof payload === "object") {
+    const values = Object.values(payload);
+    if (
+      values.length > 0 &&
+      values.every((v) => v && typeof v === "object" && !Array.isArray(v))
+    ) {
+      return values;
+    }
   }
   return [];
 }
 
 function normalizeFieldDef(raw: Record<string, unknown>): FieldDef {
-  const idRaw = raw.ID ?? raw.Id ?? raw.id ?? raw.CustomFieldID ?? raw.FieldID ?? raw.customFieldId;
+  const idRaw =
+    raw.ID ?? raw.Id ?? raw.id ?? raw.CustomFieldID ?? raw.FieldID ?? raw.customFieldId ??
+    raw.CustomFieldId;
   const id = idRaw != null && idRaw !== "" ? Number(idRaw) : undefined;
+  const nameRaw =
+    raw.Name ?? raw.name ?? raw.Label ?? raw.label ?? raw.DisplayName ?? raw.displayName ??
+    raw.FieldName ?? raw.fieldName ?? raw.CustomFieldName ?? raw.customFieldName ??
+    raw.CustomFieldDefinitionName ?? raw.customFieldDefinitionName ?? raw.Title ?? raw.title;
   return {
     ID: Number.isFinite(id) ? id : undefined,
-    Name: String(raw.Name ?? raw.name ?? raw.FieldName ?? raw.fieldName ?? "").trim() || undefined,
-    IsActive: raw.IsActive !== false && raw.isActive !== false,
+    Name: String(nameRaw ?? "").trim() || undefined,
+    IsActive: raw.IsActive !== false && raw.isActive !== false && raw.Active !== false,
     EntityType: typeof raw.EntityType === "number" ? raw.EntityType : undefined,
-    Options: (raw.Options ?? raw.options) as unknown[] | undefined,
+    Options: (raw.Options ?? raw.options ?? raw.Choices ?? raw.choices) as unknown[] | undefined,
   };
 }
 
@@ -192,7 +255,14 @@ function fieldEntryValue(entry: unknown): string | null {
 function fieldEntryId(entry: unknown): number | null {
   if (!entry || typeof entry !== "object") return null;
   const o = entry as Record<string, unknown>;
-  const raw = o.FieldID ?? o.CustomFieldID ?? o.ID ?? o.Id ?? o.id ?? o.customFieldId;
+  const def = o.Definition ?? o.definition ?? o.CustomFieldDefinition ?? o.customFieldDefinition;
+  const defId = def && typeof def === "object"
+    ? (def as Record<string, unknown>).ID ?? (def as Record<string, unknown>).Id ??
+      (def as Record<string, unknown>).id ?? (def as Record<string, unknown>).CustomFieldID
+    : null;
+  const raw =
+    o.FieldID ?? o.CustomFieldID ?? o.ID ?? o.Id ?? o.id ?? o.customFieldId ?? o.CustomFieldId ??
+    defId;
   if (raw == null || raw === "") return null;
   const n = Number(raw);
   return Number.isFinite(n) ? n : null;
@@ -201,7 +271,21 @@ function fieldEntryId(entry: unknown): number | null {
 function fieldEntryName(entry: unknown): string {
   if (!entry || typeof entry !== "object") return "";
   const o = entry as Record<string, unknown>;
-  return String(o.Name ?? o.name ?? o.FieldName ?? o.fieldName ?? "").trim();
+  const def = o.Definition ?? o.definition ?? o.CustomFieldDefinition ?? o.customFieldDefinition;
+  const defName = def && typeof def === "object"
+    ? String(
+      (def as Record<string, unknown>).Name ??
+        (def as Record<string, unknown>).name ??
+        (def as Record<string, unknown>).Label ??
+        (def as Record<string, unknown>).label ??
+        "",
+    ).trim()
+    : "";
+  return String(
+    o.Name ?? o.name ?? o.FieldName ?? o.fieldName ?? o.Label ?? o.label ??
+      o.CustomFieldName ?? o.customFieldName ?? o.CustomFieldDefinitionName ??
+      defName ?? "",
+  ).trim();
 }
 
 function pickValueByFieldId(entries: unknown[], fieldId: number): string | null {
@@ -250,6 +334,138 @@ function defHasKnownSummerGroupOptions(def: FieldDef): boolean {
   const normalized = def.Options.map((o) => String(o).toLowerCase().trim());
   return KNOWN_SUMMER_GROUP_LABELS.some((label) => normalized.includes(label));
 }
+
+function isKnownSummerGroupValue(value: string): boolean {
+  return KNOWN_SUMMER_GROUP_LABELS.includes(value.toLowerCase().trim());
+}
+
+function findDefByOptionsContaining(defs: FieldDef[], needle: string): FieldDef | undefined {
+  const expected = needle.toLowerCase().trim();
+  if (!expected) return undefined;
+
+  for (const def of defs) {
+    if (!Array.isArray(def.Options) || def.Options.length === 0) continue;
+    const hasMatch = def.Options.some(
+      (option) => String(option).toLowerCase().trim() === expected,
+    );
+    if (hasMatch) return def;
+  }
+
+  return undefined;
+}
+
+function findFullSummerDefFromDefCatalog(defs: FieldDef[]): FieldDef | undefined {
+  const scored = pickBestFieldDef(defs, scoreFullSummerGroupDef);
+  if (scored) return scored;
+
+  let bestDef: FieldDef | undefined;
+  let bestCount = 0;
+
+  for (const def of defs) {
+    if (!Array.isArray(def.Options) || def.Options.length === 0) continue;
+    const normalized = def.Options.map((option) => String(option).toLowerCase().trim());
+    const count = KNOWN_SUMMER_GROUP_LABELS.filter((label) => normalized.includes(label)).length;
+    if (count > bestCount) {
+      bestCount = count;
+      bestDef = def;
+    }
+  }
+
+  return bestCount >= 3 ? bestDef : undefined;
+}
+
+function collectProbeValuesFromContainers(
+  containers: EntityFieldContainer[],
+  defById: Map<number, FieldDef>,
+): Array<{ fieldId: number; value: string; fieldName?: string; seasonId?: number }> {
+  const probeValues: Array<{ fieldId: number; value: string; fieldName?: string; seasonId?: number }> = [];
+
+  for (const container of containers) {
+    for (const row of container.Data || []) {
+      if (row.FieldID == null || row.Value == null) continue;
+      const value = String(row.Value).trim();
+      if (!value) continue;
+      const fieldId = Number(row.FieldID);
+      const def = defById.get(fieldId);
+      probeValues.push({
+        fieldId,
+        value,
+        fieldName: def?.Name,
+        seasonId: row.SeasonID,
+      });
+    }
+  }
+
+  return probeValues;
+}
+
+function mergeUniqueProbeValues(
+  target: Array<{ fieldId: number; value: string; fieldName?: string; seasonId?: number }>,
+  incoming: Array<{ fieldId: number; value: string; fieldName?: string; seasonId?: number }>,
+): void {
+  for (const row of incoming) {
+    const exists = target.some(
+      (existing) =>
+        existing.fieldId === row.fieldId &&
+        existing.value === row.value &&
+        existing.seasonId === row.seasonId,
+    );
+    if (!exists) target.push(row);
+  }
+}
+
+function resolveFullSummerDefFromProbeValues(
+  probeValues: Array<{ fieldId: number; value: string; fieldName?: string }>,
+  defById: Map<number, FieldDef>,
+  expectedGroupValue?: string,
+): FieldDef | undefined {
+  if (expectedGroupValue) {
+    const expected = expectedGroupValue.toLowerCase().trim();
+    const exact = probeValues.find((row) => row.value.toLowerCase().trim() === expected);
+    if (exact) {
+      return defById.get(exact.fieldId) ?? {
+        ID: exact.fieldId,
+        Name: exact.fieldName ?? "Full Summer Group (discovered)",
+      };
+    }
+
+    const fuzzy = probeValues.find((row) => {
+      const value = row.value.toLowerCase();
+      return value.includes("blue") && value.includes("jay");
+    });
+    if (fuzzy) {
+      return defById.get(fuzzy.fieldId) ?? {
+        ID: fuzzy.fieldId,
+        Name: fuzzy.fieldName ?? "Full Summer Group (discovered)",
+      };
+    }
+  }
+
+  for (const row of probeValues) {
+    if (!isKnownSummerGroupValue(row.value)) continue;
+    return defById.get(row.fieldId) ?? {
+      ID: row.fieldId,
+      Name: row.fieldName ?? "Full Summer Group (discovered)",
+    };
+  }
+
+  for (const row of probeValues) {
+    const def = defById.get(row.fieldId);
+    if (!def) continue;
+    if (scoreFullSummerGroupDef(def) >= 50 || defHasKnownSummerGroupOptions(def)) {
+      return def;
+    }
+  }
+
+  return undefined;
+}
+
+type ApiAttempt = {
+  url: string;
+  status: number;
+  ok: boolean;
+  bodyPreview: string;
+};
 
 function scoreFullSummerGroupDef(def: FieldDef): number {
   if (def.IsActive === false || !def.Name?.trim()) return -1;
@@ -324,7 +540,7 @@ async function fetchPersonsApiJson(
   query: Record<string, string | number>,
   acquireRateLimitSlot: () => Promise<void>,
   preferredBase?: string,
-): Promise<{ payload: unknown; baseUsed: string } | null> {
+): Promise<{ payload: unknown; baseUsed: string; url: string } | null> {
   const bases = preferredBase
     ? [preferredBase, ...CM_PERSONS_API_BASES.filter((b) => b !== preferredBase)]
     : CM_PERSONS_API_BASES;
@@ -351,7 +567,7 @@ async function fetchPersonsApiJson(
     if (!response.ok) {
       const text = await response.text();
       console.warn(
-        `[Custom Fields] Persons ${url} → HTTP ${response.status}: ${text.slice(0, 160)}`,
+        `[Custom Fields] Persons ${url} → HTTP ${response.status}: ${text.slice(0, 200)}`,
       );
       continue;
     }
@@ -364,7 +580,7 @@ async function fetchPersonsApiJson(
       continue;
     }
 
-    return { payload, baseUsed: base };
+    return { payload, baseUsed: base, url };
   }
 
   return null;
@@ -464,25 +680,14 @@ async function loadPersonsCustomFieldMaps(
 
         personsFetched++;
 
-        if (fullSummerDef?.ID) {
-          const value =
-            pickValueByFieldId(entries, fullSummerDef.ID) ??
-            pickValueByFieldName(entries, FULL_SUMMER_GROUP_FIELD_NAMES);
-          if (value) fullSummerGroupByPerson.set(personId, value);
-        } else if (fullSummerDef?.Name) {
-          const value = pickValueByFieldName(entries, FULL_SUMMER_GROUP_FIELD_NAMES);
-          if (value) fullSummerGroupByPerson.set(personId, value);
-        }
-
-        if (ageGroupDef?.ID) {
-          const value =
-            pickValueByFieldId(entries, ageGroupDef.ID) ??
-            pickValueByFieldName(entries, AGE_GROUP_FIELD_NAMES);
-          if (value) ageGroupByPerson.set(personId, value);
-        } else if (ageGroupDef?.Name) {
-          const value = pickValueByFieldName(entries, AGE_GROUP_FIELD_NAMES);
-          if (value) ageGroupByPerson.set(personId, value);
-        }
+        applyPersonEntriesToMaps(
+          personId,
+          entries,
+          fullSummerDef,
+          ageGroupDef,
+          fullSummerGroupByPerson,
+          ageGroupByPerson,
+        );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         dataFetchErrors.push(`person ${personId}: ${msg}`);
@@ -556,6 +761,11 @@ function findFieldDefs(defs: FieldDef[]): {
       (d) => d.IsActive !== false && d.Name && fieldNameMatches(d.Name, FULL_SUMMER_GROUP_FIELD_NAMES),
     );
   }
+  if (!fullSummerDef) {
+    fullSummerDef = defs.find(
+      (d) => d.Name && /full\s*summer\s*group/i.test(d.Name.trim()),
+    );
+  }
 
   let ageGroupDef = pickBestFieldDef(defs, scoreAgeGroupDef);
   if (!ageGroupDef) {
@@ -563,8 +773,56 @@ function findFieldDefs(defs: FieldDef[]): {
       (d) => d.IsActive !== false && d.Name && fieldNameMatches(d.Name, AGE_GROUP_FIELD_NAMES),
     );
   }
+  if (!ageGroupDef) {
+    ageGroupDef = defs.find(
+      (d) => d.Name && /^age\s*groups?$/i.test(d.Name.trim()),
+    );
+  }
 
   return { fullSummerDef, ageGroupDef };
+}
+
+function discoverDefsFromPersonEntries(entries: unknown[]): {
+  fullSummerDef?: FieldDef;
+  ageGroupDef?: FieldDef;
+} {
+  let fullSummerDef: FieldDef | undefined;
+  let ageGroupDef: FieldDef | undefined;
+
+  for (const entry of entries) {
+    const name = fieldEntryName(entry);
+    const id = fieldEntryId(entry);
+    if (!name) continue;
+    if (!fullSummerDef && (fieldNameMatches(name, FULL_SUMMER_GROUP_FIELD_NAMES) ||
+      fieldNameMatchesLoose(name, FULL_SUMMER_GROUP_FIELD_NAMES))) {
+      fullSummerDef = { ID: id ?? undefined, Name: name };
+    }
+    if (!ageGroupDef && (fieldNameMatches(name, AGE_GROUP_FIELD_NAMES) ||
+      fieldNameMatchesLoose(name, AGE_GROUP_FIELD_NAMES))) {
+      ageGroupDef = { ID: id ?? undefined, Name: name };
+    }
+  }
+
+  return { fullSummerDef, ageGroupDef };
+}
+
+function applyPersonEntriesToMaps(
+  personId: string,
+  entries: unknown[],
+  fullSummerDef: FieldDef | undefined,
+  ageGroupDef: FieldDef | undefined,
+  fullSummerGroupByPerson: Map<string, string>,
+  ageGroupByPerson: Map<string, string>,
+): void {
+  const groupValue =
+    (fullSummerDef?.ID ? pickValueByFieldId(entries, fullSummerDef.ID) : null) ??
+    pickValueByFieldName(entries, FULL_SUMMER_GROUP_FIELD_NAMES);
+  if (groupValue) fullSummerGroupByPerson.set(personId, groupValue);
+
+  const ageValue =
+    (ageGroupDef?.ID ? pickValueByFieldId(entries, ageGroupDef.ID) : null) ??
+    pickValueByFieldName(entries, AGE_GROUP_FIELD_NAMES);
+  if (ageValue) ageGroupByPerson.set(personId, ageValue);
 }
 
 async function fetchCustomFieldDefs(
@@ -642,6 +900,211 @@ async function fetchCustomFieldDataBatch(
   return [];
 }
 
+async function fetchCustomFieldDataForPersonsOnly(
+  personIds: number[],
+  token: string,
+  subscriptionKey: string,
+  clientId: string,
+  acquireRateLimitSlot: () => Promise<void>,
+  preferredBase?: string,
+): Promise<EntityFieldContainer[]> {
+  const bases = preferredBase
+    ? [preferredBase, ...CM_CUSTOM_FIELD_API_BASES.filter((b) => b !== preferredBase)]
+    : CM_CUSTOM_FIELD_API_BASES;
+
+  for (const base of bases) {
+    await acquireRateLimitSlot();
+    const params = new URLSearchParams();
+    params.set("clientid", clientId);
+    for (const id of personIds) params.append("PersonIDs", String(id));
+
+    const url = `${base}/GetCustomFieldData?${params.toString()}`;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Ocp-Apim-Subscription-Key": subscriptionKey,
+      },
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.warn(
+        `[Custom Fields] GetCustomFieldData (person-only) HTTP ${response.status}: ${text.slice(0, 160)}`,
+      );
+      continue;
+    }
+
+    const payload = await response.json();
+    if (payload?.Success === false) {
+      console.warn(
+        `[Custom Fields] GetCustomFieldData (person-only) Success=false: ${payload?.ErrorText || "unknown error"}`,
+      );
+      continue;
+    }
+
+    const containers = extractApiResult(payload) as EntityFieldContainer[];
+    if (containers.length > 0) return containers;
+  }
+
+  return [];
+}
+
+/** When field defs don't match by name, probe one camper via Entity GetCustomFieldData. */
+async function discoverEntityFieldIdsFromProbePerson(
+  probePersonId: string,
+  defs: FieldDef[],
+  token: string,
+  subscriptionKey: string,
+  clientId: string,
+  acquireRateLimitSlot: () => Promise<void>,
+  preferredBase?: string,
+  expectedGroupValue?: string,
+): Promise<{
+  fullSummerDef?: FieldDef;
+  ageGroupDef?: FieldDef;
+  probeValues: Array<{ fieldId: number; value: string; fieldName?: string; seasonId?: number }>;
+  catalogGroupDef?: FieldDef;
+}> {
+  const activeDefs = defs.filter((d) => d.ID && d.IsActive !== false);
+  const allFieldIds = activeDefs.map((d) => d.ID as number);
+  const defById = new Map(activeDefs.map((d) => [d.ID as number, d]));
+  const numericPersonId = parseInt(probePersonId, 10);
+  const probeValues: Array<{ fieldId: number; value: string; fieldName?: string; seasonId?: number }> = [];
+
+  if (Number.isNaN(numericPersonId)) {
+    return { probeValues };
+  }
+
+  const catalogGroupDef =
+    findFullSummerDefFromDefCatalog(defs) ??
+    (expectedGroupValue ? findDefByOptionsContaining(defs, expectedGroupValue) : undefined);
+
+  let fullSummerDef = catalogGroupDef;
+  if (expectedGroupValue && !fullSummerDef) {
+    fullSummerDef = findDefByOptionsContaining(defs, expectedGroupValue);
+  }
+
+  const personOnlyContainers = await fetchCustomFieldDataForPersonsOnly(
+    [numericPersonId],
+    token,
+    subscriptionKey,
+    clientId,
+    acquireRateLimitSlot,
+    preferredBase,
+  );
+  mergeUniqueProbeValues(probeValues, collectProbeValuesFromContainers(personOnlyContainers, defById));
+
+  if (allFieldIds.length) {
+    const fieldIdBatchSize = 40;
+    for (let i = 0; i < allFieldIds.length; i += fieldIdBatchSize) {
+      const fieldBatch = allFieldIds.slice(i, i + fieldIdBatchSize);
+      const containers = await fetchCustomFieldDataBatch(
+        [numericPersonId],
+        fieldBatch,
+        token,
+        subscriptionKey,
+        clientId,
+        acquireRateLimitSlot,
+        preferredBase,
+      );
+      mergeUniqueProbeValues(probeValues, collectProbeValuesFromContainers(containers, defById));
+    }
+  }
+
+  if (!fullSummerDef) {
+    fullSummerDef = resolveFullSummerDefFromProbeValues(probeValues, defById, expectedGroupValue);
+  } else if (expectedGroupValue) {
+    const expected = expectedGroupValue.toLowerCase().trim();
+    const hasExpectedValue = probeValues.some(
+      (row) => row.value.toLowerCase().trim() === expected,
+    );
+    if (!hasExpectedValue) {
+      const fromValues = resolveFullSummerDefFromProbeValues(probeValues, defById, expectedGroupValue);
+      if (fromValues) fullSummerDef = fromValues;
+    }
+  }
+
+  let ageGroupDef = findFieldDefs(defs).ageGroupDef;
+  if (!ageGroupDef) {
+    for (const row of probeValues) {
+      const def = defById.get(row.fieldId);
+      if (def && scoreAgeGroupDef(def) >= 40) {
+        ageGroupDef = def;
+        break;
+      }
+    }
+  }
+
+  return { fullSummerDef, ageGroupDef, probeValues, catalogGroupDef };
+}
+
+async function fetchPersonsApiWithAttempts(
+  pathSuffix: string,
+  token: string,
+  subscriptionKey: string,
+  clientId: string,
+  query: Record<string, string | number>,
+): Promise<{
+  result: { payload: unknown; baseUsed: string; url: string } | null;
+  attempts: ApiAttempt[];
+}> {
+  const attempts: ApiAttempt[] = [];
+
+  for (const base of CM_PERSONS_API_BASES) {
+    const params = new URLSearchParams();
+    params.set("clientid", clientId);
+    for (const [key, value] of Object.entries(query)) {
+      params.set(key, String(value));
+    }
+
+    const path = pathSuffix ? `${base}/${pathSuffix}` : base;
+    const url = `${path}?${params.toString()}`;
+
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Ocp-Apim-Subscription-Key": subscriptionKey,
+        },
+      });
+
+      const text = await response.text();
+      attempts.push({
+        url,
+        status: response.status,
+        ok: response.ok,
+        bodyPreview: text.slice(0, 300),
+      });
+
+      if (!response.ok) continue;
+
+      let payload: unknown;
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        continue;
+      }
+
+      if (payload && typeof payload === "object" && (payload as { Success?: boolean }).Success === false) {
+        continue;
+      }
+
+      return { result: { payload, baseUsed: base, url }, attempts };
+    } catch (err) {
+      attempts.push({
+        url,
+        status: 0,
+        ok: false,
+        bodyPreview: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return { result: null, attempts };
+}
+
 export async function loadDayCampCamperCustomFields(
   personIds: string[],
   season: string,
@@ -706,85 +1169,153 @@ export async function loadDayCampCamperCustomFields(
   empty.debug.apiSource = apiSource;
 
   const { fullSummerDef: initialFullSummerDef, ageGroupDef: initialAgeGroupDef } = findFieldDefs(defs);
-  let fullSummerDef = initialFullSummerDef;
+  let fullSummerDef = initialFullSummerDef ?? findFullSummerDefFromDefCatalog(defs);
   let ageGroupDef = initialAgeGroupDef;
 
-  if (!fullSummerDef?.ID && !fullSummerDef?.Name && !ageGroupDef?.ID && !ageGroupDef?.Name) {
+  if (!fullSummerDef && personIds.length > 0) {
+    const fromOptions = findDefByOptionsContaining(defs, "Blue Jays");
+    if (fromOptions) fullSummerDef = fromOptions;
+  }
+
+  // If defs list didn't match, probe the first camper via Persons API (Todd's documented path).
+  if (!fullSummerDef && !ageGroupDef && personIds.length > 0) {
+    const probeEntries = await fetchPersonCustomFieldValues(
+      personIds[0],
+      season,
+      token,
+      subscriptionKey,
+      clientId,
+      acquireRateLimitSlot,
+      personsDefsResult.baseUsed ?? "https://api.campminder.com/persons",
+    );
+    if (probeEntries?.length) {
+      const discovered = discoverDefsFromPersonEntries(probeEntries);
+      fullSummerDef = discovered.fullSummerDef;
+      ageGroupDef = discovered.ageGroupDef;
+      apiSource = "persons";
+      baseUsed = baseUsed ?? "https://api.campminder.com/persons";
+      empty.debug.personsDefsAttempt = [
+        `probed person ${personIds[0]}: ${probeEntries.length} entries`,
+      ];
+      console.log(
+        `[Custom Fields] Probed person ${personIds[0]}: group="${fullSummerDef?.Name ?? "n/a"}", age="${ageGroupDef?.Name ?? "n/a"}"`,
+      );
+    }
+  }
+
+  if (!fullSummerDef && !ageGroupDef) {
     const groupLike = defs
-      .filter((d) => d.Name && /group|age|division/i.test(d.Name))
+      .filter((d) => d.Name && /full\s*summer|age\s*group|group/i.test(d.Name))
       .map((d) => d.Name)
       .slice(0, 20);
     console.log(
-      `[Custom Fields] No FULLSUMMERGROUP or Age Group defs found (${defs.length} total, source=${apiSource}). Group-like names: ${groupLike.join(", ") || "none"}`,
+      `[Custom Fields] No FULLSUMMERGROUP or Age Group defs found (${defs.length} total, source=${apiSource}). Similar names: ${groupLike.join(", ") || "none"}`,
     );
-    return empty;
+    // Still try Persons API with label-only matching for every camper.
   }
 
   empty.matchedFields = {
     fullSummerGroup: fullSummerDef?.Name,
     ageGroup: ageGroupDef?.Name,
   };
-  console.log(
-    `[Custom Fields] Using defs (source=${apiSource}): FULLSUMMERGROUP="${fullSummerDef?.Name ?? "n/a"}" (id=${fullSummerDef?.ID ?? "n/a"}), Age Group="${ageGroupDef?.Name ?? "n/a"}" (id=${ageGroupDef?.ID ?? "n/a"})`,
+  if (fullSummerDef || ageGroupDef) {
+    console.log(
+      `[Custom Fields] Using defs (source=${apiSource}): FULLSUMMERGROUP="${fullSummerDef?.Name ?? "n/a"}" (id=${fullSummerDef?.ID ?? "n/a"}), Age Group="${ageGroupDef?.Name ?? "n/a"}" (id=${ageGroupDef?.ID ?? "n/a"})`,
+    );
+  } else {
+    console.log(
+      `[Custom Fields] No field defs — will try Persons API label matching for ${personIds.length} campers (season=${season})`,
+    );
+  }
+
+  // Always try Persons API first (CampMinder-documented path).
+  const personsMaps = await loadPersonsCustomFieldMaps(
+    personIds,
+    season,
+    fullSummerDef,
+    ageGroupDef,
+    token,
+    subscriptionKey,
+    clientId,
+    acquireRateLimitSlot,
+    baseUsed,
   );
 
-  if (apiSource === "persons") {
-    const personsMaps = await loadPersonsCustomFieldMaps(
-      personIds,
-      season,
-      fullSummerDef,
-      ageGroupDef,
+  empty.fullSummerGroupByPerson = personsMaps.fullSummerGroupByPerson;
+  empty.ageGroupByPerson = personsMaps.ageGroupByPerson;
+  empty.debug.personsFetched = personsMaps.personsFetched;
+  empty.debug.dataFetchErrors = personsMaps.dataFetchErrors.slice(0, 20);
+
+  const personsGotData =
+    personsMaps.fullSummerGroupByPerson.size > 0 || personsMaps.ageGroupByPerson.size > 0;
+
+  if (personsGotData) {
+    console.log(
+      `[Custom Fields] Persons API loaded ${empty.fullSummerGroupByPerson.size} FULLSUMMERGROUP, ${empty.ageGroupByPerson.size} age group values (season=${season}, fetched ${personsMaps.personsFetched}/${personIds.length} persons)`,
+    );
+    return empty;
+  }
+
+  console.warn(
+    "[Custom Fields] Persons API returned no camper values — falling back to Entity GetCustomFieldData",
+  );
+
+  if (!defs.length || apiSource === "persons") {
+    const entityDefsResult = await fetchCustomFieldDefs(
+      token,
+      subscriptionKey,
+      clientId,
+      acquireRateLimitSlot,
+    );
+    if (entityDefsResult.defs.length) {
+      defs = entityDefsResult.defs;
+      baseUsed = entityDefsResult.baseUsed;
+      empty.debug.fieldDefCount = defs.length;
+      empty.debug.apiBaseUsed = baseUsed;
+    }
+  }
+
+  apiSource = "entity";
+  empty.debug.apiSource = apiSource;
+
+  if (!fullSummerDef?.ID && !ageGroupDef?.ID) {
+    const entityFields = findFieldDefs(defs);
+    if (entityFields.fullSummerDef) fullSummerDef = entityFields.fullSummerDef;
+    if (entityFields.ageGroupDef) ageGroupDef = entityFields.ageGroupDef;
+    if (!fullSummerDef) fullSummerDef = findFullSummerDefFromDefCatalog(defs);
+  }
+
+  if ((!fullSummerDef?.ID && !ageGroupDef?.ID) && personIds.length > 0) {
+    const discovered = await discoverEntityFieldIdsFromProbePerson(
+      personIds[0],
+      defs,
       token,
       subscriptionKey,
       clientId,
       acquireRateLimitSlot,
       baseUsed,
     );
-
-    empty.fullSummerGroupByPerson = personsMaps.fullSummerGroupByPerson;
-    empty.ageGroupByPerson = personsMaps.ageGroupByPerson;
-    empty.debug.personsFetched = personsMaps.personsFetched;
-    empty.debug.dataFetchErrors = personsMaps.dataFetchErrors.slice(0, 20);
-
-    const personsGotData =
-      personsMaps.fullSummerGroupByPerson.size > 0 || personsMaps.ageGroupByPerson.size > 0;
-
-    if (!personsGotData && personsMaps.personsFetched === 0 && (fullSummerDef?.ID || ageGroupDef?.ID)) {
-      console.warn(
-        "[Custom Fields] Persons API returned no camper values — falling back to Entity GetCustomFieldData",
-      );
-      const entityDefsResult = await fetchCustomFieldDefs(
-        token,
-        subscriptionKey,
-        clientId,
-        acquireRateLimitSlot,
-      );
-      if (entityDefsResult.defs.length) {
-        const entityFields = findFieldDefs(entityDefsResult.defs);
-        if (entityFields.fullSummerDef) fullSummerDef = entityFields.fullSummerDef;
-        if (entityFields.ageGroupDef) ageGroupDef = entityFields.ageGroupDef;
-        baseUsed = entityDefsResult.baseUsed;
-        empty.debug.apiBaseUsed = baseUsed;
-        empty.matchedFields = {
-          fullSummerGroup: fullSummerDef?.Name,
-          ageGroup: ageGroupDef?.Name,
-        };
-      }
-      empty.fullSummerGroupByPerson = new Map();
-      empty.ageGroupByPerson = new Map();
-      apiSource = "entity";
-      empty.debug.apiSource = apiSource;
-    } else {
-      console.log(
-        `[Custom Fields] Persons API loaded ${empty.fullSummerGroupByPerson.size} FULLSUMMERGROUP, ${empty.ageGroupByPerson.size} age group values (season=${season}, fetched ${personsMaps.personsFetched}/${personIds.length} persons)`,
-      );
-      return empty;
-    }
+    if (discovered.fullSummerDef) fullSummerDef = discovered.fullSummerDef;
+    if (discovered.ageGroupDef) ageGroupDef = discovered.ageGroupDef;
+    empty.debug.personsDefsAttempt = [
+      `entity probe person ${personIds[0]}: ${discovered.probeValues.length} field values, catalog id=${discovered.catalogGroupDef?.ID ?? "n/a"}, group id=${fullSummerDef?.ID ?? "n/a"}`,
+    ];
+    console.log(
+      `[Custom Fields] Entity probe person ${personIds[0]}: group="${fullSummerDef?.Name ?? "n/a"}" (id=${fullSummerDef?.ID ?? "n/a"}), age="${ageGroupDef?.Name ?? "n/a"}" (id=${ageGroupDef?.ID ?? "n/a"})`,
+    );
   }
+
+  empty.matchedFields = {
+    fullSummerGroup: fullSummerDef?.Name,
+    ageGroup: ageGroupDef?.Name,
+  };
+
+  empty.fullSummerGroupByPerson = new Map();
+  empty.ageGroupByPerson = new Map();
 
   const fieldIds = [fullSummerDef?.ID, ageGroupDef?.ID].filter((id): id is number => typeof id === "number");
   if (!fieldIds.length) {
-    console.warn("[Custom Fields] Entity API matched field names but no field IDs — cannot batch fetch");
+    console.warn("[Custom Fields] Entity API could not discover FULLSUMMERGROUP or Age Group field IDs");
     return empty;
   }
 
@@ -897,4 +1428,208 @@ export function resolveDivisionIdFromAgeGroupLabel(
 ): string | null {
   if (!ageGroupLabel?.trim()) return null;
   return ageGroupDivisionMap.get(ageGroupLabel.toLowerCase().trim()) ?? null;
+}
+
+/** One-off probe for Supabase test-campminder-custom-fields (debug API responses). */
+export async function probeCampminderCustomFields(
+  personId: string,
+  season: string,
+  token: string,
+  subscriptionKey: string,
+  clientId: string,
+  expectedGroupValue = "Blue Jays",
+): Promise<{
+  defsUrl?: string;
+  defsPayload?: unknown;
+  defsCount: number;
+  defsNamesSample: string[];
+  personUrl?: string;
+  personPayload?: unknown;
+  personEntriesCount: number;
+  parsedGroup: string | null;
+  parsedAgeGroup: string | null;
+  personsApiAttempts: ApiAttempt[];
+  entityDefsCount: number;
+  entityDiscoveredGroupFieldId: number | null;
+  entityDiscoveredGroupFieldName: string | null;
+  entityDiscoveredGroupValue: string | null;
+  entityProbeValueCount: number;
+  entityProbeValuesSample: Array<{ fieldId: number; fieldName?: string; value: string; seasonId?: number }>;
+  entityCatalogGroupFieldId: number | null;
+  entityCatalogGroupFieldName: string | null;
+  entityDefsWithOptionsCount: number;
+  personRecordGroup: string | null;
+  apiSource: "persons" | "entity" | "none";
+  errors: string[];
+}> {
+  const errors: string[] = [];
+  const noopRateLimit = async () => {};
+
+  const defsAttempt = await fetchPersonsApiWithAttempts(
+    "custom-fields",
+    token,
+    subscriptionKey,
+    clientId,
+    {},
+  );
+  const defsResponse = defsAttempt.result;
+
+  const defsRaw = defsResponse ? extractApiResult(defsResponse.payload) : [];
+  const defs = defsRaw
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+    .map(normalizeFieldDef);
+
+  const personAttempt = await fetchPersonsApiWithAttempts(
+    `${personId}/custom-fields`,
+    token,
+    subscriptionKey,
+    clientId,
+    { seasonid: season },
+  );
+  const personResponse = personAttempt.result;
+
+  const personEntries = personResponse
+    ? extractPersonCustomFieldEntries(personResponse.payload)
+    : [];
+
+  const personsApiAttempts = [...defsAttempt.attempts, ...personAttempt.attempts];
+
+  if (!defsResponse) {
+    errors.push("GET /persons/custom-fields failed on all bases");
+    for (const attempt of defsAttempt.attempts) {
+      errors.push(`  ${attempt.url} → HTTP ${attempt.status}: ${attempt.bodyPreview.slice(0, 120)}`);
+    }
+  }
+  if (!personResponse) {
+    errors.push(`GET /persons/${personId}/custom-fields failed on all bases`);
+    for (const attempt of personAttempt.attempts) {
+      errors.push(`  ${attempt.url} → HTTP ${attempt.status}: ${attempt.bodyPreview.slice(0, 120)}`);
+    }
+  }
+
+  const { fullSummerDef, ageGroupDef } = personEntries.length
+    ? discoverDefsFromPersonEntries(personEntries)
+    : findFieldDefs(defs);
+
+  const fullSummer = new Map<string, string>();
+  const ageGroup = new Map<string, string>();
+  if (personEntries.length) {
+    applyPersonEntriesToMaps(
+      personId,
+      personEntries,
+      fullSummerDef,
+      ageGroupDef,
+      fullSummer,
+      ageGroup,
+    );
+  }
+
+  let parsedGroup = fullSummer.get(personId) ?? null;
+  let parsedAgeGroup = ageGroup.get(personId) ?? null;
+  let apiSource: "persons" | "entity" | "none" = parsedGroup || parsedAgeGroup ? "persons" : "none";
+
+  let personRecordGroup: string | null = null;
+  try {
+    const personUrl =
+      `https://api.campminder.com/persons/${personId}?clientid=${clientId}&includecamperdetails=true`;
+    const personResponse = await fetch(personUrl, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Ocp-Apim-Subscription-Key": subscriptionKey,
+      },
+    });
+    if (personResponse.ok) {
+      const personRecord = await personResponse.json();
+      personRecordGroup =
+        extractFieldFromRecord(personRecord, FULL_SUMMER_GROUP_FIELD_NAMES) ??
+        extractFieldFromRecord(
+          (personRecord as { CamperDetails?: Record<string, unknown> }).CamperDetails,
+          FULL_SUMMER_GROUP_FIELD_NAMES,
+        );
+      if (!parsedGroup && personRecordGroup) {
+        parsedGroup = personRecordGroup;
+        apiSource = "entity";
+      }
+    }
+  } catch {
+    // optional probe — ignore
+  }
+
+  const entityDefsResult = await fetchCustomFieldDefs(
+    token,
+    subscriptionKey,
+    clientId,
+    noopRateLimit,
+  );
+  const entityDiscovery = await discoverEntityFieldIdsFromProbePerson(
+    personId,
+    entityDefsResult.defs,
+    token,
+    subscriptionKey,
+    clientId,
+    noopRateLimit,
+    entityDefsResult.baseUsed,
+    expectedGroupValue,
+  );
+
+  if (!parsedGroup && entityDiscovery.fullSummerDef?.ID) {
+    const expected = expectedGroupValue.toLowerCase().trim();
+    const match = entityDiscovery.probeValues.find(
+      (row) => row.value.toLowerCase().trim() === expected,
+    ) ?? entityDiscovery.probeValues.find((row) => {
+      const value = row.value.toLowerCase();
+      return value.includes("blue") && value.includes("jay");
+    });
+    if (match) {
+      parsedGroup = match.value;
+      apiSource = "entity";
+    } else if (entityDiscovery.catalogGroupDef?.ID) {
+      apiSource = "entity";
+    }
+  }
+  if (!parsedAgeGroup && entityDiscovery.ageGroupDef?.ID) {
+    const match = entityDiscovery.probeValues.find(
+      (row) => row.fieldId === entityDiscovery.ageGroupDef?.ID,
+    );
+    if (match) parsedAgeGroup = match.value;
+  }
+
+  const entityGroupMatch = entityDiscovery.probeValues.find(
+    (row) => row.value.toLowerCase().trim() === expectedGroupValue.toLowerCase().trim(),
+  );
+
+  const entityDefsWithOptionsCount = entityDefsResult.defs.filter(
+    (def) => Array.isArray(def.Options) && def.Options.length > 0,
+  ).length;
+
+  return {
+    defsUrl: defsResponse?.url,
+    defsPayload: defsResponse?.payload,
+    defsCount: defs.length,
+    defsNamesSample: defs.filter((d) => d.Name).slice(0, 20).map((d) => d.Name as string),
+    personUrl: personResponse?.url,
+    personPayload: personResponse?.payload,
+    personEntriesCount: personEntries.length,
+    parsedGroup,
+    parsedAgeGroup,
+    personsApiAttempts,
+    entityDefsCount: entityDefsResult.defs.length,
+    entityDiscoveredGroupFieldId: entityDiscovery.fullSummerDef?.ID ?? null,
+    entityDiscoveredGroupFieldName: entityDiscovery.fullSummerDef?.Name ?? null,
+    entityDiscoveredGroupValue: entityGroupMatch?.value ?? null,
+    entityProbeValueCount: entityDiscovery.probeValues.length,
+    entityProbeValuesSample: entityDiscovery.probeValues.slice(0, 30).map((row) => ({
+      fieldId: row.fieldId,
+      fieldName: row.fieldName,
+      value: row.value,
+      seasonId: row.seasonId,
+    })),
+    entityCatalogGroupFieldId: entityDiscovery.catalogGroupDef?.ID ?? null,
+    entityCatalogGroupFieldName: entityDiscovery.catalogGroupDef?.Name ?? null,
+    entityDefsWithOptionsCount,
+    personRecordGroup,
+    apiSource,
+    errors,
+  };
 }
