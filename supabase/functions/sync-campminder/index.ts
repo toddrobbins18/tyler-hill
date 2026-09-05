@@ -9,6 +9,10 @@ import {
   resolveDivisionIdFromAgeGroupLabel,
 } from '../_shared/campminderCustomFields.ts';
 import { syncFullSummerGroupsFromTelegraph } from '../_shared/campminderTelegraphReports.ts';
+import {
+  fetchCampminderBunks,
+  loadDayCampGroupsFromBunksApi,
+} from '../_shared/campminderBunks.ts';
 
 // @ts-ignore
 declare const Deno: any;
@@ -470,6 +474,7 @@ function resolveCamperDivisionAndGroup(
   fullSummerGroupByPerson: Map<string, string>,
   cmBunkId?: number | null,
   cmBunkNameByCmId?: Map<number, string>,
+  bunkGroupByPerson?: Map<string, string>,
 ): { division_id: string | null; group_name: string | null } {
   const cmDivision = cmDivisionId ? cmDivisionIdMap.get(cmDivisionId) ?? null : null;
   if (!isDayCamp) {
@@ -481,7 +486,8 @@ function resolveCamperDivisionAndGroup(
     ageGroupDivisionMap,
   );
 
-  let groupName = fullSummerGroupByPerson.get(personId) ?? null;
+  // Bunks API assignments are authoritative for day-camp groups (per CampMinder support).
+  let groupName = bunkGroupByPerson?.get(personId) ?? fullSummerGroupByPerson.get(personId) ?? null;
   if (!groupName && cmBunkId && cmBunkNameByCmId?.has(cmBunkId)) {
     groupName = cmBunkNameByCmId.get(cmBunkId) ?? null;
   }
@@ -1373,7 +1379,10 @@ async function performFullSync(
 
     let dayCampCustomFieldStats: Record<string, unknown> | null = null;
     let telegraphGroupStats: Record<string, unknown> | null = null;
+    let bunkGroupStats: Record<string, unknown> | null = null;
     const cmBunkNameByCmId = new Map<number, string>();
+    let bunkGroupByPerson = new Map<string, string>();
+    let bunkIdByPerson = new Map<string, number>();
     
     await updateSyncJob(supabase, jobId, {
       progress: { step: 'Season detected', season, syncType: isIncremental ? 'incremental' : 'full' },
@@ -1585,13 +1594,14 @@ async function performFullSync(
       progress: { step: 'Fetching bunks', season },
     });
 
-    const cmBunks = await fetchAllPaginated(
-      CM_BUNKS_URL,
+    const cmBunks = await fetchCampminderBunks(
       token,
       subscriptionKey,
-      { clientid: clientId, seasonid: season }
+      clientId,
+      season,
+      acquireRateLimitSlot,
     );
-    console.log(`Found ${cmBunks.length} bunks from CampMinder`);
+    console.log(`Found ${cmBunks.length} bunks from CampMinder Bunks API`);
 
     if (cmBunks.length > 0) {
       console.log('[DEBUG] Sample bunk record:', JSON.stringify(cmBunks[0], null, 2));
@@ -1690,6 +1700,45 @@ async function performFullSync(
       
       console.log(`[Bunks] Sync complete: ${bunksCreated} created, ${bunksUpdated} updated`);
       console.log(`[Bunks] Built mapping for ${cmBunkIdMap.size} bunks`);
+    }
+
+    if (isDayCamp) {
+      console.log('\n--- DAY CAMP: Bunks API group assignments ---');
+      await updateSyncJob(supabase, jobId, {
+        progress: { step: 'Loading bunk group assignments', season },
+      });
+      try {
+        const bunkGroups = await loadDayCampGroupsFromBunksApi(
+          token,
+          subscriptionKey,
+          clientId,
+          season,
+          acquireRateLimitSlot,
+          cmBunks,
+        );
+        bunkGroupByPerson = bunkGroups.groupByPerson;
+        bunkIdByPerson = bunkGroups.bunkIdByPerson;
+        for (const [bunkCmId, bunkName] of bunkGroups.bunkNameByCmId) {
+          cmBunkNameByCmId.set(bunkCmId, bunkName);
+        }
+        bunkGroupStats = {
+          ...bunkGroups.stats,
+          personGroupCount: bunkGroupByPerson.size,
+        };
+        console.log(
+          `[Bunks API] ${bunkGroupByPerson.size} campers mapped to groups for season ${season}`,
+        );
+        await updateSyncJob(supabase, jobId, {
+          progress: { step: 'Bunk group assignments loaded', bunksApi: bunkGroupStats, season },
+        });
+      } catch (bunkGroupError) {
+        const message = bunkGroupError instanceof Error ? bunkGroupError.message : String(bunkGroupError);
+        console.error('[Bunks API] Group assignment load failed:', message);
+        bunkGroupStats = { errors: [message] };
+        await updateSyncJob(supabase, jobId, {
+          progress: { step: 'Bunk group assignments failed', bunksApi: bunkGroupStats, season },
+        });
+      }
     }
 
     await updateSyncJob(supabase, jobId, {
@@ -1867,6 +1916,7 @@ async function performFullSync(
             apiSource: custom.debug.apiSource ?? null,
             personsFetched: custom.debug.personsFetched ?? null,
             bunkNameCount: cmBunkNameByCmId.size,
+            bunkAssignmentGroupCount: bunkGroupByPerson.size,
             errors: custom.debug.dataFetchErrors,
           };
           await updateSyncJob(supabase, jobId, {
@@ -1904,6 +1954,7 @@ async function performFullSync(
             fromAttendeesGroups: fromAttendeesGroupCount,
             fromAttendeesAgeGroups: fromAttendeesAgeGroupCount,
             bunkNameCount: cmBunkNameByCmId.size,
+            bunkAssignmentGroupCount: bunkGroupByPerson.size,
           };
         }
       }
@@ -2319,7 +2370,8 @@ async function performFullSync(
       // Prefer CamperDetails.DivisionID; fall back to session attendee when CamperDetails is absent.
       const cmDivisionId = person.CamperDetails?.DivisionID ?? attendeeRow?.DivisionID;
 
-      const attendeeBunkId = attendeeRow?.BunkID ?? null;
+      const attendeeBunkId =
+        attendeeRow?.BunkID ?? bunkIdByPerson.get(String(person.ID)) ?? null;
       const bunkId =
         attendeeBunkId != null ? (cmBunkIdMap.get(attendeeBunkId) ?? null) : null;
 
@@ -2333,6 +2385,7 @@ async function performFullSync(
         fullSummerGroupByPerson,
         attendeeBunkId,
         cmBunkNameByCmId,
+        bunkGroupByPerson,
       );
 
       if (!divisionId && cmDivisionId) {
@@ -2393,7 +2446,8 @@ async function performFullSync(
       else if (genderSource?.GenderID === 1) gender = 'Male';
 
       const cmDivisionId = person?.CamperDetails?.DivisionID ?? fallbackData?.DivisionID;
-      const fallbackBunkId = fallbackData?.BunkID ?? null;
+      const fallbackBunkId =
+        fallbackData?.BunkID ?? bunkIdByPerson.get(personIdStr) ?? null;
       const bunkId =
         fallbackBunkId != null ? (cmBunkIdMap.get(fallbackBunkId) ?? null) : null;
 
@@ -2407,6 +2461,7 @@ async function performFullSync(
         fullSummerGroupByPerson,
         fallbackBunkId,
         cmBunkNameByCmId,
+        bunkGroupByPerson,
       );
 
       camperData.push({
@@ -3251,6 +3306,7 @@ async function performFullSync(
       changes_summary: allChanges.slice(0, 50), // Limit to first 50 changes to avoid huge payloads
       total_changes: allChanges.length,
       ...(dayCampCustomFieldStats ? { customFields: dayCampCustomFieldStats } : {}),
+      ...(bunkGroupStats ? { bunksApi: bunkGroupStats } : {}),
       ...(telegraphGroupStats ? { telegraph: telegraphGroupStats } : {}),
     };
 
