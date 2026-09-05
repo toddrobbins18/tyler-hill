@@ -15,6 +15,8 @@ import { TransportRouteMap } from "@/components/TransportRouteMap";
 import { Bus, MapPin, Users, Plus, FileText, Car, Plane, ClipboardList, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2 } from "lucide-react";
 import { parseCSV, pickFirst, readFileAsText } from "@/lib/csv";
 import { supabase } from "@/integrations/supabase/client";
+import { useCompany } from "@/contexts/CompanyContext";
+import { useSeason } from "@/contexts/SeasonContext";
 
 const ROUTE_COLORS = [
   "#3eb8a0", "#4a9eff", "#f59e0b", "#ef4444", "#a855f7",
@@ -192,16 +194,7 @@ const normalizeAddress = (raw: string): string =>
     .map((tok) => STREET_SUFFIX_MAP[tok] ?? tok)
     .join(" ");
 
-const initialUnplottedCampers: UnplottedCamper[] = [
-  { id: 201, name: "Jake Morrison", address: "15 Elm St, Bayville, NY", lat: 40.9065, lng: -73.5622, age: 11, session: "Session 1" },
-  { id: 202, name: "Sophie Chen", address: "42 Shore Rd, Old Brookville, NY", lat: 40.8361, lng: -73.6044, age: 9, session: "Session 1" },
-  { id: 203, name: "Ethan Goldberg", address: "8 Harbor Ln, Centre Island, NY", lat: 40.8920, lng: -73.5180, age: 12, session: "Session 2" },
-  { id: 204, name: "Maya Patel", address: "220 Birch Hill Rd, Locust Valley, NY", lat: 40.8760, lng: -73.5970, age: 10, session: "Session 1" },
-  { id: 205, name: "Liam O'Brien", address: "55 Cove Rd, Oyster Bay Cove, NY", lat: 40.8690, lng: -73.5100, age: 13, session: "Session 2" },
-  { id: 206, name: "Ava Russo", address: "12 Dogwood Ln, Lattingtown, NY", lat: 40.8850, lng: -73.5890, age: 8, session: "Session 1" },
-  { id: 207, name: "Noah Kim", address: "300 Chicken Valley Rd, Matinecock, NY", lat: 40.8630, lng: -73.5750, age: 11, session: "Session 2" },
-  { id: 208, name: "Isabella Flores", address: "77 Mill River Rd, Upper Brookville, NY", lat: 40.8480, lng: -73.5650, age: 10, session: "Session 1" },
-];
+const initialUnplottedCampers: UnplottedCamper[] = [];
 
 const residentReports = [
   { name: "Baggage Report", desc: "Track camper luggage and belongings", icon: ClipboardList },
@@ -231,6 +224,9 @@ const statusColors: Record<string, string> = {
 
 export default function Transport() {
   const { toast } = useToast();
+  const { currentCompany } = useCompany();
+  const { currentSeason } = useSeason();
+  const companyId = currentCompany?.id;
   // Core stops are the source of truth (without camp stop)
   const [coreStops, setCoreStops] = useState<Record<number, RouteStop[]>>(initialCoreStops);
   const [routeMeta, setRouteMeta] = useState(initialRouteMeta);
@@ -318,21 +314,28 @@ export default function Transport() {
   // Persist transport board (routes + stops + unplotted campers) to Supabase so uploads survive refresh
   const [persistLoaded, setPersistLoaded] = useState(false);
   useEffect(() => {
+    if (!companyId) return;
     let cancelled = false;
+    setPersistLoaded(false);
     (async () => {
       try {
         const { data, error } = await supabase
           .from("transport_boards")
           .select("data")
-          .eq("id", "shared")
+          .eq("company_id", companyId)
+          .eq("season", currentSeason)
           .maybeSingle();
         if (cancelled) return;
-        if (!error && data?.data && typeof data.data === "object") {
+        if (error) {
+          console.error("[Transport] Failed to load board:", error.message);
+        } else if (data?.data && typeof data.data === "object") {
           const saved = data.data as any;
           if (saved.coreStops && typeof saved.coreStops === "object") {
             const restored: Record<number, RouteStop[]> = {};
             Object.entries(saved.coreStops).forEach(([k, v]) => { restored[Number(k)] = v as RouteStop[]; });
             setCoreStops(restored);
+          } else {
+            setCoreStops(initialCoreStops);
           }
           if (Array.isArray(saved.routeMeta) && saved.routeMeta.length) {
             // Merge in any default routes missing from the saved board (e.g. newly added buses)
@@ -345,30 +348,48 @@ export default function Transport() {
             }));
             setRouteMeta(refreshed);
             setVisibleRoutes(refreshed.map((r: any) => r.id));
+          } else {
+            setRouteMeta(initialRouteMeta);
+            setVisibleRoutes(initialRouteMeta.map((r) => r.id));
           }
-          if (Array.isArray(saved.unplottedCampers)) setUnplottedCampers(saved.unplottedCampers);
+          if (Array.isArray(saved.unplottedCampers)) {
+            setUnplottedCampers(saved.unplottedCampers);
+          } else {
+            setUnplottedCampers(initialUnplottedCampers);
+          }
+        } else {
+          setCoreStops(initialCoreStops);
+          setRouteMeta(initialRouteMeta);
+          setVisibleRoutes(initialRouteMeta.map((r) => r.id));
+          setUnplottedCampers(initialUnplottedCampers);
         }
-      } catch { /* ignore */ }
+      } catch (err) {
+        console.error("[Transport] Load board error:", err);
+      }
       if (!cancelled) setPersistLoaded(true);
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [companyId, currentSeason]);
 
   useEffect(() => {
-    if (!persistLoaded) return;
+    if (!persistLoaded || !companyId) return;
     const handle = setTimeout(async () => {
       try {
         const { data: userRes } = await supabase.auth.getUser();
-        await supabase.from("transport_boards").upsert({
-          id: "shared",
+        const { error } = await supabase.from("transport_boards").upsert({
+          company_id: companyId,
+          season: currentSeason,
           data: { coreStops, routeMeta, unplottedCampers } as any,
           updated_by: userRes.user?.id ?? null,
           updated_at: new Date().toISOString(),
         });
-      } catch { /* ignore */ }
+        if (error) console.error("[Transport] Save board failed:", error.message);
+      } catch (err) {
+        console.error("[Transport] Save board error:", err);
+      }
     }, 600);
     return () => clearTimeout(handle);
-  }, [coreStops, routeMeta, unplottedCampers, persistLoaded]);
+  }, [coreStops, routeMeta, unplottedCampers, persistLoaded, companyId, currentSeason]);
 
 
   const downloadBulkTemplate = (target: "campers" | "stops" | "staff") => {
