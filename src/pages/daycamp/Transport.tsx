@@ -462,10 +462,6 @@ export default function Transport() {
     const cached = loadBoardCache(companyId, currentSeason);
     if (!cached || countBoardStops(cached.coreStops) === 0) return false;
     applyBoardPayload(cached, "cache");
-    toast({
-      title: "Transport board restored",
-      description: `${countBoardStops(cached.coreStops)} stops loaded from browser cache.`,
-    });
     return true;
   };
 
@@ -526,12 +522,6 @@ export default function Transport() {
               ? saved.unplottedCampers
               : initialUnplottedCampers,
           }, "supabase");
-          if (countBoardStops(restoredStops) > 0) {
-            toast({
-              title: "Transport board restored",
-              description: `${countBoardStops(restoredStops)} stops across ${meta.length} buses loaded from Supabase.`,
-            });
-          }
         } else if (!restoreBoardFromCache() && lastKnownStopCountRef.current === 0) {
           applyBoardPayload({
             coreStops: initialCoreStops,
