@@ -14,6 +14,11 @@ import { useToast } from "@/hooks/use-toast";
 import { TransportRouteMap } from "@/components/TransportRouteMap";
 import { Bus, MapPin, Users, Plus, FileText, Car, Plane, ClipboardList, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2 } from "lucide-react";
 import { parseCSV, pickFirst, readFileAsText } from "@/lib/csv";
+import {
+  getBundledMappointRoutesCsv2026,
+  mappointRoutesSummary,
+  parseMappointRoutesCsv,
+} from "@/lib/mappointTransportImport";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -195,6 +200,51 @@ const normalizeAddress = (raw: string): string =>
     .join(" ");
 
 const initialUnplottedCampers: UnplottedCamper[] = [];
+
+const GEOCODE_CACHE_KEY = "transport-geocode-cache-v1";
+
+const loadPersistedGeocodeCache = (): Map<string, GeocodeResult | null> => {
+  try {
+    const raw = localStorage.getItem(GEOCODE_CACHE_KEY);
+    if (!raw) return new Map();
+    const entries = JSON.parse(raw) as [string, GeocodeResult | null][];
+    return new Map(entries);
+  } catch {
+    return new Map();
+  }
+};
+
+const persistGeocodeCache = (cache: Map<string, GeocodeResult | null>) => {
+  try {
+    const entries = [...cache.entries()].slice(-2500);
+    localStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify(entries));
+  } catch {
+    // ignore quota errors
+  }
+};
+
+const geocodePayloadToResult = (data: Record<string, unknown> | null | undefined): GeocodeResult | null => {
+  if (!data) return null;
+  if (typeof data.error === "string") {
+    return {
+      error: data.error,
+      retryable: data.retryable === true,
+      message: typeof data.message === "string" ? data.message : undefined,
+    };
+  }
+  if (data.found && typeof data.lat === "number" && typeof data.lng === "number") {
+    return {
+      lat: data.lat,
+      lng: data.lng,
+      provider: data.provider as GeocodeProvider | undefined,
+      label: typeof data.label === "string" ? data.label : undefined,
+    };
+  }
+  return null;
+};
+
+const isRetryableGeocodeFailure = (result: GeocodeResult | null) =>
+  !!result && "retryable" in result && result.retryable === true;
 
 const residentReports = [
   { name: "Baggage Report", desc: "Track camper luggage and belongings", icon: ClipboardList },
@@ -405,7 +455,13 @@ export default function Transport() {
   };
 
   // Session-level cache so repeated addresses skip the network entirely
-  const geocodeCacheRef = useRef<Map<string, GeocodeResult | null>>(new Map());
+  const geocodeCacheRef = useRef<Map<string, GeocodeResult | null>>(loadPersistedGeocodeCache());
+
+  const cacheGeocodeResult = (address: string, result: GeocodeResult | null) => {
+    const cacheKey = address.trim().toLowerCase();
+    const isRetryable = result && "retryable" in result && result.retryable;
+    if (!isRetryable) geocodeCacheRef.current.set(cacheKey, result);
+  };
 
   const geocodeAddress = async (address: string): Promise<GeocodeResult | null> => {
     const cacheKey = address.trim().toLowerCase();
@@ -427,15 +483,10 @@ export default function Transport() {
           }
           return { error: msg, retryable: true };
         }
-        let result: GeocodeResult | null;
-        if (data?.error) result = { error: data.error, retryable: data.retryable, message: data.message };
-        else if (data?.found) result = { lat: data.lat, lng: data.lng, provider: data.provider as GeocodeProvider | undefined, label: data.label };
-        else result = null;
-        // Cache successful results and definitive failures (not retryable rate-limits)
-        const isRetryable = result && "retryable" in result && result.retryable;
-        if (!isRetryable) geocodeCacheRef.current.set(cacheKey, result);
+        const result = geocodePayloadToResult(data as Record<string, unknown>);
+        cacheGeocodeResult(address, result);
         return result;
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (attempt < maxAttempts) {
           await new Promise(r => setTimeout(r, 400 * attempt));
           continue;
@@ -449,20 +500,103 @@ export default function Transport() {
   const geocodeBatch = async (
     addresses: string[],
     concurrency: number,
-    onEach: (index: number, result: GeocodeResult | null) => void,
+    onEach?: (index: number, result: GeocodeResult | null) => void,
   ): Promise<(GeocodeResult | null)[]> => {
     const results: (GeocodeResult | null)[] = new Array(addresses.length).fill(null);
-    let cursor = 0;
-    const workers = Array.from({ length: Math.min(concurrency, addresses.length) }, async () => {
-      while (true) {
-        const i = cursor++;
-        if (i >= addresses.length) return;
-        const r = await geocodeAddress(addresses[i]);
-        results[i] = r;
-        onEach(i, r);
+    const pending: { index: number; address: string }[] = [];
+
+    addresses.forEach((address, i) => {
+      const cacheKey = address.trim().toLowerCase();
+      const cached = geocodeCacheRef.current.get(cacheKey);
+      if (cached !== undefined) {
+        results[i] = cached;
+        onEach?.(i, cached);
+      } else {
+        pending.push({ index: i, address });
       }
     });
-    await Promise.all(workers);
+
+    const CHUNK = 20;
+    const batchConcurrency = Math.min(concurrency, 2);
+    for (let start = 0; start < pending.length; start += CHUNK) {
+      const slice = pending.slice(start, start + CHUNK);
+      const chunkAddresses = slice.map((p) => p.address);
+      let usedBatch = false;
+
+      try {
+        const { data, error } = await supabase.functions.invoke("route-optimizer", {
+          body: {
+            action: "geocodeBatch",
+            addresses: chunkAddresses,
+            concurrency: batchConcurrency,
+          },
+        });
+        if (!error && Array.isArray((data as { results?: unknown[] })?.results)) {
+          usedBatch = true;
+          ((data as { results: Record<string, unknown>[] }).results).forEach((item, j) => {
+            const entry = slice[j];
+            if (!entry) return;
+            const result = geocodePayloadToResult(item);
+            if (!isRetryableGeocodeFailure(result)) cacheGeocodeResult(entry.address, result);
+            results[entry.index] = result;
+            onEach?.(entry.index, result);
+          });
+        }
+      } catch {
+        // fall through to per-address geocode
+      }
+
+      if (!usedBatch) {
+        for (const entry of slice) {
+          const result = await geocodeAddress(entry.address);
+          results[entry.index] = result;
+          onEach?.(entry.index, result);
+        }
+      }
+
+      if (start + CHUNK < pending.length) {
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+
+    // Retry rate-limited / transient failures slowly (cached successes are skipped above).
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const retryEntries = pending.filter(({ index, address }) => {
+        const current = results[index];
+        return !isGeocodePoint(current) && isRetryableGeocodeFailure(current);
+      });
+      if (!retryEntries.length) break;
+      await new Promise((r) => setTimeout(r, 4000 * (attempt + 1)));
+      for (let start = 0; start < retryEntries.length; start += CHUNK) {
+        const slice = retryEntries.slice(start, start + CHUNK);
+        const chunkAddresses = slice.map((p) => p.address);
+        try {
+          const { data, error } = await supabase.functions.invoke("route-optimizer", {
+            body: {
+              action: "geocodeBatch",
+              addresses: chunkAddresses,
+              concurrency: 1,
+            },
+          });
+          if (error || !Array.isArray((data as { results?: unknown[] })?.results)) continue;
+          ((data as { results: Record<string, unknown>[] }).results).forEach((item, j) => {
+            const entry = slice[j];
+            if (!entry) return;
+            const result = geocodePayloadToResult(item);
+            if (!isRetryableGeocodeFailure(result)) cacheGeocodeResult(entry.address, result);
+            results[entry.index] = result;
+            onEach?.(entry.index, result);
+          });
+        } catch {
+          // keep partial results; user can click import again
+        }
+        if (start + CHUNK < retryEntries.length) {
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+      }
+    }
+
+    persistGeocodeCache(geocodeCacheRef.current);
     return results;
   };
 
@@ -907,6 +1041,94 @@ export default function Transport() {
     URL.revokeObjectURL(url);
   };
 
+  const [mappointImporting, setMappointImporting] = useState(false);
+  const handleLoadMappointRoutes = async () => {
+    setMappointImporting(true);
+    try {
+      const routes = parseMappointRoutesCsv(getBundledMappointRoutesCsv2026(), { direction: "AM" });
+      const summary = mappointRoutesSummary(routes);
+      if (!routes.length) {
+        toast({ title: "No routes found", description: "MapPoint CSV had no AM routes.", variant: "destructive" });
+        return;
+      }
+
+      const uniqueAddresses = Array.from(
+        new Set(routes.flatMap((r) => r.stops.map((s) => s.address))),
+      );
+      toast({
+        title: "Loading MapPoint routes",
+        description: `Geocoding ${uniqueAddresses.length} stops across ${summary.routeCount} buses…`,
+      });
+
+      const geos = await geocodeBatch(uniqueAddresses, 2);
+      const geoByAddress = new Map<string, GeocodeResult | null>();
+      uniqueAddresses.forEach((addr, i) => geoByAddress.set(addr, geos[i] ?? null));
+
+      const geocodedCount = geos.filter(isGeocodePoint).length;
+      const rateLimitedCount = geos.filter(isRetryableGeocodeFailure).length;
+
+      const nextCore: Record<number, RouteStop[]> = {};
+      const nextMeta: typeof initialRouteMeta = [];
+      let geocodeFailed = 0;
+
+      for (const route of routes) {
+        const stops: RouteStop[] = [];
+        for (const stop of route.stops) {
+          const geo = geoByAddress.get(stop.address);
+          if (!isGeocodePoint(geo)) {
+            geocodeFailed++;
+            continue;
+          }
+          stops.push({
+            name: stop.label,
+            address: stop.address,
+            lat: geo.lat,
+            lng: geo.lng,
+            pickupTime: "",
+            passengers: stop.camperNames.length,
+            camperNames: stop.camperNames,
+          });
+        }
+        if (!stops.length) continue;
+        nextCore[route.busNumber] = stops;
+        nextMeta.push({
+          id: route.busNumber,
+          name: `${route.routeName} · Bus ${route.busNumber}`,
+          bus: route.busCounselor
+            ? `Bus ${route.busNumber} (${route.busCounselor})`
+            : `Bus ${route.busNumber}`,
+          departure: "7:00 AM",
+          status: "Confirmed",
+          color: ROUTE_COLORS[(route.busNumber - 1) % ROUTE_COLORS.length],
+          capacity: Math.max(22, stops.reduce((n, s) => n + (s.passengers || 0), 0)),
+        });
+      }
+
+      const routeIds = nextMeta.map((r) => r.id);
+      setCoreStops(nextCore);
+      setRouteMeta(nextMeta);
+      setVisibleRoutes(routeIds);
+      setUnplottedCampers([]);
+      setTodayOverrides({ excluded: {}, added: {} });
+
+      toast({
+        title: geocodeFailed ? "MapPoint routes loaded (partial)" : "MapPoint routes loaded",
+        description: geocodeFailed
+          ? `${nextMeta.length} buses · ${geocodedCount}/${uniqueAddresses.length} addresses geocoded · ${geocodeFailed} stops skipped${rateLimitedCount ? " (rate limited — click Load MapPoint again to retry cached misses)" : ""}`
+          : `${nextMeta.length} buses · ${summary.camperCount} campers · saved to board`,
+        variant: geocodeFailed ? "destructive" : "default",
+      });
+    } catch (e: unknown) {
+      toast({
+        title: "MapPoint import failed",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
+    } finally {
+      setMappointImporting(false);
+    }
+  };
+
   // Re-run every existing pin (unplotted campers + routed stops) through the current
   // geocoder so stale/incorrect coordinates get corrected.
   const [regeocoding, setRegeocoding] = useState(false);
@@ -928,6 +1150,7 @@ export default function Transport() {
 
     setRegeocoding(true);
     geocodeCacheRef.current.clear();
+    try { localStorage.removeItem(GEOCODE_CACHE_KEY); } catch { /* ignore */ }
     toast({ title: "Re-geocoding placements", description: `Checking ${addresses.length} address${addresses.length === 1 ? "" : "es"}…` });
 
     try {
@@ -1497,6 +1720,15 @@ export default function Transport() {
               </div>
             );
           })()}
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={handleLoadMappointRoutes}
+            disabled={mappointImporting}
+          >
+            <RouteIcon className={`h-4 w-4 ${mappointImporting ? "animate-pulse" : ""}`} />
+            {mappointImporting ? "Loading MapPoint…" : "Load MapPoint Routes"}
+          </Button>
           <Button variant="outline" className="gap-2" onClick={() => setBulkImport(prev => ({ ...prev, open: true, log: { ok: 0, skipped: 0, failed: 0, messages: [] }, progress: { done: 0, total: 0 }, failedRows: [] }))}>
             <Upload className="h-4 w-4" /> Bulk Upload Addresses
           </Button>

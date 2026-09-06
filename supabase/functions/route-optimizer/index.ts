@@ -13,6 +13,7 @@ const jsonResponse = (payload: Record<string, unknown>, status = 200) =>
   });
 
 interface GeocodeReq { action: "geocode"; address: string; }
+interface GeocodeBatchReq { action: "geocodeBatch"; addresses: string[]; concurrency?: number; }
 interface OptimizeReq {
   action: "optimize";
   vehicles: { id: number; start: [number, number]; end: [number, number]; capacity?: number[] }[];
@@ -25,13 +26,172 @@ interface DirectionsReq {
   profile?: string; // e.g. "driving-car", "driving-hgv"
   includeGeometry?: boolean;
 }
-type ReqBody = GeocodeReq | OptimizeReq | DirectionsReq;
+type ReqBody = GeocodeReq | GeocodeBatchReq | OptimizeReq | DirectionsReq;
+
+const FOCUS_LAT = 40.8000;
+const FOCUS_LNG = -73.6500;
+const LI_MIN_LON = -74.05;
+const LI_MAX_LON = -71.75;
+const LI_MIN_LAT = 40.53;
+const LI_MAX_LAT = 41.20;
+
+const inLongIsland = (la: number, ln: number) =>
+  la >= LI_MIN_LAT && la <= LI_MAX_LAT && ln >= LI_MIN_LON && ln <= LI_MAX_LON;
+
+type GeocodeOneResult = Record<string, unknown>;
+
+async function geocodeOneAddress(address: string): Promise<GeocodeOneResult> {
+  const params = ORS_KEY
+    ? new URLSearchParams({
+      api_key: ORS_KEY,
+      text: address,
+      "boundary.country": "US",
+      "boundary.region": "NY",
+      "boundary.rect.min_lon": String(LI_MIN_LON),
+      "boundary.rect.min_lat": String(LI_MIN_LAT),
+      "boundary.rect.max_lon": String(LI_MAX_LON),
+      "boundary.rect.max_lat": String(LI_MAX_LAT),
+      "focus.point.lat": String(FOCUS_LAT),
+      "focus.point.lon": String(FOCUS_LNG),
+      size: "1",
+    })
+    : null;
+  const url = params
+    ? `https://api.openrouteservice.org/geocode/search?${params.toString()}`
+    : "";
+
+  let lat: number | undefined;
+  let lng: number | undefined;
+  let label: string | undefined;
+  let orsFailed = false;
+  let provider: "ors" | "nominatim" | "census" | undefined;
+  const rateLimitedProviders: string[] = [];
+
+  try {
+    if (ORS_KEY) {
+      const r = await fetch(url);
+      const txt = await r.text();
+      const data = txt ? JSON.parse(txt) : {};
+      if (!r.ok) {
+        console.warn(`ORS geocode failed [${r.status}], falling back to Nominatim`);
+        if (r.status === 403 || r.status === 429) rateLimitedProviders.push("ORS");
+        orsFailed = true;
+      } else {
+        const feat = data.features?.[0];
+        if (feat) {
+          [lng, lat] = feat.geometry.coordinates;
+          label = feat.properties?.label;
+          provider = "ors";
+        }
+      }
+    } else {
+      orsFailed = true;
+    }
+  } catch (err) {
+    console.warn("ORS geocode threw, falling back to Nominatim:", err);
+    orsFailed = true;
+  }
+
+  if (lat === undefined || lng === undefined) {
+    const nomParams = new URLSearchParams({
+      q: address,
+      format: "json",
+      limit: "1",
+      countrycodes: "us",
+      viewbox: `${LI_MIN_LON},${LI_MAX_LAT},${LI_MAX_LON},${LI_MIN_LAT}`,
+      bounded: "1",
+    });
+    const nomUrl = `https://nominatim.openstreetmap.org/search?${nomParams.toString()}`;
+    try {
+      const nr = await fetch(nomUrl, {
+        headers: { "User-Agent": "lovable-camp-transport/1.0" },
+      });
+      const txt = await nr.text();
+      if (!nr.ok) {
+        if (nr.status === 403 || nr.status === 429) {
+          rateLimitedProviders.push("Nominatim");
+          console.warn(`Nominatim geocode rate limited [${nr.status}], trying Census`);
+          // Fall through to Census instead of failing immediately.
+        } else {
+          console.warn(`Nominatim geocode failed [${nr.status}]: ${txt.slice(0, 300)}`);
+        }
+      } else {
+        const arr = txt ? JSON.parse(txt) : [];
+        const hit = Array.isArray(arr) ? arr[0] : null;
+        if (hit) {
+          lat = parseFloat(hit.lat);
+          lng = parseFloat(hit.lon);
+          label = hit.display_name;
+          provider = "nominatim";
+        }
+      }
+    } catch (err) {
+      console.warn("Nominatim geocode threw:", err);
+    }
+  }
+
+  if (lat === undefined || lng === undefined) {
+    try {
+      const censusParams = new URLSearchParams({
+        address,
+        benchmark: "Public_AR_Current",
+        format: "json",
+      });
+      const censusUrl = `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?${censusParams.toString()}`;
+      const cr = await fetch(censusUrl);
+      if (cr.ok) {
+        const cj = await cr.json();
+        const match = cj?.result?.addressMatches?.[0];
+        if (match?.coordinates && inLongIsland(match.coordinates.y, match.coordinates.x)) {
+          lng = match.coordinates.x;
+          lat = match.coordinates.y;
+          label = match.matchedAddress;
+          provider = "census";
+        }
+      } else {
+        console.warn(`Census geocode failed [${cr.status}]`);
+      }
+    } catch (err) {
+      console.warn("Census geocode threw:", err);
+    }
+  }
+
+  if (lat === undefined || lng === undefined) {
+    if (rateLimitedProviders.length > 0) {
+      return {
+        found: false,
+        error: "GEOCODING_RATE_LIMITED",
+        message: "Geocoding providers are temporarily rate-limited. Please retry the import shortly.",
+        providers: rateLimitedProviders,
+        retryable: true,
+        fallback: true,
+      };
+    }
+    return { found: false };
+  }
+
+  if (!inLongIsland(lat, lng)) {
+    console.warn(`Geocode result outside Long Island for "${address}": ${lat},${lng}`);
+    return {
+      found: false,
+      error: "GEOCODE_OUT_OF_AREA",
+      message: `Best match "${label ?? "unknown"}" is outside Long Island — please verify the address.`,
+    };
+  }
+
+  return {
+    found: true,
+    lat,
+    lng,
+    label,
+    provider: provider || (orsFailed ? "nominatim" : "ors"),
+  };
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    if (!ORS_KEY) throw new Error("OPENROUTESERVICE_API_KEY is not configured");
     const body = (await req.json()) as ReqBody;
 
     if (body.action === "geocode") {
@@ -40,150 +200,39 @@ Deno.serve(async (req) => {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      // Bias geocoding to Long Island (Nassau + Suffolk), NY.
-      // focus.point pulls results toward Nassau's North Shore; boundary.rect keeps results on Long Island;
-      // boundary.region restricts to New York state to avoid CT/RI/NJ fallbacks.
-      const FOCUS_LAT = 40.8000;
-      const FOCUS_LNG = -73.6500;
-      const LI_MIN_LON = -74.05;
-      const LI_MAX_LON = -71.75;
-      const LI_MIN_LAT = 40.53;
-      const LI_MAX_LAT = 41.20;
-      const inLongIsland = (la: number, ln: number) =>
-        la >= LI_MIN_LAT && la <= LI_MAX_LAT && ln >= LI_MIN_LON && ln <= LI_MAX_LON;
-      const params = new URLSearchParams({
-        api_key: ORS_KEY,
-        text: body.address,
-        "boundary.country": "US",
-        "boundary.region": "NY",
-        "boundary.rect.min_lon": String(LI_MIN_LON),
-        "boundary.rect.min_lat": String(LI_MIN_LAT),
-        "boundary.rect.max_lon": String(LI_MAX_LON),
-        "boundary.rect.max_lat": String(LI_MAX_LAT),
-        "focus.point.lat": String(FOCUS_LAT),
-        "focus.point.lon": String(FOCUS_LNG),
-        size: "1",
+      const result = await geocodeOneAddress(body.address);
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
-      const url = `https://api.openrouteservice.org/geocode/search?${params.toString()}`;
+    }
 
-      let lat: number | undefined;
-      let lng: number | undefined;
-      let label: string | undefined;
-      let orsFailed = false;
-      let provider: "ors" | "nominatim" | "census" | undefined;
-      const rateLimitedProviders: string[] = [];
-
-      try {
-        const r = await fetch(url);
-        const txt = await r.text();
-        const data = txt ? JSON.parse(txt) : {};
-        if (!r.ok) {
-          console.warn(`ORS geocode failed [${r.status}], falling back to Nominatim`);
-          if (r.status === 403 || r.status === 429) rateLimitedProviders.push("ORS");
-          orsFailed = true;
-        } else {
-          const feat = data.features?.[0];
-          if (feat) {
-            [lng, lat] = feat.geometry.coordinates;
-            label = feat.properties?.label;
-            provider = "ors";
+    if (body.action === "geocodeBatch") {
+      if (!Array.isArray(body.addresses) || body.addresses.length === 0) {
+        return jsonResponse({ error: "addresses required" }, 400);
+      }
+      if (body.addresses.length > 50) {
+        return jsonResponse({ error: "max 50 addresses per batch" }, 400);
+      }
+      const concurrency = ORS_KEY
+        ? Math.min(Math.max(body.concurrency ?? 5, 1), 8)
+        : 1;
+      const results: GeocodeOneResult[] = new Array(body.addresses.length);
+      let cursor = 0;
+      const workers = Array.from({ length: Math.min(concurrency, body.addresses.length) }, async () => {
+        while (true) {
+          const i = cursor++;
+          if (i >= body.addresses.length) return;
+          const addr = body.addresses[i];
+          if (typeof addr !== "string" || !addr.trim()) {
+            results[i] = { found: false };
+            continue;
           }
+          results[i] = await geocodeOneAddress(addr.trim());
+          if (!ORS_KEY) await new Promise((r) => setTimeout(r, 1100));
         }
-      } catch (err) {
-        console.warn("ORS geocode threw, falling back to Nominatim:", err);
-        orsFailed = true;
-      }
-
-      // Fallback: Nominatim (OpenStreetMap) — no API key, biased to Long Island bbox.
-      if (lat === undefined || lng === undefined) {
-        const nomParams = new URLSearchParams({
-          q: body.address,
-          format: "json",
-          limit: "1",
-          countrycodes: "us",
-          viewbox: `${LI_MIN_LON},${LI_MAX_LAT},${LI_MAX_LON},${LI_MIN_LAT}`, // left,top,right,bottom (Long Island)
-          bounded: "1",
-        });
-        const nomUrl = `https://nominatim.openstreetmap.org/search?${nomParams.toString()}`;
-        try {
-          const nr = await fetch(nomUrl, {
-            headers: { "User-Agent": "lovable-camp-transport/1.0" },
-          });
-          const txt = await nr.text();
-          if (!nr.ok) {
-            if (nr.status === 403 || nr.status === 429) {
-              rateLimitedProviders.push("Nominatim");
-              console.warn(`Nominatim geocode rate limited [${nr.status}]`);
-              return jsonResponse({
-                found: false,
-                error: "GEOCODING_RATE_LIMITED",
-                message: "Geocoding providers are temporarily rate-limited. Please retry the import shortly.",
-                providers: rateLimitedProviders,
-                retryable: true,
-                fallback: true,
-              });
-            }
-            console.warn(`Nominatim geocode failed [${nr.status}]: ${txt.slice(0, 300)}`);
-            return jsonResponse({ found: false, error: "GEOCODING_UNAVAILABLE", retryable: true, fallback: true });
-          }
-          const arr = txt ? JSON.parse(txt) : [];
-          const hit = Array.isArray(arr) ? arr[0] : null;
-          if (hit) {
-            lat = parseFloat(hit.lat);
-            lng = parseFloat(hit.lon);
-            label = hit.display_name;
-            provider = "nominatim";
-          }
-        } catch (err) {
-          console.warn("Nominatim geocode threw:", err);
-        }
-      }
-
-      // Fallback #2: US Census Geocoder — free, no API key, great for new/rural US addresses.
-      if (lat === undefined || lng === undefined) {
-        try {
-          const censusParams = new URLSearchParams({
-            address: body.address,
-            benchmark: "Public_AR_Current",
-            format: "json",
-          });
-          const censusUrl = `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?${censusParams.toString()}`;
-          const cr = await fetch(censusUrl);
-          if (cr.ok) {
-            const cj = await cr.json();
-            const match = cj?.result?.addressMatches?.[0];
-            if (match?.coordinates && inLongIsland(match.coordinates.y, match.coordinates.x)) {
-              lng = match.coordinates.x;
-              lat = match.coordinates.y;
-              label = match.matchedAddress;
-              provider = "census" as any;
-            }
-          } else {
-            console.warn(`Census geocode failed [${cr.status}]`);
-          }
-        } catch (err) {
-          console.warn("Census geocode threw:", err);
-        }
-      }
-
-      if (lat === undefined || lng === undefined) {
-        return jsonResponse({ found: false });
-      }
-
-      // Guard against off-island matches (e.g. same street name in CT or upstate NY).
-      if (!inLongIsland(lat, lng)) {
-        console.warn(`Geocode result outside Long Island for "${body.address}": ${lat},${lng}`);
-        return jsonResponse({
-          found: false,
-          error: "GEOCODE_OUT_OF_AREA",
-          message: `Best match "${label ?? "unknown"}" is outside Long Island — please verify the address.`,
-        });
-      }
-
-
-      return new Response(JSON.stringify({
-        found: true, lat, lng, label, provider: provider || (orsFailed ? "nominatim" : "ors"),
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      });
+      await Promise.all(workers);
+      return jsonResponse({ results });
     }
 
     if (body.action === "optimize") {
@@ -611,6 +660,15 @@ Deno.serve(async (req) => {
     }
 
     if (body.action === "directions") {
+      if (!ORS_KEY) {
+        return jsonResponse({
+          totalDistanceMi: 0,
+          totalDurationSec: 0,
+          steps: [],
+          geometry: body.includeGeometry === true ? [] : undefined,
+          warning: "OPENROUTESERVICE_API_KEY is not configured — turn-by-turn directions unavailable.",
+        });
+      }
       if (!Array.isArray(body.coordinates) || body.coordinates.length < 2) {
         return new Response(JSON.stringify({ error: "at least 2 coordinates required" }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },

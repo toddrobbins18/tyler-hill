@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { supabase } from "@/integrations/supabase/client";
 
 interface RouteStop {
   name: string;
@@ -51,9 +50,6 @@ declare global {
 const UNPLOTTED_COLOR = "#8b5cf6";
 const FADED_COLOR = "#9ca3af";
 
-const routeGeometryKey = (route: MapRoute) =>
-  `${route.id}:${route.stops.map((s) => `${s.lat.toFixed(5)},${s.lng.toFixed(5)}`).join("|")}`;
-
 const routeCoordinates = (route: MapRoute) =>
   route.stops.reduce<[number, number][]>((coords, stop) => {
     const next: [number, number] = [stop.lng, stop.lat];
@@ -63,6 +59,9 @@ const routeCoordinates = (route: MapRoute) =>
     }
     return coords;
   }, []);
+
+const straightPathFromRoute = (route: MapRoute): [number, number][] =>
+  routeCoordinates(route).map(([lng, lat]) => [lat, lng]);
 
 const createColoredIcon = (color: string, opacity = 1) =>
   L.divIcon({
@@ -95,10 +94,17 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], on
   const leafletMapRef = useRef<L.Map | null>(null);
   const layerGroupRef = useRef<L.LayerGroup | null>(null);
   const routeLayersRef = useRef<Map<number, RouteLayerRefs>>(new Map());
-  const roadPathCacheRef = useRef<Map<string, [number, number][] | null>>(new Map());
-  const [roadPaths, setRoadPaths] = useState<Record<number, [number, number][] | null>>({});
   const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
   const hasFitBoundsRef = useRef(false);
+
+  const routePaths = useMemo(() => {
+    const paths: Record<number, [number, number][] | null> = {};
+    routes.forEach((route) => {
+      const path = straightPathFromRoute(route);
+      paths[route.id] = path.length > 1 ? path : null;
+    });
+    return paths;
+  }, [routes]);
 
   const allPoints = useMemo(() => {
     const routePoints = routes.flatMap((r) => r.stops.map((s) => [s.lat, s.lng] as [number, number]));
@@ -152,54 +158,6 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], on
 
   const availableRoutes = allRoutes || routes;
 
-  useEffect(() => {
-    let cancelled = false;
-    const drawableRoutes = routes.filter((route) => routeCoordinates(route).length > 1);
-
-    const loadRoadPaths = async () => {
-      const nextPaths: Record<number, [number, number][] | null> = {};
-      const missing = drawableRoutes.filter((route) => {
-        const key = routeGeometryKey(route);
-        if (roadPathCacheRef.current.has(key)) {
-          nextPaths[route.id] = roadPathCacheRef.current.get(key) ?? null;
-          return false;
-        }
-        return true;
-      });
-
-      if (missing.length === 0) {
-        if (!cancelled) setRoadPaths(nextPaths);
-        return;
-      }
-
-      await Promise.all(missing.map(async (route) => {
-        const key = routeGeometryKey(route);
-        try {
-          const { data, error } = await supabase.functions.invoke("route-optimizer", {
-            body: { action: "directions", coordinates: routeCoordinates(route), includeGeometry: true },
-          });
-          if (error || data?.error || !Array.isArray(data?.geometry)) {
-            roadPathCacheRef.current.set(key, null);
-            nextPaths[route.id] = null;
-            return;
-          }
-          const path = data.geometry as [number, number][];
-          const usablePath = path.length > 1 ? path : null;
-          roadPathCacheRef.current.set(key, usablePath);
-          nextPaths[route.id] = usablePath;
-        } catch {
-          roadPathCacheRef.current.set(key, null);
-          nextPaths[route.id] = null;
-        }
-      }));
-
-      if (!cancelled) setRoadPaths(nextPaths);
-    };
-
-    loadRoadPaths();
-    return () => { cancelled = true; };
-  }, [routes]);
-
   // Build/rebuild layers ONLY when underlying data actually changes (NOT on selection change, NOT on parent re-render)
   const buildSignatureRef = useRef<string>("");
   useEffect(() => {
@@ -215,7 +173,7 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], on
       })),
       ar: (allRoutes || routes).map(r => ({ id: r.id, name: r.name, color: r.color })),
       u: unplottedCampers.map(c => [c.id, c.lat.toFixed(5), c.lng.toFixed(5), c.name, c.address, c.age, c.session]),
-      p: Object.entries(roadPaths).map(([id, path]) => [id, path ? path.length : 0]),
+      p: Object.entries(routePaths).map(([id, path]) => [id, path ? path.length : 0]),
     });
     if (signature === buildSignatureRef.current) return;
     buildSignatureRef.current = signature;
@@ -226,9 +184,9 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], on
     routes.forEach((route) => {
       const layerRefs: RouteLayerRefs = { markers: [], color: route.color };
 
-      const roadPath = roadPaths[route.id];
-      if (Array.isArray(roadPath) && roadPath.length > 1) {
-        const polyline = L.polyline(roadPath, {
+      const path = routePaths[route.id];
+      if (Array.isArray(path) && path.length > 1) {
+        const polyline = L.polyline(path, {
           color: route.color,
           weight: 5,
           opacity: 0.85,
@@ -338,7 +296,7 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], on
       }
       hasFitBoundsRef.current = true;
     }
-  }, [routes, availableRoutes, unplottedCampers, roadPaths, bounds]);
+  }, [routes, availableRoutes, unplottedCampers, routePaths, bounds]);
 
   // Restyle existing layers when selection changes — no clearing/redraw
   useEffect(() => {
