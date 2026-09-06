@@ -22,6 +22,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 const ROUTE_COLORS = [
   "#3eb8a0", "#4a9eff", "#f59e0b", "#ef4444", "#a855f7",
@@ -246,6 +247,38 @@ const geocodePayloadToResult = (data: Record<string, unknown> | null | undefined
 const isRetryableGeocodeFailure = (result: GeocodeResult | null) =>
   !!result && "retryable" in result && result.retryable === true;
 
+type BoardPayload = {
+  coreStops: Record<number, RouteStop[]>;
+  routeMeta: typeof initialRouteMeta;
+  unplottedCampers: UnplottedCamper[];
+};
+
+const boardCacheKey = (companyId: string, season: string) =>
+  `transport-board-v1:${companyId}:${season}`;
+
+const loadBoardCache = (companyId: string, season: string): BoardPayload | null => {
+  try {
+    const raw = localStorage.getItem(boardCacheKey(companyId, season));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as BoardPayload;
+    if (!parsed?.coreStops || !Array.isArray(parsed.routeMeta)) return null;
+    const coreStops = Object.fromEntries(
+      Object.entries(parsed.coreStops).map(([k, v]) => [Number(k), v as RouteStop[]]),
+    );
+    return { ...parsed, coreStops };
+  } catch {
+    return null;
+  }
+};
+
+const persistBoardCache = (companyId: string, season: string, payload: BoardPayload) => {
+  try {
+    localStorage.setItem(boardCacheKey(companyId, season), JSON.stringify(payload));
+  } catch {
+    // ignore quota errors
+  }
+};
+
 const residentReports = [
   { name: "Baggage Report", desc: "Track camper luggage and belongings", icon: ClipboardList },
   { name: "Bus Report", desc: "Bus manifest and seating", icon: Bus },
@@ -266,6 +299,9 @@ const dayCampReports = [
   { name: "Extended Care", desc: "Before/after care transport" },
 ];
 
+const countBoardStops = (stops: Record<number, RouteStop[]>) =>
+  Object.values(stops).reduce((sum, arr) => sum + (arr?.length || 0), 0);
+
 const statusColors: Record<string, string> = {
   Confirmed: "bg-success/10 text-success",
   Pending: "bg-warning/10 text-warning",
@@ -274,7 +310,8 @@ const statusColors: Record<string, string> = {
 
 export default function Transport() {
   const { toast } = useToast();
-  const { currentCompany } = useCompany();
+  const { user, loading: authLoading } = useAuth();
+  const { currentCompany, loading: companyLoading } = useCompany();
   const { currentSeason } = useSeason();
   const companyId = currentCompany?.id;
   // Core stops are the source of truth (without camp stop)
@@ -363,10 +400,89 @@ export default function Transport() {
 
   // Persist transport board (routes + stops + unplotted campers) to Supabase so uploads survive refresh
   const [persistLoaded, setPersistLoaded] = useState(false);
+  const [boardLoading, setBoardLoading] = useState(true);
+  const skipPersistRef = useRef(true);
+  const importInProgressRef = useRef(false);
+  const loadedScopeRef = useRef<string | null>(null);
+  const lastKnownStopCountRef = useRef(0);
+  const boardStateRef = useRef({
+    coreStops: initialCoreStops as Record<number, RouteStop[]>,
+    routeMeta: initialRouteMeta,
+    unplottedCampers: initialUnplottedCampers,
+  });
+
+  boardStateRef.current = { coreStops, routeMeta, unplottedCampers };
+
+  const persistBoard = useCallback(async (payload: BoardPayload) => {
+    if (!companyId) return false;
+    persistBoardCache(companyId, currentSeason, payload);
+    try {
+      const { data: userRes } = await supabase.auth.getUser();
+      const { error } = await supabase.from("transport_boards" as "profiles").upsert({
+        company_id: companyId,
+        season: currentSeason,
+        data: payload as never,
+        updated_by: userRes.user?.id ?? null,
+        updated_at: new Date().toISOString(),
+      } as never);
+      if (error) {
+        console.error("[Transport] Save board failed:", error.message);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error("[Transport] Save board error:", err);
+      return false;
+    }
+  }, [companyId, currentSeason]);
+
+  const normalizeRouteMeta = (meta: typeof initialRouteMeta) =>
+    meta.map((r, i) => ({
+      ...r,
+      id: Number(r.id),
+      color: ROUTE_COLORS[i % ROUTE_COLORS.length],
+    }));
+
+  const applyBoardPayload = (payload: BoardPayload, source?: "supabase" | "cache") => {
+    const normalizedMeta = normalizeRouteMeta(payload.routeMeta);
+    setCoreStops(payload.coreStops);
+    setRouteMeta(normalizedMeta);
+    setVisibleRoutes(normalizedMeta.map((r) => r.id));
+    setUnplottedCampers(payload.unplottedCampers);
+    lastKnownStopCountRef.current = countBoardStops(payload.coreStops);
+    if (companyId) persistBoardCache(companyId, currentSeason, payload);
+    const stops = lastKnownStopCountRef.current;
+    if (stops > 0 && source) {
+      console.info(`[Transport] Board loaded (${source}): ${stops} stops, ${normalizedMeta.length} routes`);
+    }
+  };
+
+  const restoreBoardFromCache = () => {
+    if (!companyId) return false;
+    const cached = loadBoardCache(companyId, currentSeason);
+    if (!cached || countBoardStops(cached.coreStops) === 0) return false;
+    applyBoardPayload(cached, "cache");
+    toast({
+      title: "Transport board restored",
+      description: `${countBoardStops(cached.coreStops)} stops loaded from browser cache.`,
+    });
+    return true;
+  };
+
   useEffect(() => {
-    if (!companyId) return;
+    if (authLoading || companyLoading || !user || !companyId) {
+      setBoardLoading(true);
+      return;
+    }
+    const scope = `${companyId}:${currentSeason}`;
+    if (loadedScopeRef.current === scope) {
+      setBoardLoading(false);
+      return;
+    }
     let cancelled = false;
+    skipPersistRef.current = true;
     setPersistLoaded(false);
+    setBoardLoading(true);
     (async () => {
       try {
         const { data, error } = await supabase
@@ -376,70 +492,92 @@ export default function Transport() {
           .eq("season", currentSeason)
           .maybeSingle();
         if (cancelled) return;
+        if (importInProgressRef.current) {
+          loadedScopeRef.current = scope;
+          return;
+        }
         if (error) {
           console.error("[Transport] Failed to load board:", error.message);
+          if (!restoreBoardFromCache()) {
+            toast({
+              title: "Could not load transport board",
+              description: error.message,
+              variant: "destructive",
+            });
+          }
         } else if (data?.data && typeof data.data === "object") {
           const saved = data.data as any;
-          if (saved.coreStops && typeof saved.coreStops === "object") {
-            const restored: Record<number, RouteStop[]> = {};
-            Object.entries(saved.coreStops).forEach(([k, v]) => { restored[Number(k)] = v as RouteStop[]; });
-            setCoreStops(restored);
-          } else {
-            setCoreStops(initialCoreStops);
-          }
+          const restoredStops: Record<number, RouteStop[]> = saved.coreStops && typeof saved.coreStops === "object"
+            ? Object.fromEntries(
+              Object.entries(saved.coreStops).map(([k, v]) => [Number(k), v as RouteStop[]]),
+            )
+            : initialCoreStops;
+
+          let meta = initialRouteMeta;
           if (Array.isArray(saved.routeMeta) && saved.routeMeta.length) {
-            // Merge in any default routes missing from the saved board (e.g. newly added buses)
-            const savedIds = new Set(saved.routeMeta.map((r: any) => r.id));
-            const merged = [...saved.routeMeta, ...initialRouteMeta.filter(r => !savedIds.has(r.id))];
-            // Always reassign colors from the current palette so newly added colors apply to existing routes
-            const refreshed = merged.map((r: any, i: number) => ({
-              ...r,
-              color: ROUTE_COLORS[i % ROUTE_COLORS.length],
-            }));
-            setRouteMeta(refreshed);
-            setVisibleRoutes(refreshed.map((r: any) => r.id));
-          } else {
-            setRouteMeta(initialRouteMeta);
-            setVisibleRoutes(initialRouteMeta.map((r) => r.id));
+            const savedIds = new Set(saved.routeMeta.map((r: any) => Number(r.id)));
+            meta = [...saved.routeMeta, ...initialRouteMeta.filter(r => !savedIds.has(r.id))];
           }
-          if (Array.isArray(saved.unplottedCampers)) {
-            setUnplottedCampers(saved.unplottedCampers);
-          } else {
-            setUnplottedCampers(initialUnplottedCampers);
+
+          applyBoardPayload({
+            coreStops: restoredStops,
+            routeMeta: meta,
+            unplottedCampers: Array.isArray(saved.unplottedCampers)
+              ? saved.unplottedCampers
+              : initialUnplottedCampers,
+          }, "supabase");
+          if (countBoardStops(restoredStops) > 0) {
+            toast({
+              title: "Transport board restored",
+              description: `${countBoardStops(restoredStops)} stops across ${meta.length} buses loaded from Supabase.`,
+            });
           }
-        } else {
-          setCoreStops(initialCoreStops);
-          setRouteMeta(initialRouteMeta);
-          setVisibleRoutes(initialRouteMeta.map((r) => r.id));
-          setUnplottedCampers(initialUnplottedCampers);
+        } else if (!restoreBoardFromCache() && lastKnownStopCountRef.current === 0) {
+          applyBoardPayload({
+            coreStops: initialCoreStops,
+            routeMeta: initialRouteMeta,
+            unplottedCampers: initialUnplottedCampers,
+          });
         }
       } catch (err) {
         console.error("[Transport] Load board error:", err);
+      } finally {
+        if (!cancelled) {
+          loadedScopeRef.current = scope;
+          skipPersistRef.current = false;
+          setPersistLoaded(true);
+          setBoardLoading(false);
+        }
       }
-      if (!cancelled) setPersistLoaded(true);
     })();
     return () => { cancelled = true; };
-  }, [companyId, currentSeason]);
+  }, [authLoading, companyLoading, user, companyId, currentSeason, toast]);
 
   useEffect(() => {
-    if (!persistLoaded || !companyId) return;
-    const handle = setTimeout(async () => {
-      try {
-        const { data: userRes } = await supabase.auth.getUser();
-        const { error } = await supabase.from("transport_boards").upsert({
-          company_id: companyId,
-          season: currentSeason,
-          data: { coreStops, routeMeta, unplottedCampers } as any,
-          updated_by: userRes.user?.id ?? null,
-          updated_at: new Date().toISOString(),
-        });
-        if (error) console.error("[Transport] Save board failed:", error.message);
-      } catch (err) {
-        console.error("[Transport] Save board error:", err);
-      }
+    if (!persistLoaded || !companyId || skipPersistRef.current || importInProgressRef.current) return;
+    const stopCount = countBoardStops(coreStops);
+    if (stopCount === 0) {
+      if (lastKnownStopCountRef.current > 0) return;
+      if (routeMeta.length <= initialRouteMeta.length) return;
+    }
+
+    const handle = setTimeout(() => {
+      void persistBoard({ coreStops, routeMeta, unplottedCampers }).then((ok) => {
+        if (ok) lastKnownStopCountRef.current = countBoardStops(coreStops);
+      });
     }, 600);
     return () => clearTimeout(handle);
-  }, [coreStops, routeMeta, unplottedCampers, persistLoaded, companyId, currentSeason]);
+  }, [coreStops, routeMeta, unplottedCampers, persistLoaded, companyId, currentSeason, persistBoard]);
+
+  // Flush unsaved board state when leaving the page (debounced save may not have fired yet).
+  useEffect(() => {
+    return () => {
+      if (skipPersistRef.current || importInProgressRef.current || !companyId) return;
+      const { coreStops: stops, routeMeta: meta, unplottedCampers: unplotted } = boardStateRef.current;
+      if (countBoardStops(stops) === 0) return;
+      void persistBoard({ coreStops: stops, routeMeta: meta, unplottedCampers: unplotted });
+    };
+  }, [companyId, currentSeason, persistBoard]);
 
 
   const downloadBulkTemplate = (target: "campers" | "stops" | "staff") => {
@@ -1044,6 +1182,8 @@ export default function Transport() {
   const [mappointImporting, setMappointImporting] = useState(false);
   const handleLoadMappointRoutes = async () => {
     setMappointImporting(true);
+    importInProgressRef.current = true;
+    skipPersistRef.current = true;
     try {
       const routes = parseMappointRoutesCsv(getBundledMappointRoutesCsv2026(), { direction: "AM" });
       const summary = mappointRoutesSummary(routes);
@@ -1060,12 +1200,15 @@ export default function Transport() {
         description: `Geocoding ${uniqueAddresses.length} stops across ${summary.routeCount} buses…`,
       });
 
+      const uncachedCount = uniqueAddresses.filter(
+        (addr) => !geocodeCacheRef.current.has(addr.trim().toLowerCase()),
+      ).length;
+
       const geos = await geocodeBatch(uniqueAddresses, 2);
       const geoByAddress = new Map<string, GeocodeResult | null>();
       uniqueAddresses.forEach((addr, i) => geoByAddress.set(addr, geos[i] ?? null));
 
       const geocodedCount = geos.filter(isGeocodePoint).length;
-      const rateLimitedCount = geos.filter(isRetryableGeocodeFailure).length;
 
       const nextCore: Record<number, RouteStop[]> = {};
       const nextMeta: typeof initialRouteMeta = [];
@@ -1104,19 +1247,29 @@ export default function Transport() {
         });
       }
 
-      const routeIds = nextMeta.map((r) => r.id);
-      setCoreStops(nextCore);
-      setRouteMeta(nextMeta);
-      setVisibleRoutes(routeIds);
-      setUnplottedCampers([]);
+      const saved = await persistBoard({
+        coreStops: nextCore,
+        routeMeta: nextMeta,
+        unplottedCampers: [],
+      });
+      if (saved) {
+        lastKnownStopCountRef.current = countBoardStops(nextCore);
+        loadedScopeRef.current = companyId ? `${companyId}:${currentSeason}` : null;
+      }
+
+      applyBoardPayload({
+        coreStops: nextCore,
+        routeMeta: nextMeta,
+        unplottedCampers: [],
+      });
       setTodayOverrides({ excluded: {}, added: {} });
 
       toast({
         title: geocodeFailed ? "MapPoint routes loaded (partial)" : "MapPoint routes loaded",
         description: geocodeFailed
-          ? `${nextMeta.length} buses · ${geocodedCount}/${uniqueAddresses.length} addresses geocoded · ${geocodeFailed} stops skipped${rateLimitedCount ? " (rate limited — click Load MapPoint again to retry cached misses)" : ""}`
-          : `${nextMeta.length} buses · ${summary.camperCount} campers · saved to board`,
-        variant: geocodeFailed ? "destructive" : "default",
+          ? `${nextMeta.length} buses · ${geocodedCount}/${uniqueAddresses.length} addresses geocoded · ${geocodeFailed} stops skipped${saved ? "" : " · save failed, stay on page and retry"}`
+          : `${nextMeta.length} buses · ${summary.camperCount} campers · ${saved ? "saved to board" : "save failed — click Load MapPoint again"}${uncachedCount === 0 ? " · used geocode cache (no new API calls)" : ""}`,
+        variant: geocodeFailed || !saved ? "destructive" : "default",
       });
     } catch (e: unknown) {
       toast({
@@ -1125,6 +1278,8 @@ export default function Transport() {
         variant: "destructive",
       });
     } finally {
+      importInProgressRef.current = false;
+      skipPersistRef.current = false;
       setMappointImporting(false);
     }
   };
@@ -1988,11 +2143,16 @@ export default function Transport() {
                 </Button>
               </div>
               <div className={
-                mapHeight === "sm" ? "h-[480px] w-full" :
-                mapHeight === "md" ? "h-[760px] w-full" :
-                mapHeight === "lg" ? "h-[1000px] w-full" :
-                "h-[80vh] w-full"
+                mapHeight === "sm" ? "h-[480px] w-full relative" :
+                mapHeight === "md" ? "h-[760px] w-full relative" :
+                mapHeight === "lg" ? "h-[1000px] w-full relative" :
+                "h-[80vh] w-full relative"
               }>
+                {(boardLoading || companyLoading || authLoading || mappointImporting) && (
+                  <div className="absolute inset-0 z-[1001] flex items-center justify-center bg-background/60 backdrop-blur-[1px] text-sm text-muted-foreground">
+                    {mappointImporting ? "Loading MapPoint routes…" : "Loading saved board…"}
+                  </div>
+                )}
                 <TransportRouteMap
                   routes={displayedRoutes}
                   allRoutes={routes}
