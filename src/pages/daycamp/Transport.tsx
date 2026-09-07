@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { TransportRouteMap } from "@/components/TransportRouteMap";
-import { Bus, MapPin, Users, Plus, FileText, Car, Plane, ClipboardList, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Clock } from "lucide-react";
+import { Bus, MapPin, Users, Plus, FileText, Car, Plane, ClipboardList, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Clock, Printer } from "lucide-react";
 import { parseCSV, pickFirst, readFileAsText } from "@/lib/csv";
 import {
   getBundledMappointRoutesCsv2026,
@@ -58,6 +58,10 @@ import {
   saveBusCheckins,
   type BusCheckinMap,
 } from "@/lib/transportBusCheckins";
+import {
+  downloadBusBubbleSheetsPdf,
+  downloadGroupBubbleSheetPdf,
+} from "@/lib/transportBubbleSheetPdf";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -1498,6 +1502,49 @@ export default function Transport() {
     }
   };
 
+  const handleDownloadBusBubbleSheets = () => {
+    const sheetRoutes = routes
+      .map((r) => ({
+        bus: r.bus,
+        routeName: r.name,
+        campers: campersOnRoute(r.id, getEffectiveCore(r.id)).map((c) => ({
+          name: c.name,
+          detail: c.stopName,
+        })),
+      }))
+      .filter((r) => r.campers.length > 0);
+
+    const ok = downloadBusBubbleSheetsPdf({
+      companyName: currentCompany?.name ?? "Day Camp",
+      date: overrideDate,
+      runPeriod: timeOfDay,
+      routes: sheetRoutes,
+    });
+    if (!ok) {
+      toast({ title: "No campers to print", description: "No scheduled campers on routes.", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Bubble sheet downloaded", description: "Bus attendance PDF saved." });
+  };
+
+  const handleDownloadGroupBubbleSheet = () => {
+    const groups = groupRosterByGroup.map(([groupName, campers]) => ({
+      groupName,
+      campers: campers.map((c) => ({ name: c.name })),
+    }));
+
+    const ok = downloadGroupBubbleSheetPdf({
+      companyName: currentCompany?.name ?? "Day Camp",
+      date: overrideDate,
+      groups,
+    });
+    if (!ok) {
+      toast({ title: "No group roster", description: "No campers with groups for this season.", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Bubble sheet downloaded", description: "Group attendance PDF saved." });
+  };
+
   const toggleRouteVisibility = (id: number) => {
     setVisibleRoutes(prev =>
       prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]
@@ -2835,6 +2882,28 @@ export default function Transport() {
             {checkinsLoading && (
               <span className="text-[10px] text-muted-foreground">Loading check-ins…</span>
             )}
+            <div className="flex flex-wrap gap-2 ml-auto">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs gap-1.5"
+                onClick={handleDownloadBusBubbleSheets}
+                disabled={!attendanceRoster.length}
+              >
+                <Printer className="h-3.5 w-3.5" /> Bus bubble sheet
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs gap-1.5"
+                onClick={handleDownloadGroupBubbleSheet}
+                disabled={!groupRoster.length}
+              >
+                <Printer className="h-3.5 w-3.5" /> Group bubble sheet
+              </Button>
+            </div>
           </div>
 
           <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
