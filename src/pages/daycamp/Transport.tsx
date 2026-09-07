@@ -2208,6 +2208,7 @@ export default function Transport() {
                 <TransportRouteMap
                   routes={displayedRoutes}
                   allRoutes={routes}
+                  campAddress={CAMP_LOCATION.address}
                   onMoveStop={handleMoveStop}
                   onRemoveStop={handleRemoveStop}
                   unplottedCampers={unplottedCampers}
@@ -2229,6 +2230,7 @@ export default function Transport() {
                   <TransportRouteMap
                     routes={displayedRoutes}
                     allRoutes={routes}
+                    campAddress={CAMP_LOCATION.address}
                     onMoveStop={handleMoveStop}
                     onRemoveStop={handleRemoveStop}
                     unplottedCampers={unplottedCampers}
@@ -2794,6 +2796,7 @@ export default function Transport() {
             {directionsDialog.mapStops.length >= 2 && (
               <div className="rounded-lg overflow-hidden border border-border h-64">
                 <TransportRouteMap
+                  campAddress={CAMP_LOCATION.address}
                   routes={[{
                     id: directionsDialog.routeId ?? 0,
                     name: directionsDialog.routeName,
