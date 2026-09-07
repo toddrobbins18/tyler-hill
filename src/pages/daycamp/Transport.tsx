@@ -153,6 +153,13 @@ const assignDrivingTimes = (stops: RouteStop[]): RouteStop[] => {
   });
 };
 
+const MAP_PANEL_HEIGHT: Record<"sm" | "md" | "lg" | "xl", string> = {
+  sm: "h-[480px]",
+  md: "h-[760px]",
+  lg: "h-[1000px]",
+  xl: "h-[80vh]",
+};
+
 // AM routes: stops → camp (camp is last stop)
 const buildAMStops = (stops: RouteStop[]): RouteStop[] =>
   assignDrivingTimes([...stops, { ...CAMP_LOCATION, pickupTime: "", passengers: 0 }]);
@@ -2675,23 +2682,24 @@ export default function Transport() {
             </div>
           )}
 
-          <div className="grid gap-4 lg:grid-cols-[360px,1fr]">
-            {/* Route sidebar */}
-            <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1 min-w-0">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+          <div className="grid gap-4 lg:grid-cols-[minmax(300px,380px),1fr] lg:items-start">
+            {/* Route sidebar — full map height, scroll bus list; stop lists scroll inside each card */}
+            <div className={`flex flex-col min-h-0 ${MAP_PANEL_HEIGHT[mapHeight]}`}>
+              <p className="shrink-0 text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 px-0.5">
                 {timeOfDay === "am" ? "AM Routes (→ Camp)" : "PM Routes (Camp →)"}
               </p>
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
               {routes.map(r => {
                 const isVisible = visibleRoutes.includes(r.id);
                 const core = coreStops[r.id] || [];
                 return (
                   <Card
                     key={r.id}
-                    className={`cursor-pointer transition-all ${isVisible ? "hover:shadow-md" : "opacity-50"}`}
+                    className={`cursor-pointer transition-all shrink-0 ${isVisible ? "hover:shadow-md" : "opacity-50"}`}
                     onClick={() => toggleRouteVisibility(r.id)}
                   >
                     <CardContent className="p-3">
-                      <div className="flex items-start gap-2.5">
+                      <div className="flex items-start gap-2.5 shrink-0">
                         <div
                           className="w-3 h-3 rounded-full shrink-0 mt-1 border-2 border-background"
                           style={{ backgroundColor: r.color, boxShadow: isVisible ? `0 0 8px ${r.color}60` : "none" }}
@@ -2746,7 +2754,11 @@ export default function Transport() {
                         </div>
                       </div>
                       {isVisible && r.stops.length > 0 && (
-                        <div className="mt-2 pl-6 border-l-2 space-y-1.5" style={{ borderColor: r.color + "40" }}>
+                        <div
+                          className="mt-2 pl-6 border-l-2 space-y-1.5 max-h-[220px] overflow-y-auto overscroll-y-contain pr-1"
+                          style={{ borderColor: r.color + "40" }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           {r.stops.map((stop, i) => {
                             const isCamp = stop.address === CAMP_LOCATION.address;
                             const isDragging = reorderDrag?.routeId === r.id && reorderDrag.displayIndex === i;
@@ -2803,6 +2815,7 @@ export default function Transport() {
                   </Card>
                 );
               })}
+              </div>
             </div>
 
             {/* Map */}
@@ -2829,12 +2842,7 @@ export default function Transport() {
                   <Maximize2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
-              <div className={
-                mapHeight === "sm" ? "h-[480px] w-full relative" :
-                mapHeight === "md" ? "h-[760px] w-full relative" :
-                mapHeight === "lg" ? "h-[1000px] w-full relative" :
-                "h-[80vh] w-full relative"
-              }>
+              <div className={`${MAP_PANEL_HEIGHT[mapHeight]} w-full relative`}>
                 {(boardLoading || companyLoading || authLoading || mappointImporting) && (
                   <div className="absolute inset-0 z-[1001] flex items-center justify-center bg-background/60 backdrop-blur-[1px] text-sm text-muted-foreground">
                     {mappointImporting ? "Loading MapPoint routes…" : "Loading saved board…"}
