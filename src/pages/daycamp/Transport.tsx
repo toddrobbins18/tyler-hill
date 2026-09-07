@@ -40,6 +40,17 @@ import {
   type BusAttendanceMap,
   type BusAttendanceStatus,
 } from "@/lib/transportBusAttendance";
+import {
+  buildCamperBusStatus,
+  findAttendanceConflicts,
+  groupAttendanceStatusLabel,
+  loadGroupAttendance,
+  loadGroupRoster,
+  saveGroupAttendance,
+  type GroupAttendanceMap,
+  type GroupAttendanceStatus,
+  type GroupRosterCamper,
+} from "@/lib/transportGroupAttendance";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -379,6 +390,13 @@ export default function Transport() {
   const skipAttendancePersistRef = useRef(true);
   const attendanceLoadedKeyRef = useRef<string | null>(null);
 
+  const [groupRoster, setGroupRoster] = useState<GroupRosterCamper[]>([]);
+  const [groupAttendance, setGroupAttendance] = useState<GroupAttendanceMap>({});
+  const [groupAttendanceSubmittedAt, setGroupAttendanceSubmittedAt] = useState<string | null>(null);
+  const [groupAttendanceLoading, setGroupAttendanceLoading] = useState(true);
+  const skipGroupPersistRef = useRef(true);
+  const groupLoadedKeyRef = useRef<string | null>(null);
+
   // Scope-choice dialog (Today only vs Permanent vs Cancel)
   const [scopeDialog, setScopeDialog] = useState<{
     open: boolean;
@@ -690,6 +708,61 @@ export default function Transport() {
     }, 600);
     return () => clearTimeout(handle);
   }, [busAttendance, companyId, currentSeason, overrideDate, timeOfDay, attendanceLoading]);
+
+  // Load group roster + group attendance for selected date
+  useEffect(() => {
+    if (!companyId) {
+      setGroupAttendanceLoading(true);
+      return;
+    }
+    const key = `${companyId}:${currentSeason}:${overrideDate}`;
+    if (groupLoadedKeyRef.current === key) {
+      setGroupAttendanceLoading(false);
+      return;
+    }
+    let cancelled = false;
+    skipGroupPersistRef.current = true;
+    setGroupAttendanceLoading(true);
+    (async () => {
+      try {
+        const [roster, loaded] = await Promise.all([
+          loadGroupRoster(supabase, companyId, currentSeason),
+          loadGroupAttendance(supabase, companyId, currentSeason, overrideDate),
+        ]);
+        if (cancelled) return;
+        setGroupRoster(roster);
+        setGroupAttendance(loaded.records);
+        setGroupAttendanceSubmittedAt(loaded.submittedAt);
+        groupLoadedKeyRef.current = key;
+      } catch (err) {
+        console.error("[Transport] Load group attendance error:", err);
+      } finally {
+        if (!cancelled) {
+          skipGroupPersistRef.current = false;
+          setGroupAttendanceLoading(false);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [companyId, currentSeason, overrideDate]);
+
+  useEffect(() => {
+    if (!companyId || skipGroupPersistRef.current || groupAttendanceLoading) return;
+    const handle = setTimeout(() => {
+      void (async () => {
+        const { data: userRes } = await supabase.auth.getUser();
+        await saveGroupAttendance(
+          supabase,
+          companyId,
+          currentSeason,
+          overrideDate,
+          groupAttendance,
+          { userId: userRes.user?.id },
+        );
+      })();
+    }, 600);
+    return () => clearTimeout(handle);
+  }, [groupAttendance, companyId, currentSeason, overrideDate, groupAttendanceLoading]);
 
   useEffect(() => {
     if (!persistLoaded || !companyId || skipPersistRef.current || importInProgressRef.current) return;
@@ -1216,6 +1289,84 @@ export default function Transport() {
       });
     } else {
       toast({ title: "Could not submit bus attendance", variant: "destructive" });
+    }
+  };
+
+  const groupStats = useMemo(() => {
+    let present = 0;
+    let absent = 0;
+    let unmarked = 0;
+    for (const c of groupRoster) {
+      const label = groupAttendanceStatusLabel(c.key, groupAttendance);
+      if (label === "Present") present++;
+      else if (label === "Absent") absent++;
+      else unmarked++;
+    }
+    return { present, absent, unmarked, total: groupRoster.length };
+  }, [groupRoster, groupAttendance]);
+
+  const groupRosterByGroup = useMemo(() => {
+    const map = new Map<string, GroupRosterCamper[]>();
+    for (const c of groupRoster) {
+      const list = map.get(c.groupName) ?? [];
+      list.push(c);
+      map.set(c.groupName, list);
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [groupRoster]);
+
+  const camperBusStatus = useMemo(
+    () => buildCamperBusStatus(attendanceRoster, busAttendance),
+    [attendanceRoster, busAttendance],
+  );
+
+  const attendanceConflicts = useMemo(
+    () => findAttendanceConflicts(camperBusStatus, groupRoster, groupAttendance),
+    [camperBusStatus, groupRoster, groupAttendance],
+  );
+
+  const setGroupCamperAttendance = (key: string, status: GroupAttendanceStatus) => {
+    setGroupAttendance((prev) => ({ ...prev, [key]: status }));
+    setGroupAttendanceSubmittedAt(null);
+  };
+
+  const markAllGroupPresent = () => {
+    const next: GroupAttendanceMap = { ...groupAttendance };
+    for (const c of groupRoster) next[c.key] = "present";
+    setGroupAttendance(next);
+    setGroupAttendanceSubmittedAt(null);
+  };
+
+  const handleSubmitGroupAttendance = async () => {
+    if (!companyId) return;
+    if (!attendanceSubmittedAt) {
+      toast({
+        title: "Submit bus attendance first",
+        description: "Group attendance is recorded after the bus run is submitted.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const { data: userRes } = await supabase.auth.getUser();
+    const ok = await saveGroupAttendance(
+      supabase,
+      companyId,
+      currentSeason,
+      overrideDate,
+      groupAttendance,
+      { submitted: true, userId: userRes.user?.id },
+    );
+    if (ok) {
+      setGroupAttendanceSubmittedAt(new Date().toISOString());
+      toast({
+        title: "Group attendance submitted",
+        description: attendanceConflicts.length
+          ? `${attendanceConflicts.length} conflict${attendanceConflicts.length === 1 ? "" : "s"} with bus — review below`
+          : `${groupStats.present} present · ${groupStats.absent} absent`,
+        variant: attendanceConflicts.length ? "destructive" : "default",
+      });
+    } else {
+      toast({ title: "Could not submit group attendance", variant: "destructive" });
     }
   };
 
@@ -2222,6 +2373,7 @@ export default function Transport() {
                 onChange={(e) => {
                   overrideLoadedKeyRef.current = null;
                   attendanceLoadedKeyRef.current = null;
+                  groupLoadedKeyRef.current = null;
                   setOverrideDate(e.target.value || todayDateString());
                 }}
                 className="h-8 w-[140px] text-xs"
@@ -2510,6 +2662,7 @@ export default function Transport() {
                 onChange={(e) => {
                   overrideLoadedKeyRef.current = null;
                   attendanceLoadedKeyRef.current = null;
+                  groupLoadedKeyRef.current = null;
                   setOverrideDate(e.target.value || todayDateString());
                 }}
                 className="h-8 w-[140px] text-xs"
@@ -2549,7 +2702,8 @@ export default function Transport() {
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold">1. Bus attendance ({timeOfDay.toUpperCase()})</h3>
             <div className="flex flex-wrap gap-2 text-xs">
               <Badge variant="outline" className="border-emerald-500/40 text-emerald-700 dark:text-emerald-300">
                 {attendanceStats.present} present
@@ -2622,6 +2776,110 @@ export default function Transport() {
           </div>
           {!attendanceRoster.length && !attendanceLoading && (
             <p className="text-sm text-muted-foreground">No campers on routes for this date and run.</p>
+          )}
+
+          <div className="border-t border-border pt-6 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold">2. Group attendance</h3>
+                <p className="text-[11px] text-muted-foreground">
+                  {attendanceSubmittedAt
+                    ? "Bus submitted — mark each group, then submit."
+                    : "Submit bus attendance above before submitting group attendance."}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 items-center">
+                <Badge variant="outline" className="text-[10px]">{groupStats.present} present</Badge>
+                <Badge variant="outline" className="text-[10px]">{groupStats.absent} absent</Badge>
+                <Badge variant="outline" className="text-[10px]">{groupStats.unmarked} unmarked</Badge>
+                {groupAttendanceSubmittedAt && (
+                  <Badge variant="secondary" className="text-[10px]">Group submitted</Badge>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={markAllGroupPresent}
+                  disabled={!groupRoster.length || groupAttendanceLoading}
+                >
+                  Mark all present
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSubmitGroupAttendance}
+                  disabled={!groupRoster.length || groupAttendanceLoading || !attendanceSubmittedAt}
+                >
+                  Submit group attendance
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {groupRosterByGroup.map(([groupName, campers]) => (
+                <Card key={groupName}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">{groupName}</CardTitle>
+                    <p className="text-[11px] text-muted-foreground">{campers.length} campers</p>
+                  </CardHeader>
+                  <CardContent className="space-y-2 pt-0">
+                    {campers.map((c) => {
+                      const status = groupAttendance[c.key];
+                      const bus = camperBusStatus.get(c.name.trim().toLowerCase()) ?? "unmarked";
+                      return (
+                        <div key={c.key} className="flex items-center justify-between gap-2 text-xs">
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{c.name}</p>
+                            {bus !== "unmarked" && (
+                              <p className="text-[10px] text-muted-foreground">Bus: {bus}</p>
+                            )}
+                          </div>
+                          <div className="flex gap-1 shrink-0">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={status === "present" ? "default" : "outline"}
+                              className="h-7 px-2 text-[10px]"
+                              onClick={() => setGroupCamperAttendance(c.key, "present")}
+                              disabled={!attendanceSubmittedAt}
+                            >
+                              P
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={status === "absent" ? "destructive" : "outline"}
+                              className="h-7 px-2 text-[10px]"
+                              onClick={() => setGroupCamperAttendance(c.key, "absent")}
+                              disabled={!attendanceSubmittedAt}
+                            >
+                              A
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            {!groupRoster.length && !groupAttendanceLoading && (
+              <p className="text-sm text-muted-foreground">No campers with groups on the roster for this season.</p>
+            )}
+          </div>
+
+          {attendanceConflicts.length > 0 && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2">
+              <p className="text-xs font-semibold text-destructive mb-1">
+                Bus vs group conflicts ({attendanceConflicts.length})
+              </p>
+              <ul className="text-[11px] space-y-0.5 max-h-32 overflow-y-auto">
+                {attendanceConflicts.map((c) => (
+                  <li key={`${c.groupName}-${c.camperName}`}>
+                    <span className="font-medium">{c.camperName}</span>
+                    {" "}({c.groupName}) — bus: {c.busStatus}, group: {c.groupStatus}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </TabsContent>
 
