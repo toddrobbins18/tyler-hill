@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { TransportRouteMap } from "@/components/TransportRouteMap";
-import { Bus, MapPin, Users, Plus, FileText, Car, Plane, ClipboardList, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2 } from "lucide-react";
+import { Bus, MapPin, Users, Plus, FileText, Car, Plane, ClipboardList, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Clock } from "lucide-react";
 import { parseCSV, pickFirst, readFileAsText } from "@/lib/csv";
 import {
   getBundledMappointRoutesCsv2026,
@@ -51,6 +51,13 @@ import {
   type GroupAttendanceStatus,
   type GroupRosterCamper,
 } from "@/lib/transportGroupAttendance";
+import {
+  busCheckinKey,
+  formatCheckinTime,
+  loadBusCheckins,
+  saveBusCheckins,
+  type BusCheckinMap,
+} from "@/lib/transportBusCheckins";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -396,6 +403,11 @@ export default function Transport() {
   const [groupAttendanceLoading, setGroupAttendanceLoading] = useState(true);
   const skipGroupPersistRef = useRef(true);
   const groupLoadedKeyRef = useRef<string | null>(null);
+
+  const [busCheckins, setBusCheckins] = useState<BusCheckinMap>({});
+  const [checkinsLoading, setCheckinsLoading] = useState(true);
+  const skipCheckinsPersistRef = useRef(true);
+  const checkinsLoadedKeyRef = useRef<string | null>(null);
 
   // Scope-choice dialog (Today only vs Permanent vs Cancel)
   const [scopeDialog, setScopeDialog] = useState<{
@@ -763,6 +775,63 @@ export default function Transport() {
     }, 600);
     return () => clearTimeout(handle);
   }, [groupAttendance, companyId, currentSeason, overrideDate, groupAttendanceLoading]);
+
+  // Load bus check-in / check-out for selected date + AM/PM run
+  useEffect(() => {
+    if (!companyId) {
+      setCheckinsLoading(true);
+      return;
+    }
+    const key = `${companyId}:${currentSeason}:${overrideDate}:${timeOfDay}`;
+    if (checkinsLoadedKeyRef.current === key) {
+      setCheckinsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    skipCheckinsPersistRef.current = true;
+    setCheckinsLoading(true);
+    (async () => {
+      try {
+        const loaded = await loadBusCheckins(
+          supabase,
+          companyId,
+          currentSeason,
+          overrideDate,
+          timeOfDay,
+        );
+        if (cancelled) return;
+        setBusCheckins(loaded);
+        checkinsLoadedKeyRef.current = key;
+      } catch (err) {
+        console.error("[Transport] Load bus check-ins error:", err);
+      } finally {
+        if (!cancelled) {
+          skipCheckinsPersistRef.current = false;
+          setCheckinsLoading(false);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [companyId, currentSeason, overrideDate, timeOfDay]);
+
+  useEffect(() => {
+    if (!companyId || skipCheckinsPersistRef.current || checkinsLoading) return;
+    const handle = setTimeout(() => {
+      void (async () => {
+        const { data: userRes } = await supabase.auth.getUser();
+        await saveBusCheckins(
+          supabase,
+          companyId,
+          currentSeason,
+          overrideDate,
+          timeOfDay,
+          busCheckins,
+          userRes.user?.id,
+        );
+      })();
+    }, 600);
+    return () => clearTimeout(handle);
+  }, [busCheckins, companyId, currentSeason, overrideDate, timeOfDay, checkinsLoading]);
 
   useEffect(() => {
     if (!persistLoaded || !companyId || skipPersistRef.current || importInProgressRef.current) return;
@@ -1291,6 +1360,65 @@ export default function Transport() {
       toast({ title: "Could not submit bus attendance", variant: "destructive" });
     }
   };
+
+  const markBusArrived = async (routeId: number) => {
+    const key = busCheckinKey(routeId);
+    const now = new Date().toISOString();
+    const { data: userRes } = await supabase.auth.getUser();
+    const next: BusCheckinMap = {
+      ...busCheckins,
+      [key]: {
+        ...busCheckins[key],
+        arrivedAt: now,
+        arrivedBy: userRes.user?.id ?? null,
+      },
+    };
+    setBusCheckins(next);
+    toast({ title: "Bus marked arrived", description: `Timestamp: ${formatCheckinTime(now)}` });
+  };
+
+  const markBusReadyToDepart = async (routeId: number, busLabel: string) => {
+    if (!attendanceSubmittedAt) {
+      toast({
+        title: "Submit bus attendance first",
+        description: "Mark ready to depart after bus attendance is submitted.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const key = busCheckinKey(routeId);
+    if (!busCheckins[key]?.arrivedAt) {
+      toast({
+        title: "Mark bus arrived first",
+        description: `${busLabel} must be checked in before ready to depart.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    const now = new Date().toISOString();
+    const { data: userRes } = await supabase.auth.getUser();
+    const next: BusCheckinMap = {
+      ...busCheckins,
+      [key]: {
+        ...busCheckins[key],
+        departedAt: now,
+        departedBy: userRes.user?.id ?? null,
+      },
+    };
+    setBusCheckins(next);
+    toast({ title: "Bus ready to depart", description: `${busLabel} · ${formatCheckinTime(now)}` });
+  };
+
+  const checkinStats = useMemo(() => {
+    let arrived = 0;
+    let departed = 0;
+    for (const r of routes) {
+      const rec = busCheckins[busCheckinKey(r.id)];
+      if (rec?.arrivedAt) arrived++;
+      if (rec?.departedAt) departed++;
+    }
+    return { arrived, departed, total: routes.length };
+  }, [routes, busCheckins]);
 
   const groupStats = useMemo(() => {
     let present = 0;
@@ -2374,6 +2502,7 @@ export default function Transport() {
                   overrideLoadedKeyRef.current = null;
                   attendanceLoadedKeyRef.current = null;
                   groupLoadedKeyRef.current = null;
+                  checkinsLoadedKeyRef.current = null;
                   setOverrideDate(e.target.value || todayDateString());
                 }}
                 className="h-8 w-[140px] text-xs"
@@ -2663,6 +2792,7 @@ export default function Transport() {
                   overrideLoadedKeyRef.current = null;
                   attendanceLoadedKeyRef.current = null;
                   groupLoadedKeyRef.current = null;
+                  checkinsLoadedKeyRef.current = null;
                   setOverrideDate(e.target.value || todayDateString());
                 }}
                 className="h-8 w-[140px] text-xs"
@@ -2676,6 +2806,7 @@ export default function Transport() {
                 }`}
                 onClick={() => {
                   attendanceLoadedKeyRef.current = null;
+                  checkinsLoadedKeyRef.current = null;
                   setTimeOfDay("am");
                 }}
               >
@@ -2688,6 +2819,7 @@ export default function Transport() {
                 }`}
                 onClick={() => {
                   attendanceLoadedKeyRef.current = null;
+                  checkinsLoadedKeyRef.current = null;
                   setTimeOfDay("pm");
                 }}
               >
@@ -2700,6 +2832,72 @@ export default function Transport() {
             {attendanceSubmittedAt && (
               <Badge variant="secondary" className="text-[10px]">Submitted</Badge>
             )}
+            {checkinsLoading && (
+              <span className="text-[10px] text-muted-foreground">Loading check-ins…</span>
+            )}
+          </div>
+
+          <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5" /> Bus check-in / check-out
+                </h3>
+                <p className="text-[11px] text-muted-foreground">
+                  Mark each bus when it arrives, then ready to depart after attendance is submitted.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <Badge variant="outline">{checkinStats.arrived} / {checkinStats.total} arrived</Badge>
+                <Badge variant="outline">{checkinStats.departed} / {checkinStats.total} departed</Badge>
+              </div>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {routes.map((r) => {
+                const rec = busCheckins[busCheckinKey(r.id)];
+                return (
+                  <div key={`checkin-${r.id}`} className="rounded-md border border-border bg-background px-2.5 py-2 text-xs space-y-1.5">
+                    <div className="flex items-center gap-1.5 font-medium">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: r.color }} />
+                      {r.bus}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {rec?.arrivedAt ? (
+                        <Badge variant="secondary" className="text-[10px]">
+                          Arrived {formatCheckinTime(rec.arrivedAt)}
+                        </Badge>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[10px]"
+                          onClick={() => void markBusArrived(r.id)}
+                          disabled={checkinsLoading}
+                        >
+                          Mark arrived
+                        </Button>
+                      )}
+                      {rec?.departedAt ? (
+                        <Badge variant="secondary" className="text-[10px]">
+                          Departed {formatCheckinTime(rec.departedAt)}
+                        </Badge>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-7 text-[10px]"
+                          onClick={() => void markBusReadyToDepart(r.id, r.bus)}
+                          disabled={checkinsLoading || !rec?.arrivedAt || !attendanceSubmittedAt}
+                        >
+                          Ready to depart
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2">
