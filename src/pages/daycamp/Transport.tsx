@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,16 @@ import {
   resolveBundledGeocodeResult,
   seedGeocodeCacheFromBundled,
 } from "@/lib/mappointTransportImport";
+import {
+  applyRouteOverrides,
+  emptyManualOverrides,
+  excludedCamperSet,
+  fetchTransportExceptions,
+  loadManualOverrides,
+  saveManualOverrides,
+  todayDateString,
+  type TransportException,
+} from "@/lib/transportDailyOverrides";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -339,12 +349,20 @@ export default function Transport() {
     capacity: number;
   } | null>(null);
 
-  // Today-only overrides: per route, stops added or addresses excluded for today's run only
-  // Keyed by route id; address used as stop identifier
+  // Today-only overrides: per route, stops added or addresses excluded for the selected date
+  const [overrideDate, setOverrideDate] = useState(todayDateString);
   const [todayOverrides, setTodayOverrides] = useState<{
-    excluded: Record<number, string[]>; // route id -> excluded stop addresses (today only)
-    added: Record<number, RouteStop[]>; // route id -> stops added today only
-  }>({ excluded: {}, added: {} });
+    excluded: Record<number, string[]>;
+    added: Record<number, RouteStop[]>;
+  }>(emptyManualOverrides());
+  const [transportExceptions, setTransportExceptions] = useState<TransportException[]>([]);
+  const [overridesLoading, setOverridesLoading] = useState(true);
+  const skipOverridePersistRef = useRef(true);
+  const overrideLoadedKeyRef = useRef<string | null>(null);
+  const excludedCampers = useMemo(
+    () => excludedCamperSet(transportExceptions),
+    [transportExceptions],
+  );
 
   // Scope-choice dialog (Today only vs Permanent vs Cancel)
   const [scopeDialog, setScopeDialog] = useState<{
@@ -544,6 +562,61 @@ export default function Transport() {
     })();
     return () => { cancelled = true; };
   }, [authLoading, companyLoading, user, companyId, currentSeason, toast]);
+
+  // Load daily overrides + external exceptions (parent, office, nurse) for selected date
+  useEffect(() => {
+    if (!companyId) {
+      setOverridesLoading(true);
+      return;
+    }
+    const key = `${companyId}:${currentSeason}:${overrideDate}`;
+    if (overrideLoadedKeyRef.current === key) {
+      setOverridesLoading(false);
+      return;
+    }
+    let cancelled = false;
+    skipOverridePersistRef.current = true;
+    setOverridesLoading(true);
+    (async () => {
+      try {
+        const [manual, exceptions] = await Promise.all([
+          loadManualOverrides(supabase, companyId, currentSeason, overrideDate),
+          fetchTransportExceptions(supabase, companyId, overrideDate),
+        ]);
+        if (cancelled) return;
+        setTodayOverrides(manual);
+        setTransportExceptions(exceptions);
+        overrideLoadedKeyRef.current = key;
+      } catch (err) {
+        console.error("[Transport] Load daily overrides error:", err);
+      } finally {
+        if (!cancelled) {
+          skipOverridePersistRef.current = false;
+          setOverridesLoading(false);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [companyId, currentSeason, overrideDate]);
+
+  // Persist manual daily overrides (stop moves / pins for selected date only)
+  useEffect(() => {
+    if (!companyId || skipOverridePersistRef.current || overridesLoading) return;
+    const handle = setTimeout(() => {
+      void (async () => {
+        const { data: userRes } = await supabase.auth.getUser();
+        await saveManualOverrides(
+          supabase,
+          companyId,
+          currentSeason,
+          overrideDate,
+          todayOverrides,
+          userRes.user?.id,
+        );
+      })();
+    }, 600);
+    return () => clearTimeout(handle);
+  }, [todayOverrides, companyId, currentSeason, overrideDate, overridesLoading]);
 
   useEffect(() => {
     if (!persistLoaded || !companyId || skipPersistRef.current || importInProgressRef.current) return;
@@ -951,14 +1024,15 @@ export default function Transport() {
     }
   };
 
-  // Compute the effective core stops for a given route, applying today's overrides
+  // Compute the effective core stops for a given route, applying manual + external exceptions
   const getEffectiveCore = useCallback((routeId: number): RouteStop[] => {
-    const base = coreStops[routeId] || [];
-    const excl = new Set(todayOverrides.excluded[routeId] || []);
-    const filtered = base.filter(s => !excl.has(s.address));
-    const added = todayOverrides.added[routeId] || [];
-    return [...filtered, ...added];
-  }, [coreStops, todayOverrides]);
+    return applyRouteOverrides(
+      coreStops[routeId] || [],
+      routeId,
+      todayOverrides,
+      excludedCampers,
+    );
+  }, [coreStops, todayOverrides, excludedCampers]);
 
   // Drag-to-reorder stops within a single route
   const [reorderDrag, setReorderDrag] = useState<{ routeId: number; displayIndex: number } | null>(null);
@@ -1314,7 +1388,8 @@ export default function Transport() {
         routeMeta: nextMeta,
         unplottedCampers: [],
       });
-      setTodayOverrides({ excluded: {}, added: {} });
+      setTodayOverrides(emptyManualOverrides());
+      overrideLoadedKeyRef.current = null;
 
       toast({
         title: geocodeFailed ? "MapPoint routes loaded (partial)" : "MapPoint routes loaded",
@@ -1973,7 +2048,8 @@ export default function Transport() {
                     const totalStops = Object.values(coreStops).reduce((sum, s) => sum + (s?.length || 0), 0);
                     setUnplottedCampers([]);
                     setCoreStops({});
-                    setTodayOverrides({ excluded: {}, added: {} });
+                    setTodayOverrides(emptyManualOverrides());
+      overrideLoadedKeyRef.current = null;
                     toast({ title: "All campers removed", description: `Cleared ${totalUnplotted} unplotted and ${totalStops} routed campers.` });
                   }}
                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -1997,8 +2073,32 @@ export default function Transport() {
 
         {/* ─── Route Map Tab ─── */}
         <TabsContent value="map" className="mt-4">
-          {/* AM / PM Toggle */}
-          <div className="flex items-center gap-2 mb-4">
+          {/* Date + AM / PM */}
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="transport-date" className="text-xs text-muted-foreground whitespace-nowrap">Run date</Label>
+              <Input
+                id="transport-date"
+                type="date"
+                value={overrideDate}
+                onChange={(e) => {
+                  overrideLoadedKeyRef.current = null;
+                  setOverrideDate(e.target.value || todayDateString());
+                }}
+                className="h-8 w-[140px] text-xs"
+              />
+              {overrideDate === todayDateString() && (
+                <Badge variant="secondary" className="text-[10px]">Today</Badge>
+              )}
+            </div>
+            {transportExceptions.length > 0 && (
+              <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-700 dark:text-amber-300">
+                {transportExceptions.length} bus exception{transportExceptions.length === 1 ? "" : "s"}
+              </Badge>
+            )}
+            {overridesLoading && (
+              <span className="text-[10px] text-muted-foreground">Loading exceptions…</span>
+            )}
             <div className="inline-flex rounded-lg border border-border bg-muted/30 p-0.5">
               <button
                 className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
@@ -2039,6 +2139,23 @@ export default function Transport() {
               {optimizing ? "Optimizing…" : "Optimize Routes"}
             </Button>
           </div>
+
+          {transportExceptions.length > 0 && (
+            <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+              <p className="text-xs font-medium text-amber-800 dark:text-amber-200 mb-1">
+                Today&apos;s bus exceptions (auto-applied)
+              </p>
+              <ul className="text-[11px] text-muted-foreground space-y-0.5 max-h-24 overflow-y-auto">
+                {transportExceptions.map((ex, i) => (
+                  <li key={`${ex.source}-${ex.camperName}-${i}`}>
+                    <span className="font-medium text-foreground">{ex.camperName}</span>
+                    {" · "}{ex.label}
+                    {ex.detail ? ` — ${ex.detail}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div className="grid gap-4 lg:grid-cols-[360px,1fr]">
             {/* Route sidebar */}
