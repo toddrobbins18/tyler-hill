@@ -15,6 +15,11 @@ import { Users, LogOut, Plus, Calendar, UserCheck, Clock, Trash2, Waves, CheckCi
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { useParentCompany } from "@/hooks/useParentCompany";
+import {
+  isSameDayRequestBlocked,
+  SAME_DAY_CUTOFF_MESSAGE,
+} from "@/lib/parentPortalCutoff";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 type Camper = { id: string; name: string };
 type PickupChange = {
@@ -394,10 +399,14 @@ function PickupChangeDialog({
   const [personPhone, setPersonPhone] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const sameDayBlocked = isSameDayRequestBlocked(changeDate);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!camperId) return toast.error("Pick a camper");
+    if (isSameDayRequestBlocked(changeDate)) {
+      return toast.error(SAME_DAY_CUTOFF_MESSAGE);
+    }
     setSaving(true);
     const { error } = await supabase.from("pickup_changes").insert({
       company_id: companyId,
@@ -425,6 +434,11 @@ function PickupChangeDialog({
       <DialogContent>
         <DialogHeader><DialogTitle>New pickup change</DialogTitle></DialogHeader>
         <form onSubmit={submit} className="space-y-3">
+          {sameDayBlocked && (
+            <Alert variant="destructive">
+              <AlertDescription className="text-sm">{SAME_DAY_CUTOFF_MESSAGE}</AlertDescription>
+            </Alert>
+          )}
           <div className="space-y-2">
             <Label>Camper</Label>
             <Select value={camperId} onValueChange={setCamperId}>
@@ -472,7 +486,7 @@ function PickupChangeDialog({
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={saving}>{saving ? "Submitting…" : "Submit"}</Button>
+            <Button type="submit" disabled={saving || sameDayBlocked}>{saving ? "Submitting…" : "Submit"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -499,10 +513,14 @@ function AbsenceDialog({
   const [reason, setReason] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const sameDayBlocked = isSameDayRequestBlocked(date);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!camperId) return toast.error("Pick a camper");
+    if (isSameDayRequestBlocked(date)) {
+      return toast.error(SAME_DAY_CUTOFF_MESSAGE);
+    }
     setSaving(true);
     const { error } = await supabase.from("absences").insert({
       company_id: companyId,
@@ -529,6 +547,11 @@ function AbsenceDialog({
       <DialogContent>
         <DialogHeader><DialogTitle>Report absence or late arrival</DialogTitle></DialogHeader>
         <form onSubmit={submit} className="space-y-3">
+          {sameDayBlocked && (
+            <Alert variant="destructive">
+              <AlertDescription className="text-sm">{SAME_DAY_CUTOFF_MESSAGE}</AlertDescription>
+            </Alert>
+          )}
           <div className="space-y-2">
             <Label>Camper</Label>
             <Select value={camperId} onValueChange={setCamperId}>
@@ -572,7 +595,7 @@ function AbsenceDialog({
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={saving}>{saving ? "Submitting…" : "Submit"}</Button>
+            <Button type="submit" disabled={saving || sameDayBlocked}>{saving ? "Submitting…" : "Submit"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

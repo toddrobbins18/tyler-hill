@@ -31,6 +31,15 @@ import {
   todayDateString,
   type TransportException,
 } from "@/lib/transportDailyOverrides";
+import {
+  attendanceRecordKey,
+  attendanceStatusLabel,
+  campersOnRoute,
+  loadBusAttendance,
+  saveBusAttendance,
+  type BusAttendanceMap,
+  type BusAttendanceStatus,
+} from "@/lib/transportBusAttendance";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -364,6 +373,12 @@ export default function Transport() {
     [transportExceptions],
   );
 
+  const [busAttendance, setBusAttendance] = useState<BusAttendanceMap>({});
+  const [attendanceSubmittedAt, setAttendanceSubmittedAt] = useState<string | null>(null);
+  const [attendanceLoading, setAttendanceLoading] = useState(true);
+  const skipAttendancePersistRef = useRef(true);
+  const attendanceLoadedKeyRef = useRef<string | null>(null);
+
   // Scope-choice dialog (Today only vs Permanent vs Cancel)
   const [scopeDialog, setScopeDialog] = useState<{
     open: boolean;
@@ -617,6 +632,64 @@ export default function Transport() {
     }, 600);
     return () => clearTimeout(handle);
   }, [todayOverrides, companyId, currentSeason, overrideDate, overridesLoading]);
+
+  // Load bus attendance for selected date + AM/PM run
+  useEffect(() => {
+    if (!companyId) {
+      setAttendanceLoading(true);
+      return;
+    }
+    const key = `${companyId}:${currentSeason}:${overrideDate}:${timeOfDay}`;
+    if (attendanceLoadedKeyRef.current === key) {
+      setAttendanceLoading(false);
+      return;
+    }
+    let cancelled = false;
+    skipAttendancePersistRef.current = true;
+    setAttendanceLoading(true);
+    (async () => {
+      try {
+        const loaded = await loadBusAttendance(
+          supabase,
+          companyId,
+          currentSeason,
+          overrideDate,
+          timeOfDay,
+        );
+        if (cancelled) return;
+        setBusAttendance(loaded.records);
+        setAttendanceSubmittedAt(loaded.submittedAt);
+        attendanceLoadedKeyRef.current = key;
+      } catch (err) {
+        console.error("[Transport] Load bus attendance error:", err);
+      } finally {
+        if (!cancelled) {
+          skipAttendancePersistRef.current = false;
+          setAttendanceLoading(false);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [companyId, currentSeason, overrideDate, timeOfDay]);
+
+  useEffect(() => {
+    if (!companyId || skipAttendancePersistRef.current || attendanceLoading) return;
+    const handle = setTimeout(() => {
+      void (async () => {
+        const { data: userRes } = await supabase.auth.getUser();
+        await saveBusAttendance(
+          supabase,
+          companyId,
+          currentSeason,
+          overrideDate,
+          timeOfDay,
+          busAttendance,
+          { userId: userRes.user?.id },
+        );
+      })();
+    }, 600);
+    return () => clearTimeout(handle);
+  }, [busAttendance, companyId, currentSeason, overrideDate, timeOfDay, attendanceLoading]);
 
   useEffect(() => {
     if (!persistLoaded || !companyId || skipPersistRef.current || importInProgressRef.current) return;
@@ -1083,6 +1156,68 @@ export default function Transport() {
 
   const routes = buildRoutes(timeOfDay);
   const displayedRoutes = routes.filter(r => visibleRoutes.includes(r.id));
+
+  const attendanceRoster = useMemo(
+    () => routes.flatMap((r) =>
+      campersOnRoute(r.id, getEffectiveCore(r.id)).map((c) => ({
+        ...c,
+        routeId: r.id,
+        routeName: r.name,
+        bus: r.bus,
+        color: r.color,
+      })),
+    ),
+    [routes, getEffectiveCore],
+  );
+
+  const attendanceStats = useMemo(() => {
+    let present = 0;
+    let absent = 0;
+    let unmarked = 0;
+    for (const c of attendanceRoster) {
+      const label = attendanceStatusLabel(c.key, busAttendance);
+      if (label === "Present") present++;
+      else if (label === "Absent") absent++;
+      else unmarked++;
+    }
+    return { present, absent, unmarked, total: attendanceRoster.length };
+  }, [attendanceRoster, busAttendance]);
+
+  const setCamperAttendance = (key: string, status: BusAttendanceStatus) => {
+    setBusAttendance((prev) => ({ ...prev, [key]: status }));
+    setAttendanceSubmittedAt(null);
+  };
+
+  const markAllBusPresent = () => {
+    const next: BusAttendanceMap = { ...busAttendance };
+    for (const c of attendanceRoster) next[c.key] = "present";
+    setBusAttendance(next);
+    setAttendanceSubmittedAt(null);
+  };
+
+  const handleSubmitBusAttendance = async () => {
+    if (!companyId) return;
+    const { data: userRes } = await supabase.auth.getUser();
+    const ok = await saveBusAttendance(
+      supabase,
+      companyId,
+      currentSeason,
+      overrideDate,
+      timeOfDay,
+      busAttendance,
+      { submitted: true, userId: userRes.user?.id },
+    );
+    if (ok) {
+      const now = new Date().toISOString();
+      setAttendanceSubmittedAt(now);
+      toast({
+        title: "Bus attendance submitted",
+        description: `${attendanceStats.present} present · ${attendanceStats.absent} absent · ${attendanceStats.unmarked} unmarked`,
+      });
+    } else {
+      toast({ title: "Could not submit bus attendance", variant: "destructive" });
+    }
+  };
 
   const toggleRouteVisibility = (id: number) => {
     setVisibleRoutes(prev =>
@@ -1858,12 +1993,14 @@ export default function Transport() {
 
     switch (reportName) {
       case "Attendance": {
-        rows.push(["Camper Name", "Route", "Pickup Stop", "Pickup Time", "Status"]);
+        rows.push(["Date", "Run", "Camper Name", "Route", "Bus", "Pickup Stop", "Pickup Time", "Status"]);
         routes.forEach(r => {
           r.stops.forEach(s => {
             if (s.address === CAMP_LOCATION.address) return;
             (s.camperNames || [s.name]).forEach(name => {
-              rows.push([name, r.name, s.address, s.pickupTime, "Scheduled"]);
+              const label = attendanceStatusLabel(attendanceRecordKey(r.id, name), busAttendance);
+              const status = label === "Unmarked" ? "Scheduled" : label;
+              rows.push([overrideDate, timeOfDay.toUpperCase(), name, r.name, r.bus, s.address, s.pickupTime, status]);
             });
           });
         });
@@ -2066,6 +2203,7 @@ export default function Transport() {
       <Tabs defaultValue="map">
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="map" className="text-xs gap-1"><MapIcon className="h-3.5 w-3.5" /> Route Map</TabsTrigger>
+          <TabsTrigger value="attendance" className="text-xs gap-1"><ClipboardList className="h-3.5 w-3.5" /> Bus Attendance</TabsTrigger>
           <TabsTrigger value="unplotted" className="text-xs gap-1"><UserRound className="h-3.5 w-3.5" /> Unplotted Campers{unplottedCampers.length > 0 && <Badge variant="secondary" className="ml-1 text-[9px] px-1.5">{unplottedCampers.length}</Badge>}</TabsTrigger>
           <TabsTrigger value="resident" className="text-xs gap-1"><FileText className="h-3.5 w-3.5" /> Resident Camp Reports</TabsTrigger>
           <TabsTrigger value="daycamp" className="text-xs gap-1"><Car className="h-3.5 w-3.5" /> Day Camp</TabsTrigger>
@@ -2083,6 +2221,7 @@ export default function Transport() {
                 value={overrideDate}
                 onChange={(e) => {
                   overrideLoadedKeyRef.current = null;
+                  attendanceLoadedKeyRef.current = null;
                   setOverrideDate(e.target.value || todayDateString());
                 }}
                 className="h-8 w-[140px] text-xs"
@@ -2357,6 +2496,133 @@ export default function Transport() {
               </DialogContent>
             </Dialog>
           </div>
+        </TabsContent>
+
+        {/* ─── Bus Attendance Tab ─── */}
+        <TabsContent value="attendance" className="mt-4 space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="attendance-date" className="text-xs text-muted-foreground whitespace-nowrap">Run date</Label>
+              <Input
+                id="attendance-date"
+                type="date"
+                value={overrideDate}
+                onChange={(e) => {
+                  overrideLoadedKeyRef.current = null;
+                  attendanceLoadedKeyRef.current = null;
+                  setOverrideDate(e.target.value || todayDateString());
+                }}
+                className="h-8 w-[140px] text-xs"
+              />
+            </div>
+            <div className="inline-flex rounded-lg border border-border bg-muted/30 p-0.5">
+              <button
+                type="button"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  timeOfDay === "am" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
+                }`}
+                onClick={() => {
+                  attendanceLoadedKeyRef.current = null;
+                  setTimeOfDay("am");
+                }}
+              >
+                <Sun className="h-3.5 w-3.5" /> AM
+              </button>
+              <button
+                type="button"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  timeOfDay === "pm" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
+                }`}
+                onClick={() => {
+                  attendanceLoadedKeyRef.current = null;
+                  setTimeOfDay("pm");
+                }}
+              >
+                <Moon className="h-3.5 w-3.5" /> PM
+              </button>
+            </div>
+            {attendanceLoading && (
+              <span className="text-[10px] text-muted-foreground">Loading…</span>
+            )}
+            {attendanceSubmittedAt && (
+              <Badge variant="secondary" className="text-[10px]">Submitted</Badge>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 justify-between">
+            <div className="flex flex-wrap gap-2 text-xs">
+              <Badge variant="outline" className="border-emerald-500/40 text-emerald-700 dark:text-emerald-300">
+                {attendanceStats.present} present
+              </Badge>
+              <Badge variant="outline" className="border-red-500/40 text-red-700 dark:text-red-300">
+                {attendanceStats.absent} absent
+              </Badge>
+              <Badge variant="outline">{attendanceStats.unmarked} unmarked</Badge>
+              <span className="text-muted-foreground self-center">· {attendanceStats.total} scheduled</span>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={markAllBusPresent} disabled={!attendanceRoster.length}>
+                Mark all present
+              </Button>
+              <Button size="sm" onClick={handleSubmitBusAttendance} disabled={!attendanceRoster.length || attendanceLoading}>
+                Submit bus attendance
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {routes.map((r) => {
+              const campers = campersOnRoute(r.id, getEffectiveCore(r.id));
+              if (!campers.length) return null;
+              return (
+                <Card key={r.id}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r.color }} />
+                      {r.bus}
+                    </CardTitle>
+                    <p className="text-[11px] text-muted-foreground">{r.name} · {campers.length} campers</p>
+                  </CardHeader>
+                  <CardContent className="space-y-2 pt-0">
+                    {campers.map((c) => {
+                      const status = busAttendance[c.key];
+                      return (
+                        <div key={c.key} className="flex items-center justify-between gap-2 text-xs">
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{c.name}</p>
+                            <p className="text-[10px] text-muted-foreground truncate">{c.stopName}</p>
+                          </div>
+                          <div className="flex gap-1 shrink-0">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={status === "present" ? "default" : "outline"}
+                              className="h-7 px-2 text-[10px]"
+                              onClick={() => setCamperAttendance(c.key, "present")}
+                            >
+                              P
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={status === "absent" ? "destructive" : "outline"}
+                              className="h-7 px-2 text-[10px]"
+                              onClick={() => setCamperAttendance(c.key, "absent")}
+                            >
+                              A
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+          {!attendanceRoster.length && !attendanceLoading && (
+            <p className="text-sm text-muted-foreground">No campers on routes for this date and run.</p>
+          )}
         </TabsContent>
 
         {/* ─── Unplotted Campers Tab ─── */}
