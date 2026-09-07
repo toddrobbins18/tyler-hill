@@ -1,8 +1,49 @@
 import { parseCSV } from "@/lib/csv";
 import mappointRoutesCsv2026 from "../../data/north_shore_mappoint_routes_2026.csv?raw";
+import bundledGeocodes2026 from "../../data/north_shore_mappoint_geocodes_2026.json";
 
 export function getBundledMappointRoutesCsv2026(): string {
   return mappointRoutesCsv2026;
+}
+
+export type BundledGeocode = { lat: number; lng: number; provider?: string };
+
+const bundledGeocodeMap = bundledGeocodes2026 as Record<string, BundledGeocode>;
+
+/** Pre-geocoded MapPoint addresses — instant import, no API calls in production. */
+export function lookupBundledMappointGeocode(address: string): BundledGeocode | null {
+  const hit = bundledGeocodeMap[address.trim().toLowerCase()];
+  return hit?.lat != null && hit?.lng != null ? hit : null;
+}
+
+/** Resolve from bundled MapPoint cache (377 North Shore AM stops). */
+export function resolveBundledGeocodeResult(address: string): {
+  lat: number;
+  lng: number;
+  provider: "ors" | "nominatim" | "census";
+} | null {
+  const hit = lookupBundledMappointGeocode(address);
+  if (!hit) return null;
+  const provider = hit.provider === "nominatim" || hit.provider === "census" ? hit.provider : "ors";
+  return { lat: hit.lat, lng: hit.lng, provider };
+}
+
+export function bundledMappointGeocodeCount() {
+  return Object.keys(bundledGeocodeMap).length;
+}
+
+export function seedGeocodeCacheFromBundled(
+  cache: Map<string, { lat: number; lng: number; provider?: string } | null>,
+) {
+  for (const [key, hit] of Object.entries(bundledGeocodeMap)) {
+    if (!cache.has(key)) {
+      cache.set(key, {
+        lat: hit.lat,
+        lng: hit.lng,
+        provider: hit.provider || "ors",
+      });
+    }
+  }
 }
 
 export type MappointRouteRow = {

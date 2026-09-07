@@ -18,6 +18,8 @@ import {
   getBundledMappointRoutesCsv2026,
   mappointRoutesSummary,
   parseMappointRoutesCsv,
+  resolveBundledGeocodeResult,
+  seedGeocodeCacheFromBundled,
 } from "@/lib/mappointTransportImport";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
@@ -585,6 +587,10 @@ export default function Transport() {
   // Session-level cache so repeated addresses skip the network entirely
   const geocodeCacheRef = useRef<Map<string, GeocodeResult | null>>(loadPersistedGeocodeCache());
 
+  useEffect(() => {
+    seedGeocodeCacheFromBundled(geocodeCacheRef.current);
+  }, []);
+
   const cacheGeocodeResult = (address: string, result: GeocodeResult | null) => {
     const cacheKey = address.trim().toLowerCase();
     const isRetryable = result && "retryable" in result && result.retryable;
@@ -595,6 +601,11 @@ export default function Transport() {
     const cacheKey = address.trim().toLowerCase();
     const cached = geocodeCacheRef.current.get(cacheKey);
     if (cached !== undefined) return cached;
+    const bundled = resolveBundledGeocodeResult(address);
+    if (bundled) {
+      cacheGeocodeResult(address, bundled);
+      return bundled;
+    }
     // Retry transient errors (404 NOT_FOUND during cold-start, network blips)
     const maxAttempts = 3;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -639,17 +650,25 @@ export default function Transport() {
       if (cached !== undefined) {
         results[i] = cached;
         onEach?.(i, cached);
-      } else {
-        pending.push({ index: i, address });
+        return;
       }
+      const bundled = resolveBundledGeocodeResult(address);
+      if (bundled) {
+        cacheGeocodeResult(address, bundled);
+        results[i] = bundled;
+        onEach?.(i, bundled);
+        return;
+      }
+      pending.push({ index: i, address });
     });
 
-    const CHUNK = 20;
-    const batchConcurrency = Math.min(concurrency, 2);
+    const CHUNK = 50;
+    const batchConcurrency = Math.min(concurrency, 6);
+    let sawRateLimit = false;
     for (let start = 0; start < pending.length; start += CHUNK) {
       const slice = pending.slice(start, start + CHUNK);
       const chunkAddresses = slice.map((p) => p.address);
-      let usedBatch = false;
+      let batchResults: Record<string, unknown>[] | null = null;
 
       try {
         const { data, error } = await supabase.functions.invoke("route-optimizer", {
@@ -660,30 +679,47 @@ export default function Transport() {
           },
         });
         if (!error && Array.isArray((data as { results?: unknown[] })?.results)) {
-          usedBatch = true;
-          ((data as { results: Record<string, unknown>[] }).results).forEach((item, j) => {
-            const entry = slice[j];
-            if (!entry) return;
-            const result = geocodePayloadToResult(item);
-            if (!isRetryableGeocodeFailure(result)) cacheGeocodeResult(entry.address, result);
+          batchResults = (data as { results: Record<string, unknown>[] }).results;
+        }
+      } catch {
+        // retry unresolved addresses below
+      }
+
+      const unresolved: typeof slice = [];
+      if (batchResults) {
+        batchResults.forEach((item, j) => {
+          const entry = slice[j];
+          if (!entry) return;
+          const result = geocodePayloadToResult(item);
+          if (!isRetryableGeocodeFailure(result)) cacheGeocodeResult(entry.address, result);
+          results[entry.index] = result;
+          onEach?.(entry.index, result);
+          if (!isGeocodePoint(result) && isRetryableGeocodeFailure(result)) {
+            sawRateLimit = true;
+            unresolved.push(entry);
+          } else if (!isGeocodePoint(result)) {
+            unresolved.push(entry);
+          }
+        });
+      } else {
+        unresolved.push(...slice);
+      }
+
+      if (unresolved.length > 0) {
+        const parallel = Math.min(Math.max(concurrency, 1), 4);
+        for (let u = 0; u < unresolved.length; u += parallel) {
+          const group = unresolved.slice(u, u + parallel);
+          const groupResults = await Promise.all(group.map((entry) => geocodeAddress(entry.address)));
+          group.forEach((entry, j) => {
+            const result = groupResults[j] ?? null;
             results[entry.index] = result;
             onEach?.(entry.index, result);
           });
         }
-      } catch {
-        // fall through to per-address geocode
       }
 
-      if (!usedBatch) {
-        for (const entry of slice) {
-          const result = await geocodeAddress(entry.address);
-          results[entry.index] = result;
-          onEach?.(entry.index, result);
-        }
-      }
-
-      if (start + CHUNK < pending.length) {
-        await new Promise((r) => setTimeout(r, 1500));
+      if (sawRateLimit && start + CHUNK < pending.length) {
+        await new Promise((r) => setTimeout(r, 1200));
       }
     }
 
@@ -1185,16 +1221,42 @@ export default function Transport() {
       const uniqueAddresses = Array.from(
         new Set(routes.flatMap((r) => r.stops.map((s) => s.address))),
       );
+
+      const resolveFromBundled = (addr: string): GeocodeResult | null => resolveBundledGeocodeResult(addr);
+
+      const bundledHits = uniqueAddresses.filter((a) => isGeocodePoint(resolveFromBundled(a))).length;
+      const needsNetwork = uniqueAddresses.filter((a) => !isGeocodePoint(resolveFromBundled(a)));
+
       toast({
-        title: "Loading MapPoint routes",
-        description: `Geocoding ${uniqueAddresses.length} stops across ${summary.routeCount} buses…`,
+        title: bundledHits === uniqueAddresses.length ? "Loading MapPoint routes" : "Loading MapPoint routes",
+        description: bundledHits === uniqueAddresses.length
+          ? `Building ${summary.routeCount} buses from saved coordinates (${bundledHits} stops, no geocoding)…`
+          : `Geocoding ${needsNetwork.length} new stops across ${summary.routeCount} buses…`,
       });
 
-      const uncachedCount = uniqueAddresses.filter(
-        (addr) => !geocodeCacheRef.current.has(addr.trim().toLowerCase()),
-      ).length;
+      const geos: (GeocodeResult | null)[] = uniqueAddresses.map((addr) => {
+        const bundled = resolveFromBundled(addr);
+        if (isGeocodePoint(bundled)) {
+          cacheGeocodeResult(addr, bundled);
+          return bundled;
+        }
+        return geocodeCacheRef.current.get(addr.trim().toLowerCase()) ?? null;
+      });
 
-      const geos = await geocodeBatch(uniqueAddresses, 2);
+      const stillMissing = uniqueAddresses
+        .map((addr, i) => ({ addr, i }))
+        .filter(({ addr, i }) => !isGeocodePoint(geos[i]));
+
+      if (stillMissing.length > 0) {
+        const missResults = await geocodeBatch(
+          stillMissing.map((m) => m.addr),
+          2,
+        );
+        stillMissing.forEach(({ addr, i }, j) => {
+          geos[i] = missResults[j] ?? null;
+        });
+      }
+
       const geoByAddress = new Map<string, GeocodeResult | null>();
       uniqueAddresses.forEach((addr, i) => geoByAddress.set(addr, geos[i] ?? null));
 
@@ -1258,7 +1320,7 @@ export default function Transport() {
         title: geocodeFailed ? "MapPoint routes loaded (partial)" : "MapPoint routes loaded",
         description: geocodeFailed
           ? `${nextMeta.length} buses · ${geocodedCount}/${uniqueAddresses.length} addresses geocoded · ${geocodeFailed} stops skipped${saved ? "" : " · save failed, stay on page and retry"}`
-          : `${nextMeta.length} buses · ${summary.camperCount} campers · ${saved ? "saved to board" : "save failed — click Load MapPoint again"}${uncachedCount === 0 ? " · used geocode cache (no new API calls)" : ""}`,
+          : `${nextMeta.length} buses · ${summary.camperCount} campers · ${saved ? "saved to board" : "save failed — click Load MapPoint again"}${stillMissing.length === 0 ? " · instant load (bundled coordinates)" : ""}`,
         variant: geocodeFailed || !saved ? "destructive" : "default",
       });
     } catch (e: unknown) {
