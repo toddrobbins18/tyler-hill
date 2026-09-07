@@ -412,8 +412,8 @@ export default function Transport() {
   const skipOverridePersistRef = useRef(true);
   const overrideLoadedKeyRef = useRef<string | null>(null);
   const excludedCampers = useMemo(
-    () => excludedCamperSet(transportExceptions),
-    [transportExceptions],
+    () => excludedCamperSet(transportExceptions, timeOfDay),
+    [transportExceptions, timeOfDay],
   );
 
   const [busAttendance, setBusAttendance] = useState<BusAttendanceMap>({});
@@ -633,7 +633,7 @@ export default function Transport() {
     return () => { cancelled = true; };
   }, [authLoading, companyLoading, user, companyId, currentSeason, toast]);
 
-  // Load daily overrides + external exceptions (parent, office, nurse) for selected date
+  // Load daily overrides + external exceptions (parent, office, nurse, swim) for selected date
   useEffect(() => {
     if (!companyId) {
       setOverridesLoading(true);

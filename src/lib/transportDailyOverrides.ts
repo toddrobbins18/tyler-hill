@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { CAMP_TIMEZONE } from "@/lib/parentPortalCutoff";
 
 export interface TransportRouteStop {
   name: string;
@@ -19,13 +20,18 @@ export type TransportExceptionSource =
   | "parent_absence"
   | "parent_bus_change"
   | "office_change"
-  | "nurse_sent_home";
+  | "nurse_sent_home"
+  | "swim_lesson";
+
+export type TransportRunPeriod = "am" | "pm";
 
 export type TransportException = {
   source: TransportExceptionSource;
   camperName: string;
   label: string;
   detail?: string;
+  /** When set, exception only removes camper from that run (default: both runs). */
+  appliesTo?: TransportRunPeriod;
 };
 
 export const emptyManualOverrides = (): TransportManualOverrides => ({
@@ -36,6 +42,31 @@ export const emptyManualOverrides = (): TransportManualOverrides => ({
 export const todayDateString = () => new Date().toISOString().slice(0, 10);
 
 const normName = (name: string) => name.trim().toLowerCase();
+
+/** Camp calendar date (YYYY-MM-DD) for a stored lesson timestamp. */
+export function campDateFromTimestamp(iso: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: CAMP_TIMEZONE }).format(new Date(iso));
+}
+
+/** AM vs PM bus run affected by a swim lesson (camp local time). */
+export function swimLessonBusRun(scheduledAt: string): TransportRunPeriod {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: CAMP_TIMEZONE,
+      hour: "numeric",
+      hour12: false,
+    }).format(new Date(scheduledAt)),
+  );
+  return hour < 12 ? "am" : "pm";
+}
+
+function formatCampTime(iso: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: CAMP_TIMEZONE,
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
 
 export function parseManualOverrides(raw: unknown): TransportManualOverrides {
   if (!raw || typeof raw !== "object") return emptyManualOverrides();
@@ -128,13 +159,14 @@ export async function fetchTransportExceptions(
   const seen = new Set<string>();
 
   const add = (item: TransportException) => {
-    const key = `${item.source}:${normName(item.camperName)}`;
+    const key = `${item.source}:${normName(item.camperName)}:${item.appliesTo ?? "both"}`;
     if (!item.camperName.trim() || seen.has(key)) return;
     seen.add(key);
     out.push(item);
   };
 
-  const [{ data: absences }, { data: pickups }, { data: office }, { data: nurse }] = await Promise.all([
+  const [{ data: absences }, { data: pickups }, { data: office }, { data: nurse }, { data: swimLessons }] =
+    await Promise.all([
     supabase
       .from("absences")
       .select("absence_type, reason, children:camper_id(name)")
@@ -159,6 +191,16 @@ export async function fetchTransportExceptions(
       .eq("company_id", companyId)
       .eq("date", overrideDate)
       .eq("sent_home", true),
+    supabase
+      .from("swim_lessons")
+      .select(
+        "scheduled_at, duration_minutes, location, instructor, parent_confirmed, status, children:camper_id(name)",
+      )
+      .eq("company_id", companyId)
+      .eq("parent_confirmed", true)
+      .neq("status", "cancelled")
+      .gte("scheduled_at", `${overrideDate}T00:00:00`)
+      .lt("scheduled_at", `${overrideDate}T23:59:59.999`),
   ]);
 
   for (const row of absences ?? []) {
@@ -206,6 +248,31 @@ export async function fetchTransportExceptions(
     });
   }
 
+  for (const row of swimLessons ?? []) {
+    const scheduledAt = (row as { scheduled_at?: string }).scheduled_at;
+    const name = (row as { children?: { name?: string } }).children?.name?.trim();
+    if (!name || !scheduledAt) continue;
+    if (campDateFromTimestamp(scheduledAt) !== overrideDate) continue;
+
+    const run = swimLessonBusRun(scheduledAt);
+    const location = (row as { location?: string | null }).location;
+    const instructor = (row as { instructor?: string | null }).instructor;
+    const duration = (row as { duration_minutes?: number }).duration_minutes ?? 30;
+    const timeLabel = formatCampTime(scheduledAt);
+    const place = location?.trim() || "Swim lesson";
+    const coach = instructor?.trim();
+
+    add({
+      source: "swim_lesson",
+      camperName: name,
+      label: `Swim lesson — no ${run.toUpperCase()} bus`,
+      detail: coach
+        ? `${timeLabel} · ${place} · ${duration} min · ${coach}`
+        : `${timeLabel} · ${place} · ${duration} min`,
+      appliesTo: run,
+    });
+  }
+
   return out;
 }
 
@@ -247,6 +314,16 @@ export function applyRouteOverrides(
   return [...filtered, ...added];
 }
 
-export function excludedCamperSet(exceptions: TransportException[]): Set<string> {
-  return new Set(exceptions.map((e) => normName(e.camperName)));
+export function excludedCamperSet(
+  exceptions: TransportException[],
+  runPeriod?: TransportRunPeriod,
+): Set<string> {
+  return new Set(
+    exceptions
+      .filter((e) => {
+        if (!runPeriod || !e.appliesTo) return true;
+        return e.appliesTo === runPeriod;
+      })
+      .map((e) => normName(e.camperName)),
+  );
 }
