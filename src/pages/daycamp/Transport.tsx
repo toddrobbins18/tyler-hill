@@ -60,12 +60,21 @@ import {
 } from "@/lib/transportBusCheckins";
 import {
   downloadBusBubbleSheetsPdf,
+  downloadCombinedAttendanceBubbleSheetPdf,
   downloadGroupBubbleSheetPdf,
 } from "@/lib/transportBubbleSheetPdf";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSearchParams } from "react-router-dom";
+
+const TRANSPORT_TABS = ["map", "attendance", "unplotted", "resident", "daycamp"] as const;
+type TransportTab = (typeof TRANSPORT_TABS)[number];
+
+function isTransportTab(value: string | null): value is TransportTab {
+  return !!value && (TRANSPORT_TABS as readonly string[]).includes(value);
+}
 
 const ROUTE_COLORS = [
   "#3eb8a0", "#4a9eff", "#f59e0b", "#ef4444", "#a855f7",
@@ -334,7 +343,7 @@ const residentReports = [
 ];
 
 const dayCampReports = [
-  { name: "Attendance", desc: "Daily attendance tracking" },
+  { name: "Attendance", desc: "Bubble sheet PDF backup (bus + group)" },
   { name: "Bus Report", desc: "Day camp bus assignments" },
   { name: "Bus Route Summary", desc: "Route overview with stops" },
   { name: "Car Report", desc: "Car pickup/dropoff log" },
@@ -356,7 +365,19 @@ export default function Transport() {
   const { user, loading: authLoading } = useAuth();
   const { currentCompany, loading: companyLoading } = useCompany();
   const { currentSeason } = useSeason();
+  const [searchParams, setSearchParams] = useSearchParams();
   const companyId = currentCompany?.id;
+
+  const tabParam = searchParams.get("tab");
+  const activeTransportTab: TransportTab = isTransportTab(tabParam) ? tabParam : "map";
+  const setActiveTransportTab = useCallback((tab: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (tab === "map") next.delete("tab");
+      else next.set("tab", tab);
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
   // Core stops are the source of truth (without camp stop)
   const [coreStops, setCoreStops] = useState<Record<number, RouteStop[]>>(initialCoreStops);
   const [routeMeta, setRouteMeta] = useState(initialRouteMeta);
@@ -2310,6 +2331,36 @@ export default function Transport() {
   };
 
   const handleGenerateReport = (reportName: string, category: "resident" | "daycamp") => {
+    if (reportName === "Attendance" && category === "daycamp") {
+      const sheetRoutes = routes
+        .map((r) => ({
+          bus: r.bus,
+          routeName: r.name,
+          campers: campersOnRoute(r.id, getEffectiveCore(r.id)).map((c) => ({
+            name: c.name,
+            detail: c.stopName,
+          })),
+        }))
+        .filter((r) => r.campers.length > 0);
+      const groups = groupRosterByGroup.map(([groupName, campers]) => ({
+        groupName,
+        campers: campers.map((c) => ({ name: c.name })),
+      }));
+      const ok = downloadCombinedAttendanceBubbleSheetPdf({
+        companyName: currentCompany?.name ?? "Day Camp",
+        date: overrideDate,
+        runPeriod: timeOfDay,
+        busRoutes: sheetRoutes,
+        groups,
+      });
+      if (!ok) {
+        toast({ title: "No campers to print", variant: "destructive" });
+      } else {
+        toast({ title: "Attendance bubble sheet downloaded", description: "PDF saved (bus + group)." });
+      }
+      return;
+    }
+
     const today = new Date().toISOString().slice(0, 10);
     const safeName = reportName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
     const filename = `${category}-${safeName}-${today}.csv`;
@@ -2526,7 +2577,7 @@ export default function Transport() {
         </div>
       </div>
 
-      <Tabs defaultValue="map">
+      <Tabs value={activeTransportTab} onValueChange={setActiveTransportTab}>
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="map" className="text-xs gap-1"><MapIcon className="h-3.5 w-3.5" /> Route Map</TabsTrigger>
           <TabsTrigger value="attendance" className="text-xs gap-1"><ClipboardList className="h-3.5 w-3.5" /> Bus Attendance</TabsTrigger>
