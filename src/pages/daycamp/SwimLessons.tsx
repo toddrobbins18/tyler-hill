@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/table";
 import { Waves, Plus, Trash2, CheckCircle2, Clock } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { campDateTimeToIso, formatCampDate, formatCampTime } from "@/lib/campTime";
+import { campTodayDateString } from "@/lib/parentPortalCutoff";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
 
 type Camper = { id: string; name: string; guardian_email: string | null };
@@ -115,9 +116,9 @@ export default function SwimLessons() {
                 {lessons.map(l => (
                   <TableRow key={l.id}>
                     <TableCell>
-                      <div className="font-medium">{format(new Date(l.scheduled_at), "MMM d, yyyy")}</div>
+                      <div className="font-medium">{formatCampDate(l.scheduled_at)}</div>
                       <div className="text-xs text-muted-foreground">
-                        {format(new Date(l.scheduled_at), "h:mm a")} · {l.duration_minutes} min
+                        {formatCampTime(l.scheduled_at)} · {l.duration_minutes} min
                       </div>
                     </TableCell>
                     <TableCell>{camperName(l.camper_id)}</TableCell>
@@ -134,7 +135,7 @@ export default function SwimLessons() {
                     </TableCell>
                     <TableCell>
                       {l.reminder_sent_at
-                        ? <span className="text-xs text-muted-foreground">Sent {format(new Date(l.reminder_sent_at), "MMM d")}</span>
+                        ? <span className="text-xs text-muted-foreground">Sent {formatCampDate(l.reminder_sent_at)}</span>
                         : <span className="text-xs text-muted-foreground">—</span>}
                     </TableCell>
                     <TableCell>
@@ -159,7 +160,7 @@ function LessonDialog({
   const { currentCompany } = useCompany();
   const [open, setOpen] = useState(false);
   const [camperId, setCamperId] = useState("");
-  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [date, setDate] = useState(campTodayDateString());
   const [time, setTime] = useState("10:00");
   const [duration, setDuration] = useState("30");
   const [instructor, setInstructor] = useState("");
@@ -174,7 +175,7 @@ function LessonDialog({
     if (!camperId) return toast.error("Pick a camper");
     
     setSaving(true);
-    const scheduled_at = new Date(`${date}T${time}:00`).toISOString();
+    const scheduled_at = campDateTimeToIso(date, time);
     
     const { error } = await supabase.from("swim_lessons").insert({
       company_id: currentCompany.id,

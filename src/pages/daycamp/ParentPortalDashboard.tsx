@@ -18,7 +18,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Users, Calendar, Clock, UserCheck, Waves, Link2, Trash2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { formatCampDateTime } from "@/lib/campTime";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
 
 const CHANGE_TYPES: Record<string, string> = {
@@ -563,7 +563,7 @@ export default function ParentPortalDashboard() {
                   <TableBody>
                     {swimLessons.map((l) => (
                       <TableRow key={l.id}>
-                        <TableCell>{format(new Date(l.scheduled_at), "EEE, MMM d · h:mm a")}</TableCell>
+                        <TableCell>{formatCampDateTime(l.scheduled_at)}</TableCell>
                         <TableCell>{l.camperName}</TableCell>
                         <TableCell>{l.instructor ?? "—"}</TableCell>
                         <TableCell>

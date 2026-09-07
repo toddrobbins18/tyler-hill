@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Users, LogOut, Plus, Calendar, UserCheck, Clock, Trash2, Waves, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { formatCampDateTime } from "@/lib/campTime";
 import { useParentCompany } from "@/hooks/useParentCompany";
 import {
   isSameDayRequestBlocked,
@@ -322,7 +322,6 @@ export default function ParentPortal() {
                 ) : (
                   <ul className="divide-y">
                     {swimLessons.map((l) => {
-                      const dt = new Date(l.scheduled_at);
                       const confirm = async () => {
                         const { error } = await supabase
                           .from("swim_lessons")
@@ -343,7 +342,7 @@ export default function ParentPortal() {
                         <li key={l.id} className="py-3 flex flex-wrap items-center justify-between gap-3">
                           <div className="min-w-0">
                             <div className="font-medium">
-                              {camperName(l.camper_id)} · {format(dt, "EEE, MMM d 'at' h:mm a")}
+                              {camperName(l.camper_id)} · {formatCampDateTime(l.scheduled_at)}
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {l.duration_minutes} min

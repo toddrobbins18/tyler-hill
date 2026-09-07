@@ -1,5 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { CAMP_TIMEZONE } from "@/lib/parentPortalCutoff";
+import {
+  campDateFromTimestamp,
+  campYmdToUtcEndIso,
+  campYmdToUtcStartIso,
+  formatCampTime,
+  swimLessonBusRun,
+} from "@/lib/campTime";
 
 export interface TransportRouteStop {
   name: string;
@@ -43,30 +49,7 @@ export const todayDateString = () => new Date().toISOString().slice(0, 10);
 
 const normName = (name: string) => name.trim().toLowerCase();
 
-/** Camp calendar date (YYYY-MM-DD) for a stored lesson timestamp. */
-export function campDateFromTimestamp(iso: string): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: CAMP_TIMEZONE }).format(new Date(iso));
-}
-
-/** AM vs PM bus run affected by a swim lesson (camp local time). */
-export function swimLessonBusRun(scheduledAt: string): TransportRunPeriod {
-  const hour = Number(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: CAMP_TIMEZONE,
-      hour: "numeric",
-      hour12: false,
-    }).format(new Date(scheduledAt)),
-  );
-  return hour < 12 ? "am" : "pm";
-}
-
-function formatCampTime(iso: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: CAMP_TIMEZONE,
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(iso));
-}
+export { campDateFromTimestamp, swimLessonBusRun };
 
 export function parseManualOverrides(raw: unknown): TransportManualOverrides {
   if (!raw || typeof raw !== "object") return emptyManualOverrides();
@@ -199,8 +182,8 @@ export async function fetchTransportExceptions(
       .eq("company_id", companyId)
       .eq("parent_confirmed", true)
       .neq("status", "cancelled")
-      .gte("scheduled_at", `${overrideDate}T00:00:00`)
-      .lt("scheduled_at", `${overrideDate}T23:59:59.999`),
+      .gte("scheduled_at", campYmdToUtcStartIso(overrideDate))
+      .lt("scheduled_at", campYmdToUtcEndIso(overrideDate)),
   ]);
 
   for (const row of absences ?? []) {
