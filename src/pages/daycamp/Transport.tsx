@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { TransportRouteMap } from "@/components/TransportRouteMap";
-import { Bus, MapPin, Users, Plus, FileText, Car, Plane, ClipboardList, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Clock, Printer } from "lucide-react";
+import { Bus, MapPin, Users, Plus, FileText, Car, Plane, ClipboardList, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Clock, Printer, Eye, EyeOff } from "lucide-react";
 import { parseCSV, pickFirst, readFileAsText } from "@/lib/csv";
 import {
   getBundledMappointRoutesCsv2026,
@@ -164,16 +164,20 @@ const MAP_PANEL_HEIGHT: Record<"sm" | "md" | "lg" | "xl", string> = {
 const buildAMStops = (stops: RouteStop[]): RouteStop[] =>
   assignDrivingTimes([...stops, { ...CAMP_LOCATION, pickupTime: "", passengers: 0 }]);
 
-// PM routes: camp → stops reversed (camp is first stop)
+// PM routes: camp first, then same stop order as AM (first on = first off)
 const buildPMStops = (stops: RouteStop[]): RouteStop[] =>
-  assignDrivingTimes([{ ...CAMP_LOCATION, pickupTime: "", passengers: 0 }, ...[...stops].reverse()]);
+  assignDrivingTimes([{ ...CAMP_LOCATION, pickupTime: "", passengers: 0 }, ...stops]);
 
-// Core stops without camp
+// Core stops without camp (same order for AM and PM)
 const coreStopsFromAM = (stops: RouteStop[]): RouteStop[] =>
   stops.filter(s => s.address !== CAMP_LOCATION.address);
 
 const coreStopsFromPM = (stops: RouteStop[]): RouteStop[] =>
-  [...stops.filter(s => s.address !== CAMP_LOCATION.address)].reverse();
+  stops.filter(s => s.address !== CAMP_LOCATION.address);
+
+/** Map marker / sidebar display index → index in core stop array. */
+const displayStopToCoreIndex = (displayIdx: number, isAM: boolean): number =>
+  isAM ? displayIdx : displayIdx - 1;
 
 const initialCoreStops: Record<number, RouteStop[]> = {
   1: [],
@@ -1289,15 +1293,11 @@ export default function Transport() {
     const effective = getEffectiveCore(routeId);
     if (!effective.length) return;
 
-    // Convert display indices to core indices.
-    // AM display: [...core, CAMP]  → core idx = display idx (camp is last, skip it)
-    // PM display: [CAMP, ...core.reverse()] → core idx = core.length - 1 - (display - 1)
-    const toCoreIdx = (displayIdx: number, isAM: boolean): number =>
-      isAM ? displayIdx : effective.length - 1 - (displayIdx - 1);
-
+    // AM display: [...core, CAMP]  → core idx = display idx (camp is last, not draggable)
+    // PM display: [CAMP, ...core]  → core idx = display idx - 1
     const isAM = timeOfDay === "am";
-    const fromCore = toCoreIdx(fromDisplayIdx, isAM);
-    const toCore = toCoreIdx(toDisplayIdx, isAM);
+    const fromCore = displayStopToCoreIndex(fromDisplayIdx, isAM);
+    const toCore = displayStopToCoreIndex(toDisplayIdx, isAM);
     if (fromCore < 0 || fromCore >= effective.length || toCore < 0 || toCore >= effective.length) return;
 
     const next = [...effective];
@@ -1573,10 +1573,13 @@ export default function Transport() {
     toast({ title: "Bubble sheet downloaded", description: "Group attendance PDF saved." });
   };
 
-  const toggleRouteVisibility = (id: number) => {
-    setVisibleRoutes(prev =>
-      prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]
-    );
+  const hideAllRoutes = () => setVisibleRoutes([]);
+
+  const showAllRoutes = () => setVisibleRoutes(routeMeta.map(r => r.id));
+
+  /** Show one route on the map; click the same card again to hide it. */
+  const selectRouteOnMap = (id: number) => {
+    setVisibleRoutes(prev => (prev.length === 1 && prev[0] === id ? [] : [id]));
   };
 
   const handleAddRoute = () => {
@@ -1970,7 +1973,7 @@ export default function Transport() {
   const handleMoveStop = (fromRouteId: number, stopIndex: number, toRouteId: number) => {
     // Map display index to effective core index (effective = core minus today-excluded + today-added)
     const effective = getEffectiveCore(fromRouteId);
-    const coreIndex = timeOfDay === "am" ? stopIndex : effective.length - 1 - stopIndex;
+    const coreIndex = displayStopToCoreIndex(stopIndex, timeOfDay === "am");
     if (coreIndex < 0 || coreIndex >= effective.length) return;
     const stop = effective[coreIndex];
 
@@ -2024,7 +2027,7 @@ export default function Transport() {
 
   const handleRemoveStop = (routeId: number, stopIndex: number) => {
     const effective = getEffectiveCore(routeId);
-    const coreIndex = timeOfDay === "am" ? stopIndex : effective.length - 1 - stopIndex;
+    const coreIndex = displayStopToCoreIndex(stopIndex, timeOfDay === "am");
     if (coreIndex < 0 || coreIndex >= effective.length) return;
     const stop = effective[coreIndex];
 
@@ -2065,7 +2068,7 @@ export default function Transport() {
 
   // ─── Route Optimization ─────────────────────────────────────────────
   // Compute total miles for an ordered list of stops, anchored at camp.
-  // AM: stops -> camp. PM: camp -> stops reversed. We use AM ordering for cost.
+  // AM: stops → camp. PM: camp → stops (same order). Core order is shared for both runs.
   const routeMiles = (stops: RouteStop[]): number => {
     if (stops.length === 0) return 0;
     const seq = [...stops, { lat: CAMP_LOCATION.lat, lng: CAMP_LOCATION.lng } as any];
@@ -2685,18 +2688,58 @@ export default function Transport() {
           <div className="grid gap-4 lg:grid-cols-[minmax(300px,380px),1fr] lg:items-start">
             {/* Route sidebar — full map height, scroll bus list; stop lists scroll inside each card */}
             <div className={`flex flex-col min-h-0 ${MAP_PANEL_HEIGHT[mapHeight]}`}>
-              <p className="shrink-0 text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 px-0.5">
-                {timeOfDay === "am" ? "AM Routes (→ Camp)" : "PM Routes (Camp →)"}
-              </p>
+              <div className="shrink-0 flex items-center justify-between gap-2 mb-2 px-0.5">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  {timeOfDay === "am" ? "AM Routes (→ Camp)" : "PM Routes (Camp →)"}
+                </p>
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 text-[10px] gap-1"
+                    onClick={hideAllRoutes}
+                    title="Hide all routes on the map"
+                  >
+                    <EyeOff className="h-3 w-3" />
+                    Hide all
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 text-[10px] gap-1"
+                    onClick={showAllRoutes}
+                    disabled={visibleRoutes.length === routeMeta.length}
+                    title="Show every route on the map"
+                  >
+                    <Eye className="h-3 w-3" />
+                    Show all
+                  </Button>
+                </div>
+              </div>
+              {visibleRoutes.length === 0 && (
+                <p className="shrink-0 text-[10px] text-muted-foreground mb-2 px-0.5">
+                  Map is clear — click a bus below to view one route at a time.
+                </p>
+              )}
+              {visibleRoutes.length === 1 && (
+                <p className="shrink-0 text-[10px] text-muted-foreground mb-2 px-0.5">
+                  Showing {routes.find(r => r.id === visibleRoutes[0])?.bus ?? "1 bus"} only — click again to hide.
+                </p>
+              )}
               <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
               {routes.map(r => {
                 const isVisible = visibleRoutes.includes(r.id);
+                const isSolo = visibleRoutes.length === 1 && visibleRoutes[0] === r.id;
                 const core = coreStops[r.id] || [];
                 return (
                   <Card
                     key={r.id}
-                    className={`cursor-pointer transition-all shrink-0 ${isVisible ? "hover:shadow-md" : "opacity-50"}`}
-                    onClick={() => toggleRouteVisibility(r.id)}
+                    className={`cursor-pointer transition-all shrink-0 ${
+                      isSolo ? "ring-2 ring-primary/40 shadow-md" : isVisible ? "hover:shadow-md" : "opacity-50"
+                    }`}
+                    onClick={() => selectRouteOnMap(r.id)}
                   >
                     <CardContent className="p-3">
                       <div className="flex items-start gap-2.5 shrink-0">
