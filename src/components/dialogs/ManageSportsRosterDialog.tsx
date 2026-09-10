@@ -152,6 +152,7 @@ export default function ManageSportsRosterDialog({
               .select("*")
               .in("id", rosterIds)
               .eq("company_id", currentCompany.id)
+              .eq("season", currentSeason)
               .order("name")
           : Promise.resolve({ data: [] as any[] }),
         assignedStaffIds.length > 0
@@ -160,6 +161,7 @@ export default function ManageSportsRosterDialog({
               .select("*")
               .in("id", assignedStaffIds)
               .eq("company_id", currentCompany.id)
+              .eq("season", currentSeason)
               .order("name")
           : Promise.resolve({ data: [] as any[] }),
       ]);

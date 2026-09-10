@@ -96,6 +96,7 @@ export default function CSVUploader({ tableName, onUploadComplete }: CSVUploader
       .from('staff')
       .select('id, person_id')
       .eq('company_id', currentCompany.id)
+      .eq('season', selectedSeason)
       .in('person_id', personIds);
     
     const mapping = new Map<string, string>();

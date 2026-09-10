@@ -648,6 +648,8 @@ export default function Nurse() {
       .from("staff")
       .select("id")
       .eq("email", user?.email)
+      .eq("company_id", currentCompany?.id ?? "")
+      .eq("season", currentSeason)
       .maybeSingle();
 
     const dateStr = format(selectedDate, "yyyy-MM-dd");
@@ -738,6 +740,8 @@ export default function Nurse() {
       .from("staff")
       .select("id")
       .eq("email", user?.email)
+      .eq("company_id", currentCompany?.id ?? "")
+      .eq("season", currentSeason)
       .maybeSingle();
 
     const dateStr = format(selectedDate, "yyyy-MM-dd");
@@ -957,7 +961,9 @@ export default function Nurse() {
         .from("staff")
         .select("id, name")
         .eq("email", user?.email)
-        .single();
+        .eq("company_id", currentCompany?.id ?? "")
+        .eq("season", currentSeason)
+        .maybeSingle();
 
       // Find all unadministered medications for this child today
       const todayMeds = activeListMedications.filter(

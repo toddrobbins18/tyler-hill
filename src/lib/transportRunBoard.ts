@@ -10,6 +10,7 @@ import {
   type TransportRouteStop,
 } from "@/lib/transportDailyOverrides";
 import { compareBusLabels } from "@/lib/transportBusAttendance";
+import { normalizeTransportBoardForSeason } from "@/lib/transportRoster";
 
 export type TransportRouteMeta = {
   id: number;
@@ -62,19 +63,31 @@ export async function loadTransportRunBoard(
     const saved = boardRow.data as {
       routeMeta?: TransportRouteMeta[];
       coreStops?: Record<number, TransportRouteStop[]>;
+      unplottedCampers?: unknown[];
+      routesConfigured?: boolean;
+      routesSeason?: string;
+      routesSource?: "mappoint2026" | "manual";
     };
-    if (Array.isArray(saved.routeMeta)) {
-      routeMeta = saved.routeMeta.map((r, i) => ({
-        ...r,
-        id: Number(r.id),
-        color: ROUTE_COLORS[i % ROUTE_COLORS.length],
-      }));
-    }
-    if (saved.coreStops && typeof saved.coreStops === "object") {
-      coreStops = Object.fromEntries(
-        Object.entries(saved.coreStops).map(([k, v]) => [Number(k), v as TransportRouteStop[]]),
-      );
-    }
+    const normalized = await normalizeTransportBoardForSeason(supabase, companyId, season, {
+      routeMeta: Array.isArray(saved.routeMeta)
+        ? saved.routeMeta.map((r, i) => ({
+          ...r,
+          id: Number(r.id),
+          color: r.color || ROUTE_COLORS[i % ROUTE_COLORS.length],
+        }))
+        : [],
+      coreStops: saved.coreStops && typeof saved.coreStops === "object"
+        ? Object.fromEntries(
+          Object.entries(saved.coreStops).map(([k, v]) => [Number(k), v as TransportRouteStop[]]),
+        )
+        : {},
+      unplottedCampers: Array.isArray(saved.unplottedCampers) ? saved.unplottedCampers as never : [],
+      routesConfigured: saved.routesConfigured,
+      routesSeason: saved.routesSeason,
+      routesSource: saved.routesSource,
+    });
+    routeMeta = normalized.routeMeta;
+    coreStops = normalized.coreStops;
   }
 
   return {

@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { childSchema } from "@/lib/validationSchemas";
 import { z } from "zod";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { normalizeRfidInput } from "@/lib/rfidUtils";
 import { Radio, CheckCircle2 } from "lucide-react";
@@ -25,6 +26,7 @@ interface EditChildDialogProps {
 
 export default function EditChildDialog({ childId, open, onOpenChange, onSuccess }: EditChildDialogProps) {
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const [loading, setLoading] = useState(false);
   const [child, setChild] = useState<any>(null);
   const [staff, setStaff] = useState<any[]>([]);
@@ -53,7 +55,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
       fetchDivisions();
       fetchBunks();
     }
-  }, [open, childId]);
+  }, [open, childId, currentSeason]);
 
   const fetchChild = async () => {
     const { data, error } = await supabase
@@ -87,6 +89,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
       .select("id, name, role")
       .eq("status", "active")
       .eq("company_id", currentCompany.id)
+      .eq("season", currentSeason)
       .order("name");
     setStaff(data || []);
   };

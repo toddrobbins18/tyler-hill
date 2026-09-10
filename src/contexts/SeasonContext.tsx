@@ -70,6 +70,8 @@ export function useSeasonContext() {
 export function useSeason() {
   const context = useSeasonContext();
   return {
+    currentSeason: context.currentSeason,
+    setCurrentSeason: context.setCurrentSeason,
     selectedSeason: context.currentSeason,
     setSelectedSeason: context.setCurrentSeason,
   };

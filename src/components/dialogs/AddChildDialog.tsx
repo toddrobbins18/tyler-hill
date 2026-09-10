@@ -56,7 +56,7 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
       fetchStaff();
       fetchDivisions();
     }
-  }, [open]);
+  }, [open, currentSeason]);
 
   const fetchStaff = async () => {
     if (!currentCompany?.id) return;
@@ -65,6 +65,7 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
       .select("id, name, role")
       .eq("status", "active")
       .eq("company_id", currentCompany.id)
+      .eq("season", currentSeason)
       .order("name");
     setStaff(data || []);
   };

@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 import { Hospital, Pill, Clock, Calendar, User, FileText } from "lucide-react";
 import { format } from "date-fns";
 
@@ -15,6 +16,7 @@ type AdmissionNote = { id: string; note: string; created_at: string };
 
 export function HealthCenterTab({ entityId, entityType }: HealthCenterTabProps) {
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const [admissions, setAdmissions] = useState<any[]>([]);
   const [admissionNotesByAdmission, setAdmissionNotesByAdmission] = useState<
     Record<string, AdmissionNote[]>
@@ -96,6 +98,8 @@ export function HealthCenterTab({ entityId, entityType }: HealthCenterTabProps) 
       const { data: staffData } = await supabase
         .from("staff")
         .select("id")
+        .eq("company_id", currentCompany?.id ?? "")
+        .eq("season", currentSeason)
         .eq("email", user?.email)
         .maybeSingle();
 

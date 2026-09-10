@@ -8,6 +8,7 @@ import { Users, Search, Tag } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useSeasonContext } from "@/contexts/SeasonContext";
 
 interface UserWithTags {
   id: string;
@@ -68,12 +69,13 @@ export default function UserTagManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTag, setSelectedTag] = useState<string>("all");
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
 
   useEffect(() => {
     if (currentCompany?.id) {
       fetchUsers();
     }
-  }, [currentCompany?.id]);
+  }, [currentCompany?.id, currentSeason]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -94,6 +96,7 @@ export default function UserTagManagement() {
       .from("staff")
       .select("email, name")
       .eq("company_id", currentCompany?.id)
+      .eq("season", currentSeason)
       .not("email", "is", null);
 
     const staffNameByEmail = new Map(
