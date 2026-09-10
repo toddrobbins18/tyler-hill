@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { TransportRouteMap } from "@/components/TransportRouteMap";
-import { Bus, MapPin, Users, Plus, FileText, Car, Plane, ClipboardList, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Clock, Printer, Eye, EyeOff } from "lucide-react";
+import { Bus, MapPin, Users, Plus, FileText, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Eye, EyeOff } from "lucide-react";
 import { parseCSV, pickFirst, readFileAsText } from "@/lib/csv";
 import {
   getBundledMappointRoutesCsv2026,
@@ -38,32 +38,14 @@ import {
   attendanceStatusLabel,
   campersOnRoute,
   loadBusAttendance,
-  saveBusAttendance,
   type BusAttendanceMap,
-  type BusAttendanceStatus,
 } from "@/lib/transportBusAttendance";
 import {
-  buildCamperBusStatus,
-  findAttendanceConflicts,
-  groupAttendanceStatusLabel,
-  loadGroupAttendance,
   loadGroupRoster,
-  saveGroupAttendance,
-  type GroupAttendanceMap,
-  type GroupAttendanceStatus,
   type GroupRosterCamper,
 } from "@/lib/transportGroupAttendance";
 import {
-  busCheckinKey,
-  formatCheckinTime,
-  loadBusCheckins,
-  saveBusCheckins,
-  type BusCheckinMap,
-} from "@/lib/transportBusCheckins";
-import {
-  buildBusBubbleSheetsPdf,
   buildCombinedAttendanceBubbleSheetPdf,
-  buildGroupBubbleSheetPdf,
 } from "@/lib/transportBubbleSheetPdf";
 import { TransportReportPreviewDialog, type TransportReportPreview } from "@/components/TransportReportPreviewDialog";
 import { supabase } from "@/integrations/supabase/client";
@@ -72,7 +54,7 @@ import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSearchParams } from "react-router-dom";
 
-const TRANSPORT_TABS = ["map", "attendance", "unplotted", "resident", "daycamp"] as const;
+const TRANSPORT_TABS = ["map", "unplotted", "daycamp"] as const;
 type TransportTab = (typeof TRANSPORT_TABS)[number];
 
 function isTransportTab(value: string | null): value is TransportTab {
@@ -345,17 +327,6 @@ const persistBoardCache = (companyId: string, season: string, payload: BoardPayl
   }
 };
 
-const residentReports = [
-  { name: "Baggage Report", desc: "Track camper luggage and belongings", icon: ClipboardList },
-  { name: "Bus Report", desc: "Bus manifest and seating", icon: Bus },
-  { name: "Car Report", desc: "Private car arrivals/departures", icon: Car },
-  { name: "Consolidated Summary", desc: "All transport modes combined", icon: FileText },
-  { name: "Group Flights", desc: "Organized group flight coordination", icon: Plane },
-  { name: "Master Report", desc: "Master transportation roster", icon: ClipboardList },
-  { name: "Shuttles", desc: "Airport shuttle assignments", icon: Bus },
-  { name: "Vehicle Allocation", desc: "Vehicle assignment overview", icon: Car },
-];
-
 const dayCampReports = [
   { name: "Transport Exceptions", desc: "Absences, swim, office changes, and manual route edits for this date" },
   { name: "Attendance", desc: "Bubble sheet PDF backup (bus + group)" },
@@ -432,23 +403,8 @@ export default function Transport() {
     [transportExceptions, timeOfDay],
   );
 
-  const [busAttendance, setBusAttendance] = useState<BusAttendanceMap>({});
-  const [attendanceSubmittedAt, setAttendanceSubmittedAt] = useState<string | null>(null);
-  const [attendanceLoading, setAttendanceLoading] = useState(true);
-  const skipAttendancePersistRef = useRef(true);
-  const attendanceLoadedKeyRef = useRef<string | null>(null);
-
   const [groupRoster, setGroupRoster] = useState<GroupRosterCamper[]>([]);
-  const [groupAttendance, setGroupAttendance] = useState<GroupAttendanceMap>({});
-  const [groupAttendanceSubmittedAt, setGroupAttendanceSubmittedAt] = useState<string | null>(null);
-  const [groupAttendanceLoading, setGroupAttendanceLoading] = useState(true);
-  const skipGroupPersistRef = useRef(true);
   const groupLoadedKeyRef = useRef<string | null>(null);
-
-  const [busCheckins, setBusCheckins] = useState<BusCheckinMap>({});
-  const [checkinsLoading, setCheckinsLoading] = useState(true);
-  const skipCheckinsPersistRef = useRef(true);
-  const checkinsLoadedKeyRef = useRef<string | null>(null);
 
   // Scope-choice dialog (Today only vs Permanent vs Cancel)
   const [scopeDialog, setScopeDialog] = useState<{
@@ -704,176 +660,25 @@ export default function Transport() {
     return () => clearTimeout(handle);
   }, [todayOverrides, companyId, currentSeason, overrideDate, overridesLoading]);
 
-  // Load bus attendance for selected date + AM/PM run
+  // Load group roster for attendance reports
   useEffect(() => {
-    if (!companyId) {
-      setAttendanceLoading(true);
-      return;
-    }
-    const key = `${companyId}:${currentSeason}:${overrideDate}:${timeOfDay}`;
-    if (attendanceLoadedKeyRef.current === key) {
-      setAttendanceLoading(false);
-      return;
-    }
+    if (!companyId) return;
+    const key = `${companyId}:${currentSeason}`;
+    if (groupLoadedKeyRef.current === key) return;
     let cancelled = false;
-    skipAttendancePersistRef.current = true;
-    setAttendanceLoading(true);
-    (async () => {
+    void (async () => {
       try {
-        const loaded = await loadBusAttendance(
-          supabase,
-          companyId,
-          currentSeason,
-          overrideDate,
-          timeOfDay,
-        );
-        if (cancelled) return;
-        setBusAttendance(loaded.records);
-        setAttendanceSubmittedAt(loaded.submittedAt);
-        attendanceLoadedKeyRef.current = key;
-      } catch (err) {
-        console.error("[Transport] Load bus attendance error:", err);
-      } finally {
+        const roster = await loadGroupRoster(supabase, companyId, currentSeason);
         if (!cancelled) {
-          skipAttendancePersistRef.current = false;
-          setAttendanceLoading(false);
+          setGroupRoster(roster);
+          groupLoadedKeyRef.current = key;
         }
+      } catch (err) {
+        console.error("[Transport] Load group roster error:", err);
       }
     })();
     return () => { cancelled = true; };
-  }, [companyId, currentSeason, overrideDate, timeOfDay]);
-
-  useEffect(() => {
-    if (!companyId || skipAttendancePersistRef.current || attendanceLoading) return;
-    const handle = setTimeout(() => {
-      void (async () => {
-        const { data: userRes } = await supabase.auth.getUser();
-        await saveBusAttendance(
-          supabase,
-          companyId,
-          currentSeason,
-          overrideDate,
-          timeOfDay,
-          busAttendance,
-          { userId: userRes.user?.id },
-        );
-      })();
-    }, 600);
-    return () => clearTimeout(handle);
-  }, [busAttendance, companyId, currentSeason, overrideDate, timeOfDay, attendanceLoading]);
-
-  // Load group roster + group attendance for selected date
-  useEffect(() => {
-    if (!companyId) {
-      setGroupAttendanceLoading(true);
-      return;
-    }
-    const key = `${companyId}:${currentSeason}:${overrideDate}`;
-    if (groupLoadedKeyRef.current === key) {
-      setGroupAttendanceLoading(false);
-      return;
-    }
-    let cancelled = false;
-    skipGroupPersistRef.current = true;
-    setGroupAttendanceLoading(true);
-    (async () => {
-      try {
-        const [roster, loaded] = await Promise.all([
-          loadGroupRoster(supabase, companyId, currentSeason),
-          loadGroupAttendance(supabase, companyId, currentSeason, overrideDate),
-        ]);
-        if (cancelled) return;
-        setGroupRoster(roster);
-        setGroupAttendance(loaded.records);
-        setGroupAttendanceSubmittedAt(loaded.submittedAt);
-        groupLoadedKeyRef.current = key;
-      } catch (err) {
-        console.error("[Transport] Load group attendance error:", err);
-      } finally {
-        if (!cancelled) {
-          skipGroupPersistRef.current = false;
-          setGroupAttendanceLoading(false);
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [companyId, currentSeason, overrideDate]);
-
-  useEffect(() => {
-    if (!companyId || skipGroupPersistRef.current || groupAttendanceLoading) return;
-    const handle = setTimeout(() => {
-      void (async () => {
-        const { data: userRes } = await supabase.auth.getUser();
-        await saveGroupAttendance(
-          supabase,
-          companyId,
-          currentSeason,
-          overrideDate,
-          groupAttendance,
-          { userId: userRes.user?.id },
-        );
-      })();
-    }, 600);
-    return () => clearTimeout(handle);
-  }, [groupAttendance, companyId, currentSeason, overrideDate, groupAttendanceLoading]);
-
-  // Load bus check-in / check-out for selected date + AM/PM run
-  useEffect(() => {
-    if (!companyId) {
-      setCheckinsLoading(true);
-      return;
-    }
-    const key = `${companyId}:${currentSeason}:${overrideDate}:${timeOfDay}`;
-    if (checkinsLoadedKeyRef.current === key) {
-      setCheckinsLoading(false);
-      return;
-    }
-    let cancelled = false;
-    skipCheckinsPersistRef.current = true;
-    setCheckinsLoading(true);
-    (async () => {
-      try {
-        const loaded = await loadBusCheckins(
-          supabase,
-          companyId,
-          currentSeason,
-          overrideDate,
-          timeOfDay,
-        );
-        if (cancelled) return;
-        setBusCheckins(loaded);
-        checkinsLoadedKeyRef.current = key;
-      } catch (err) {
-        console.error("[Transport] Load bus check-ins error:", err);
-      } finally {
-        if (!cancelled) {
-          skipCheckinsPersistRef.current = false;
-          setCheckinsLoading(false);
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [companyId, currentSeason, overrideDate, timeOfDay]);
-
-  useEffect(() => {
-    if (!companyId || skipCheckinsPersistRef.current || checkinsLoading) return;
-    const handle = setTimeout(() => {
-      void (async () => {
-        const { data: userRes } = await supabase.auth.getUser();
-        await saveBusCheckins(
-          supabase,
-          companyId,
-          currentSeason,
-          overrideDate,
-          timeOfDay,
-          busCheckins,
-          userRes.user?.id,
-        );
-      })();
-    }, 600);
-    return () => clearTimeout(handle);
-  }, [busCheckins, companyId, currentSeason, overrideDate, timeOfDay, checkinsLoading]);
-
+  }, [companyId, currentSeason]);
   useEffect(() => {
     if (!persistLoaded || !companyId || skipPersistRef.current || importInProgressRef.current) return;
     const stopCount = countBoardStops(coreStops);
@@ -1336,140 +1141,6 @@ export default function Transport() {
   const routes = buildRoutes(timeOfDay);
   const displayedRoutes = routes.filter(r => visibleRoutes.includes(r.id));
 
-  const attendanceRoster = useMemo(
-    () => routes.flatMap((r) =>
-      campersOnRoute(r.id, getEffectiveCore(r.id)).map((c) => ({
-        ...c,
-        routeId: r.id,
-        routeName: r.name,
-        bus: r.bus,
-        color: r.color,
-      })),
-    ),
-    [routes, getEffectiveCore],
-  );
-
-  const attendanceStats = useMemo(() => {
-    let present = 0;
-    let absent = 0;
-    let unmarked = 0;
-    for (const c of attendanceRoster) {
-      const label = attendanceStatusLabel(c.key, busAttendance);
-      if (label === "Present") present++;
-      else if (label === "Absent") absent++;
-      else unmarked++;
-    }
-    return { present, absent, unmarked, total: attendanceRoster.length };
-  }, [attendanceRoster, busAttendance]);
-
-  const setCamperAttendance = (key: string, status: BusAttendanceStatus) => {
-    setBusAttendance((prev) => ({ ...prev, [key]: status }));
-    setAttendanceSubmittedAt(null);
-  };
-
-  const markAllBusPresent = () => {
-    const next: BusAttendanceMap = { ...busAttendance };
-    for (const c of attendanceRoster) next[c.key] = "present";
-    setBusAttendance(next);
-    setAttendanceSubmittedAt(null);
-  };
-
-  const handleSubmitBusAttendance = async () => {
-    if (!companyId) return;
-    const { data: userRes } = await supabase.auth.getUser();
-    const ok = await saveBusAttendance(
-      supabase,
-      companyId,
-      currentSeason,
-      overrideDate,
-      timeOfDay,
-      busAttendance,
-      { submitted: true, userId: userRes.user?.id },
-    );
-    if (ok) {
-      const now = new Date().toISOString();
-      setAttendanceSubmittedAt(now);
-      toast({
-        title: "Bus attendance submitted",
-        description: `${attendanceStats.present} present · ${attendanceStats.absent} absent · ${attendanceStats.unmarked} unmarked`,
-      });
-    } else {
-      toast({ title: "Could not submit bus attendance", variant: "destructive" });
-    }
-  };
-
-  const markBusArrived = async (routeId: number) => {
-    const key = busCheckinKey(routeId);
-    const now = new Date().toISOString();
-    const { data: userRes } = await supabase.auth.getUser();
-    const next: BusCheckinMap = {
-      ...busCheckins,
-      [key]: {
-        ...busCheckins[key],
-        arrivedAt: now,
-        arrivedBy: userRes.user?.id ?? null,
-      },
-    };
-    setBusCheckins(next);
-    toast({ title: "Bus marked arrived", description: `Timestamp: ${formatCheckinTime(now)}` });
-  };
-
-  const markBusReadyToDepart = async (routeId: number, busLabel: string) => {
-    if (!attendanceSubmittedAt) {
-      toast({
-        title: "Submit bus attendance first",
-        description: "Mark ready to depart after bus attendance is submitted.",
-        variant: "destructive",
-      });
-      return;
-    }
-    const key = busCheckinKey(routeId);
-    if (!busCheckins[key]?.arrivedAt) {
-      toast({
-        title: "Mark bus arrived first",
-        description: `${busLabel} must be checked in before ready to depart.`,
-        variant: "destructive",
-      });
-      return;
-    }
-    const now = new Date().toISOString();
-    const { data: userRes } = await supabase.auth.getUser();
-    const next: BusCheckinMap = {
-      ...busCheckins,
-      [key]: {
-        ...busCheckins[key],
-        departedAt: now,
-        departedBy: userRes.user?.id ?? null,
-      },
-    };
-    setBusCheckins(next);
-    toast({ title: "Bus ready to depart", description: `${busLabel} · ${formatCheckinTime(now)}` });
-  };
-
-  const checkinStats = useMemo(() => {
-    let arrived = 0;
-    let departed = 0;
-    for (const r of routes) {
-      const rec = busCheckins[busCheckinKey(r.id)];
-      if (rec?.arrivedAt) arrived++;
-      if (rec?.departedAt) departed++;
-    }
-    return { arrived, departed, total: routes.length };
-  }, [routes, busCheckins]);
-
-  const groupStats = useMemo(() => {
-    let present = 0;
-    let absent = 0;
-    let unmarked = 0;
-    for (const c of groupRoster) {
-      const label = groupAttendanceStatusLabel(c.key, groupAttendance);
-      if (label === "Present") present++;
-      else if (label === "Absent") absent++;
-      else unmarked++;
-    }
-    return { present, absent, unmarked, total: groupRoster.length };
-  }, [groupRoster, groupAttendance]);
-
   const groupRosterByGroup = useMemo(() => {
     const map = new Map<string, GroupRosterCamper[]>();
     for (const c of groupRoster) {
@@ -1480,119 +1151,10 @@ export default function Transport() {
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [groupRoster]);
 
-  const camperBusStatus = useMemo(
-    () => buildCamperBusStatus(attendanceRoster, busAttendance),
-    [attendanceRoster, busAttendance],
-  );
-
-  const attendanceConflicts = useMemo(
-    () => findAttendanceConflicts(camperBusStatus, groupRoster, groupAttendance),
-    [camperBusStatus, groupRoster, groupAttendance],
-  );
-
-  const setGroupCamperAttendance = (key: string, status: GroupAttendanceStatus) => {
-    setGroupAttendance((prev) => ({ ...prev, [key]: status }));
-    setGroupAttendanceSubmittedAt(null);
-  };
-
-  const markAllGroupPresent = () => {
-    const next: GroupAttendanceMap = { ...groupAttendance };
-    for (const c of groupRoster) next[c.key] = "present";
-    setGroupAttendance(next);
-    setGroupAttendanceSubmittedAt(null);
-  };
-
-  const handleSubmitGroupAttendance = async () => {
-    if (!companyId) return;
-    if (!attendanceSubmittedAt) {
-      toast({
-        title: "Submit bus attendance first",
-        description: "Group attendance is recorded after the bus run is submitted.",
-        variant: "destructive",
-      });
-      return;
-    }
-    const { data: userRes } = await supabase.auth.getUser();
-    const ok = await saveGroupAttendance(
-      supabase,
-      companyId,
-      currentSeason,
-      overrideDate,
-      groupAttendance,
-      { submitted: true, userId: userRes.user?.id },
-    );
-    if (ok) {
-      setGroupAttendanceSubmittedAt(new Date().toISOString());
-      toast({
-        title: "Group attendance submitted",
-        description: attendanceConflicts.length
-          ? `${attendanceConflicts.length} conflict${attendanceConflicts.length === 1 ? "" : "s"} with bus — review below`
-          : `${groupStats.present} present · ${groupStats.absent} absent`,
-        variant: attendanceConflicts.length ? "destructive" : "default",
-      });
-    } else {
-      toast({ title: "Could not submit group attendance", variant: "destructive" });
-    }
-  };
-
   const openReportPreview = (preview: Omit<TransportReportPreview, "open">) => {
     setReportPreview({ ...preview, open: true });
   };
 
-  const handleDownloadBusBubbleSheets = () => {
-    const sheetRoutes = routes
-      .map((r) => ({
-        bus: r.bus,
-        routeName: r.name,
-        campers: campersOnRoute(r.id, getEffectiveCore(r.id)).map((c) => ({
-          name: c.name,
-          detail: c.stopName,
-        })),
-      }))
-      .filter((r) => r.campers.length > 0);
-
-    const built = buildBusBubbleSheetsPdf({
-      companyName: currentCompany?.name ?? "Day Camp",
-      date: overrideDate,
-      runPeriod: timeOfDay,
-      routes: sheetRoutes,
-    });
-    if (!built) {
-      toast({ title: "No campers to print", description: "No scheduled campers on routes.", variant: "destructive" });
-      return;
-    }
-    openReportPreview({
-      title: "Bus Attendance Bubble Sheet",
-      description: `${overrideDate} · ${timeOfDay.toUpperCase()} run`,
-      kind: "pdf",
-      blob: built.blob,
-      filename: built.filename,
-    });
-  };
-
-  const handleDownloadGroupBubbleSheet = () => {
-    const groups = groupRosterByGroup.map(([groupName, campers]) => ({
-      groupName,
-      campers: campers.map((c) => ({ name: c.name })),
-    }));
-
-    const built = buildGroupBubbleSheetPdf({
-      companyName: currentCompany?.name ?? "Day Camp",
-      date: overrideDate,
-      groups,
-    });
-    if (!built) {
-      toast({ title: "No group roster", description: "No campers with groups for this season.", variant: "destructive" });
-      return;
-    }
-    openReportPreview({
-      title: "Group Attendance Bubble Sheet",
-      description: overrideDate,
-      kind: "pdf",
-      blob: built.blob,
-      filename: built.filename,
-    });
-  };
 
   const hideAllRoutes = () => setVisibleRoutes([]);
 
@@ -2358,8 +1920,8 @@ export default function Transport() {
     return new Blob([csv], { type: "text/csv" });
   };
 
-  const handleGenerateReport = async (reportName: string, category: "resident" | "daycamp") => {
-    if (reportName === "Transport Exceptions" && category === "daycamp") {
+  const handleGenerateReport = async (reportName: string) => {
+    if (reportName === "Transport Exceptions") {
       if (!companyId) {
         toast({ title: "Company not loaded", variant: "destructive" });
         return;
@@ -2384,7 +1946,7 @@ export default function Transport() {
       return;
     }
 
-    if (reportName === "Attendance" && category === "daycamp") {
+    if (reportName === "Attendance") {
       const sheetRoutes = routes
         .map((r) => ({
           bus: r.bus,
@@ -2422,7 +1984,13 @@ export default function Transport() {
 
     const today = new Date().toISOString().slice(0, 10);
     const safeName = reportName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    const filename = `${category}-${safeName}-${today}.csv`;
+    const filename = `daycamp-${safeName}-${today}.csv`;
+
+    let reportBusAttendance: BusAttendanceMap = {};
+    if (reportName === "Attendance" && companyId) {
+      const loaded = await loadBusAttendance(supabase, companyId, currentSeason, overrideDate, timeOfDay);
+      reportBusAttendance = loaded.records;
+    }
 
     // Build rows specific to each report type
     let rows: (string | number)[][] = [];
@@ -2434,7 +2002,7 @@ export default function Transport() {
           r.stops.forEach(s => {
             if (s.address === CAMP_LOCATION.address) return;
             (s.camperNames || [s.name]).forEach(name => {
-              const label = attendanceStatusLabel(attendanceRecordKey(r.id, name), busAttendance);
+              const label = attendanceStatusLabel(attendanceRecordKey(r.id, name), reportBusAttendance);
               const status = label === "Unmarked" ? "Scheduled" : label;
               rows.push([overrideDate, timeOfDay.toUpperCase(), name, r.name, r.bus, s.address, s.pickupTime, status]);
             });
@@ -2485,57 +2053,6 @@ export default function Transport() {
         });
         break;
       }
-      case "Baggage Report": {
-        rows.push(["Camper Name", "Route", "Baggage Count", "Special Items", "Status"]);
-        routes.forEach(r => {
-          r.stops.forEach(s => {
-            if (s.address === CAMP_LOCATION.address) return;
-            (s.camperNames || [s.name]).forEach(name => {
-              rows.push([name, r.name, 1, "", "Pending check-in"]);
-            });
-          });
-        });
-        break;
-      }
-      case "Consolidated Summary":
-      case "Master Report": {
-        rows.push(["Route", "Bus", "Direction", "Departure", "Stops", "Campers", "Status"]);
-        routes.forEach(r => {
-          rows.push([r.name, r.bus, r.direction, r.departure, (coreStops[r.id] || []).length, r.campers, r.status]);
-        });
-        rows.push([]);
-        rows.push(["Camper Roster"]);
-        rows.push(["Camper Name", "Route", "Stop", "Time"]);
-        routes.forEach(r => {
-          r.stops.forEach(s => {
-            if (s.address === CAMP_LOCATION.address) return;
-            (s.camperNames || [s.name]).forEach(name => {
-              rows.push([name, r.name, s.address, s.pickupTime]);
-            });
-          });
-        });
-        break;
-      }
-      case "Group Flights":
-      case "Shuttles": {
-        rows.push(["Camper Name", "Route", "Type", "Departure", "Notes"]);
-        routes.forEach(r => {
-          r.stops.forEach(s => {
-            if (s.address === CAMP_LOCATION.address) return;
-            (s.camperNames || [s.name]).forEach(name => {
-              rows.push([name, r.name, reportName === "Group Flights" ? "Flight" : "Shuttle", r.departure, ""]);
-            });
-          });
-        });
-        break;
-      }
-      case "Vehicle Allocation": {
-        rows.push(["Bus / Vehicle", "Route", "Capacity", "Assigned Campers", "Utilization"]);
-        routes.forEach(r => {
-          rows.push([r.bus, r.name, r.capacity, r.campers, `${Math.round((r.campers / r.capacity) * 100)}%`]);
-        });
-        break;
-      }
       default: {
         rows.push(["Report", reportName]);
         rows.push(["Generated", today]);
@@ -2544,7 +2061,7 @@ export default function Transport() {
 
     openReportPreview({
       title: reportName,
-      description: `${category === "daycamp" ? "Day Camp" : "Resident Camp"} · ${rows.length - 1} row${rows.length - 1 === 1 ? "" : "s"}`,
+      description: `Day Camp · ${rows.length - 1} row${rows.length - 1 === 1 ? "" : "s"}`,
       kind: "csv",
       blob: csvRowsToBlob(rows),
       filename,
@@ -2645,10 +2162,8 @@ export default function Transport() {
       <Tabs value={activeTransportTab} onValueChange={setActiveTransportTab}>
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="map" className="text-xs gap-1"><MapIcon className="h-3.5 w-3.5" /> Route Map</TabsTrigger>
-          <TabsTrigger value="attendance" className="text-xs gap-1"><ClipboardList className="h-3.5 w-3.5" /> Bus Attendance</TabsTrigger>
           <TabsTrigger value="unplotted" className="text-xs gap-1"><UserRound className="h-3.5 w-3.5" /> Unplotted Campers{unplottedCampers.length > 0 && <Badge variant="secondary" className="ml-1 text-[9px] px-1.5">{unplottedCampers.length}</Badge>}</TabsTrigger>
-          <TabsTrigger value="resident" className="text-xs gap-1"><FileText className="h-3.5 w-3.5" /> Resident Camp Reports</TabsTrigger>
-          <TabsTrigger value="daycamp" className="text-xs gap-1"><Car className="h-3.5 w-3.5" /> Day Camp</TabsTrigger>
+          <TabsTrigger value="daycamp" className="text-xs gap-1"><FileText className="h-3.5 w-3.5" /> Reports</TabsTrigger>
         </TabsList>
 
         {/* ─── Route Map Tab ─── */}
@@ -2663,9 +2178,6 @@ export default function Transport() {
                 value={overrideDate}
                 onChange={(e) => {
                   overrideLoadedKeyRef.current = null;
-                  attendanceLoadedKeyRef.current = null;
-                  groupLoadedKeyRef.current = null;
-                  checkinsLoadedKeyRef.current = null;
                   setOverrideDate(e.target.value || todayDateString());
                 }}
                 className="h-8 w-[140px] text-xs"
@@ -2983,330 +2495,6 @@ export default function Transport() {
           </div>
         </TabsContent>
 
-        {/* ─── Bus Attendance Tab ─── */}
-        <TabsContent value="attendance" className="mt-4 space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="attendance-date" className="text-xs text-muted-foreground whitespace-nowrap">Run date</Label>
-              <Input
-                id="attendance-date"
-                type="date"
-                value={overrideDate}
-                onChange={(e) => {
-                  overrideLoadedKeyRef.current = null;
-                  attendanceLoadedKeyRef.current = null;
-                  groupLoadedKeyRef.current = null;
-                  checkinsLoadedKeyRef.current = null;
-                  setOverrideDate(e.target.value || todayDateString());
-                }}
-                className="h-8 w-[140px] text-xs"
-              />
-            </div>
-            <div className="inline-flex rounded-lg border border-border bg-muted/30 p-0.5">
-              <button
-                type="button"
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                  timeOfDay === "am" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
-                }`}
-                onClick={() => {
-                  attendanceLoadedKeyRef.current = null;
-                  checkinsLoadedKeyRef.current = null;
-                  setTimeOfDay("am");
-                }}
-              >
-                <Sun className="h-3.5 w-3.5" /> AM
-              </button>
-              <button
-                type="button"
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                  timeOfDay === "pm" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
-                }`}
-                onClick={() => {
-                  attendanceLoadedKeyRef.current = null;
-                  checkinsLoadedKeyRef.current = null;
-                  setTimeOfDay("pm");
-                }}
-              >
-                <Moon className="h-3.5 w-3.5" /> PM
-              </button>
-            </div>
-            {attendanceLoading && (
-              <span className="text-[10px] text-muted-foreground">Loading…</span>
-            )}
-            {attendanceSubmittedAt && (
-              <Badge variant="secondary" className="text-[10px]">Submitted</Badge>
-            )}
-            {checkinsLoading && (
-              <span className="text-[10px] text-muted-foreground">Loading check-ins…</span>
-            )}
-            <div className="flex flex-wrap gap-2 ml-auto">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs gap-1.5"
-                onClick={handleDownloadBusBubbleSheets}
-                disabled={!attendanceRoster.length}
-              >
-                <Printer className="h-3.5 w-3.5" /> Bus bubble sheet
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs gap-1.5"
-                onClick={handleDownloadGroupBubbleSheet}
-                disabled={!groupRoster.length}
-              >
-                <Printer className="h-3.5 w-3.5" /> Group bubble sheet
-              </Button>
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-semibold flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5" /> Bus check-in / check-out
-                </h3>
-                <p className="text-[11px] text-muted-foreground">
-                  Mark each bus when it arrives, then ready to depart after attendance is submitted.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2 text-xs">
-                <Badge variant="outline">{checkinStats.arrived} / {checkinStats.total} arrived</Badge>
-                <Badge variant="outline">{checkinStats.departed} / {checkinStats.total} departed</Badge>
-              </div>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {routes.map((r) => {
-                const rec = busCheckins[busCheckinKey(r.id)];
-                return (
-                  <div key={`checkin-${r.id}`} className="rounded-md border border-border bg-background px-2.5 py-2 text-xs space-y-1.5">
-                    <div className="flex items-center gap-1.5 font-medium">
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: r.color }} />
-                      {r.bus}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {rec?.arrivedAt ? (
-                        <Badge variant="secondary" className="text-[10px]">
-                          Arrived {formatCheckinTime(rec.arrivedAt)}
-                        </Badge>
-                      ) : (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-[10px]"
-                          onClick={() => void markBusArrived(r.id)}
-                          disabled={checkinsLoading}
-                        >
-                          Mark arrived
-                        </Button>
-                      )}
-                      {rec?.departedAt ? (
-                        <Badge variant="secondary" className="text-[10px]">
-                          Departed {formatCheckinTime(rec.departedAt)}
-                        </Badge>
-                      ) : (
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="h-7 text-[10px]"
-                          onClick={() => void markBusReadyToDepart(r.id, r.bus)}
-                          disabled={checkinsLoading || !rec?.arrivedAt || !attendanceSubmittedAt}
-                        >
-                          Ready to depart
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold">1. Bus attendance ({timeOfDay.toUpperCase()})</h3>
-            <div className="flex flex-wrap gap-2 text-xs">
-              <Badge variant="outline" className="border-emerald-500/40 text-emerald-700 dark:text-emerald-300">
-                {attendanceStats.present} present
-              </Badge>
-              <Badge variant="outline" className="border-red-500/40 text-red-700 dark:text-red-300">
-                {attendanceStats.absent} absent
-              </Badge>
-              <Badge variant="outline">{attendanceStats.unmarked} unmarked</Badge>
-              <span className="text-muted-foreground self-center">· {attendanceStats.total} scheduled</span>
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={markAllBusPresent} disabled={!attendanceRoster.length}>
-                Mark all present
-              </Button>
-              <Button size="sm" onClick={handleSubmitBusAttendance} disabled={!attendanceRoster.length || attendanceLoading}>
-                Submit bus attendance
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {routes.map((r) => {
-              const campers = campersOnRoute(r.id, getEffectiveCore(r.id));
-              if (!campers.length) return null;
-              return (
-                <Card key={r.id}>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r.color }} />
-                      {r.bus}
-                    </CardTitle>
-                    <p className="text-[11px] text-muted-foreground">{r.name} · {campers.length} campers</p>
-                  </CardHeader>
-                  <CardContent className="space-y-2 pt-0">
-                    {campers.map((c) => {
-                      const status = busAttendance[c.key];
-                      return (
-                        <div key={c.key} className="flex items-center justify-between gap-2 text-xs">
-                          <div className="min-w-0">
-                            <p className="font-medium truncate">{c.name}</p>
-                            <p className="text-[10px] text-muted-foreground truncate">{c.stopName}</p>
-                          </div>
-                          <div className="flex gap-1 shrink-0">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={status === "present" ? "default" : "outline"}
-                              className="h-7 px-2 text-[10px]"
-                              onClick={() => setCamperAttendance(c.key, "present")}
-                            >
-                              P
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={status === "absent" ? "destructive" : "outline"}
-                              className="h-7 px-2 text-[10px]"
-                              onClick={() => setCamperAttendance(c.key, "absent")}
-                            >
-                              A
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-          {!attendanceRoster.length && !attendanceLoading && (
-            <p className="text-sm text-muted-foreground">No campers on routes for this date and run.</p>
-          )}
-
-          <div className="border-t border-border pt-6 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-semibold">2. Group attendance</h3>
-                <p className="text-[11px] text-muted-foreground">
-                  {attendanceSubmittedAt
-                    ? "Bus submitted — mark each group, then submit."
-                    : "Submit bus attendance above before submitting group attendance."}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2 items-center">
-                <Badge variant="outline" className="text-[10px]">{groupStats.present} present</Badge>
-                <Badge variant="outline" className="text-[10px]">{groupStats.absent} absent</Badge>
-                <Badge variant="outline" className="text-[10px]">{groupStats.unmarked} unmarked</Badge>
-                {groupAttendanceSubmittedAt && (
-                  <Badge variant="secondary" className="text-[10px]">Group submitted</Badge>
-                )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={markAllGroupPresent}
-                  disabled={!groupRoster.length || groupAttendanceLoading}
-                >
-                  Mark all present
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleSubmitGroupAttendance}
-                  disabled={!groupRoster.length || groupAttendanceLoading || !attendanceSubmittedAt}
-                >
-                  Submit group attendance
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {groupRosterByGroup.map(([groupName, campers]) => (
-                <Card key={groupName}>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">{groupName}</CardTitle>
-                    <p className="text-[11px] text-muted-foreground">{campers.length} campers</p>
-                  </CardHeader>
-                  <CardContent className="space-y-2 pt-0">
-                    {campers.map((c) => {
-                      const status = groupAttendance[c.key];
-                      const bus = camperBusStatus.get(c.name.trim().toLowerCase()) ?? "unmarked";
-                      return (
-                        <div key={c.key} className="flex items-center justify-between gap-2 text-xs">
-                          <div className="min-w-0">
-                            <p className="font-medium truncate">{c.name}</p>
-                            {bus !== "unmarked" && (
-                              <p className="text-[10px] text-muted-foreground">Bus: {bus}</p>
-                            )}
-                          </div>
-                          <div className="flex gap-1 shrink-0">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={status === "present" ? "default" : "outline"}
-                              className="h-7 px-2 text-[10px]"
-                              onClick={() => setGroupCamperAttendance(c.key, "present")}
-                              disabled={!attendanceSubmittedAt}
-                            >
-                              P
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={status === "absent" ? "destructive" : "outline"}
-                              className="h-7 px-2 text-[10px]"
-                              onClick={() => setGroupCamperAttendance(c.key, "absent")}
-                              disabled={!attendanceSubmittedAt}
-                            >
-                              A
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-            {!groupRoster.length && !groupAttendanceLoading && (
-              <p className="text-sm text-muted-foreground">No campers with groups on the roster for this season.</p>
-            )}
-          </div>
-
-          {attendanceConflicts.length > 0 && (
-            <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2">
-              <p className="text-xs font-semibold text-destructive mb-1">
-                Bus vs group conflicts ({attendanceConflicts.length})
-              </p>
-              <ul className="text-[11px] space-y-0.5 max-h-32 overflow-y-auto">
-                {attendanceConflicts.map((c) => (
-                  <li key={`${c.groupName}-${c.camperName}`}>
-                    <span className="font-medium">{c.camperName}</span>
-                    {" "}({c.groupName}) — bus: {c.busStatus}, group: {c.groupStatus}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </TabsContent>
-
         {/* ─── Unplotted Campers Tab ─── */}
         <TabsContent value="unplotted" className="mt-4 space-y-3">
           <div className="flex items-center justify-end gap-2 flex-wrap">
@@ -3409,22 +2597,6 @@ export default function Transport() {
           </Dialog>
         </TabsContent>
 
-        <TabsContent value="resident">
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-            {residentReports.map((r) => (
-              <Card key={r.name} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleGenerateReport(r.name, "resident")}>
-                <CardContent className="p-4 flex items-center gap-3">
-                  <div className="rounded-lg bg-primary/10 p-2"><r.icon className="h-4 w-4 text-primary" /></div>
-                  <div>
-                    <p className="text-sm font-medium">{r.name}</p>
-                    <p className="text-xs text-muted-foreground">{r.desc}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
-
         <TabsContent value="daycamp" className="mt-4 space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <Label htmlFor="daycamp-report-date" className="text-xs text-muted-foreground whitespace-nowrap">
@@ -3436,9 +2608,6 @@ export default function Transport() {
               value={overrideDate}
               onChange={(e) => {
                 overrideLoadedKeyRef.current = null;
-                attendanceLoadedKeyRef.current = null;
-                groupLoadedKeyRef.current = null;
-                checkinsLoadedKeyRef.current = null;
                 setOverrideDate(e.target.value || todayDateString());
               }}
               className="h-8 w-[140px] text-xs"
@@ -3452,7 +2621,7 @@ export default function Transport() {
           </div>
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {dayCampReports.map((r) => (
-              <Card key={r.name} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleGenerateReport(r.name, "daycamp")}>
+              <Card key={r.name} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleGenerateReport(r.name)}>
                 <CardContent className="p-4">
                   <p className="text-sm font-medium text-primary">{r.name}</p>
                   <p className="text-xs text-muted-foreground mt-1">{r.desc}</p>

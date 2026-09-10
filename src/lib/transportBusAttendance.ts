@@ -4,8 +4,19 @@ export type BusAttendanceStatus = "present" | "absent";
 
 export type BusAttendanceMap = Record<string, BusAttendanceStatus>;
 
+export type BusSubmissionRecord = {
+  submittedAt: string;
+  submittedBy?: string | null;
+};
+
+export type BusSubmissionsMap = Record<string, BusSubmissionRecord>;
+
 export function attendanceRecordKey(routeId: number, camperName: string): string {
   return `${routeId}|${camperName.trim().toLowerCase()}`;
+}
+
+export function busSubmissionKey(routeId: number): string {
+  return String(routeId);
 }
 
 export function parseAttendanceMap(raw: unknown): BusAttendanceMap {
@@ -19,8 +30,27 @@ export function parseAttendanceMap(raw: unknown): BusAttendanceMap {
     return map;
   }
   for (const [key, val] of Object.entries(obj)) {
-    if (key === "submittedAt") continue;
+    if (key === "submittedAt" || key === "busSubmissions") continue;
     if (val === "present" || val === "absent") map[key] = val;
+  }
+  return map;
+}
+
+export function parseBusSubmissions(raw: unknown): BusSubmissionsMap {
+  if (!raw || typeof raw !== "object") return {};
+  const obj = raw as Record<string, unknown>;
+  const source = obj.busSubmissions;
+  if (!source || typeof source !== "object" || Array.isArray(source)) return {};
+  const map: BusSubmissionsMap = {};
+  for (const [key, val] of Object.entries(source as Record<string, unknown>)) {
+    if (!val || typeof val !== "object" || Array.isArray(val)) continue;
+    const row = val as Record<string, unknown>;
+    if (typeof row.submittedAt === "string") {
+      map[key] = {
+        submittedAt: row.submittedAt,
+        submittedBy: typeof row.submittedBy === "string" ? row.submittedBy : null,
+      };
+    }
   }
   return map;
 }
@@ -28,6 +58,7 @@ export function parseAttendanceMap(raw: unknown): BusAttendanceMap {
 export type BusAttendancePayload = {
   records: BusAttendanceMap;
   submittedAt?: string | null;
+  busSubmissions?: BusSubmissionsMap;
 };
 
 export function attendanceStatusLabel(
@@ -40,13 +71,34 @@ export function attendanceStatusLabel(
   return "Unmarked";
 }
 
+export function isRouteBusSubmitted(routeId: number, busSubmissions: BusSubmissionsMap): boolean {
+  return !!busSubmissions[busSubmissionKey(routeId)]?.submittedAt;
+}
+
+export function routeIdsWithCampers(
+  routeMeta: { id: number }[],
+  coreStops: Record<number, { passengers: number }[]>,
+): number[] {
+  return routeMeta
+    .filter((meta) => (coreStops[meta.id] ?? []).some((s) => s.passengers > 0))
+    .map((meta) => meta.id);
+}
+
+export function allRoutesBusSubmitted(
+  routeIds: number[],
+  busSubmissions: BusSubmissionsMap,
+): boolean {
+  if (!routeIds.length) return false;
+  return routeIds.every((id) => isRouteBusSubmitted(id, busSubmissions));
+}
+
 export async function loadBusAttendance(
   supabase: SupabaseClient,
   companyId: string,
   season: string,
   attendanceDate: string,
   runPeriod: "am" | "pm",
-): Promise<{ records: BusAttendanceMap; submittedAt: string | null }> {
+): Promise<{ records: BusAttendanceMap; submittedAt: string | null; busSubmissions: BusSubmissionsMap }> {
   const { data, error } = await supabase
     .from("transport_bus_attendance" as "profiles")
     .select("data, submitted_at")
@@ -58,13 +110,14 @@ export async function loadBusAttendance(
 
   if (error) {
     console.error("[Transport] Load bus attendance failed:", error.message);
-    return { records: {}, submittedAt: null };
+    return { records: {}, submittedAt: null, busSubmissions: {} };
   }
 
   const payload = (data?.data ?? {}) as Record<string, unknown>;
   return {
     records: parseAttendanceMap(payload),
     submittedAt: (data?.submitted_at as string | null) ?? (payload.submittedAt as string | null) ?? null,
+    busSubmissions: parseBusSubmissions(payload),
   };
 }
 
@@ -75,12 +128,18 @@ export async function saveBusAttendance(
   attendanceDate: string,
   runPeriod: "am" | "pm",
   records: BusAttendanceMap,
-  options?: { submitted?: boolean; userId?: string | null },
+  options?: {
+    busSubmissions?: BusSubmissionsMap;
+    submittedRouteId?: number;
+    allRoutesSubmitted?: boolean;
+    userId?: string | null;
+  },
 ): Promise<boolean> {
   const hasRecords = Object.keys(records).length > 0;
+  const hasSubmissions = Object.keys(options?.busSubmissions ?? {}).length > 0;
   const now = new Date().toISOString();
 
-  if (!hasRecords && !options?.submitted) {
+  if (!hasRecords && !hasSubmissions) {
     const { error } = await supabase
       .from("transport_bus_attendance" as "profiles")
       .delete()
@@ -95,16 +154,24 @@ export async function saveBusAttendance(
     return true;
   }
 
+  const busSubmissions = { ...(options?.busSubmissions ?? {}) };
+  if (options?.submittedRouteId != null) {
+    busSubmissions[busSubmissionKey(options.submittedRouteId)] = {
+      submittedAt: now,
+      submittedBy: options.userId ?? null,
+    };
+  }
+
   const payload: Record<string, unknown> = {
     company_id: companyId,
     season,
     attendance_date: attendanceDate,
     run_period: runPeriod,
-    data: { records } as never,
+    data: { records, busSubmissions } as never,
     updated_by: options?.userId ?? null,
     updated_at: now,
   };
-  if (options?.submitted) {
+  if (options?.allRoutesSubmitted) {
     payload.submitted_at = now;
     payload.submitted_by = options.userId ?? null;
   }
@@ -135,4 +202,8 @@ export function campersOnRoute(
     }
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function compareBusLabels(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 }

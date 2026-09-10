@@ -25,6 +25,7 @@ import Bunking from "./pages/Bunking";
 import SwimLessons from "./pages/daycamp/SwimLessons";
 import SunshineReport from "./pages/daycamp/SunshineReport";
 import ParentPortalDashboard from "./pages/daycamp/ParentPortalDashboard";
+import BusAttendance from "./pages/daycamp/BusAttendance";
 import Roster from "./pages/Roster";
 import Staff from "./pages/Staff";
 import StaffProfile from "./pages/StaffProfile";
@@ -108,6 +109,7 @@ function CompanyScopedMainRoutes() {
       <Route path="/day-camp/swim-lessons" element={<SwimLessons />} />
       <Route path="/day-camp/sunshine-report" element={<SunshineReport />} />
       <Route path="/day-camp/parent-portal-dashboard" element={<ParentPortalDashboard />} />
+      <Route path="/day-camp/bus-attendance" element={<BusAttendance />} />
       <Route path="/sunshine-report" element={<SunshineReport />} />
       <Route path="/roster" element={<Roster />} />
       <Route path="/staff" element={<Staff />} />

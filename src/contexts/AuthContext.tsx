@@ -180,9 +180,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasPagePermission = useCallback((companyId: string, menuItem: string): boolean => {
     // Super admins have access to everything
     if (isSuperAdmin) return true;
-    
-    // Check the preloaded permissions map
-    return allPermissions[companyId]?.[menuItem] === true;
+
+    const perms = allPermissions[companyId];
+    if (perms?.[menuItem] === true) return true;
+
+    // Bus Attendance: allow anyone with Transportation until bus-attendance is toggled per role
+    if (menuItem === "bus-attendance" && perms?.transportation === true) return true;
+
+    return false;
   }, [isSuperAdmin, allPermissions]);
 
   return (

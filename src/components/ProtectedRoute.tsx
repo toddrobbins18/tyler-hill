@@ -12,6 +12,7 @@ const routeToMenuMap: Record<string, string> = {
   'staff-profile': 'staff',
   'parent-portal-dashboard': 'parent-portal',
   'transport': 'transportation',
+  'bus-attendance': 'bus-attendance',
 };
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
