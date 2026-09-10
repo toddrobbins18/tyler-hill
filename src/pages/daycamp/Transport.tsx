@@ -25,7 +25,9 @@ import {
   applyRouteOverrides,
   emptyManualOverrides,
   excludedCamperSet,
+  buildTransportExceptionsReportRows,
   fetchTransportExceptions,
+  fetchTransportExceptionsForReport,
   loadManualOverrides,
   saveManualOverrides,
   todayDateString,
@@ -355,6 +357,7 @@ const residentReports = [
 ];
 
 const dayCampReports = [
+  { name: "Transport Exceptions", desc: "Absences, swim, office changes, and manual route edits for this date" },
   { name: "Attendance", desc: "Bubble sheet PDF backup (bus + group)" },
   { name: "Bus Report", desc: "Day camp bus assignments" },
   { name: "Bus Route Summary", desc: "Route overview with stops" },
@@ -2355,7 +2358,32 @@ export default function Transport() {
     return new Blob([csv], { type: "text/csv" });
   };
 
-  const handleGenerateReport = (reportName: string, category: "resident" | "daycamp") => {
+  const handleGenerateReport = async (reportName: string, category: "resident" | "daycamp") => {
+    if (reportName === "Transport Exceptions" && category === "daycamp") {
+      if (!companyId) {
+        toast({ title: "Company not loaded", variant: "destructive" });
+        return;
+      }
+      const exceptions = await fetchTransportExceptionsForReport(supabase, companyId, overrideDate);
+      const rows = buildTransportExceptionsReportRows({
+        overrideDate,
+        exceptions,
+        manual: todayOverrides,
+        routeMeta: routeMeta.map((r) => ({ id: r.id, name: r.name, bus: r.bus })),
+        coreStops,
+      });
+      const dataRowCount = rows.length > 1 && String(rows[1][0]).startsWith("(") ? 0 : rows.length - 1;
+      openReportPreview({
+        title: "Transport Exceptions",
+        description: `${overrideDate} · ${dataRowCount} change${dataRowCount === 1 ? "" : "s"} · season ${currentSeason}`,
+        kind: "csv",
+        blob: csvRowsToBlob(rows),
+        filename: `daycamp-transport-exceptions-${overrideDate}.csv`,
+        rows,
+      });
+      return;
+    }
+
     if (reportName === "Attendance" && category === "daycamp") {
       const sheetRoutes = routes
         .map((r) => ({
@@ -3397,7 +3425,31 @@ export default function Transport() {
           </div>
         </TabsContent>
 
-        <TabsContent value="daycamp">
+        <TabsContent value="daycamp" className="mt-4 space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Label htmlFor="daycamp-report-date" className="text-xs text-muted-foreground whitespace-nowrap">
+              Report date
+            </Label>
+            <Input
+              id="daycamp-report-date"
+              type="date"
+              value={overrideDate}
+              onChange={(e) => {
+                overrideLoadedKeyRef.current = null;
+                attendanceLoadedKeyRef.current = null;
+                groupLoadedKeyRef.current = null;
+                checkinsLoadedKeyRef.current = null;
+                setOverrideDate(e.target.value || todayDateString());
+              }}
+              className="h-8 w-[140px] text-xs"
+            />
+            {overrideDate === todayDateString() && (
+              <Badge variant="secondary" className="text-[10px]">Today</Badge>
+            )}
+            <span className="text-[10px] text-muted-foreground">
+              Same date as Map / Attendance · manual edits are per season ({currentSeason})
+            </span>
+          </div>
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {dayCampReports.map((r) => (
               <Card key={r.name} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleGenerateReport(r.name, "daycamp")}>
