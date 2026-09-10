@@ -59,10 +59,11 @@ import {
   type BusCheckinMap,
 } from "@/lib/transportBusCheckins";
 import {
-  downloadBusBubbleSheetsPdf,
-  downloadCombinedAttendanceBubbleSheetPdf,
-  downloadGroupBubbleSheetPdf,
+  buildBusBubbleSheetsPdf,
+  buildCombinedAttendanceBubbleSheetPdf,
+  buildGroupBubbleSheetPdf,
 } from "@/lib/transportBubbleSheetPdf";
+import { TransportReportPreviewDialog, type TransportReportPreview } from "@/components/TransportReportPreviewDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -395,6 +396,7 @@ export default function Transport() {
   const [unplottedCampers, setUnplottedCampers] = useState(initialUnplottedCampers);
   const [addRouteOpen, setAddRouteOpen] = useState(false);
   const [addCamperOpen, setAddCamperOpen] = useState(false);
+  const [reportPreview, setReportPreview] = useState<TransportReportPreview | null>(null);
   const [newUnplotted, setNewUnplotted] = useState({ name: "", address: "", age: 10, session: "Session 1" });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedRoute, setSelectedRoute] = useState<Route | null>(null);
@@ -1530,6 +1532,10 @@ export default function Transport() {
     }
   };
 
+  const openReportPreview = (preview: Omit<TransportReportPreview, "open">) => {
+    setReportPreview({ ...preview, open: true });
+  };
+
   const handleDownloadBusBubbleSheets = () => {
     const sheetRoutes = routes
       .map((r) => ({
@@ -1542,17 +1548,23 @@ export default function Transport() {
       }))
       .filter((r) => r.campers.length > 0);
 
-    const ok = downloadBusBubbleSheetsPdf({
+    const built = buildBusBubbleSheetsPdf({
       companyName: currentCompany?.name ?? "Day Camp",
       date: overrideDate,
       runPeriod: timeOfDay,
       routes: sheetRoutes,
     });
-    if (!ok) {
+    if (!built) {
       toast({ title: "No campers to print", description: "No scheduled campers on routes.", variant: "destructive" });
       return;
     }
-    toast({ title: "Bubble sheet downloaded", description: "Bus attendance PDF saved." });
+    openReportPreview({
+      title: "Bus Attendance Bubble Sheet",
+      description: `${overrideDate} · ${timeOfDay.toUpperCase()} run`,
+      kind: "pdf",
+      blob: built.blob,
+      filename: built.filename,
+    });
   };
 
   const handleDownloadGroupBubbleSheet = () => {
@@ -1561,16 +1573,22 @@ export default function Transport() {
       campers: campers.map((c) => ({ name: c.name })),
     }));
 
-    const ok = downloadGroupBubbleSheetPdf({
+    const built = buildGroupBubbleSheetPdf({
       companyName: currentCompany?.name ?? "Day Camp",
       date: overrideDate,
       groups,
     });
-    if (!ok) {
+    if (!built) {
       toast({ title: "No group roster", description: "No campers with groups for this season.", variant: "destructive" });
       return;
     }
-    toast({ title: "Bubble sheet downloaded", description: "Group attendance PDF saved." });
+    openReportPreview({
+      title: "Group Attendance Bubble Sheet",
+      description: overrideDate,
+      kind: "pdf",
+      blob: built.blob,
+      filename: built.filename,
+    });
   };
 
   const hideAllRoutes = () => setVisibleRoutes([]);
@@ -2329,15 +2347,12 @@ export default function Transport() {
   };
 
   // ─── Report Generation ──────────────────────────────────────────────
-  const downloadCSV = (filename: string, rows: (string | number)[][]) => {
+  const csvRowsToBlob = (rows: (string | number)[][]) => {
     const csv = rows.map(r => r.map(c => {
       const s = String(c ?? "");
       return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
     }).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
-    URL.revokeObjectURL(url);
+    return new Blob([csv], { type: "text/csv" });
   };
 
   const handleGenerateReport = (reportName: string, category: "resident" | "daycamp") => {
@@ -2356,17 +2371,23 @@ export default function Transport() {
         groupName,
         campers: campers.map((c) => ({ name: c.name })),
       }));
-      const ok = downloadCombinedAttendanceBubbleSheetPdf({
+      const built = buildCombinedAttendanceBubbleSheetPdf({
         companyName: currentCompany?.name ?? "Day Camp",
         date: overrideDate,
         runPeriod: timeOfDay,
         busRoutes: sheetRoutes,
         groups,
       });
-      if (!ok) {
+      if (!built) {
         toast({ title: "No campers to print", variant: "destructive" });
       } else {
-        toast({ title: "Attendance bubble sheet downloaded", description: "PDF saved (bus + group)." });
+        openReportPreview({
+          title: "Day Camp Attendance Bubble Sheet",
+          description: `${overrideDate} · ${timeOfDay.toUpperCase()} run · bus + group`,
+          kind: "pdf",
+          blob: built.blob,
+          filename: built.filename,
+        });
       }
       return;
     }
@@ -2493,8 +2514,14 @@ export default function Transport() {
       }
     }
 
-    downloadCSV(filename, rows);
-    toast({ title: `${reportName} generated`, description: `Downloaded ${filename}` });
+    openReportPreview({
+      title: reportName,
+      description: `${category === "daycamp" ? "Day Camp" : "Resident Camp"} · ${rows.length - 1} row${rows.length - 1 === 1 ? "" : "s"}`,
+      kind: "csv",
+      blob: csvRowsToBlob(rows),
+      filename,
+      rows,
+    });
   };
 
   return (
@@ -4178,6 +4205,13 @@ ${sections.join("\n")}
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <TransportReportPreviewDialog
+        preview={reportPreview}
+        onOpenChange={(open) => {
+          if (!open) setReportPreview(null);
+        }}
+      />
     </motion.div>
   );
 }

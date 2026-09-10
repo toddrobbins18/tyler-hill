@@ -324,7 +324,21 @@ function renderBubbleSections(
   addPageFooters(doc);
 }
 
-export function downloadBusBubbleSheetsPdf(options: {
+export type TransportReportPdf = {
+  blob: Blob;
+  filename: string;
+};
+
+function triggerBlobDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function buildBusBubbleSheetsPdf(options: {
   companyName: string;
   date: string;
   runPeriod: "am" | "pm";
@@ -333,7 +347,7 @@ export function downloadBusBubbleSheetsPdf(options: {
     routeName: string;
     campers: BubbleSheetCamper[];
   }[];
-}): boolean {
+}): TransportReportPdf | null {
   const sections = options.routes
     .filter((r) => r.campers.length > 0)
     .map((r) => ({
@@ -342,7 +356,7 @@ export function downloadBusBubbleSheetsPdf(options: {
       campers: r.campers,
     }));
 
-  if (!sections.length) return false;
+  if (!sections.length) return null;
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
   renderBubbleSections(
@@ -354,18 +368,36 @@ export function downloadBusBubbleSheetsPdf(options: {
   );
 
   const safeDate = options.date.replace(/[^0-9-]/g, "");
-  doc.save(`bus-bubble-sheets-${safeDate}-${options.runPeriod}.pdf`);
+  return {
+    blob: doc.output("blob"),
+    filename: `bus-bubble-sheets-${safeDate}-${options.runPeriod}.pdf`,
+  };
+}
+
+export function downloadBusBubbleSheetsPdf(options: {
+  companyName: string;
+  date: string;
+  runPeriod: "am" | "pm";
+  routes: {
+    bus: string;
+    routeName: string;
+    campers: BubbleSheetCamper[];
+  }[];
+}): boolean {
+  const built = buildBusBubbleSheetsPdf(options);
+  if (!built) return false;
+  triggerBlobDownload(built.blob, built.filename);
   return true;
 }
 
-export function downloadGroupBubbleSheetPdf(options: {
+export function buildGroupBubbleSheetPdf(options: {
   companyName: string;
   date: string;
   groups: {
     groupName: string;
     campers: BubbleSheetCamper[];
   }[];
-}): boolean {
+}): TransportReportPdf | null {
   const sections = options.groups
     .filter((g) => g.campers.length > 0)
     .map((g) => ({
@@ -374,7 +406,7 @@ export function downloadGroupBubbleSheetPdf(options: {
       campers: g.campers,
     }));
 
-  if (!sections.length) return false;
+  if (!sections.length) return null;
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
   renderBubbleSections(
@@ -386,11 +418,27 @@ export function downloadGroupBubbleSheetPdf(options: {
   );
 
   const safeDate = options.date.replace(/[^0-9-]/g, "");
-  doc.save(`group-bubble-sheet-${safeDate}.pdf`);
+  return {
+    blob: doc.output("blob"),
+    filename: `group-bubble-sheet-${safeDate}.pdf`,
+  };
+}
+
+export function downloadGroupBubbleSheetPdf(options: {
+  companyName: string;
+  date: string;
+  groups: {
+    groupName: string;
+    campers: BubbleSheetCamper[];
+  }[];
+}): boolean {
+  const built = buildGroupBubbleSheetPdf(options);
+  if (!built) return false;
+  triggerBlobDownload(built.blob, built.filename);
   return true;
 }
 
-export function downloadCombinedAttendanceBubbleSheetPdf(options: {
+export function buildCombinedAttendanceBubbleSheetPdf(options: {
   companyName: string;
   date: string;
   runPeriod: "am" | "pm";
@@ -403,7 +451,7 @@ export function downloadCombinedAttendanceBubbleSheetPdf(options: {
     groupName: string;
     campers: BubbleSheetCamper[];
   }[];
-}): boolean {
+}): TransportReportPdf | null {
   const busSections: BubbleSheetSection[] = options.busRoutes
     .filter((r) => r.campers.length > 0)
     .map((r) => ({
@@ -421,7 +469,7 @@ export function downloadCombinedAttendanceBubbleSheetPdf(options: {
     }));
 
   const sections = [...busSections, ...groupSections];
-  if (!sections.length) return false;
+  if (!sections.length) return null;
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
   renderBubbleSections(
@@ -433,6 +481,28 @@ export function downloadCombinedAttendanceBubbleSheetPdf(options: {
   );
 
   const safeDate = options.date.replace(/[^0-9-]/g, "");
-  doc.save(`daycamp-attendance-bubble-${safeDate}-${options.runPeriod}.pdf`);
+  return {
+    blob: doc.output("blob"),
+    filename: `daycamp-attendance-bubble-${safeDate}-${options.runPeriod}.pdf`,
+  };
+}
+
+export function downloadCombinedAttendanceBubbleSheetPdf(options: {
+  companyName: string;
+  date: string;
+  runPeriod: "am" | "pm";
+  busRoutes: {
+    bus: string;
+    routeName: string;
+    campers: BubbleSheetCamper[];
+  }[];
+  groups: {
+    groupName: string;
+    campers: BubbleSheetCamper[];
+  }[];
+}): boolean {
+  const built = buildCombinedAttendanceBubbleSheetPdf(options);
+  if (!built) return false;
+  triggerBlobDownload(built.blob, built.filename);
   return true;
 }
