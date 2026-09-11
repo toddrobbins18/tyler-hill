@@ -516,13 +516,13 @@ export default function Transport() {
     persistBoardCache(companyId, currentSeason, marked);
     try {
       const { data: userRes } = await supabase.auth.getUser();
-      const { error } = await supabase.from("transport_boards" as "profiles").upsert({
+      const { error } = await supabase.from("transport_boards").upsert({
         company_id: companyId,
         season: currentSeason,
-        data: marked as never,
+        data: marked,
         updated_by: userRes.user?.id ?? null,
         updated_at: new Date().toISOString(),
-      } as never);
+      });
       if (error) {
         console.error("[Transport] Save board failed:", error.message);
         return false;
@@ -630,8 +630,8 @@ export default function Transport() {
               variant: "destructive",
             });
           }
-        } else if (data?.data && typeof data.data === "object") {
-          const saved = data.data as BoardPayload & { routeMeta?: typeof initialRouteMeta };
+        } else if (data?.data && typeof data.data === "object" && !Array.isArray(data.data)) {
+          const saved = data.data as unknown as BoardPayload;
           const restoredStops: Record<number, RouteStop[]> = saved.coreStops && typeof saved.coreStops === "object"
             ? Object.fromEntries(
               Object.entries(saved.coreStops).map(([k, v]) => [Number(k), v as RouteStop[]]),
@@ -819,7 +819,9 @@ export default function Transport() {
   const geocodeCacheRef = useRef<Map<string, GeocodeResult | null>>(loadPersistedGeocodeCache());
 
   useEffect(() => {
-    seedGeocodeCacheFromBundled(geocodeCacheRef.current);
+    seedGeocodeCacheFromBundled(
+      geocodeCacheRef.current as Map<string, { lat: number; lng: number; provider?: string } | null>,
+    );
   }, []);
 
   const cacheGeocodeResult = (address: string, result: GeocodeResult | null) => {

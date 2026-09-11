@@ -8,6 +8,8 @@ export function getBundledMappointRoutesCsv2026(): string {
 
 export type BundledGeocode = { lat: number; lng: number; provider?: string };
 
+export type GeocodeCacheEntry = { lat: number; lng: number; provider?: string };
+
 const bundledGeocodeMap = bundledGeocodes2026 as Record<string, BundledGeocode>;
 
 /** Pre-geocoded MapPoint addresses — instant import, no API calls in production. */
@@ -33,7 +35,7 @@ export function bundledMappointGeocodeCount() {
 }
 
 export function seedGeocodeCacheFromBundled(
-  cache: Map<string, { lat: number; lng: number; provider?: string } | null>,
+  cache: Map<string, GeocodeCacheEntry | null>,
 ) {
   for (const [key, hit] of Object.entries(bundledGeocodeMap)) {
     if (!cache.has(key)) {

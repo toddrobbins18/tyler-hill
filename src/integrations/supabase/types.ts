@@ -3903,6 +3903,41 @@ export type Database = {
           },
         ]
       }
+      transport_boards: {
+        Row: {
+          company_id: string
+          season: string
+          data: Json
+          updated_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          season?: string
+          data?: Json
+          updated_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          season?: string
+          data?: Json
+          updated_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transport_boards_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tutoring_therapy: {
         Row: {
           child_id: string
