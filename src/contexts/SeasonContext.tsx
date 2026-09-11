@@ -5,6 +5,7 @@ import {
   isCampSeason,
   SEASON_BOOTSTRAP_VERSION,
 } from '@/lib/seasonConstants';
+import { supabase } from '@/integrations/supabase/client';
 
 interface SeasonContextType {
   currentSeason: string;
@@ -43,6 +44,16 @@ export function SeasonProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem('currentSeason', currentSeason);
   }, [currentSeason]);
+
+  // Reset to the current camp year whenever a user signs in (not on token refresh).
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN') {
+        setCurrentSeason(DEFAULT_SEASON);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   return (
     <SeasonContext.Provider
