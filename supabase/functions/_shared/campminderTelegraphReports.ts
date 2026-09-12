@@ -44,6 +44,12 @@ const FULL_SUMMER_GROUP_HEADERS = [
   "full summer group name",
 ];
 
+const CAMP_GRADE_HEADERS = [
+  "camp grade",
+  "campgrade",
+  "camp grades",
+];
+
 const AGE_GROUP_HEADERS = [
   "age group",
   "agegroup",
@@ -300,7 +306,10 @@ function parseTelegraphCsv(csvText: string): {
   const headers = rows[0];
   const personIdx = pickColumnIndex(headers, PERSON_ID_HEADERS);
   const groupIdx = pickColumnIndex(headers, FULL_SUMMER_GROUP_HEADERS);
-  const ageIdx = pickColumnIndex(headers, AGE_GROUP_HEADERS);
+  const campGradeIdx = pickColumnIndex(headers, CAMP_GRADE_HEADERS);
+  const ageIdx = campGradeIdx >= 0
+    ? campGradeIdx
+    : pickColumnIndex(headers, AGE_GROUP_HEADERS);
 
   if (personIdx < 0) {
     throw new Error(
@@ -309,7 +318,7 @@ function parseTelegraphCsv(csvText: string): {
   }
   if (groupIdx < 0 && ageIdx < 0) {
     throw new Error(
-      `Telegraph CSV missing Full Summer Group / Age Group column. Headers: ${headers.slice(0, 12).join(", ")}`,
+      `Telegraph CSV missing Full Summer Group / Camp Grade column. Headers: ${headers.slice(0, 12).join(", ")}`,
     );
   }
 

@@ -1,5 +1,5 @@
 /**
- * CampMinder camper custom fields (e.g. North Shore age group + FULLSUMMERGROUP).
+ * CampMinder camper custom fields (e.g. North Shore Camp Grade + FULLSUMMERGROUP).
  * Primary: Persons API (/persons/custom-fields) per CampMinder docs.
  * Fallback: legacy Entity customfield API (GetFieldDefs / GetCustomFieldData).
  */
@@ -20,7 +20,14 @@ export const FULL_SUMMER_GROUP_FIELD_NAMES = [
   "full summer group",
 ];
 
-/** Age group → Nest division for day camps. */
+/** Camp Grade → Nest division for day camps (North Shore). */
+export const CAMP_GRADE_FIELD_NAMES = [
+  "camp grade",
+  "campgrade",
+  "camp_grade",
+];
+
+/** Legacy age group custom field — used only when Camp Grade is absent. */
 export const AGE_GROUP_FIELD_NAMES = [
   "age group",
   "agegroup",
@@ -28,10 +35,35 @@ export const AGE_GROUP_FIELD_NAMES = [
   "age groups",
 ];
 
+/** CampMinder CamperDetails.CampGradeID → display label (also used for division names). */
+export const CM_CAMP_GRADE_LABELS: Record<number, string> = {
+  0: "Pre-K",
+  1: "K",
+  2: "1st",
+  3: "2nd",
+  4: "3rd",
+  5: "4th",
+  6: "5th",
+  7: "6th",
+  8: "7th",
+  9: "8th",
+  10: "9th",
+  11: "10th",
+  12: "11th",
+  13: "12th",
+};
+
+export function campGradeLabelFromId(
+  campGradeId: number | null | undefined,
+): string | null {
+  if (campGradeId == null) return null;
+  return CM_CAMP_GRADE_LABELS[campGradeId] ?? null;
+}
+
 export type DayCampCustomFieldMaps = {
   fullSummerGroupByPerson: Map<string, string>;
   ageGroupByPerson: Map<string, string>;
-  matchedFields: { fullSummerGroup?: string; ageGroup?: string };
+  matchedFields: { fullSummerGroup?: string; campGrade?: string; ageGroup?: string };
   debug: {
     fieldDefCount: number;
     fieldDefSample: string[];
@@ -180,8 +212,10 @@ export function buildMapsFromSessionAttendees(
     const group = extractFieldFromRecord(attendee, FULL_SUMMER_GROUP_FIELD_NAMES);
     if (group) fullSummerGroupByPerson.set(personId, group);
 
-    const ageGroup = extractFieldFromRecord(attendee, AGE_GROUP_FIELD_NAMES);
-    if (ageGroup) ageGroupByPerson.set(personId, ageGroup);
+    const divisionLabel =
+      extractFieldFromRecord(attendee, CAMP_GRADE_FIELD_NAMES) ??
+      extractFieldFromRecord(attendee, AGE_GROUP_FIELD_NAMES);
+    if (divisionLabel) ageGroupByPerson.set(personId, divisionLabel);
   }
 
   return { fullSummerGroupByPerson, ageGroupByPerson };
@@ -482,11 +516,15 @@ function scoreFullSummerGroupDef(def: FieldDef): number {
   return -1;
 }
 
-function scoreAgeGroupDef(def: FieldDef): number {
+function scoreDivisionSourceDef(def: FieldDef): number {
   if (def.IsActive === false || !def.Name?.trim()) return -1;
   if (AGE_GROUP_DEF_EXCLUDE.test(def.Name)) return -1;
 
   const normalized = normalizeFieldName(def.Name);
+  if (normalized === "campgrade") return 110;
+  if (/^camp grade$/i.test(def.Name.trim())) return 105;
+  if (fieldNameMatchesLoose(def.Name, ["campgrade"]) && !def.Name.includes("-")) return 90;
+
   if (normalized === "agegroup") return 100;
   if (/^age group$/i.test(def.Name.trim())) return 95;
   if (normalized === "agegroups" && !def.Name.includes("-")) return 80;
@@ -767,7 +805,12 @@ function findFieldDefs(defs: FieldDef[]): {
     );
   }
 
-  let ageGroupDef = pickBestFieldDef(defs, scoreAgeGroupDef);
+  let ageGroupDef = pickBestFieldDef(defs, scoreDivisionSourceDef);
+  if (!ageGroupDef) {
+    ageGroupDef = defs.find(
+      (d) => d.IsActive !== false && d.Name && fieldNameMatches(d.Name, CAMP_GRADE_FIELD_NAMES),
+    );
+  }
   if (!ageGroupDef) {
     ageGroupDef = defs.find(
       (d) => d.IsActive !== false && d.Name && fieldNameMatches(d.Name, AGE_GROUP_FIELD_NAMES),
@@ -775,7 +818,7 @@ function findFieldDefs(defs: FieldDef[]): {
   }
   if (!ageGroupDef) {
     ageGroupDef = defs.find(
-      (d) => d.Name && /^age\s*groups?$/i.test(d.Name.trim()),
+      (d) => d.Name && (/^camp\s*grade$/i.test(d.Name.trim()) || /^age\s*groups?$/i.test(d.Name.trim())),
     );
   }
 
@@ -797,7 +840,9 @@ function discoverDefsFromPersonEntries(entries: unknown[]): {
       fieldNameMatchesLoose(name, FULL_SUMMER_GROUP_FIELD_NAMES))) {
       fullSummerDef = { ID: id ?? undefined, Name: name };
     }
-    if (!ageGroupDef && (fieldNameMatches(name, AGE_GROUP_FIELD_NAMES) ||
+    if (!ageGroupDef && (fieldNameMatches(name, CAMP_GRADE_FIELD_NAMES) ||
+      fieldNameMatchesLoose(name, CAMP_GRADE_FIELD_NAMES) ||
+      fieldNameMatches(name, AGE_GROUP_FIELD_NAMES) ||
       fieldNameMatchesLoose(name, AGE_GROUP_FIELD_NAMES))) {
       ageGroupDef = { ID: id ?? undefined, Name: name };
     }
@@ -819,10 +864,11 @@ function applyPersonEntriesToMaps(
     pickValueByFieldName(entries, FULL_SUMMER_GROUP_FIELD_NAMES);
   if (groupValue) fullSummerGroupByPerson.set(personId, groupValue);
 
-  const ageValue =
+  const divisionValue =
+    pickValueByFieldName(entries, CAMP_GRADE_FIELD_NAMES) ??
     (ageGroupDef?.ID ? pickValueByFieldId(entries, ageGroupDef.ID) : null) ??
     pickValueByFieldName(entries, AGE_GROUP_FIELD_NAMES);
-  if (ageValue) ageGroupByPerson.set(personId, ageValue);
+  if (divisionValue) ageGroupByPerson.set(personId, divisionValue);
 }
 
 async function fetchCustomFieldDefs(
@@ -1029,7 +1075,7 @@ async function discoverEntityFieldIdsFromProbePerson(
   if (!ageGroupDef) {
     for (const row of probeValues) {
       const def = defById.get(row.fieldId);
-      if (def && scoreAgeGroupDef(def) >= 40) {
+      if (def && scoreDivisionSourceDef(def) >= 40) {
         ageGroupDef = def;
         break;
       }
@@ -1162,7 +1208,7 @@ export async function loadDayCampCamperCustomFields(
     .map((d) => `${d.Name} (id=${d.ID})`)
     .slice(0, 20);
   empty.debug.ageGroupCandidates = defs
-    .filter((d) => d.Name && scoreAgeGroupDef(d) >= 40)
+    .filter((d) => d.Name && scoreDivisionSourceDef(d) >= 40)
     .map((d) => `${d.Name} (id=${d.ID})`)
     .slice(0, 20);
   empty.debug.apiBaseUsed = baseUsed;
@@ -1209,18 +1255,24 @@ export async function loadDayCampCamperCustomFields(
       .map((d) => d.Name)
       .slice(0, 20);
     console.log(
-      `[Custom Fields] No FULLSUMMERGROUP or Age Group defs found (${defs.length} total, source=${apiSource}). Similar names: ${groupLike.join(", ") || "none"}`,
+      `[Custom Fields] No FULLSUMMERGROUP or Camp Grade defs found (${defs.length} total, source=${apiSource}). Similar names: ${groupLike.join(", ") || "none"}`,
     );
     // Still try Persons API with label-only matching for every camper.
   }
 
+  const divisionFieldIsCampGrade = ageGroupDef?.Name
+    ? fieldNameMatches(ageGroupDef.Name, CAMP_GRADE_FIELD_NAMES) ||
+      fieldNameMatchesLoose(ageGroupDef.Name, CAMP_GRADE_FIELD_NAMES)
+    : false;
+
   empty.matchedFields = {
     fullSummerGroup: fullSummerDef?.Name,
-    ageGroup: ageGroupDef?.Name,
+    campGrade: divisionFieldIsCampGrade ? ageGroupDef?.Name : undefined,
+    ageGroup: !divisionFieldIsCampGrade ? ageGroupDef?.Name : undefined,
   };
   if (fullSummerDef || ageGroupDef) {
     console.log(
-      `[Custom Fields] Using defs (source=${apiSource}): FULLSUMMERGROUP="${fullSummerDef?.Name ?? "n/a"}" (id=${fullSummerDef?.ID ?? "n/a"}), Age Group="${ageGroupDef?.Name ?? "n/a"}" (id=${ageGroupDef?.ID ?? "n/a"})`,
+      `[Custom Fields] Using defs (source=${apiSource}): FULLSUMMERGROUP="${fullSummerDef?.Name ?? "n/a"}" (id=${fullSummerDef?.ID ?? "n/a"}), Division="${ageGroupDef?.Name ?? "n/a"}" (id=${ageGroupDef?.ID ?? "n/a"})`,
     );
   } else {
     console.log(
@@ -1363,7 +1415,7 @@ export async function loadDayCampCamperCustomFields(
   }
 
   console.log(
-    `[Custom Fields] Entity API loaded ${empty.fullSummerGroupByPerson.size} FULLSUMMERGROUP, ${empty.ageGroupByPerson.size} age group values (season param=${season}, using latest field values)`,
+    `[Custom Fields] Entity API loaded ${empty.fullSummerGroupByPerson.size} FULLSUMMERGROUP, ${empty.ageGroupByPerson.size} Camp Grade / division values (season param=${season}, using latest field values)`,
   );
   return empty;
 }
@@ -1428,6 +1480,25 @@ export function resolveDivisionIdFromAgeGroupLabel(
 ): string | null {
   if (!ageGroupLabel?.trim()) return null;
   return ageGroupDivisionMap.get(ageGroupLabel.toLowerCase().trim()) ?? null;
+}
+
+/** Apply CampMinder CamperDetails.CampGradeID as division labels (authoritative for North Shore). */
+export function mergeCampGradeLabelsFromPersonMap(
+  personIds: string[],
+  personMap: Map<string, unknown>,
+  divisionLabelByPerson: Map<string, string>,
+): number {
+  let merged = 0;
+  for (const personId of personIds) {
+    const person = personMap.get(String(personId)) as {
+      CamperDetails?: { CampGradeID?: number | null };
+    } | undefined;
+    const label = campGradeLabelFromId(person?.CamperDetails?.CampGradeID);
+    if (!label) continue;
+    divisionLabelByPerson.set(String(personId), label);
+    merged++;
+  }
+  return merged;
 }
 
 /** One-off probe for Supabase test-campminder-custom-fields (debug API responses). */

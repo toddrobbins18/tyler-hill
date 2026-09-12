@@ -4,8 +4,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
   buildMapsFromSessionAttendees,
+  campGradeLabelFromId,
   ensureDivisionsForAgeGroupLabels,
-  loadDayCampCamperCustomFields,
+  mergeCampGradeLabelsFromPersonMap,
   resolveDivisionIdFromAgeGroupLabel,
 } from '../_shared/campminderCustomFields.ts';
 import { syncFullSummerGroupsFromTelegraph } from '../_shared/campminderTelegraphReports.ts';
@@ -492,8 +493,10 @@ function resolveCamperDivisionAndGroup(
     groupName = cmBunkNameByCmId.get(cmBunkId) ?? null;
   }
 
+  // Day-camp divisions come from Camp Grade (custom field or CamperDetails.CampGradeID),
+  // not CampMinder session DivisionID (often session/program, not grade).
   return {
-    division_id: ageGroupDivision ?? cmDivision,
+    division_id: ageGroupDivision ?? (isDayCamp ? null : cmDivision),
     group_name: groupName,
   };
 }
@@ -1867,96 +1870,28 @@ async function performFullSync(
       }
 
       if (isDayCamp && enrolledPersonIdArray.length > 0) {
-        console.log('\n--- FETCHING DAY CAMP CUSTOM FIELDS (Age Group + FULLSUMMERGROUP) ---');
+        // Skip Entity/Persons custom-field bulk fetch — it times out for North Shore (~1700 campers).
+        // Groups: Bunks API (+ session attendee hints). Divisions: CamperDetails.CampGradeID after person fetch.
+        console.log(
+          '\n--- DAY CAMP: skipping bulk custom-field fetch (Bunks API + Camp Grade on person records) ---',
+        );
+        dayCampCustomFieldStats = {
+          skipped: true,
+          reason: 'Groups from Bunks API; divisions from CamperDetails.CampGradeID',
+          fullSummerGroupCount: fullSummerGroupByPerson.size,
+          fromAttendeesGroups: fromAttendeesGroupCount,
+          fromAttendeesAgeGroups: fromAttendeesAgeGroupCount,
+          bunkNameCount: cmBunkNameByCmId.size,
+          bunkAssignmentGroupCount: bunkGroupByPerson.size,
+        };
         await updateSyncJob(supabase, jobId, {
-          progress: { step: 'Fetching day camp custom fields', enrolledCampers: enrolledPersonIdArray.length, season },
-        });
-        try {
-          const custom = await loadDayCampCamperCustomFields(
-            enrolledPersonIdArray,
+          progress: {
+            step: 'Day camp custom fields skipped (Bunks API + Camp Grade)',
+            customFields: dayCampCustomFieldStats,
+            enrolledCampers: enrolledPersonIdArray.length,
             season,
-            token,
-            subscriptionKey,
-            clientId,
-            acquireRateLimitSlot,
-          );
-          for (const [pid, val] of custom.fullSummerGroupByPerson) {
-            fullSummerGroupByPerson.set(pid, val);
-          }
-          for (const [pid, val] of custom.ageGroupByPerson) {
-            ageGroupByPerson.set(pid, val);
-          }
-
-          if (ageGroupByPerson.size > 0) {
-            const uniqueAgeGroups = [...new Set(ageGroupByPerson.values())];
-            ageGroupDivisionMap = await ensureDivisionsForAgeGroupLabels(
-              supabase,
-              companyId,
-              uniqueAgeGroups,
-            );
-          }
-
-          console.log(
-            `[Custom Fields] Divisions from age groups: ${ageGroupDivisionMap.size}, groups mapped: ${fullSummerGroupByPerson.size}`,
-          );
-          dayCampCustomFieldStats = {
-            fullSummerGroupField: custom.matchedFields.fullSummerGroup ?? null,
-            ageGroupField: custom.matchedFields.ageGroup ?? null,
-            fullSummerGroupCount: fullSummerGroupByPerson.size,
-            ageGroupCount: ageGroupByPerson.size,
-            divisionCount: ageGroupDivisionMap.size,
-            fromAttendeesGroups: fromAttendeesGroupCount,
-            fromAttendeesAgeGroups: fromAttendeesAgeGroupCount,
-            fieldDefCount: custom.debug.fieldDefCount,
-            fieldDefSample: custom.debug.fieldDefSample.slice(0, 15),
-            groupCandidateFields: custom.debug.groupCandidateFields ?? [],
-            ageGroupCandidates: custom.debug.ageGroupCandidates ?? [],
-            firstBatchContainerCount: custom.debug.firstBatchContainerCount ?? null,
-            apiBase: custom.debug.apiBaseUsed ?? null,
-            apiSource: custom.debug.apiSource ?? null,
-            personsFetched: custom.debug.personsFetched ?? null,
-            bunkNameCount: cmBunkNameByCmId.size,
-            bunkAssignmentGroupCount: bunkGroupByPerson.size,
-            errors: custom.debug.dataFetchErrors,
-          };
-          await updateSyncJob(supabase, jobId, {
-            progress: {
-              step: 'Day camp custom fields loaded',
-              customFields: dayCampCustomFieldStats,
-              season,
-            },
-          });
-        } catch (customFieldError) {
-          console.error('[Custom Fields] Day camp custom field sync failed:', customFieldError);
-          await updateSyncJob(supabase, jobId, {
-            progress: {
-              step: 'Day camp custom fields failed',
-              customFieldError: customFieldError instanceof Error ? customFieldError.message : String(customFieldError),
-              season,
-            },
-          });
-        }
-
-        if (ageGroupByPerson.size > 0 && ageGroupDivisionMap.size === 0) {
-          const uniqueAgeGroups = [...new Set(ageGroupByPerson.values())];
-          ageGroupDivisionMap = await ensureDivisionsForAgeGroupLabels(
-            supabase,
-            companyId,
-            uniqueAgeGroups,
-          );
-        }
-
-        if (!dayCampCustomFieldStats) {
-          dayCampCustomFieldStats = {
-            fullSummerGroupCount: fullSummerGroupByPerson.size,
-            ageGroupCount: ageGroupByPerson.size,
-            divisionCount: ageGroupDivisionMap.size,
-            fromAttendeesGroups: fromAttendeesGroupCount,
-            fromAttendeesAgeGroups: fromAttendeesAgeGroupCount,
-            bunkNameCount: cmBunkNameByCmId.size,
-            bunkAssignmentGroupCount: bunkGroupByPerson.size,
-          };
-        }
+          },
+        });
       }
 
       // Fetch sessions for session NAME lookup
@@ -2057,6 +1992,25 @@ async function performFullSync(
 
       console.log(`✓ Total enrolled campers in personMap: ${campers.length} (${campersWithoutCamperDetails} without CamperDetails)`);
       console.log(`  Missing camper IDs (person fetch failed): ${missingCamperIds.length}`);
+
+      if (isDayCamp && enrolledPersonIdArray.length > 0) {
+        const campGradeMerged = mergeCampGradeLabelsFromPersonMap(
+          enrolledPersonIdArray,
+          personMap,
+          ageGroupByPerson,
+        );
+        if (campGradeMerged > 0) {
+          const uniqueCampGrades = [...new Set(ageGroupByPerson.values())];
+          ageGroupDivisionMap = await ensureDivisionsForAgeGroupLabels(
+            supabase,
+            companyId,
+            uniqueCampGrades,
+          );
+          console.log(
+            `[Day Camp] Applied Camp Grade from CamperDetails for ${campGradeMerged} campers; ${ageGroupDivisionMap.size} divisions`,
+          );
+        }
+      }
     } else {
       console.log(`\n--- SKIPPING CAMPER FETCH (syncType=${syncType}) ---`);
     }
@@ -2319,11 +2273,6 @@ async function performFullSync(
         total_counts: { divisions: divisions.length, campers: enrolledPersonIdArray.length },
       });
 
-      const gradeMap: Record<number, string> = {
-        0: 'Pre-K', 1: 'K', 2: '1st', 3: '2nd', 4: '3rd', 5: '4th',
-        6: '5th', 7: '6th', 8: '7th', 9: '8th', 10: '9th', 11: '10th', 12: '11th', 13: '12th'
-      };
-
     // Note: camperData is declared in initialization section
 
     // Process campers from persons API
@@ -2346,7 +2295,7 @@ async function performFullSync(
       else if (person.GenderID === 1) gender = 'Male';
       
       const attendeeRow = attendeeDataMap.get(String(person.ID));
-      const grade = gradeMap[person.CamperDetails?.CampGradeID] ?? null;
+      const grade = campGradeLabelFromId(person.CamperDetails?.CampGradeID);
 
       // Get parent contact info
       const parentPersonId = camperToParentMap.get(String(person.ID));
@@ -2469,7 +2418,7 @@ async function performFullSync(
         name,
         gender,
         date_of_birth: normalizeDateOfBirthForDb(person?.DateOfBirth || fallbackData?.DateOfBirth),
-        grade: gradeMap[person?.CamperDetails?.CampGradeID] ?? null,
+        grade: campGradeLabelFromId(person?.CamperDetails?.CampGradeID),
         guardian_name: null,
         guardian_email: null,
         guardian_phone: null,
