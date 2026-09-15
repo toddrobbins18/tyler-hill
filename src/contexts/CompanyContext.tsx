@@ -99,9 +99,6 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(COMPANY_BOOTSTRAP_KEY, COMPANY_BOOTSTRAP_VERSION);
       }
 
-      // Read saved viewing company early (per browser tab session).
-      const savedViewingId = sessionStorage.getItem('viewing_company_id');
-
       // Fetch profile + company data in parallel with companies list for super admins or multi-camp users
       // Users with multiple role assignments across camps (like Welsford) need to see all their camps
       const profilePromise = supabase
@@ -172,13 +169,8 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       // Determine which company to set as current
       let targetCompany: Company | null = null;
 
-      if (savedViewingId && companies) {
-        // User switched camp this session — keep their choice.
-        targetCompany = companies.find(c => c.id === savedViewingId) || null;
-      }
-
-      if (!targetCompany && companies && companies.length > 0) {
-        // Default opening camp: North Shore Day Camp when available.
+      if (companies && companies.length > 0) {
+        // Default opening camp: North Shore Day Camp when available (every fresh load / login).
         targetCompany =
           companies.find(c => c.slug === DEFAULT_COMPANY_SLUG) ?? null;
       }

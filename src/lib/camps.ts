@@ -10,7 +10,7 @@ export const CAMP_SLUG = {
 export const DEFAULT_COMPANY_SLUG = CAMP_SLUG.NORTH_SHORE_DAY_CAMP;
 
 /** Bump to reset saved camp selection once (localStorage bootstrap). */
-export const COMPANY_BOOTSTRAP_VERSION = "north-shore-default-v1";
+export const COMPANY_BOOTSTRAP_VERSION = "north-shore-default-v2";
 
 export type CampSlug = (typeof CAMP_SLUG)[keyof typeof CAMP_SLUG];
 
