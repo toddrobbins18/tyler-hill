@@ -5,6 +5,8 @@ import DayCampPlaceholder from "./DayCampPlaceholder";
 import SunshineReport from "./SunshineReport";
 import Transport from "./Transport";
 import OfficeTransportChanges from "./OfficeTransportChanges";
+import TransportChangeSheets from "./TransportChangeSheets";
+import PendingTransportChanges from "./PendingTransportChanges";
 import SwimProgram from "./SwimProgram";
 
 import Nurse from "./Nurse";
@@ -30,6 +32,14 @@ const DAY_CAMP_MODULES: Record<string, { title: string; description: string }> =
   "office-changes": {
     title: "Office Changes",
     description: "Schedule changes that notify transportation when entered.",
+  },
+  "change-sheets": {
+    title: "Change Sheets",
+    description: "Approved daily transport changes — filter by date and route.",
+  },
+  "pending-transport-changes": {
+    title: "Pending Changes",
+    description: "Parent and office submissions awaiting approval.",
   },
 };
 
@@ -61,6 +71,14 @@ export default function DayCampModulePage() {
 
   if (moduleId === "office-changes") {
     return <OfficeTransportChanges />;
+  }
+
+  if (moduleId === "change-sheets") {
+    return <TransportChangeSheets />;
+  }
+
+  if (moduleId === "pending-transport-changes") {
+    return <PendingTransportChanges />;
   }
 
   if (moduleId === "swim") {

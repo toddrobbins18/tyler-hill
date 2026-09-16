@@ -5,6 +5,8 @@ import {
   Truck,
   ClipboardEdit,
   ClipboardList,
+  FileText,
+  Clock,
   Waves,
   FileBarChart,
   HeartPulse,
@@ -13,7 +15,6 @@ import {
   Mail,
   Calendar,
   Utensils,
-  FileText,
   Palmtree,
   CloudRain,
   Stethoscope,
@@ -61,6 +62,8 @@ export function getDayCampPocItems(): DayCampMenuItem[] {
     { title: "Sunshine Report", url: "/day-camp/sunshine-report", icon: Sun, menuId: "sunshine-report" },
     { title: "Transportation", url: "/day-camp/transport", icon: Truck, menuId: "transportation" },
     { title: "Bus Attendance", url: "/day-camp/bus-attendance", icon: ClipboardList, menuId: "bus-attendance" },
+    { title: "Change Sheets", url: "/day-camp/change-sheets", icon: FileText, menuId: "change-sheets" },
+    { title: "Pending Changes", url: "/day-camp/pending-transport-changes", icon: Clock, menuId: "pending-transport-changes" },
     { title: "Office Changes", url: "/day-camp/office-changes", icon: ClipboardEdit, menuId: "office-changes" },
     { title: "Swim", url: "/day-camp/swim", icon: Waves, menuId: "swim" },
   ];
@@ -75,7 +78,13 @@ export function getDayCampPocItemsForCompany(company: CampLike): DayCampMenuItem
     if (isNorthShoreDayCamp(company?.slug) && NORTH_SHORE_SKIP_POC_MENU_IDS.has(item.menuId)) {
       return false;
     }
-    if ((item.menuId === "transportation" || item.menuId === "bus-attendance") && !northShoreBusTransportEnabled(company)) {
+    if (
+      (item.menuId === "transportation" ||
+        item.menuId === "bus-attendance" ||
+        item.menuId === "change-sheets" ||
+        item.menuId === "pending-transport-changes") &&
+      !northShoreBusTransportEnabled(company)
+    ) {
       return false;
     }
     return true;

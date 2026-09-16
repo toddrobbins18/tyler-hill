@@ -27,7 +27,7 @@ export type TransportRunRoute = TransportRouteMeta & {
   direction: string;
 };
 
-const ROUTE_COLORS = [
+export const ROUTE_COLORS = [
   "#3eb8a0", "#4a9eff", "#f59e0b", "#ef4444", "#a855f7",
   "#ec4899", "#22c55e", "#eab308", "#06b6d4", "#f97316",
 ];

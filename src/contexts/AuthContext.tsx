@@ -184,8 +184,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const perms = allPermissions[companyId];
     if (perms?.[menuItem] === true) return true;
 
-    // Bus Attendance: allow anyone with Transportation until bus-attendance is toggled per role
-    if (menuItem === "bus-attendance" && perms?.transportation === true) return true;
+    // Transport sub-pages: allow anyone with Transportation until toggled per role
+    if (
+      (menuItem === "bus-attendance" ||
+        menuItem === "change-sheets" ||
+        menuItem === "pending-transport-changes") &&
+      perms?.transportation === true
+    ) {
+      return true;
+    }
 
     return false;
   }, [isSuperAdmin, allPermissions]);
