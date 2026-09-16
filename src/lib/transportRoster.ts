@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { resolvePersonAge } from "@/lib/birthdayCalendar";
 import {
   getBundledMappointRoutesCsv2026,
   parseMappointRoutesCsv,
@@ -162,7 +163,7 @@ export async function loadEnrolledCampersForTransport(
 ): Promise<TransportEnrolledCamper[]> {
   const { data, error } = await supabase
     .from("children")
-    .select("id, name, age, session, grade, group_name")
+    .select("id, name, age, date_of_birth, session, grade, group_name")
     .eq("company_id", companyId)
     .eq("season", season)
     .neq("status", "inactive")
@@ -176,7 +177,7 @@ export async function loadEnrolledCampersForTransport(
   return (data ?? []).map((row) => ({
     id: row.id as string,
     name: (row.name as string)?.trim() ?? "",
-    age: row.age as number | null,
+    age: resolvePersonAge(row.date_of_birth, row.age),
     session: row.session as string | null,
     grade: row.grade as string | null,
     groupName: row.group_name as string | null,
@@ -231,9 +232,14 @@ export function buildUnplottedFromEnrollment(options: {
     const key = normName(child.name);
     if (onBoard.has(key)) return;
 
+    const resolvedAge = child.age ?? null;
     const kept = existingByName.get(key);
     if (kept) {
-      out.push(kept);
+      out.push({
+        ...kept,
+        age: resolvedAge ?? kept.age,
+        session: child.session ?? child.grade ?? kept.session,
+      });
       return;
     }
 
@@ -244,7 +250,7 @@ export function buildUnplottedFromEnrollment(options: {
       address: hint?.address ?? "",
       lat: hint?.lat ?? 0,
       lng: hint?.lng ?? 0,
-      age: child.age ?? 10,
+      age: resolvedAge ?? 10,
       session: child.session ?? child.grade ?? "",
     });
   });

@@ -35,6 +35,33 @@ export function isBirthdayTodayCalendar(dateValue: unknown, todayMonth: number, 
   return p != null && p.month === todayMonth && p.day === todayDay;
 }
 
+/** Age on a given calendar day (local), same logic as Dashboard calculateAge. */
+export function ageOnLocalDate(
+  parts: { year: number; month: number; day: number },
+  now: Date = new Date(),
+): number {
+  let age = now.getFullYear() - parts.year;
+  const todayMonth = now.getMonth() + 1;
+  const todayDay = now.getDate();
+  if (todayMonth < parts.month || (todayMonth === parts.month && todayDay < parts.day)) {
+    age--;
+  }
+  return age;
+}
+
+/** Prefer DOB-derived age; fall back to stored age when DOB is missing. */
+export function resolvePersonAge(
+  dateOfBirth: unknown,
+  storedAge: unknown,
+  now: Date = new Date(),
+): number | null {
+  const parts = parseBirthdayCalendarParts(dateOfBirth);
+  if (parts) return ageOnLocalDate(parts, now);
+  if (storedAge == null || storedAge === "") return null;
+  const n = typeof storedAge === "number" ? storedAge : parseInt(String(storedAge).trim(), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
 export { isActiveRosterStatus } from './rosterStatus';
 
 /** Normalize CampMinder / form values to Postgres `date` (YYYY-MM-DD). */
