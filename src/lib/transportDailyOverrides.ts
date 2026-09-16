@@ -25,9 +25,46 @@ export type TransportManualOverrides = {
 export type TransportExceptionSource =
   | "parent_absence"
   | "parent_bus_change"
+  | "parent_pickup_note"
   | "office_change"
   | "nurse_sent_home"
   | "swim_lesson";
+
+const PICKUP_CHANGE_LABELS: Record<string, string> = {
+  early_pickup: "Early pickup",
+  late_stay: "Late stay",
+  alternate_guardian: "Alternate guardian",
+  bus_change: "Bus / transport change",
+  other: "Parent note",
+};
+
+function pickupChangeLabel(changeType: string): string {
+  return PICKUP_CHANGE_LABELS[changeType] ?? changeType.replace(/_/g, " ");
+}
+
+function pickupChangeSource(changeType: string): "parent_bus_change" | "parent_pickup_note" {
+  return changeType === "bus_change" ? "parent_bus_change" : "parent_pickup_note";
+}
+
+/** Pickup types that remove camper from today's bus route when staff-approved. */
+function pickupChangeAffectsRoutes(changeType: string): boolean {
+  return changeType === "bus_change" || changeType === "early_pickup" || changeType === "late_stay";
+}
+
+function pickupChangeAppliesTo(changeType: string): TransportRunPeriod | undefined {
+  if (changeType === "early_pickup" || changeType === "late_stay") return "pm";
+  return undefined;
+}
+
+function absenceAppliesTo(absenceType: string): TransportRunPeriod | undefined {
+  if (absenceType === "leaving_early") return "pm";
+  return undefined;
+}
+
+/** Absence types that remove camper from today's bus route when staff-approved. */
+function absenceAffectsRoutes(absenceType: string): boolean {
+  return absenceType === "absent" || absenceType === "leaving_early";
+}
 
 export type TransportRunPeriod = "am" | "pm";
 
@@ -162,11 +199,10 @@ export async function fetchTransportExceptions(
       .eq("status", "acknowledged"),
     supabase
       .from("pickup_changes")
-      .select("change_type, notes, children:camper_id(name)")
+      .select("change_type, notes, pickup_time, pickup_person_name, children:camper_id(name)")
       .eq("company_id", companyId)
       .eq("change_date", overrideDate)
-      .in("status", ["acknowledged", "completed"])
-      .eq("change_type", "bus_change"),
+      .in("status", ["acknowledged", "completed"]),
     supabase
       .from("office_transport_changes")
       .select("camper_name, note")
@@ -194,22 +230,31 @@ export async function fetchTransportExceptions(
     const name = (row as { children?: { name?: string } }).children?.name?.trim();
     if (!name) continue;
     const type = (row as { absence_type?: string }).absence_type ?? "absent";
+    if (!absenceAffectsRoutes(type)) continue;
     add({
       source: "parent_absence",
       camperName: name,
       label: "Parent absence (acknowledged)",
-      detail: type,
+      detail: (row as { reason?: string }).reason ?? type,
+      appliesTo: absenceAppliesTo(type),
     });
   }
 
   for (const row of pickups ?? []) {
     const name = (row as { children?: { name?: string } }).children?.name?.trim();
     if (!name) continue;
+    const changeType = (row as { change_type?: string }).change_type ?? "other";
+    if (!pickupChangeAffectsRoutes(changeType)) continue;
+    const notes = (row as { notes?: string }).notes;
+    const pickupTime = (row as { pickup_time?: string }).pickup_time;
+    const pickupPerson = (row as { pickup_person_name?: string }).pickup_person_name;
+    const detail = [pickupTime, pickupPerson, notes].filter(Boolean).join(" · ") || undefined;
     add({
-      source: "parent_bus_change",
+      source: pickupChangeSource(changeType),
       camperName: name,
-      label: "Parent bus change (acknowledged)",
-      detail: (row as { notes?: string }).notes ?? undefined,
+      label: `${pickupChangeLabel(changeType)} (acknowledged)`,
+      detail,
+      appliesTo: pickupChangeAppliesTo(changeType),
     });
   }
 
@@ -273,7 +318,7 @@ export async function fetchTransportExceptionsForReport(
   const seen = new Set<string>();
 
   const add = (item: TransportException) => {
-    const key = `${item.source}:${normName(item.camperName)}:${item.appliesTo ?? "both"}:${item.workflowStatus ?? ""}`;
+    const key = `${item.source}:${normName(item.camperName)}:${item.appliesTo ?? "both"}:${item.workflowStatus ?? ""}:${item.label ?? ""}`;
     if (!item.camperName.trim() || seen.has(key)) return;
     seen.add(key);
     out.push(item);
@@ -289,10 +334,9 @@ export async function fetchTransportExceptionsForReport(
         .neq("status", "cancelled"),
       supabase
         .from("pickup_changes")
-        .select("change_type, notes, status, children:camper_id(name)")
+        .select("change_type, notes, pickup_time, pickup_person_name, status, children:camper_id(name)")
         .eq("company_id", companyId)
         .eq("change_date", overrideDate)
-        .eq("change_type", "bus_change")
         .neq("status", "cancelled"),
       supabase
         .from("office_transport_changes")
@@ -326,24 +370,33 @@ export async function fetchTransportExceptionsForReport(
       source: "parent_absence",
       camperName: name,
       label: acknowledged ? "Parent absence (acknowledged)" : "Parent absence (submitted)",
-      detail: type,
+      detail: (row as { reason?: string }).reason ?? type,
       workflowStatus: status,
       appliedToRoutes: acknowledged,
+      appliesTo: absenceAppliesTo(type),
     });
   }
 
   for (const row of pickups ?? []) {
     const name = (row as { children?: { name?: string } }).children?.name?.trim();
     if (!name) continue;
+    const changeType = (row as { change_type?: string }).change_type ?? "other";
     const status = (row as { status?: string }).status ?? "submitted";
     const applied = status === "acknowledged" || status === "completed";
+    const notes = (row as { notes?: string }).notes;
+    const pickupTime = (row as { pickup_time?: string }).pickup_time;
+    const pickupPerson = (row as { pickup_person_name?: string }).pickup_person_name;
+    const detail = [pickupTime, pickupPerson, notes].filter(Boolean).join(" · ") || undefined;
     add({
-      source: "parent_bus_change",
+      source: pickupChangeSource(changeType),
       camperName: name,
-      label: applied ? "Parent bus change (acknowledged)" : "Parent bus change (submitted)",
-      detail: (row as { notes?: string }).notes ?? undefined,
+      label: applied
+        ? `${pickupChangeLabel(changeType)} (acknowledged)`
+        : `${pickupChangeLabel(changeType)} (submitted)`,
+      detail,
       workflowStatus: status,
       appliedToRoutes: applied,
+      appliesTo: pickupChangeAppliesTo(changeType),
     });
   }
 
@@ -467,6 +520,7 @@ export type TransportRouteMeta = {
 const EXCEPTION_SOURCE_LABELS: Record<TransportExceptionSource, string> = {
   parent_absence: "Parent absence",
   parent_bus_change: "Parent bus change",
+  parent_pickup_note: "Parent note",
   office_change: "Office change",
   nurse_sent_home: "Nurse — sent home",
   swim_lesson: "Swim lesson",

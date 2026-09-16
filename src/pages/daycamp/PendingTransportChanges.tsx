@@ -18,9 +18,17 @@ import { buildPendingChangeSheetRows, type TransportChangeSheetRow } from "@/lib
 import { normalizeTransportBoardForSeason, type TransportRouteMeta, type TransportRouteStop } from "@/lib/transportRoster";
 import { ROUTE_COLORS } from "@/lib/transportRunBoard";
 
+const PICKUP_LABELS: Record<string, string> = {
+  early_pickup: "Early pickup",
+  late_stay: "Late stay",
+  alternate_guardian: "Alternate guardian",
+  bus_change: "Bus / transport change",
+  other: "Parent note",
+};
+
 type PendingAction =
   | { kind: "absence"; id: string; camper: string }
-  | { kind: "pickup"; id: string; camper: string };
+  | { kind: "pickup"; id: string; camper: string; changeType: string };
 
 export default function PendingTransportChanges() {
   const { currentCompany } = useCompany();
@@ -76,10 +84,9 @@ export default function PendingTransportChanges() {
           .eq("status", "submitted"),
         supabase
           .from("pickup_changes")
-          .select("id, children:camper_id(name)")
+          .select("id, change_type, children:camper_id(name)")
           .eq("company_id", currentCompany.id)
           .eq("change_date", sheetDate)
-          .eq("change_type", "bus_change")
           .eq("status", "submitted"),
       ]);
 
@@ -90,7 +97,8 @@ export default function PendingTransportChanges() {
       }
       for (const row of pickupRes.data ?? []) {
         const name = (row as { children?: { name?: string } }).children?.name?.trim();
-        if (name) pendingActions.push({ kind: "pickup", id: row.id, camper: name });
+        const changeType = (row as { change_type?: string }).change_type ?? "other";
+        if (name) pendingActions.push({ kind: "pickup", id: row.id, camper: name, changeType });
       }
       setActions(pendingActions);
 
@@ -126,8 +134,13 @@ export default function PendingTransportChanges() {
     }
   };
 
-  const findAction = (camper: string) =>
-    actions.find((a) => a.camper.toLowerCase() === camper.toLowerCase());
+  const findAction = (row: TransportChangeSheetRow) =>
+    actions.find((a) => {
+      if (a.camper.toLowerCase() !== row.camper.toLowerCase()) return false;
+      if (a.kind === "absence") return row.source.toLowerCase().includes("absence");
+      const label = PICKUP_LABELS[a.changeType] ?? a.changeType.replace(/_/g, " ");
+      return row.description.toLowerCase().includes(label.toLowerCase());
+    });
 
   return (
     <div className="space-y-6">
@@ -180,7 +193,7 @@ export default function PendingTransportChanges() {
           ) : (
             <div className="space-y-3">
               {rows.map((row, i) => {
-                const action = findAction(row.camper);
+                const action = findAction(row);
                 return (
                   <div key={`${row.camper}-${i}`} className="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
                     <div className="flex items-center justify-between gap-2">
@@ -201,7 +214,7 @@ export default function PendingTransportChanges() {
                       <p className="mt-2 text-xs text-muted-foreground italic">
                         {row.source.includes("Swim")
                           ? "Waiting for parent swim lesson confirmation"
-                          : "Review in office or parent portal"}
+                          : "Approve in Portal Dashboard or Pending Changes"}
                       </p>
                     )}
                   </div>

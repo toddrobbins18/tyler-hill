@@ -308,7 +308,7 @@ export default function ParentPortalDashboard() {
         <div>
           <h1 className="text-2xl font-bold">Portal Dashboard</h1>
           <p className="text-sm text-muted-foreground">
-            Review and manage parent portal submissions for {currentCompany?.name}
+            Review and approve parent submissions before they update routes, change sheets, and daily paperwork for {currentCompany?.name}
           </p>
         </div>
       </div>
@@ -412,6 +412,7 @@ export default function ParentPortalDashboard() {
                       <TableHead>Type</TableHead>
                       <TableHead>Details</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead className="w-[120px]" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -435,6 +436,14 @@ export default function ParentPortalDashboard() {
                               ))}
                             </SelectContent>
                           </Select>
+                        </TableCell>
+                        <TableCell>
+                          {p.status === "submitted" ? (
+                            <Button size="sm" onClick={() => void updatePickupStatus(p.id, "acknowledged")}>
+                              <CheckCircle2 className="mr-1 h-4 w-4" />
+                              Approve
+                            </Button>
+                          ) : null}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -461,6 +470,7 @@ export default function ParentPortalDashboard() {
                       <TableHead>Type</TableHead>
                       <TableHead>Reason</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead className="w-[120px]" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -480,6 +490,14 @@ export default function ParentPortalDashboard() {
                               ))}
                             </SelectContent>
                           </Select>
+                        </TableCell>
+                        <TableCell>
+                          {a.status === "submitted" ? (
+                            <Button size="sm" onClick={() => void updateAbsenceStatus(a.id, "acknowledged")}>
+                              <CheckCircle2 className="mr-1 h-4 w-4" />
+                              Approve
+                            </Button>
+                          ) : null}
                         </TableCell>
                       </TableRow>
                     ))}
