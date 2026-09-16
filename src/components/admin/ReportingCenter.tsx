@@ -320,6 +320,7 @@ export default function ReportingCenter({
             Type: i.type,
             Severity: i.severity,
             Status: i.status,
+            Location: i.location || 'N/A',
             Description: i.description,
           }, [i.children?.division_id], [i.children?.divisions?.name])) || [];
           

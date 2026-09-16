@@ -79,8 +79,8 @@ const ALL_FORMATS: Record<string, FormatDef> = {
   },
   incident_reports: {
     title: "Incident Reports",
-    columns: "person_id, date, type, severity, description, reported_by, reporter_person_id, status",
-    example: "P12345, 2024-06-15, Minor Injury, Low, Scraped knee on playground, Jane Smith, S98765, resolved",
+    columns: "person_id, date, type, severity, description, location, reported_by, reporter_person_id, status",
+    example: "P12345, 2024-06-15, Minor Injury, Low, Scraped knee on playground, Main Playground, Jane Smith, S98765, resolved",
     notes: "All fields are optional. person_id, date, type, and description are recommended. For multiple children, use comma-separated person_ids."
   },
   bunk_staff: {

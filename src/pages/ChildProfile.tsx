@@ -130,6 +130,7 @@ export default function ChildProfile() {
             type,
             severity,
             description,
+            location,
             status,
             reported_by,
             tags,
@@ -942,6 +943,9 @@ export default function ChildProfile() {
                           </div>
                         </div>
                         <p className="text-sm mb-3">{report.description}</p>
+                        {report.location && (
+                          <p className="text-sm text-muted-foreground mb-2">Location: {report.location}</p>
+                        )}
                         {report.tags && report.tags.length > 0 && (
                           <div className="flex flex-wrap gap-2 mb-2">
                             {report.tags.map((tag: string, idx: number) => (

@@ -30,6 +30,7 @@ export default function EditIncidentDialog({ open, onOpenChange, incident, onSuc
     date: "",
     type: "",
     description: "",
+    location: "",
     severity: "medium",
     reported_by: "",
     status: "open",
@@ -48,6 +49,7 @@ export default function EditIncidentDialog({ open, onOpenChange, incident, onSuc
         date: incident.date,
         type: incident.type,
         description: incident.description,
+        location: incident.location || "",
         severity: incident.severity || "medium",
         reported_by: incident.reported_by || "",
         status: incident.status || "open",
@@ -253,6 +255,15 @@ export default function EditIncidentDialog({ open, onOpenChange, incident, onSuc
               placeholder="Describe the incident..."
               required
               rows={4}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Location</Label>
+            <Input
+              value={formData.location}
+              onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+              placeholder="Where did the incident occur?"
             />
           </div>
 

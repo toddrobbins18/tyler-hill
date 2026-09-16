@@ -1706,6 +1706,7 @@ export type Database = {
           date: string
           description: string
           id: string
+          location: string | null
           reported_by: string | null
           reporter_id: string | null
           season: string | null
@@ -1721,6 +1722,7 @@ export type Database = {
           date: string
           description: string
           id?: string
+          location?: string | null
           reported_by?: string | null
           reporter_id?: string | null
           season?: string | null
@@ -1736,6 +1738,7 @@ export type Database = {
           date?: string
           description?: string
           id?: string
+          location?: string | null
           reported_by?: string | null
           reporter_id?: string | null
           season?: string | null

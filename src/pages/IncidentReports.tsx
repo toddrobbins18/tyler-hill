@@ -178,6 +178,11 @@ export default function IncidentReports() {
                 <p className="text-sm text-muted-foreground line-clamp-3">
                   {incident.description}
                 </p>
+                {incident.location && (
+                  <p className="text-xs text-muted-foreground">
+                    Location: {incident.location}
+                  </p>
+                )}
                 {(incident.staff?.name || incident.reported_by) && (
                   <p className="text-xs text-muted-foreground">
                     Reported by: {incident.staff?.name || incident.reported_by}

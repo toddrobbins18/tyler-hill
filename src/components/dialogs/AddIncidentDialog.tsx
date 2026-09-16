@@ -29,6 +29,7 @@ export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: Add
     date: new Date().toISOString().split('T')[0],
     type: "",
     description: "",
+    location: "",
     severity: "medium",
     reported_by: "",
     status: "open",
@@ -127,6 +128,7 @@ export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: Add
       date: new Date().toISOString().split('T')[0],
       type: "",
       description: "",
+      location: "",
       severity: "medium",
       reported_by: "",
       status: "open",
@@ -254,6 +256,15 @@ export default function AddIncidentDialog({ open, onOpenChange, onSuccess }: Add
               placeholder="Describe the incident..."
               required
               rows={4}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Location</Label>
+            <Input
+              value={formData.location}
+              onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+              placeholder="Where did the incident occur?"
             />
           </div>
 
