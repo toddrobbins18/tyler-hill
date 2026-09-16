@@ -8,7 +8,7 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
 import { bunkStaffSchema, parseBunkStaffRow } from "@/lib/validationSchemas";
 import { z } from "zod";
-import { parseSpreadsheetFile } from "@/lib/spreadsheetImport";
+import { isSpreadsheetFileName, parseSpreadsheetFile } from "@/lib/spreadsheetImport";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface BunkStaffCSVUploaderProps {
@@ -32,8 +32,8 @@ export default function BunkStaffCSVUploader({ onUploadComplete }: BunkStaffCSVU
     const file = event.target.files?.[0];
     if (!file || !currentCompany?.id) return;
 
-    if (!file.name.endsWith('.csv')) {
-      toast.error("Please upload a CSV file");
+    if (!isSpreadsheetFileName(file.name)) {
+      toast.error("Please upload a CSV or Excel file (.csv, .xlsx, .xls)");
       return;
     }
 
@@ -222,7 +222,7 @@ export default function BunkStaffCSVUploader({ onUploadComplete }: BunkStaffCSVU
           <div>
             <h4 className="font-medium">Upload Bunk Assignments</h4>
             <p className="text-sm text-muted-foreground">
-              Upload a CSV file to assign staff to bunks in bulk
+              Upload a CSV or Excel file to assign staff to bunks in bulk
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -236,7 +236,7 @@ export default function BunkStaffCSVUploader({ onUploadComplete }: BunkStaffCSVU
             </Button>
             <Input
               type="file"
-              accept=".csv"
+              accept=".csv,.xlsx,.xls,text/csv"
               onChange={handleFileUpload}
               disabled={uploading}
               className="hidden"

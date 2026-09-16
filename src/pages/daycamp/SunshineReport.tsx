@@ -31,7 +31,8 @@ import {
 import { Plus, Check, Mail, Trash2, Upload, Download, UserPlus, FolderPlus, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { parseCSV, pickFirst, readFileAsText } from "@/lib/csv";
+import { pickFirst } from "@/lib/csv";
+import { isSpreadsheetFileName, loadSpreadsheetRowsFromFile } from "@/lib/spreadsheetImport";
 import { syncSunshineFromRoster } from "@/lib/sunshineRoster";
 import { isNorthShoreDayCamp } from "@/lib/camps";
 import {
@@ -416,8 +417,11 @@ export default function SunshineReport() {
   async function handleCSVImport(file: File) {
     if (!currentCompany) return;
     try {
-      const text = await readFileAsText(file);
-      const rows = parseCSV(text);
+      if (!isSpreadsheetFileName(file.name)) {
+        toast.error("Please upload a CSV or Excel file (.csv, .xlsx, .xls)");
+        return;
+      }
+      const rows = await loadSpreadsheetRowsFromFile(file);
       if (!rows.length) {
         toast.error("CSV appears empty.");
         return;
@@ -542,7 +546,7 @@ export default function SunshineReport() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.xlsx,.xls,text/csv"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
@@ -564,7 +568,7 @@ export default function SunshineReport() {
             <Download className="h-3.5 w-3.5" /> Template
           </Button>
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5">
-            <Upload className="h-3.5 w-3.5" /> Import CSV
+            <Upload className="h-3.5 w-3.5" /> Import File
           </Button>
           <Button variant="outline" size="sm" onClick={() => setAddGroupOpen(true)} className="gap-1.5">
             <FolderPlus className="h-3.5 w-3.5" /> Group

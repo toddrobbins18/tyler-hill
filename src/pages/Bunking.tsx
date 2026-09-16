@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Lock, Unlock, BarChart3, Users, GripVertical, X, Upload, Download, UserPlus, Home, Trash2, Pencil, Sparkles, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { parseCSV, pickFirst, readFileAsText } from "@/lib/csv";
+import { pickFirst } from "@/lib/csv";
+import { isSpreadsheetFileName, loadSpreadsheetRowsFromFile } from "@/lib/spreadsheetImport";
 import { optimizeCabins, type OptCamper } from "@/lib/bunking-optimizer";
 import { fetchBunkingCampersFromRoster } from "@/lib/bunkingRoster";
 import { supabase } from "@/integrations/supabase/client";
@@ -244,8 +245,11 @@ export default function Bunking() {
 
   const handleCSVImport = async (file: File) => {
     try {
-      const text = await readFileAsText(file);
-      const rows = parseCSV(text);
+      if (!isSpreadsheetFileName(file.name)) {
+        toast.error("Please upload a CSV or Excel file (.csv, .xlsx, .xls)");
+        return;
+      }
+      const rows = await loadSpreadsheetRowsFromFile(file);
       if (!rows.length) { toast.error("CSV is empty."); return; }
       const parsed: OptCamper[] = [];
       let skipped = 0;
@@ -451,7 +455,7 @@ export default function Bunking() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.xlsx,.xls,text/csv"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
@@ -463,7 +467,7 @@ export default function Bunking() {
             <Download className="h-3.5 w-3.5" /> Template
           </Button>
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5 text-xs">
-            <Upload className="h-3.5 w-3.5" /> Import CSV
+            <Upload className="h-3.5 w-3.5" /> Import File
           </Button>
           <Button variant="outline" size="sm" onClick={() => { setEditCabinId(null); setNewCabin({ name: "", capacity: 8, gender: "", ageGroup: "" }); setAddCabinOpen(true); }} className="gap-1.5 text-xs">
             <Home className="h-3.5 w-3.5" /> Add Cabin

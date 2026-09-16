@@ -13,7 +13,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { TransportRouteMap } from "@/components/TransportRouteMap";
 import { Bus, MapPin, Users, Plus, FileText, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Eye, EyeOff } from "lucide-react";
-import { parseCSV, pickFirst, readFileAsText } from "@/lib/csv";
+import { pickFirst } from "@/lib/csv";
+import { isSpreadsheetFileName, loadSpreadsheetRowsFromFile } from "@/lib/spreadsheetImport";
 import {
   getBundledMappointRoutesCsv2026,
   mappointRoutesSummary,
@@ -1000,9 +1001,12 @@ export default function Transport() {
   const handleBulkImportFile = async (file: File) => {
     const { target, routeId, mode } = bulkImport;
     try {
-      const text = await readFileAsText(file);
-      const rows = parseCSV(text);
-      if (!rows.length) { toast({ title: "Empty CSV", variant: "destructive" }); return; }
+      if (!isSpreadsheetFileName(file.name)) {
+        toast({ title: "Unsupported file", description: "Please upload a CSV or Excel file (.csv, .xlsx, .xls).", variant: "destructive" });
+        return;
+      }
+      const rows = await loadSpreadsheetRowsFromFile(file);
+      if (!rows.length) { toast({ title: "Empty file", variant: "destructive" }); return; }
 
       setBulkImport(prev => ({ ...prev, running: true, progress: { done: 0, total: rows.length }, log: { ok: 0, skipped: 0, failed: 0, messages: [] }, failedRows: [] }));
 
@@ -1408,9 +1412,12 @@ export default function Transport() {
 
   const handleCSVImport = async (file: File) => {
     try {
-      const text = await readFileAsText(file);
-      const rows = parseCSV(text);
-      if (!rows.length) { toast({ title: "Empty CSV", variant: "destructive" }); return; }
+      if (!isSpreadsheetFileName(file.name)) {
+        toast({ title: "Unsupported file", description: "Please upload a CSV or Excel file (.csv, .xlsx, .xls).", variant: "destructive" });
+        return;
+      }
+      const rows = await loadSpreadsheetRowsFromFile(file);
+      if (!rows.length) { toast({ title: "Empty file", variant: "destructive" }); return; }
       let skipped = 0;
       const newOnes: UnplottedCamper[] = [];
       let nextId = Math.max(300, ...unplottedCampers.map(c => c.id));
@@ -2608,7 +2615,7 @@ export default function Transport() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,.xlsx,.xls,text/csv"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -2620,7 +2627,7 @@ export default function Transport() {
               <Download className="h-3.5 w-3.5" /> Template
             </Button>
             <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5 text-xs">
-              <Upload className="h-3.5 w-3.5" /> Import CSV
+              <Upload className="h-3.5 w-3.5" /> Import File
             </Button>
             <Button size="sm" onClick={() => setAddCamperOpen(true)} className="gap-1.5 text-xs">
               <UserPlus className="h-3.5 w-3.5" /> Add Camper
@@ -3370,7 +3377,7 @@ ${sections.join("\n")}
             <input
               ref={bulkFileRef}
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,.xlsx,.xls,text/csv"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
