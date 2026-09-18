@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Search, Filter, Pencil, Trash2, ArrowUpDown, Radio } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,9 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import {
   camperMatchesDivisionFilter,
+  dedupeDivisionsForDropdown,
+  getCamperEffectiveDivision,
+  getCamperGradeDisplay,
   getDivisionDropdownLabel,
   normalizeDivisionNameForFilter,
 } from "@/lib/divisionFilterUtils";
@@ -157,18 +160,25 @@ export default function Roster() {
     setCurrentPage(1);
   }, [searchTerm, selectedDivision, selectedSession, currentSeason, sortBy]);
 
-  const selectedDivisionRecord = divisions.find((div) => div.id === selectedDivision);
+  const dropdownDivisions = useMemo(
+    () => dedupeDivisionsForDropdown(divisions),
+    [divisions],
+  );
+
+  const selectedDivisionRecord = dropdownDivisions.find((div) => div.id === selectedDivision);
 
   const filteredChildren = children
     .filter((child) => {
+      const effectiveDivision = getCamperEffectiveDivision(child);
+      const gradeDisplay = getCamperGradeDisplay(child.grade, effectiveDivision.name);
       const matchesSearch = 
         child.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (child.grade?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
-        (child.division?.name?.toLowerCase() || "").includes(searchTerm.toLowerCase());
+        (gradeDisplay !== "N/A" && gradeDisplay.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (effectiveDivision.name?.toLowerCase() || "").includes(searchTerm.toLowerCase());
       
       const matchesDivision = camperMatchesDivisionFilter(
-        child.division_id,
-        child.division?.name,
+        effectiveDivision.id,
+        effectiveDivision.name,
         selectedDivision,
         selectedDivisionRecord?.name,
       );
@@ -197,11 +207,13 @@ export default function Roster() {
         return compareByLastName(a, b);
       }
       if (sortBy === "division") {
-        const divA = a.division?.sort_order || 999;
-        const divB = b.division?.sort_order || 999;
-        if (divA !== divB) return divA - divB;
-        const nameA = normalizeDivisionNameForFilter(a.division?.name);
-        const nameB = normalizeDivisionNameForFilter(b.division?.name);
+        const divA = getCamperEffectiveDivision(a);
+        const divB = getCamperEffectiveDivision(b);
+        const orderA = divA.sort_order ?? 999;
+        const orderB = divB.sort_order ?? 999;
+        if (orderA !== orderB) return orderA - orderB;
+        const nameA = normalizeDivisionNameForFilter(divA.name);
+        const nameB = normalizeDivisionNameForFilter(divB.name);
         if (nameA !== nameB) return nameA.localeCompare(nameB);
         return compareByLastName(a, b);
       }
@@ -423,7 +435,7 @@ export default function Roster() {
           className="px-4 py-2 border rounded-md bg-background"
         >
           <option value="all">All Divisions</option>
-          {divisions.map((div) => (
+          {dropdownDivisions.map((div) => (
             <option key={div.id} value={div.id}>
               {getDivisionDropdownLabel(div.name)}
             </option>
@@ -461,7 +473,11 @@ export default function Roster() {
             </span>
           </div>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {paginatedChildren.map((child) => (
+            {paginatedChildren.map((child) => {
+            const effectiveDivision = getCamperEffectiveDivision(child);
+            const gradeDisplay = getCamperGradeDisplay(child.grade, effectiveDivision.name);
+            const divisionDisplay = getDivisionDropdownLabel(effectiveDivision.name) || "N/A";
+            return (
             <Card 
               key={child.id} 
               className="shadow-card hover:shadow-md transition-all group"
@@ -474,7 +490,7 @@ export default function Roster() {
                   >
                     <h3 className="font-semibold text-lg">{child.name}</h3>
                     <p className="text-sm text-muted-foreground">
-                      {child.grade || "N/A"}
+                      Grade: {gradeDisplay}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -507,7 +523,9 @@ export default function Roster() {
                   onClick={() => navigate(`/child/${child.id}`)}
                 >
                   <div className="space-y-1 min-w-0">
-                    <p className="text-muted-foreground">Division: {getDivisionDropdownLabel(child.division?.name) || "N/A"}</p>
+                    {divisionDisplay !== "N/A" && (
+                      <p className="text-muted-foreground">Division: {divisionDisplay}</p>
+                    )}
                     {child.bunk && (
                       <p className="text-muted-foreground">Bunk: {child.bunk.bunk_name || `Bunk ${child.bunk.bunk_number}`}</p>
                     )}
@@ -531,7 +549,8 @@ export default function Roster() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
 
         {totalPages > 1 && (

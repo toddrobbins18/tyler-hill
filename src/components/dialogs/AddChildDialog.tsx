@@ -16,6 +16,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
+import { dedupeDivisionsForDropdown, getDivisionDropdownLabel } from "@/lib/divisionFilterUtils";
 
 const TSHIRT_SIZES = [
   "Youth S", "Youth M", "Youth L", "Youth XL",
@@ -77,7 +78,7 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
       .select("*")
       .eq("company_id", currentCompany.id)
       .eq("is_active", true);
-    setDivisions(sortDivisionsAlternatingGender(data || []));
+    setDivisions(dedupeDivisionsForDropdown(sortDivisionsAlternatingGender(data || [])));
   };
 
   const onSubmit = async (values: z.infer<typeof childSchema>) => {
@@ -220,7 +221,7 @@ export default function AddChildDialog({ onSuccess }: { onSuccess?: () => void }
                       <SelectContent>
                         {divisions.map((division) => (
                           <SelectItem key={division.id} value={division.id}>
-                            {division.name}
+                            {getDivisionDropdownLabel(division.name)}
                           </SelectItem>
                         ))}
                       </SelectContent>

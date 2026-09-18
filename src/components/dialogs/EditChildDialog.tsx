@@ -14,6 +14,7 @@ import { z } from "zod";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
+import { dedupeDivisionsForDropdown, getDivisionDropdownLabel } from "@/lib/divisionFilterUtils";
 import { normalizeRfidInput } from "@/lib/rfidUtils";
 import { Radio, CheckCircle2 } from "lucide-react";
 
@@ -101,7 +102,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
       .select("*")
       .eq("company_id", currentCompany.id)
       .eq("is_active", true);
-    setDivisions(sortDivisionsAlternatingGender(data || []));
+    setDivisions(dedupeDivisionsForDropdown(sortDivisionsAlternatingGender(data || [])));
   };
 
   const fetchBunks = async () => {
@@ -226,7 +227,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
                 <SelectContent>
                   {divisions.map((division) => (
                     <SelectItem key={division.id} value={division.id}>
-                      {division.name}
+                      {getDivisionDropdownLabel(division.name)}
                     </SelectItem>
                   ))}
                 </SelectContent>

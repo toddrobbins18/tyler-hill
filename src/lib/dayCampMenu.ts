@@ -17,7 +17,7 @@ import {
   Utensils,
   Palmtree,
   CloudRain,
-  Stethoscope,
+  BookOpen,
   AlertTriangle,
   Briefcase,
   BedDouble,
@@ -37,7 +37,7 @@ export type DayCampMenuItem = {
 export function getDayCampNestCarryoverItems(): DayCampMenuItem[] {
   return [
     { title: "Activities & Field Trips", url: "/activities", icon: Palmtree, menuId: "activities" },
-    { title: "Appointments", url: "/appointments", icon: Stethoscope, menuId: "appointments" },
+    { title: "Tutoring & Therapy", url: "/tutoring-therapy", icon: BookOpen, menuId: "tutoring-therapy" },
     { title: "Camper", url: "/roster", icon: Users, menuId: "roster" },
     { title: "Daily news", url: "/notes", icon: FileText, menuId: "notes" },
     { title: "Dashboard", url: "/", icon: Home, menuId: "dashboard" },

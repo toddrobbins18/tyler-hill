@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,11 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { Users, Plus, Trash2, Search, Edit, Copy } from "lucide-react";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { compareByLastName } from "@/lib/nameSortUtils";
+import {
+  camperMatchesDivisionFilter,
+  dedupeDivisionsForDropdown,
+  getDivisionDropdownLabel,
+} from "@/lib/divisionFilterUtils";
 
 interface RosterTemplate {
   id: string;
@@ -33,15 +38,6 @@ interface Child {
 }
 
 const CAMPERS_PAGE_SIZE = 1000;
-
-function normalizeDivisionNameForFilter(name: string | null | undefined): string {
-  return String(name || "")
-    .replace(/\bSuper\s+Senior\b/gi, "Super")
-    .replace(/\bTN\d+\b/gi, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-}
 
 export default function RosterTemplates() {
   const { currentSeason } = useSeasonContext();
@@ -128,17 +124,24 @@ export default function RosterTemplates() {
     }
   };
 
-  const selectedDivision = divisions.find((division) => division.id === filterDivision);
-  const selectedDivisionKey = normalizeDivisionNameForFilter(selectedDivision?.name);
+  const dropdownDivisions = useMemo(
+    () => dedupeDivisionsForDropdown(divisions),
+    [divisions],
+  );
+
+  const selectedDivision = dropdownDivisions.find((division) => division.id === filterDivision);
 
   const filteredChildren = children.filter(child => {
     if (searchTerm && !child.name.toLowerCase().includes(searchTerm.toLowerCase())) {
       return false;
     }
     if (
-      filterDivision !== "all" &&
-      child.division_id !== filterDivision &&
-      normalizeDivisionNameForFilter(child.division?.name) !== selectedDivisionKey
+      !camperMatchesDivisionFilter(
+        child.division_id,
+        child.division?.name,
+        filterDivision,
+        selectedDivision?.name,
+      )
     ) {
       return false;
     }
@@ -499,8 +502,10 @@ export default function RosterTemplates() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Divisions</SelectItem>
-                    {divisions.map((div) => (
-                      <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
+                    {dropdownDivisions.map((div) => (
+                      <SelectItem key={div.id} value={div.id}>
+                        {getDivisionDropdownLabel(div.name)}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -612,8 +617,10 @@ export default function RosterTemplates() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Divisions</SelectItem>
-                    {divisions.map((div) => (
-                      <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
+                    {dropdownDivisions.map((div) => (
+                      <SelectItem key={div.id} value={div.id}>
+                        {getDivisionDropdownLabel(div.name)}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

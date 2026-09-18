@@ -14,6 +14,7 @@ import {
   fetchCampminderBunks,
   loadDayCampGroupsFromBunksApi,
 } from '../_shared/campminderBunks.ts';
+import { parseEnrolledWeeksFromSession } from '../_shared/enrolledWeeks.ts';
 
 // @ts-ignore
 declare const Deno: any;
@@ -2947,6 +2948,7 @@ async function performFullSync(
           sessionUpdates.push({
             person_id: String(attendee.PersonID),
             session: enrolledSessions,
+            enrolled_weeks: parseEnrolledWeeksFromSession(enrolledSessions),
           });
         }
       }
@@ -2961,7 +2963,10 @@ async function performFullSync(
           batch.map(update => 
             supabase
               .from('children')
-              .update({ session: update.session })
+              .update({
+                session: update.session,
+                enrolled_weeks: update.enrolled_weeks?.length ? update.enrolled_weeks : null,
+              })
               .eq('company_id', companyId)
               .eq('person_id', update.person_id)
               .eq('season', season)

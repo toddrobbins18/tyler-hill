@@ -23,6 +23,10 @@ import ProfileQuickSearch from "@/components/ProfileQuickSearch";
 import { formatSportsAcademySessionDate } from "@/lib/sportsAcademyUtils";
 import PersonThreeDayOutlook from "@/components/PersonThreeDayOutlook";
 import { useSeasonContext } from "@/contexts/SeasonContext";
+import { isDayCampCompany } from "@/lib/camps";
+import { resolveEnrolledWeeks } from "@/lib/enrolledWeeks";
+import { getCamperGradeDisplay, getDivisionDropdownLabel } from "@/lib/divisionFilterUtils";
+import EnrolledWeeksDisplay from "@/components/EnrolledWeeksDisplay";
 
 export default function ChildProfile() {
   const { id } = useParams();
@@ -372,12 +376,19 @@ export default function ChildProfile() {
                       <p className="font-medium">{child.age} years old</p>
                     </div>
                   )}
-                  {child.grade && (
-                    <div>
-                      <p className="text-sm text-muted-foreground">Grade</p>
-                      <p className="font-medium">{child.grade}</p>
-                    </div>
-                  )}
+                  {(() => {
+                    const gradeDisplay = getCamperGradeDisplay(
+                      child.grade,
+                      child.division?.name ?? child.category,
+                    );
+                    if (gradeDisplay === "N/A") return null;
+                    return (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Grade</p>
+                        <p className="font-medium">{gradeDisplay}</p>
+                      </div>
+                    );
+                  })()}
                   {child.gender && (
                     <div>
                       <p className="text-sm text-muted-foreground">Gender</p>
@@ -387,7 +398,9 @@ export default function ChildProfile() {
                   {(child.division?.name || child.category) && (
                     <div>
                       <p className="text-sm text-muted-foreground">Division</p>
-                      <p className="font-medium">{child.division?.name || child.category}</p>
+                      <p className="font-medium">
+                        {getDivisionDropdownLabel(child.division?.name || child.category) || child.category}
+                      </p>
                     </div>
                   )}
                   {child.group_name && (
@@ -396,6 +409,17 @@ export default function ChildProfile() {
                       <p className="font-medium">{child.group_name}</p>
                     </div>
                   )}
+                  {isDayCampCompany(currentCompany) &&
+                  (resolveEnrolledWeeks(child.enrolled_weeks, child.session).length > 0 ||
+                    child.session) ? (
+                    <div className="col-span-2">
+                      <p className="text-sm text-muted-foreground mb-1">Enrolled Weeks</p>
+                      <EnrolledWeeksDisplay
+                        weeks={resolveEnrolledWeeks(child.enrolled_weeks, child.session)}
+                        sessionLabel={child.session}
+                      />
+                    </div>
+                  ) : null}
                   {child.leader && (
                     <div>
                       <p className="text-sm text-muted-foreground">Assigned Leader</p>
