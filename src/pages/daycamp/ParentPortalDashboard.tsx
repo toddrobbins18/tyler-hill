@@ -20,6 +20,7 @@ import { Users, Calendar, Clock, UserCheck, Waves, Link2, Trash2, CheckCircle2 }
 import { toast } from "sonner";
 import { formatCampDateTime } from "@/lib/campTime";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
+import { DISMISSAL_REALTIME_TABLES } from "@/lib/dismissalDashboard";
 
 const CHANGE_TYPES: Record<string, string> = {
   early_pickup: "Early Pickup",
@@ -265,6 +266,24 @@ export default function ParentPortalDashboard() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!currentCompany?.id) return;
+    const channel = supabase.channel(`portal-dashboard-${currentCompany.id}`);
+    for (const table of DISMISSAL_REALTIME_TABLES) {
+      channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table, filter: `company_id=eq.${currentCompany.id}` },
+        () => {
+          void load();
+        },
+      );
+    }
+    channel.subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [currentCompany?.id, load]);
 
   const pendingPickups = useMemo(() => pickups.filter((p) => p.status === "submitted").length, [pickups]);
   const pendingAbsences = useMemo(() => absences.filter((a) => a.status === "submitted").length, [absences]);

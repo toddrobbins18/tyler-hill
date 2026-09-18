@@ -17,6 +17,7 @@ import {
 import { buildPendingChangeSheetRows, type TransportChangeSheetRow } from "@/lib/transportChangeSheets";
 import { normalizeTransportBoardForSeason, type TransportRouteMeta, type TransportRouteStop } from "@/lib/transportRoster";
 import { ROUTE_COLORS } from "@/lib/transportRunBoard";
+import { DISMISSAL_REALTIME_TABLES } from "@/lib/dismissalDashboard";
 
 const PICKUP_LABELS: Record<string, string> = {
   early_pickup: "Early pickup",
@@ -123,6 +124,24 @@ export default function PendingTransportChanges() {
   useEffect(() => {
     void loadPending();
   }, [loadPending]);
+
+  useEffect(() => {
+    if (!currentCompany?.id) return;
+    const channel = supabase.channel(`pending-changes-${currentCompany.id}`);
+    for (const table of DISMISSAL_REALTIME_TABLES) {
+      channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table, filter: `company_id=eq.${currentCompany.id}` },
+        () => {
+          void loadPending();
+        },
+      );
+    }
+    channel.subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [currentCompany?.id, loadPending]);
 
   const approve = async (action: PendingAction) => {
     const table = action.kind === "absence" ? "absences" : "pickup_changes";
