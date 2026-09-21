@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { campTodayDateString } from "@/lib/parentPortalCutoff";
+import { campYmdToUtcEndIso, campYmdToUtcStartIso } from "@/lib/campTime";
 import { allRoutesBusSubmitted, loadBusAttendance } from "@/lib/transportBusAttendance";
 import { loadTransportRunBoard } from "@/lib/transportRunBoard";
 
@@ -50,12 +51,32 @@ export type DismissalOfficeRow = {
   created_at: string;
 };
 
+export type DismissalNurseRow = {
+  id: string;
+  date: string;
+  camper_name: string;
+  reason: string | null;
+  transport_status: string;
+};
+
+export type DismissalSwimRow = {
+  id: string;
+  scheduled_at: string;
+  camperName: string;
+  instructor: string | null;
+  transport_status: string;
+};
+
 export type DismissalDashboardData = {
   selectedDate: string;
   pendingPickups: DismissalPickupRow[];
   pendingAbsences: DismissalAbsenceRow[];
+  pendingNurse: DismissalNurseRow[];
+  pendingSwim: DismissalSwimRow[];
   approvedPickups: DismissalPickupRow[];
   approvedAbsences: DismissalAbsenceRow[];
+  approvedNurse: DismissalNurseRow[];
+  approvedSwim: DismissalSwimRow[];
   officeChanges: DismissalOfficeRow[];
   allPendingCount: number;
   routeCount: number;
@@ -103,9 +124,13 @@ export async function fetchDismissalDashboard(
   const [
     pickupRes,
     absenceRes,
+    nurseRes,
+    swimRes,
     officeRes,
     allPendingPickupRes,
     allPendingAbsenceRes,
+    allPendingNurseRes,
+    allPendingSwimRes,
     board,
     busAm,
     busPm,
@@ -131,6 +156,22 @@ export async function fetchDismissalDashboard(
       .eq("absence_date", selectedDate)
       .order("created_at", { ascending: false }),
     supabase
+      .from("nurse_records")
+      .select("id, date, camper_name, reason, transport_status")
+      .eq("company_id", companyId)
+      .eq("date", selectedDate)
+      .eq("sent_home", true)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("swim_lessons")
+      .select("id, scheduled_at, instructor, transport_status, children:camper_id(name)")
+      .eq("company_id", companyId)
+      .eq("parent_confirmed", true)
+      .neq("status", "cancelled")
+      .gte("scheduled_at", campYmdToUtcStartIso(selectedDate))
+      .lt("scheduled_at", campYmdToUtcEndIso(selectedDate))
+      .order("scheduled_at", { ascending: true }),
+    supabase
       .from("office_transport_changes")
       .select("id, change_date, camper_name, group_division, note, done, created_at")
       .eq("company_id", companyId)
@@ -146,6 +187,19 @@ export async function fetchDismissalDashboard(
       .select("id", { count: "exact", head: true })
       .eq("company_id", companyId)
       .eq("status", "submitted"),
+    supabase
+      .from("nurse_records")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", companyId)
+      .eq("sent_home", true)
+      .eq("transport_status", "submitted"),
+    supabase
+      .from("swim_lessons")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", companyId)
+      .eq("parent_confirmed", true)
+      .eq("transport_status", "submitted")
+      .neq("status", "cancelled"),
     loadTransportRunBoard(supabase, companyId, season, selectedDate),
     loadBusAttendance(supabase, companyId, season, selectedDate, "am"),
     loadBusAttendance(supabase, companyId, season, selectedDate, "pm"),
@@ -153,6 +207,20 @@ export async function fetchDismissalDashboard(
 
   const pickups = (pickupRes.data ?? []).map((r) => mapPickup(r as Record<string, unknown>));
   const absences = (absenceRes.data ?? []).map((r) => mapAbsence(r as Record<string, unknown>));
+  const nurseRows: DismissalNurseRow[] = (nurseRes.data ?? []).map((r) => ({
+    id: String(r.id),
+    date: String(r.date ?? ""),
+    camper_name: String(r.camper_name ?? "—"),
+    reason: (r.reason as string | null) ?? null,
+    transport_status: String(r.transport_status ?? "submitted"),
+  }));
+  const swimRows: DismissalSwimRow[] = (swimRes.data ?? []).map((r) => ({
+    id: String(r.id),
+    scheduled_at: String(r.scheduled_at ?? ""),
+    camperName: (r.children as { name?: string } | null)?.name ?? "—",
+    instructor: (r.instructor as string | null) ?? null,
+    transport_status: String(r.transport_status ?? "submitted"),
+  }));
 
   const routeIds = board.routeMeta.map((r) => r.id);
 
@@ -160,10 +228,18 @@ export async function fetchDismissalDashboard(
     selectedDate,
     pendingPickups: pickups.filter((p) => p.status === "submitted"),
     pendingAbsences: absences.filter((a) => a.status === "submitted"),
+    pendingNurse: nurseRows.filter((n) => n.transport_status === "submitted"),
+    pendingSwim: swimRows.filter((s) => s.transport_status === "submitted"),
     approvedPickups: pickups.filter((p) => p.status === "acknowledged" || p.status === "completed"),
     approvedAbsences: absences.filter((a) => a.status === "acknowledged"),
+    approvedNurse: nurseRows.filter((n) => n.transport_status === "acknowledged"),
+    approvedSwim: swimRows.filter((s) => s.transport_status === "acknowledged"),
     officeChanges: (officeRes.data ?? []) as DismissalOfficeRow[],
-    allPendingCount: (allPendingPickupRes.count ?? 0) + (allPendingAbsenceRes.count ?? 0),
+    allPendingCount:
+      (allPendingPickupRes.count ?? 0) +
+      (allPendingAbsenceRes.count ?? 0) +
+      (allPendingNurseRes.count ?? 0) +
+      (allPendingSwimRes.count ?? 0),
     routeCount: board.routeMeta.length,
     busAmSubmitted: routeIds.length > 0
       ? allRoutesBusSubmitted(routeIds, busAm.busSubmissions)
@@ -182,6 +258,14 @@ export async function approveDismissalAbsence(supabase: SupabaseClient, id: stri
   return supabase.from("absences").update({ status: "acknowledged" }).eq("id", id);
 }
 
+export async function approveDismissalNurse(supabase: SupabaseClient, id: string) {
+  return supabase.from("nurse_records").update({ transport_status: "acknowledged" }).eq("id", id);
+}
+
+export async function approveDismissalSwim(supabase: SupabaseClient, id: string) {
+  return supabase.from("swim_lessons").update({ transport_status: "acknowledged" }).eq("id", id);
+}
+
 export async function toggleOfficeChangeDone(supabase: SupabaseClient, id: string, done: boolean) {
   return supabase.from("office_transport_changes").update({ done }).eq("id", id);
 }
@@ -190,6 +274,8 @@ export async function toggleOfficeChangeDone(supabase: SupabaseClient, id: strin
 export const DISMISSAL_REALTIME_TABLES = [
   "pickup_changes",
   "absences",
+  "nurse_records",
+  "swim_lessons",
   "office_transport_changes",
   "transport_bus_attendance",
 ] as const;

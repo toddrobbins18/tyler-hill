@@ -20,7 +20,7 @@ import { Users, Calendar, Clock, UserCheck, Waves, Link2, Trash2, CheckCircle2 }
 import { toast } from "sonner";
 import { formatCampDateTime } from "@/lib/campTime";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
-import { DISMISSAL_REALTIME_TABLES } from "@/lib/dismissalDashboard";
+import { approveDismissalSwim, DISMISSAL_REALTIME_TABLES } from "@/lib/dismissalDashboard";
 
 const CHANGE_TYPES: Record<string, string> = {
   early_pickup: "Early Pickup",
@@ -97,6 +97,7 @@ type SwimRow = {
   duration_minutes: number;
   instructor: string | null;
   parent_confirmed: boolean;
+  transport_status: string | null;
   camperName: string;
 };
 
@@ -163,7 +164,7 @@ export default function ParentPortalDashboard() {
       supabase
         .from("swim_lessons")
         .select(`
-          id, camper_id, scheduled_at, duration_minutes, instructor, parent_confirmed,
+          id, camper_id, scheduled_at, duration_minutes, instructor, parent_confirmed, transport_status,
           children:camper_id(name, guardian_email)
         `)
         .eq("company_id", companyId)
@@ -255,6 +256,7 @@ export default function ParentPortalDashboard() {
         duration_minutes: l.duration_minutes,
         instructor: l.instructor,
         parent_confirmed: l.parent_confirmed,
+        transport_status: l.transport_status ?? null,
         camperName: l.children?.name ?? childNameById.get(l.camper_id) ?? "—",
       })),
     );
@@ -287,6 +289,13 @@ export default function ParentPortalDashboard() {
 
   const pendingPickups = useMemo(() => pickups.filter((p) => p.status === "submitted").length, [pickups]);
   const pendingAbsences = useMemo(() => absences.filter((a) => a.status === "submitted").length, [absences]);
+  const pendingSwim = useMemo(
+    () =>
+      swimLessons.filter(
+        (l) => l.parent_confirmed && (l.transport_status ?? "submitted") === "submitted",
+      ).length,
+    [swimLessons],
+  );
 
   const updatePickupStatus = async (id: string, status: string) => {
     const { error } = await supabase.from("pickup_changes").update({ status }).eq("id", id);
@@ -298,6 +307,15 @@ export default function ParentPortalDashboard() {
     const { error } = await supabase.from("absences").update({ status }).eq("id", id);
     if (error) toast.error(error.message);
     else { toast.success("Absence updated"); void load(); }
+  };
+
+  const approveSwimTransport = async (id: string) => {
+    const { error } = await approveDismissalSwim(supabase, id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Swim lesson approved — will appear on change sheets");
+      void load();
+    }
   };
 
   const unlinkChild = async (familyId: string, childId: string) => {
@@ -332,10 +350,11 @@ export default function ParentPortalDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{families.length}</div><p className="text-xs text-muted-foreground">Families</p></CardContent></Card>
         <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{pendingPickups}</div><p className="text-xs text-muted-foreground">Pending pickups</p></CardContent></Card>
         <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{pendingAbsences}</div><p className="text-xs text-muted-foreground">Pending absences</p></CardContent></Card>
+        <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{pendingSwim}</div><p className="text-xs text-muted-foreground">Pending swim</p></CardContent></Card>
         <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{authorized.filter((a) => a.is_active).length}</div><p className="text-xs text-muted-foreground">Authorized adults</p></CardContent></Card>
       </div>
 
@@ -594,7 +613,9 @@ export default function ParentPortalDashboard() {
                       <TableHead>When</TableHead>
                       <TableHead>Camper</TableHead>
                       <TableHead>Instructor</TableHead>
-                      <TableHead>Confirmed</TableHead>
+                      <TableHead>Parent</TableHead>
+                      <TableHead>Transport</TableHead>
+                      <TableHead className="w-[120px]" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -605,10 +626,27 @@ export default function ParentPortalDashboard() {
                         <TableCell>{l.instructor ?? "—"}</TableCell>
                         <TableCell>
                           {l.parent_confirmed ? (
-                            <Badge className="gap-1"><CheckCircle2 className="h-3 w-3" />Yes</Badge>
+                            <Badge className="gap-1"><CheckCircle2 className="h-3 w-3" />Confirmed</Badge>
                           ) : (
-                            <Badge variant="outline">Pending</Badge>
+                            <Badge variant="outline">Awaiting parent</Badge>
                           )}
+                        </TableCell>
+                        <TableCell>
+                          {!l.parent_confirmed ? (
+                            <Badge variant="outline">—</Badge>
+                          ) : l.transport_status === "acknowledged" ? (
+                            <Badge className="gap-1"><CheckCircle2 className="h-3 w-3" />Approved</Badge>
+                          ) : (
+                            <Badge variant="outline">Pending approval</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {l.parent_confirmed && l.transport_status !== "acknowledged" ? (
+                            <Button size="sm" onClick={() => void approveSwimTransport(l.id)}>
+                              <CheckCircle2 className="mr-1 h-4 w-4" />
+                              Approve
+                            </Button>
+                          ) : null}
                         </TableCell>
                       </TableRow>
                     ))}

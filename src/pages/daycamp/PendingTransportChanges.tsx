@@ -17,7 +17,12 @@ import {
 import { buildPendingChangeSheetRows, type TransportChangeSheetRow } from "@/lib/transportChangeSheets";
 import { normalizeTransportBoardForSeason, type TransportRouteMeta, type TransportRouteStop } from "@/lib/transportRoster";
 import { ROUTE_COLORS } from "@/lib/transportRunBoard";
-import { DISMISSAL_REALTIME_TABLES } from "@/lib/dismissalDashboard";
+import {
+  approveDismissalNurse,
+  approveDismissalSwim,
+  DISMISSAL_REALTIME_TABLES,
+} from "@/lib/dismissalDashboard";
+import { campYmdToUtcEndIso, campYmdToUtcStartIso } from "@/lib/campTime";
 
 const PICKUP_LABELS: Record<string, string> = {
   early_pickup: "Early pickup",
@@ -29,7 +34,9 @@ const PICKUP_LABELS: Record<string, string> = {
 
 type PendingAction =
   | { kind: "absence"; id: string; camper: string }
-  | { kind: "pickup"; id: string; camper: string; changeType: string };
+  | { kind: "pickup"; id: string; camper: string; changeType: string }
+  | { kind: "nurse"; id: string; camper: string }
+  | { kind: "swim"; id: string; camper: string };
 
 export default function PendingTransportChanges() {
   const { currentCompany } = useCompany();
@@ -75,7 +82,7 @@ export default function PendingTransportChanges() {
     if (!currentCompany?.id) return;
     setLoading(true);
     try {
-      const [exceptions, absenceRes, pickupRes] = await Promise.all([
+      const [exceptions, absenceRes, pickupRes, nurseRes, swimRes] = await Promise.all([
         fetchTransportExceptionsForReport(supabase, currentCompany.id, sheetDate),
         supabase
           .from("absences")
@@ -89,6 +96,22 @@ export default function PendingTransportChanges() {
           .eq("company_id", currentCompany.id)
           .eq("change_date", sheetDate)
           .eq("status", "submitted"),
+        supabase
+          .from("nurse_records")
+          .select("id, camper_name")
+          .eq("company_id", currentCompany.id)
+          .eq("date", sheetDate)
+          .eq("sent_home", true)
+          .eq("transport_status", "submitted"),
+        supabase
+          .from("swim_lessons")
+          .select("id, children:camper_id(name)")
+          .eq("company_id", currentCompany.id)
+          .eq("parent_confirmed", true)
+          .eq("transport_status", "submitted")
+          .neq("status", "cancelled")
+          .gte("scheduled_at", campYmdToUtcStartIso(sheetDate))
+          .lt("scheduled_at", campYmdToUtcEndIso(sheetDate)),
       ]);
 
       const pendingActions: PendingAction[] = [];
@@ -100,6 +123,14 @@ export default function PendingTransportChanges() {
         const name = (row as { children?: { name?: string } }).children?.name?.trim();
         const changeType = (row as { change_type?: string }).change_type ?? "other";
         if (name) pendingActions.push({ kind: "pickup", id: row.id, camper: name, changeType });
+      }
+      for (const row of nurseRes.data ?? []) {
+        const name = (row as { camper_name?: string }).camper_name?.trim();
+        if (name) pendingActions.push({ kind: "nurse", id: row.id, camper: name });
+      }
+      for (const row of swimRes.data ?? []) {
+        const name = (row as { children?: { name?: string } }).children?.name?.trim();
+        if (name) pendingActions.push({ kind: "swim", id: row.id, camper: name });
       }
       setActions(pendingActions);
 
@@ -144,11 +175,29 @@ export default function PendingTransportChanges() {
   }, [currentCompany?.id, loadPending]);
 
   const approve = async (action: PendingAction) => {
-    const table = action.kind === "absence" ? "absences" : "pickup_changes";
-    const { error } = await supabase.from(table).update({ status: "acknowledged" }).eq("id", action.id);
+    let error: { message: string } | null = null;
+    if (action.kind === "absence") {
+      ({ error } = await supabase.from("absences").update({ status: "acknowledged" }).eq("id", action.id));
+    } else if (action.kind === "pickup") {
+      ({ error } = await supabase.from("pickup_changes").update({ status: "acknowledged" }).eq("id", action.id));
+    } else if (action.kind === "nurse") {
+      ({ error } = await approveDismissalNurse(supabase, action.id));
+    } else {
+      ({ error } = await approveDismissalSwim(supabase, action.id));
+    }
     if (error) toast.error(error.message);
     else {
-      toast.success(`${action.camper} approved — will show on change sheets`);
+      const affectsRoutes =
+        action.kind === "nurse" ||
+        action.kind === "swim" ||
+        (action.kind === "pickup" &&
+          ["bus_change", "early_pickup", "late_stay"].includes(action.changeType)) ||
+        action.kind === "absence";
+      toast.success(
+        affectsRoutes
+          ? `${action.camper} approved — will show on change sheets`
+          : `${action.camper} approved`,
+      );
       void loadPending();
     }
   };
@@ -157,6 +206,8 @@ export default function PendingTransportChanges() {
     actions.find((a) => {
       if (a.camper.toLowerCase() !== row.camper.toLowerCase()) return false;
       if (a.kind === "absence") return row.source.toLowerCase().includes("absence");
+      if (a.kind === "nurse") return row.source.toLowerCase().includes("nurse");
+      if (a.kind === "swim") return row.source.toLowerCase().includes("swim");
       const label = PICKUP_LABELS[a.changeType] ?? a.changeType.replace(/_/g, " ");
       return row.description.toLowerCase().includes(label.toLowerCase());
     });
@@ -231,9 +282,9 @@ export default function PendingTransportChanges() {
                       </Button>
                     ) : (
                       <p className="mt-2 text-xs text-muted-foreground italic">
-                        {row.source.includes("Swim")
+                        {row.description.toLowerCase().includes("awaiting parent")
                           ? "Waiting for parent swim lesson confirmation"
-                          : "Approve in Portal Dashboard or Pending Changes"}
+                          : "Approve in Portal Dashboard or Front Office"}
                       </p>
                     )}
                   </div>

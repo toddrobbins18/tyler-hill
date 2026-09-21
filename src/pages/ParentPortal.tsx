@@ -325,7 +325,11 @@ export default function ParentPortal() {
                       const confirm = async () => {
                         const { error } = await supabase
                           .from("swim_lessons")
-                          .update({ parent_confirmed: true, parent_confirmed_at: new Date().toISOString() })
+                          .update({
+                            parent_confirmed: true,
+                            parent_confirmed_at: new Date().toISOString(),
+                            transport_status: "submitted",
+                          })
                           .eq("id", l.id);
                         if (error) toast.error(error.message);
                         else { toast.success("Attendance confirmed"); loadAll(); }
@@ -333,7 +337,11 @@ export default function ParentPortal() {
                       const unconfirm = async () => {
                         const { error } = await supabase
                           .from("swim_lessons")
-                          .update({ parent_confirmed: false, parent_confirmed_at: null })
+                          .update({
+                            parent_confirmed: false,
+                            parent_confirmed_at: null,
+                            transport_status: null,
+                          })
                           .eq("id", l.id);
                         if (error) toast.error(error.message);
                         else { toast.success("Confirmation cleared"); loadAll(); }

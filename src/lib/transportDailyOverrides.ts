@@ -210,17 +210,19 @@ export async function fetchTransportExceptions(
       .eq("change_date", overrideDate),
     supabase
       .from("nurse_records")
-      .select("camper_name, reason, sent_home")
+      .select("camper_name, reason, sent_home, transport_status")
       .eq("company_id", companyId)
       .eq("date", overrideDate)
-      .eq("sent_home", true),
+      .eq("sent_home", true)
+      .eq("transport_status", "acknowledged"),
     supabase
       .from("swim_lessons")
       .select(
-        "scheduled_at, duration_minutes, location, instructor, parent_confirmed, status, children:camper_id(name)",
+        "scheduled_at, duration_minutes, location, instructor, parent_confirmed, transport_status, status, children:camper_id(name)",
       )
       .eq("company_id", companyId)
       .eq("parent_confirmed", true)
+      .eq("transport_status", "acknowledged")
       .neq("status", "cancelled")
       .gte("scheduled_at", campYmdToUtcStartIso(overrideDate))
       .lt("scheduled_at", campYmdToUtcEndIso(overrideDate)),
@@ -275,7 +277,7 @@ export async function fetchTransportExceptions(
     add({
       source: "nurse_sent_home",
       camperName: name,
-      label: "Nurse — sent home",
+      label: "Nurse — sent home (acknowledged)",
       detail: (row as { reason?: string }).reason ?? undefined,
     });
   }
@@ -297,7 +299,7 @@ export async function fetchTransportExceptions(
     add({
       source: "swim_lesson",
       camperName: name,
-      label: `Swim lesson — no ${run.toUpperCase()} bus`,
+      label: `Swim lesson — no ${run.toUpperCase()} bus (acknowledged)`,
       detail: coach
         ? `${timeLabel} · ${place} · ${duration} min · ${coach}`
         : `${timeLabel} · ${place} · ${duration} min`,
@@ -345,14 +347,14 @@ export async function fetchTransportExceptionsForReport(
         .eq("change_date", overrideDate),
       supabase
         .from("nurse_records")
-        .select("camper_name, reason, sent_home")
+        .select("camper_name, reason, sent_home, transport_status")
         .eq("company_id", companyId)
         .eq("date", overrideDate)
         .eq("sent_home", true),
       supabase
         .from("swim_lessons")
         .select(
-          "scheduled_at, duration_minutes, location, instructor, parent_confirmed, status, children:camper_id(name)",
+          "scheduled_at, duration_minutes, location, instructor, parent_confirmed, transport_status, status, children:camper_id(name)",
         )
         .eq("company_id", companyId)
         .neq("status", "cancelled")
@@ -372,7 +374,7 @@ export async function fetchTransportExceptionsForReport(
       label: acknowledged ? "Parent absence (acknowledged)" : "Parent absence (submitted)",
       detail: (row as { reason?: string }).reason ?? type,
       workflowStatus: status,
-      appliedToRoutes: acknowledged,
+      appliedToRoutes: acknowledged && absenceAffectsRoutes(type),
       appliesTo: absenceAppliesTo(type),
     });
   }
@@ -395,7 +397,7 @@ export async function fetchTransportExceptionsForReport(
         : `${pickupChangeLabel(changeType)} (submitted)`,
       detail,
       workflowStatus: status,
-      appliedToRoutes: applied,
+      appliedToRoutes: applied && pickupChangeAffectsRoutes(changeType),
       appliesTo: pickupChangeAppliesTo(changeType),
     });
   }
@@ -416,13 +418,15 @@ export async function fetchTransportExceptionsForReport(
   for (const row of nurse ?? []) {
     const name = (row as { camper_name?: string }).camper_name?.trim();
     if (!name) continue;
+    const transportStatus = String((row as { transport_status?: string | null }).transport_status ?? "submitted");
+    const acknowledged = transportStatus === "acknowledged";
     add({
       source: "nurse_sent_home",
       camperName: name,
-      label: "Nurse — sent home",
+      label: acknowledged ? "Nurse — sent home (acknowledged)" : "Nurse — sent home (submitted)",
       detail: (row as { reason?: string }).reason ?? undefined,
-      workflowStatus: "sent home",
-      appliedToRoutes: true,
+      workflowStatus: transportStatus,
+      appliedToRoutes: acknowledged,
     });
   }
 
@@ -432,7 +436,9 @@ export async function fetchTransportExceptionsForReport(
     if (!name || !scheduledAt) continue;
     if (campDateFromTimestamp(scheduledAt) !== overrideDate) continue;
 
-    const confirmed = (row as { parent_confirmed?: boolean }).parent_confirmed === true;
+    const parentConfirmed = (row as { parent_confirmed?: boolean }).parent_confirmed === true;
+    const transportStatus = String((row as { transport_status?: string | null }).transport_status ?? "submitted");
+    const staffApproved = transportStatus === "acknowledged";
     const run = swimLessonBusRun(scheduledAt);
     const location = (row as { location?: string | null }).location;
     const instructor = (row as { instructor?: string | null }).instructor;
@@ -444,15 +450,21 @@ export async function fetchTransportExceptionsForReport(
     add({
       source: "swim_lesson",
       camperName: name,
-      label: confirmed
-        ? `Swim lesson — no ${run.toUpperCase()} bus`
-        : `Swim lesson — pending parent confirm (no ${run.toUpperCase()} bus when confirmed)`,
+      label: !parentConfirmed
+        ? `Swim lesson — pending parent confirm (no ${run.toUpperCase()} bus when confirmed)`
+        : staffApproved
+          ? `Swim lesson — no ${run.toUpperCase()} bus (acknowledged)`
+          : `Swim lesson — parent confirmed, pending staff approval`,
       detail: coach
         ? `${timeLabel} · ${place} · ${duration} min · ${coach}`
         : `${timeLabel} · ${place} · ${duration} min`,
       appliesTo: run,
-      workflowStatus: confirmed ? "parent confirmed" : "awaiting parent confirm",
-      appliedToRoutes: confirmed,
+      workflowStatus: !parentConfirmed
+        ? "awaiting parent confirm"
+        : staffApproved
+          ? "acknowledged"
+          : "submitted",
+      appliedToRoutes: parentConfirmed && staffApproved,
     });
   }
 

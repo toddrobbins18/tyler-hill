@@ -26,6 +26,7 @@ type NurseRecord = {
   counselor: string | null;
   nurse_name: string | null;
   sent_home: boolean | null;
+  transport_status: string | null;
   called_home: boolean | null;
   notes: string | null;
   created_at: string;
@@ -154,7 +155,12 @@ export default function Nurse() {
                   <TableCell><TextCell value={r.counselor} onCommit={(v) => updateRecord(r.id, { counselor: v })} /></TableCell>
                   <TableCell><TextCell value={r.nurse_name} onCommit={(v) => updateRecord(r.id, { nurse_name: v })} /></TableCell>
                   <TableCell className="text-center">
-                    <Checkbox checked={!!r.sent_home} onCheckedChange={(c) => updateRecord(r.id, { sent_home: !!c })} />
+                    <Checkbox
+                      checked={!!r.sent_home}
+                      onCheckedChange={(c) =>
+                        updateRecord(r.id, { sent_home: !!c, transport_status: c ? "submitted" : null })
+                      }
+                    />
                   </TableCell>
                   <TableCell className="text-center">
                     <Checkbox checked={!!r.called_home} onCheckedChange={(c) => updateRecord(r.id, { called_home: !!c })} />

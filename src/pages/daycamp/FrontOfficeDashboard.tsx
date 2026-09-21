@@ -17,7 +17,9 @@ import { campTodayDateString } from "@/lib/parentPortalCutoff";
 import {
   ABSENCE_TYPE_LABELS,
   approveDismissalAbsence,
+  approveDismissalNurse,
   approveDismissalPickup,
+  approveDismissalSwim,
   DISMISSAL_REALTIME_TABLES,
   fetchDismissalDashboard,
   PICKUP_CHANGE_LABELS,
@@ -95,7 +97,12 @@ export default function FrontOfficeDashboard() {
 
   const pendingTodayCount = useMemo(() => {
     if (!data) return 0;
-    return data.pendingPickups.length + data.pendingAbsences.length;
+    return (
+      data.pendingPickups.length +
+      data.pendingAbsences.length +
+      data.pendingNurse.length +
+      data.pendingSwim.length
+    );
   }, [data]);
 
   const openOfficeCount = useMemo(
@@ -117,6 +124,24 @@ export default function FrontOfficeDashboard() {
     if (error) toast.error(error.message);
     else {
       toast.success("Absence approved");
+      void load();
+    }
+  };
+
+  const handleApproveNurse = async (id: string) => {
+    const { error } = await approveDismissalNurse(supabase, id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Nurse sent-home approved — will appear on change sheets");
+      void load();
+    }
+  };
+
+  const handleApproveSwim = async (id: string) => {
+    const { error } = await approveDismissalSwim(supabase, id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Swim lesson approved — will appear on change sheets");
       void load();
     }
   };
@@ -195,7 +220,10 @@ export default function FrontOfficeDashboard() {
         <Card>
           <CardContent className="pt-6">
             <div className="text-2xl font-bold">
-              {(data?.approvedPickups.length ?? 0) + (data?.approvedAbsences.length ?? 0)}
+              {(data?.approvedPickups.length ?? 0) +
+                (data?.approvedAbsences.length ?? 0) +
+                (data?.approvedNurse.length ?? 0) +
+                (data?.approvedSwim.length ?? 0)}
             </div>
             <p className="text-xs text-muted-foreground">Approved for {selectedDate}</p>
           </CardContent>
@@ -252,8 +280,11 @@ export default function FrontOfficeDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {!data?.pendingPickups.length && !data?.pendingAbsences.length ? (
-                <p className="text-sm text-muted-foreground">No pending parent changes for this date.</p>
+              {!data?.pendingPickups.length &&
+              !data?.pendingAbsences.length &&
+              !data?.pendingNurse.length &&
+              !data?.pendingSwim.length ? (
+                <p className="text-sm text-muted-foreground">No pending changes for this date.</p>
               ) : null}
               {data?.pendingPickups.map((p) => (
                 <div key={p.id} className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
@@ -290,6 +321,39 @@ export default function FrontOfficeDashboard() {
                       </p>
                     </div>
                     <Button size="sm" onClick={() => void handleApproveAbsence(a.id)}>
+                      <CheckCircle2 className="mr-1 h-4 w-4" />
+                      Approve
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              {data?.pendingNurse.map((n) => (
+                <div key={n.id} className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold">{n.camper_name}</p>
+                      <p className="text-xs text-amber-800">Nurse · Sent home</p>
+                      {n.reason ? <p className="text-sm text-muted-foreground">{n.reason}</p> : null}
+                    </div>
+                    <Button size="sm" onClick={() => void handleApproveNurse(n.id)}>
+                      <CheckCircle2 className="mr-1 h-4 w-4" />
+                      Approve
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              {data?.pendingSwim.map((s) => (
+                <div key={s.id} className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold">{s.camperName}</p>
+                      <p className="text-xs text-amber-800">Swim lesson · Parent confirmed</p>
+                      <p className="text-sm text-muted-foreground">
+                        {format(new Date(s.scheduled_at), "MMM d · h:mm a")}
+                        {s.instructor ? ` · ${s.instructor}` : ""}
+                      </p>
+                    </div>
+                    <Button size="sm" onClick={() => void handleApproveSwim(s.id)}>
                       <CheckCircle2 className="mr-1 h-4 w-4" />
                       Approve
                     </Button>
@@ -335,7 +399,10 @@ export default function FrontOfficeDashboard() {
                 <CardDescription>Ready for transport and dismissal paperwork</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2 max-h-64 overflow-y-auto">
-                {!data?.approvedPickups.length && !data?.approvedAbsences.length ? (
+                {!data?.approvedPickups.length &&
+                !data?.approvedAbsences.length &&
+                !data?.approvedNurse.length &&
+                !data?.approvedSwim.length ? (
                   <p className="text-sm text-muted-foreground">Nothing approved yet for this date.</p>
                 ) : null}
                 {data?.approvedPickups.map((p) => (
@@ -350,6 +417,18 @@ export default function FrontOfficeDashboard() {
                     <span className="font-medium">{a.camperName}</span>
                     {" — "}
                     {ABSENCE_TYPE_LABELS[a.absence_type] ?? a.absence_type}
+                  </div>
+                ))}
+                {data?.approvedNurse.map((n) => (
+                  <div key={n.id} className="text-sm rounded-md border border-emerald-200 bg-emerald-50/50 px-3 py-2">
+                    <span className="font-medium">{n.camper_name}</span>
+                    {" — Nurse sent home"}
+                  </div>
+                ))}
+                {data?.approvedSwim.map((s) => (
+                  <div key={s.id} className="text-sm rounded-md border border-emerald-200 bg-emerald-50/50 px-3 py-2">
+                    <span className="font-medium">{s.camperName}</span>
+                    {" — Swim lesson (no bus)"}
                   </div>
                 ))}
               </CardContent>
