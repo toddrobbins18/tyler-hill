@@ -188,7 +188,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (
       (menuItem === "bus-attendance" ||
         menuItem === "change-sheets" ||
-        menuItem === "pending-transport-changes") &&
+        menuItem === "pending-transport-changes" ||
+        menuItem === "transport-admin" ||
+        menuItem === "front-office") &&
       perms?.transportation === true
     ) {
       return true;

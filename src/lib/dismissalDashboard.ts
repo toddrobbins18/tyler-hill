@@ -266,6 +266,23 @@ export async function approveDismissalSwim(supabase: SupabaseClient, id: string)
   return supabase.from("swim_lessons").update({ transport_status: "acknowledged" }).eq("id", id);
 }
 
+/** Family linked to a camper (required for staff-entered pickup/absence). */
+export async function lookupFamilyIdForCamper(
+  supabase: SupabaseClient,
+  companyId: string,
+  camperId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("family_children")
+    .select("family_id, families!inner(company_id)")
+    .eq("child_id", camperId)
+    .eq("families.company_id", companyId)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data?.family_id as string | undefined) ?? null;
+}
+
 export async function toggleOfficeChangeDone(supabase: SupabaseClient, id: string, done: boolean) {
   return supabase.from("office_transport_changes").update({ done }).eq("id", id);
 }

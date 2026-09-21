@@ -255,6 +255,7 @@ export default function FrontOfficeDashboard() {
             <Link to="/day-camp/pending-transport-changes"><Clock className="mr-2 h-4 w-4" />Pending Changes</Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
+            <Link to="/day-camp/transport-admin"><Bus className="mr-2 h-4 w-4" />Transport Admin</Link>
             <Link to="/day-camp/parent-portal-dashboard"><Users className="mr-2 h-4 w-4" />Portal Dashboard</Link>
           </Button>
           <Button variant="outline" size="sm" asChild>

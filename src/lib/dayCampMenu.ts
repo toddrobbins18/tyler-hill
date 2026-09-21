@@ -3,6 +3,7 @@ import {
   Home,
   Sun,
   Truck,
+  Bus,
   ClipboardEdit,
   ClipboardList,
   Radio,
@@ -57,6 +58,7 @@ export function getDayCampNestCarryoverItems(): DayCampMenuItem[] {
 export function getDayCampPocItems(): DayCampMenuItem[] {
   return [
     { title: "Front Office", url: "/day-camp/front-office", icon: Radio, menuId: "front-office" },
+    { title: "Transport Admin", url: "/day-camp/transport-admin", icon: Bus, menuId: "transport-admin" },
     { title: "Bunking", url: "/day-camp/bunking", icon: BedDouble, menuId: "bunking" },
     { title: "Hiring", url: "/day-camp/hiring", icon: Briefcase, menuId: "hiring" },
     { title: "Media", url: "/day-camp/media", icon: Camera, menuId: "media" },
@@ -82,6 +84,7 @@ export function getDayCampPocItemsForCompany(company: CampLike): DayCampMenuItem
     }
     if (
       (item.menuId === "transportation" ||
+        item.menuId === "transport-admin" ||
         item.menuId === "bus-attendance" ||
         item.menuId === "change-sheets" ||
         item.menuId === "pending-transport-changes") &&

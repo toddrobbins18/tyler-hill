@@ -13,7 +13,9 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Waves, Plus, Trash2, CheckCircle2, Clock } from "lucide-react";
+import { Waves, Plus, Trash2, CheckCircle2, Clock, Bus } from "lucide-react";
+import { approveDismissalSwim } from "@/lib/dismissalDashboard";
+import { swimLessonBusRun } from "@/lib/campTime";
 import { toast } from "sonner";
 import { campDateTimeToIso, formatCampDate, formatCampTime } from "@/lib/campTime";
 import { campTodayDateString } from "@/lib/parentPortalCutoff";
@@ -31,6 +33,7 @@ type Lesson = {
   status: string;
   parent_confirmed: boolean;
   parent_confirmed_at: string | null;
+  transport_status: string | null;
   reminder_sent_at: string | null;
   notes: string | null;
 };
@@ -68,6 +71,15 @@ export default function SwimLessons() {
     const { error } = await supabase.from("swim_lessons").delete().eq("id", id);
     if (error) toast.error(error.message);
     else { toast.success("Lesson removed"); load(); }
+  };
+
+  const approveTransport = async (id: string) => {
+    const { error } = await approveDismissalSwim(supabase, id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Transport approved — camper off bus for lesson run");
+      load();
+    }
   };
 
   return (
@@ -108,6 +120,7 @@ export default function SwimLessons() {
                   <TableHead>Location</TableHead>
                   <TableHead>Cost</TableHead>
                   <TableHead>Parent</TableHead>
+                  <TableHead>Bus</TableHead>
                   <TableHead>Reminder</TableHead>
                   <TableHead />
                 </TableRow>
@@ -131,6 +144,20 @@ export default function SwimLessons() {
                         <Badge className="gap-1"><CheckCircle2 className="h-3 w-3" />Confirmed</Badge>
                       ) : (
                         <Badge variant="outline" className="gap-1"><Clock className="h-3 w-3" />Pending</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {!l.parent_confirmed ? (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      ) : l.transport_status === "acknowledged" ? (
+                        <Badge className="gap-1 bg-emerald-600">
+                          <Bus className="h-3 w-3" />
+                          No {swimLessonBusRun(l.scheduled_at).toUpperCase()} bus
+                        </Badge>
+                      ) : (
+                        <Button size="sm" variant="outline" onClick={() => void approveTransport(l.id)}>
+                          Approve bus
+                        </Button>
                       )}
                     </TableCell>
                     <TableCell>
