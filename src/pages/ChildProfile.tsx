@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { formatBirthdayDisplay } from "@/lib/birthdayCalendar";
-import { ArrowLeft, Award, Trophy, Star, Calendar, AlertTriangle, FileText, Pencil, Users, MapPin, Shield, Stethoscope, Clock, Hospital } from "lucide-react";
+import { ArrowLeft, Award, Trophy, Star, Calendar, AlertTriangle, FileText, Pencil, Users, MapPin, Shield, Stethoscope, Clock, Hospital, Waves } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,7 @@ import { isDayCampCompany } from "@/lib/camps";
 import { resolveEnrolledWeeks } from "@/lib/enrolledWeeks";
 import { getCamperGradeDisplay, getDivisionDropdownLabel } from "@/lib/divisionFilterUtils";
 import EnrolledWeeksDisplay from "@/components/EnrolledWeeksDisplay";
+import CamperSwimHistoryTab from "@/components/CamperSwimHistoryTab";
 
 export default function ChildProfile() {
   const { id } = useParams();
@@ -336,6 +337,12 @@ export default function ChildProfile() {
           <TabsTrigger value="sports-academy">Sports Academy</TabsTrigger>
           <TabsTrigger value="incidents">Incident Reports</TabsTrigger>
           <TabsTrigger value="appointments">Appointments</TabsTrigger>
+          {isDayCampCompany(currentCompany) && child?.person_id && (
+            <TabsTrigger value="swim">
+              <Waves className="h-4 w-4 mr-1" />
+              Swim
+            </TabsTrigger>
+          )}
           {currentCompany?.slug === 'timber-lake-camp' && (
             <>
               <TabsTrigger value="10-day-report">10-Day Report</TabsTrigger>
@@ -1082,6 +1089,12 @@ export default function ChildProfile() {
               <CamperReportsTab childId={id || ''} reportType="end_of_summer" />
             </TabsContent>
           </>
+        )}
+
+        {isDayCampCompany(currentCompany) && child?.person_id && (
+          <TabsContent value="swim">
+            <CamperSwimHistoryTab personId={child.person_id} />
+          </TabsContent>
         )}
 
         <TabsContent value="health-center">
