@@ -8,6 +8,7 @@ import OfficeTransportChanges from "./OfficeTransportChanges";
 import TransportChangeSheets from "./TransportChangeSheets";
 import PendingTransportChanges from "./PendingTransportChanges";
 import SwimProgram from "./SwimProgram";
+import FrontOfficeDashboard from "./FrontOfficeDashboard";
 
 import Nurse from "./Nurse";
 
@@ -40,6 +41,10 @@ const DAY_CAMP_MODULES: Record<string, { title: string; description: string }> =
   "pending-transport-changes": {
     title: "Pending Changes",
     description: "Parent and office submissions awaiting approval.",
+  },
+  "front-office": {
+    title: "Front Office",
+    description: "Real-time dismissal control — parent and office changes.",
   },
 };
 
@@ -87,6 +92,10 @@ export default function DayCampModulePage() {
 
   if (moduleId === "nurse") {
     return <Nurse />;
+  }
+
+  if (moduleId === "front-office") {
+    return <FrontOfficeDashboard />;
   }
 
   return <DayCampPlaceholder title={config.title} description={config.description} />;

@@ -22,7 +22,6 @@ import { addDays, format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { isActiveRosterStatus, isBirthdayTodayCalendar, parseBirthdayCalendarParts } from "@/lib/birthdayCalendar";
 import { isTimberLakeCamp, isTimberLakeWestCompany, isTylerHillCamp, isDayCampCompany, shouldShowTigerTimes } from "@/lib/camps";
-import FrontOfficeDashboard from "@/pages/daycamp/FrontOfficeDashboard";
 import { formatTime12Hour } from "@/lib/utils";
 import { dedupeMenuItemsForDisplay } from "@/lib/csvRosterSync";
 import {
@@ -579,10 +578,6 @@ export default function Dashboard() {
     hour: 'numeric',
     minute: '2-digit',
   });
-
-  if (isDayCamp) {
-    return <FrontOfficeDashboard />;
-  }
 
   const calculateAge = (dateOfBirth: string): number => {
     const today = new Date();

@@ -5,6 +5,7 @@ import {
   Truck,
   ClipboardEdit,
   ClipboardList,
+  Radio,
   FileText,
   Clock,
   Waves,
@@ -40,7 +41,7 @@ export function getDayCampNestCarryoverItems(): DayCampMenuItem[] {
     { title: "Tutoring & Therapy", url: "/tutoring-therapy", icon: BookOpen, menuId: "tutoring-therapy" },
     { title: "Camper", url: "/roster", icon: Users, menuId: "roster" },
     { title: "Daily news", url: "/notes", icon: FileText, menuId: "notes" },
-    { title: "Front Office", url: "/", icon: Home, menuId: "dashboard" },
+    { title: "Dashboard", url: "/", icon: Home, menuId: "dashboard" },
     { title: "Incident Reports", url: "/incidents", icon: AlertTriangle, menuId: "incidents" },
     { title: "Master Calendar", url: "/calendar", icon: Calendar, menuId: "calendar" },
     { title: "Menu", url: "/menu", icon: Utensils, menuId: "menu" },
@@ -55,6 +56,7 @@ export function getDayCampNestCarryoverItems(): DayCampMenuItem[] {
 /** Nest 2.0 / Airtable POC — Day Camp features (Jul 30 North Shore priorities). */
 export function getDayCampPocItems(): DayCampMenuItem[] {
   return [
+    { title: "Front Office", url: "/day-camp/front-office", icon: Radio, menuId: "front-office" },
     { title: "Bunking", url: "/day-camp/bunking", icon: BedDouble, menuId: "bunking" },
     { title: "Hiring", url: "/day-camp/hiring", icon: Briefcase, menuId: "hiring" },
     { title: "Media", url: "/day-camp/media", icon: Camera, menuId: "media" },
