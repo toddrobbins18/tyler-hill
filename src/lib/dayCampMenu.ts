@@ -66,6 +66,7 @@ export function getDayCampPocItems(): DayCampMenuItem[] {
     { title: "Sunshine Report", url: "/day-camp/sunshine-report", icon: Sun, menuId: "sunshine-report" },
     { title: "Transportation", url: "/day-camp/transport", icon: Truck, menuId: "transportation" },
     { title: "Bus Attendance", url: "/day-camp/bus-attendance", icon: ClipboardList, menuId: "bus-attendance" },
+    { title: "Group Bubble Sheets", url: "/day-camp/group-bubble-sheets", icon: Users, menuId: "group-bubble-sheets" },
     { title: "Change Sheets", url: "/day-camp/change-sheets", icon: FileText, menuId: "change-sheets" },
     { title: "Pending Changes", url: "/day-camp/pending-transport-changes", icon: Clock, menuId: "pending-transport-changes" },
     { title: "Office Changes", url: "/day-camp/office-changes", icon: ClipboardEdit, menuId: "office-changes" },
@@ -86,6 +87,7 @@ export function getDayCampPocItemsForCompany(company: CampLike): DayCampMenuItem
       (item.menuId === "transportation" ||
         item.menuId === "transport-admin" ||
         item.menuId === "bus-attendance" ||
+        item.menuId === "group-bubble-sheets" ||
         item.menuId === "change-sheets" ||
         item.menuId === "pending-transport-changes") &&
       !northShoreBusTransportEnabled(company)

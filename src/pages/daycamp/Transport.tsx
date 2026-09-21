@@ -48,6 +48,14 @@ import {
 import {
   buildCombinedAttendanceBubbleSheetPdf,
 } from "@/lib/transportBubbleSheetPdf";
+import {
+  camperEnrolledInWeek,
+  enrollmentWeekForDate,
+  formatEnrollmentWeekRange,
+  getEnrollmentWeekRow,
+  loadEnrollmentWeekCalendar,
+  type EnrollmentWeekCalendar,
+} from "@/lib/enrollmentWeekCalendar";
 import { TransportReportPreviewDialog, type TransportReportPreview } from "@/components/TransportReportPreviewDialog";
 import {
   normalizeTransportBoardForSeason,
@@ -421,6 +429,7 @@ export default function Transport() {
   );
 
   const [groupRoster, setGroupRoster] = useState<GroupRosterCamper[]>([]);
+  const [enrollmentWeekCalendar, setEnrollmentWeekCalendar] = useState<EnrollmentWeekCalendar>([]);
   const groupLoadedKeyRef = useRef<string | null>(null);
 
   // Scope-choice dialog (Today only vs Permanent vs Cancel)
@@ -730,7 +739,7 @@ export default function Transport() {
     return () => clearTimeout(handle);
   }, [todayOverrides, companyId, currentSeason, overrideDate, overridesLoading]);
 
-  // Load group roster for attendance reports
+  // Load group roster + enrollment week calendar for attendance reports
   useEffect(() => {
     if (!companyId) return;
     const key = `${companyId}:${currentSeason}`;
@@ -738,9 +747,13 @@ export default function Transport() {
     let cancelled = false;
     void (async () => {
       try {
-        const roster = await loadGroupRoster(supabase, companyId, currentSeason);
+        const [roster, calendar] = await Promise.all([
+          loadGroupRoster(supabase, companyId, currentSeason),
+          loadEnrollmentWeekCalendar(supabase, companyId, currentSeason),
+        ]);
         if (!cancelled) {
           setGroupRoster(roster);
+          setEnrollmentWeekCalendar(calendar);
           groupLoadedKeyRef.current = key;
         }
       } catch (err) {
@@ -1246,15 +1259,27 @@ export default function Transport() {
   const routes = buildRoutes(timeOfDay);
   const displayedRoutes = routes.filter(r => visibleRoutes.includes(r.id));
 
+  const enrollmentWeekForReport = useMemo(
+    () => enrollmentWeekForDate(enrollmentWeekCalendar, overrideDate),
+    [enrollmentWeekCalendar, overrideDate],
+  );
+
+  const groupRosterForReport = useMemo(() => {
+    if (enrollmentWeekForReport == null) return groupRoster;
+    return groupRoster.filter((c) =>
+      camperEnrolledInWeek(c.enrolledWeeks, c.session, enrollmentWeekForReport),
+    );
+  }, [groupRoster, enrollmentWeekForReport]);
+
   const groupRosterByGroup = useMemo(() => {
     const map = new Map<string, GroupRosterCamper[]>();
-    for (const c of groupRoster) {
+    for (const c of groupRosterForReport) {
       const list = map.get(c.groupName) ?? [];
       list.push(c);
       map.set(c.groupName, list);
     }
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [groupRoster]);
+  }, [groupRosterForReport]);
 
   const openReportPreview = (preview: Omit<TransportReportPreview, "open">) => {
     setReportPreview({ ...preview, open: true });
@@ -2073,12 +2098,18 @@ export default function Transport() {
         .filter((r) => r.campers.length > 0);
       const groups = groupRosterByGroup.map(([groupName, campers]) => ({
         groupName,
-        campers: campers.map((c) => ({ name: c.name })),
+        campers: campers.map((c) => ({ name: c.name, detail: groupName })),
       }));
+      const weekRow =
+        enrollmentWeekForReport != null
+          ? getEnrollmentWeekRow(enrollmentWeekCalendar, enrollmentWeekForReport)
+          : null;
       const built = buildCombinedAttendanceBubbleSheetPdf({
         companyName: currentCompany?.name ?? "Day Camp",
         date: overrideDate,
         runPeriod: timeOfDay,
+        enrollmentWeek: enrollmentWeekForReport ?? undefined,
+        weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : undefined,
         busRoutes: sheetRoutes,
         groups,
       });

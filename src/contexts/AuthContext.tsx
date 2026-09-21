@@ -187,6 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Transport sub-pages: allow anyone with Transportation until toggled per role
     if (
       (menuItem === "bus-attendance" ||
+        menuItem === "group-bubble-sheets" ||
         menuItem === "change-sheets" ||
         menuItem === "pending-transport-changes" ||
         menuItem === "transport-admin" ||
