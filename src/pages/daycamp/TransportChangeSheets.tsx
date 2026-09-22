@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
+import { FrontOfficeBackLink } from "@/components/daycamp/FrontOfficeBackLink";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -122,6 +123,7 @@ export default function TransportChangeSheets() {
 
   return (
     <div className="space-y-6">
+      <FrontOfficeBackLink />
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">

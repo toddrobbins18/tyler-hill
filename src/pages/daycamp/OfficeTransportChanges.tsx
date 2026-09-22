@@ -19,6 +19,7 @@ import { Bus, Plus, Trash2, CalendarIcon, Mail, PhoneCall } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { FrontOfficeBackLink } from "@/components/daycamp/FrontOfficeBackLink";
 
 type Change = {
   id: string;
@@ -221,6 +222,7 @@ export default function OfficeTransportChanges() {
 
   return (
     <div className="space-y-6 p-4 md:p-6">
+      <FrontOfficeBackLink />
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
           <PhoneCall className="h-5 w-5 text-primary-foreground" />

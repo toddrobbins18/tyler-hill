@@ -32,6 +32,7 @@ import {
 import { buildBusBubbleSheetsPdf } from "@/lib/transportBubbleSheetPdf";
 import { buildRunRoutes, getEffectiveCoreStops, loadTransportRunBoard, type TransportRunBoard } from "@/lib/transportRunBoard";
 import { TransportReportPreviewDialog, type TransportReportPreview } from "@/components/TransportReportPreviewDialog";
+import { FrontOfficeBackLink } from "@/components/daycamp/FrontOfficeBackLink";
 
 export default function BusAttendance() {
   const { toast } = useToast();
@@ -315,6 +316,7 @@ export default function BusAttendance() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+      <FrontOfficeBackLink />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="page-header flex items-center gap-2">

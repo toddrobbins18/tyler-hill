@@ -23,6 +23,7 @@ import {
 import { loadGroupRoster, type GroupRosterCamper } from "@/lib/transportGroupAttendance";
 import { buildGroupBubbleSheetPdf } from "@/lib/transportBubbleSheetPdf";
 import { TransportReportPreviewDialog, type TransportReportPreview } from "@/components/TransportReportPreviewDialog";
+import { FrontOfficeBackLink } from "@/components/daycamp/FrontOfficeBackLink";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -208,6 +209,7 @@ export default function GroupBubbleSheets() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+      <FrontOfficeBackLink />
       <div>
         <h1 className="page-header flex items-center gap-2">
           <Users className="h-6 w-6" /> Group Bubble Sheets
