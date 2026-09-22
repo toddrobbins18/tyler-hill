@@ -35,6 +35,21 @@ export type DayCampMenuItem = {
   menuId: string;
 };
 
+/** Staff transport tools — linked from Front Office, not top-level sidebar. */
+export const FRONT_OFFICE_TRANSPORT_MENU_IDS = new Set([
+  "transport-admin",
+  "bus-attendance",
+  "change-sheets",
+  "pending-transport-changes",
+  "group-bubble-sheets",
+]);
+
+/** Bus transport modules — gated when North Shore bus transport is disabled. */
+const BUS_TRANSPORT_MENU_IDS = new Set(["transportation", ...FRONT_OFFICE_TRANSPORT_MENU_IDS]);
+
+/** Parent-facing staff tools — Parent Portal section in sidebar. */
+export const PARENT_PORTAL_MENU_IDS = new Set(["parent-portal", "parent-portal-dashboard"]);
+
 /** Todd carryover — existing Nest modules (same labels/UX as The Nest). */
 export function getDayCampNestCarryoverItems(): DayCampMenuItem[] {
   return [
@@ -77,25 +92,54 @@ export function getDayCampPocItems(): DayCampMenuItem[] {
 /** North Shore Phase 1 — hide Media per Todd (Jul 30). Bunking + Hiring enabled for roster. */
 const NORTH_SHORE_SKIP_POC_MENU_IDS = new Set(["media"]);
 
-/** Day Camp POC items scoped to the active company. */
+function isTransportMenuItem(menuId: string): boolean {
+  return BUS_TRANSPORT_MENU_IDS.has(menuId);
+}
+
+/** Day Camp POC items scoped to the active company (includes all modules for permissions). */
 export function getDayCampPocItemsForCompany(company: CampLike): DayCampMenuItem[] {
   return getDayCampPocItems().filter((item) => {
     if (isNorthShoreDayCamp(company?.slug) && NORTH_SHORE_SKIP_POC_MENU_IDS.has(item.menuId)) {
       return false;
     }
-    if (
-      (item.menuId === "transportation" ||
-        item.menuId === "transport-admin" ||
-        item.menuId === "bus-attendance" ||
-        item.menuId === "group-bubble-sheets" ||
-        item.menuId === "change-sheets" ||
-        item.menuId === "pending-transport-changes") &&
-      !northShoreBusTransportEnabled(company)
-    ) {
+    if (isTransportMenuItem(item.menuId) && !northShoreBusTransportEnabled(company)) {
       return false;
     }
     return true;
   });
+}
+
+/** Day Camp sidebar — excludes Front Office transport links and Parent Portal items. */
+export function getDayCampSidebarPocItems(company: CampLike): DayCampMenuItem[] {
+  return getDayCampPocItemsForCompany(company).filter(
+    (item) =>
+      !FRONT_OFFICE_TRANSPORT_MENU_IDS.has(item.menuId) &&
+      !PARENT_PORTAL_MENU_IDS.has(item.menuId),
+  );
+}
+
+/** Transport shortcuts rendered on the Front Office dashboard. */
+export function getFrontOfficeTransportMenuItems(company: CampLike): DayCampMenuItem[] {
+  return getDayCampPocItemsForCompany(company).filter((item) =>
+    FRONT_OFFICE_TRANSPORT_MENU_IDS.has(item.menuId),
+  );
+}
+
+export function getParentPortalMenuItems(): DayCampMenuItem[] {
+  return [
+    {
+      title: "Parent Portal",
+      url: "/parents",
+      icon: Users,
+      menuId: "parent-portal",
+    },
+    {
+      title: "Portal Dashboard",
+      url: "/day-camp/parent-portal-dashboard",
+      icon: ClipboardList,
+      menuId: "parent-portal-dashboard",
+    },
+  ];
 }
 
 /** Todd carryover — sorted for Main Menu (same Nest sidebar style). */

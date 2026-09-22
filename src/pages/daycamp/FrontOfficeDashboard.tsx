@@ -27,6 +27,7 @@ import {
   type DismissalDashboardData,
 } from "@/lib/dismissalDashboard";
 import { northShoreBusTransportEnabled } from "@/lib/camps";
+import { getFrontOfficeTransportMenuItems } from "@/lib/dayCampMenu";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +44,10 @@ export default function FrontOfficeDashboard() {
   const [live, setLive] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const showTransport = northShoreBusTransportEnabled(currentCompany);
+  const frontOfficeTransportLinks = useMemo(
+    () => (currentCompany ? getFrontOfficeTransportMenuItems(currentCompany) : []),
+    [currentCompany],
+  );
 
   const load = useCallback(async () => {
     if (!currentCompany?.id) return;
@@ -240,26 +245,16 @@ export default function FrontOfficeDashboard() {
         ) : null}
       </div>
 
-      {showTransport ? (
+      {showTransport && frontOfficeTransportLinks.length > 0 ? (
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/day-camp/transport"><Truck className="mr-2 h-4 w-4" />Transport</Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/day-camp/change-sheets"><ClipboardList className="mr-2 h-4 w-4" />Change Sheets</Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/day-camp/bus-attendance"><Bus className="mr-2 h-4 w-4" />Bus Attendance</Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/day-camp/pending-transport-changes"><Clock className="mr-2 h-4 w-4" />Pending Changes</Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/day-camp/transport-admin"><Bus className="mr-2 h-4 w-4" />Transport Admin</Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/day-camp/parent-portal-dashboard"><Users className="mr-2 h-4 w-4" />Portal Dashboard</Link>
-          </Button>
+          {frontOfficeTransportLinks.map((item) => (
+            <Button key={item.menuId} variant="outline" size="sm" asChild>
+              <Link to={item.url}>
+                <item.icon className="mr-2 h-4 w-4" />
+                {item.title}
+              </Link>
+            </Button>
+          ))}
           <Button variant="outline" size="sm" asChild>
             <Link to="/day-camp/office-changes">+ Log office change</Link>
           </Button>
