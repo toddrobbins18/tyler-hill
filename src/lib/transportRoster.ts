@@ -6,6 +6,11 @@ import {
   resolveBundledGeocodeResult,
   type ParsedMappointRoute,
 } from "@/lib/mappointTransportImport";
+import {
+  buildAddressHintsFromPriors,
+  loadCamperRoutingPriors,
+  loadRouteReferenceImport,
+} from "@/lib/routeReferenceWarehouse";
 
 export type TransportEnrolledCamper = {
   id: string;
@@ -99,7 +104,10 @@ export async function normalizeTransportBoardForSeason(
   board = stripEmptyRouteShell(board);
 
   const enrolled = await loadEnrolledCampersForTransport(supabase, companyId, season);
-  const hints = season !== "2026" ? buildMappoint2026AddressHints() : undefined;
+  const hints =
+    season !== "2026"
+      ? await loadHistoricalAddressHints(supabase, companyId, "2026")
+      : undefined;
   const unplottedCampers = buildUnplottedFromEnrollment({
     enrolled,
     coreStops: board.coreStops,
@@ -197,7 +205,30 @@ export function camperNamesOnBoard(coreStops: Record<number, TransportRouteStop[
   return names;
 }
 
-/** Build address hints from 2026 MapPoint CSV (historical learning — not auto-routing). */
+/** Load camper→address hints from warehouse (falls back to bundled 2026 CSV). */
+export async function loadHistoricalAddressHints(
+  supabase: SupabaseClient,
+  companyId: string,
+  referenceSeason = "2026",
+): Promise<Map<string, { address: string; lat: number; lng: number }>> {
+  const importRecord = await loadRouteReferenceImport(supabase, companyId, referenceSeason);
+  if (!importRecord) return buildMappoint2026AddressHints();
+
+  const priors = await loadCamperRoutingPriors(supabase, companyId, {
+    referenceSeason,
+    direction: "AM",
+  });
+  if (!priors.length) return buildMappoint2026AddressHints();
+
+  const withBus = buildAddressHintsFromPriors(priors);
+  const hints = new Map<string, { address: string; lat: number; lng: number }>();
+  for (const [key, value] of withBus) {
+    hints.set(key, { address: value.address, lat: value.lat, lng: value.lng });
+  }
+  return hints;
+}
+
+/** Build address hints from 2026 MapPoint CSV (historical learning — bundled fallback). */
 export function buildMappoint2026AddressHints(): Map<string, { address: string; lat: number; lng: number }> {
   const routes = parseMappointRoutesCsv(getBundledMappointRoutesCsv2026(), { direction: "AM" });
   const hints = new Map<string, { address: string; lat: number; lng: number }>();

@@ -9,7 +9,8 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "seed:route-reference-2026": "node scripts/seed_route_reference_2026.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
