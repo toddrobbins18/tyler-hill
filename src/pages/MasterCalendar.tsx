@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useSeasonContext } from "@/contexts/SeasonContext";
+import { campDateInSeason } from "@/lib/campSeasonDate";
 import { Calendar as CalendarIcon, Plus, Minus, Maximize2, List, Pencil, Trash2, Search, X, Trophy, Users, Star, Sparkles, MapPin, Clock, Home, Plane, FileText, Download } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -76,7 +77,11 @@ export default function MasterCalendar() {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [calendarView, setCalendarView] = useState<View>(() => readStoredMasterCalendarView());
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState(() => campDateInSeason(currentSeason));
+
+  useEffect(() => {
+    setCurrentDate(campDateInSeason(currentSeason));
+  }, [currentSeason]);
   const calendarContainerRef = useRef<HTMLDivElement>(null);
   const [calendarAutoHeight, setCalendarAutoHeight] = useState(600);
   const [calendarZoomOffset, setCalendarZoomOffset] = useState(0);

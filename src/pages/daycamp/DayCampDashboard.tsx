@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
-import { useSeasonContext } from "@/contexts/SeasonContext";
+import { useCampOperationalDate } from "@/hooks/useCampOperationalDate";
 
 const quickActions = [
   {
@@ -47,7 +47,7 @@ const quickActions = [
 export default function DayCampDashboard() {
   const navigate = useNavigate();
   const { currentCompany } = useCompany();
-  const { currentSeason } = useSeasonContext();
+  const { operationalDate, currentSeason } = useCampOperationalDate();
   const [totalCampers, setTotalCampers] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -72,7 +72,7 @@ export default function DayCampDashboard() {
     fetchCamperCount();
   }, [currentCompany?.id, currentSeason]);
 
-  const todayLabel = format(new Date(), "EEEE, MMMM d, yyyy");
+  const todayLabel = format(operationalDate, "EEEE, MMMM d, yyyy");
 
   return (
     <div className="space-y-8 max-w-6xl">

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSeasonContext } from '@/contexts/SeasonContext';
+import { useCampOperationalDate } from '@/hooks/useCampOperationalDate';
+import { campDateInSeason, campDateStringInSeason } from '@/lib/campSeasonDate';
 import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
@@ -39,6 +41,7 @@ interface ScheduleEvent {
 export default function DailyNotes() {
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
+  const { operationalDate } = useCampOperationalDate();
   const [birthdayChildren, setBirthdayChildren] = useState<BirthdayRow[]>([]);
   const [birthdayStaff, setBirthdayStaff] = useState<BirthdayRow[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -81,8 +84,8 @@ export default function DailyNotes() {
   const fetchAllData = async () => {
     try {
       setLoading(true);
-      const today = new Date().toISOString().split('T')[0];
-      const todayDate = new Date();
+      const today = campDateStringInSeason(currentSeason);
+      const todayDate = campDateInSeason(currentSeason);
       const divisionFilter = getDivisionFilter();
 
       // Fetch birthday children with division filtering
@@ -206,7 +209,7 @@ export default function DailyNotes() {
     window.print();
   };
 
-  const today = format(new Date(), 'EEEE, MMMM d, yyyy');
+  const today = format(operationalDate, 'EEEE, MMMM d, yyyy');
   const campName = getDailyNewsCampLabel(currentCompany);
   const campSubtitle = getDailyNewsSubtitle(currentCompany);
   const printHeadline = getDailyNewsPrintHeadline(currentCompany);

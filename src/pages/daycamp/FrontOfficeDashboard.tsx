@@ -13,7 +13,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
-import { campTodayDateString } from "@/lib/parentPortalCutoff";
+import { useCampOperationalDate } from "@/hooks/useCampOperationalDate";
 import {
   ABSENCE_TYPE_LABELS,
   approveDismissalAbsence,
@@ -38,11 +38,15 @@ import { toast } from "sonner";
 export default function FrontOfficeDashboard() {
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
-  const [selectedDate, setSelectedDate] = useState(campTodayDateString());
+  const { now, operationalDate, operationalDateString } = useCampOperationalDate();
+  const [selectedDate, setSelectedDate] = useState(operationalDateString);
   const [data, setData] = useState<DismissalDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [live, setLive] = useState(false);
-  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    setSelectedDate(operationalDateString);
+  }, [operationalDateString]);
   const showTransport = northShoreBusTransportEnabled(currentCompany);
   const frontOfficeTransportLinks = useMemo(
     () => (currentCompany ? getFrontOfficeTransportMenuItems(currentCompany) : []),
@@ -71,11 +75,6 @@ export default function FrontOfficeDashboard() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 30_000);
-    return () => clearInterval(id);
-  }, []);
 
   useEffect(() => {
     if (!currentCompany?.id) return;
@@ -157,7 +156,7 @@ export default function FrontOfficeDashboard() {
     else void load();
   };
 
-  const formattedDate = now.toLocaleDateString("en-US", {
+  const formattedDate = operationalDate.toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",
@@ -199,7 +198,7 @@ export default function FrontOfficeDashboard() {
           onChange={(e) => setSelectedDate(e.target.value)}
           className="w-auto"
         />
-        <Button variant="outline" size="sm" onClick={() => setSelectedDate(campTodayDateString())}>
+        <Button variant="outline" size="sm" onClick={() => setSelectedDate(operationalDateString)}>
           Today
         </Button>
       </div>

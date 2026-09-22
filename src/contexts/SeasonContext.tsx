@@ -55,11 +55,17 @@ export function SeasonProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
+  const setCurrentSeasonSafe = (season: string) => {
+    if (isCampSeason(season)) {
+      setCurrentSeason(season);
+    }
+  };
+
   return (
     <SeasonContext.Provider
       value={{
         currentSeason,
-        setCurrentSeason,
+        setCurrentSeason: setCurrentSeasonSafe,
         availableSeasons,
         setAvailableSeasons,
       }}

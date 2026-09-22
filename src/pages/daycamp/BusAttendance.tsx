@@ -10,7 +10,7 @@ import { Bus, ClipboardList, Clock, Moon, Printer, Sun } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
-import { campTodayDateString } from "@/lib/parentPortalCutoff";
+import { useCampOperationalDate } from "@/hooks/useCampOperationalDate";
 import {
   allRoutesBusSubmitted,
   busSubmissionKey,
@@ -39,7 +39,12 @@ export default function BusAttendance() {
   const { currentSeason } = useSeason();
   const companyId = currentCompany?.id;
 
-  const [runDate, setRunDate] = useState(campTodayDateString());
+  const { operationalDateString } = useCampOperationalDate();
+  const [runDate, setRunDate] = useState(operationalDateString);
+
+  useEffect(() => {
+    setRunDate(operationalDateString);
+  }, [operationalDateString]);
   const [timeOfDay, setTimeOfDay] = useState<"am" | "pm">("am");
   const [board, setBoard] = useState<TransportRunBoard | null>(null);
   const [boardLoading, setBoardLoading] = useState(true);
@@ -330,10 +335,10 @@ export default function BusAttendance() {
           id="bus-attendance-date"
           type="date"
           value={runDate}
-          onChange={(e) => setRunDate(e.target.value || campTodayDateString())}
+          onChange={(e) => setRunDate(e.target.value || operationalDateString)}
           className="h-8 w-[140px] text-xs"
         />
-        {runDate === campTodayDateString() && (
+        {runDate === operationalDateString && (
           <Badge variant="secondary" className="text-[10px]">Today</Badge>
         )}
         <div className="inline-flex rounded-lg border border-border bg-muted/30 p-0.5">

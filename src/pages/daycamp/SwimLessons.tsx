@@ -18,7 +18,7 @@ import { approveDismissalSwim } from "@/lib/dismissalDashboard";
 import { swimLessonBusRun } from "@/lib/campTime";
 import { toast } from "sonner";
 import { campDateTimeToIso, formatCampDate, formatCampTime } from "@/lib/campTime";
-import { campTodayDateString } from "@/lib/parentPortalCutoff";
+import { campDateStringInSeason } from "@/lib/campSeasonDate";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
 
 type Camper = { id: string; name: string; guardian_email: string | null };
@@ -187,7 +187,11 @@ function LessonDialog({
   const { currentCompany } = useCompany();
   const [open, setOpen] = useState(false);
   const [camperId, setCamperId] = useState("");
-  const [date, setDate] = useState(campTodayDateString());
+  const [date, setDate] = useState(() => campDateStringInSeason(currentSeason));
+
+  useEffect(() => {
+    setDate(campDateStringInSeason(currentSeason));
+  }, [currentSeason]);
   const [time, setTime] = useState("10:00");
   const [duration, setDuration] = useState("30");
   const [instructor, setInstructor] = useState("");

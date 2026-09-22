@@ -4,7 +4,7 @@ import { CalendarDays, ClipboardList, Printer, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
-import { campTodayDateString } from "@/lib/parentPortalCutoff";
+import { campDateStringInSeason } from "@/lib/campSeasonDate";
 import { DAY_CAMP_ENROLLMENT_WEEKS } from "@/lib/enrolledWeeks";
 import {
   buildMonFriEnrollmentWeeks,
@@ -80,7 +80,7 @@ export default function GroupBubbleSheets() {
       const loaded = await loadEnrollmentWeekCalendar(supabase, companyId, currentSeason);
       setCalendar(loaded);
       setCalendarDraft(mergeCalendarDraft(loaded));
-      const today = campTodayDateString();
+      const today = campDateStringInSeason(currentSeason);
       const currentWeek = enrollmentWeekForDate(loaded, today);
       if (currentWeek != null) setSelectedWeek(currentWeek);
     } catch (err) {

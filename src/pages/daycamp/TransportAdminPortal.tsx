@@ -4,7 +4,7 @@ import { Bus, CheckCircle2, Clock, HeartPulse, Plus, Waves } from "lucide-react"
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
-import { campTodayDateString } from "@/lib/parentPortalCutoff";
+import { useCampOperationalDate } from "@/hooks/useCampOperationalDate";
 import { campDateTimeToIso, swimLessonBusRun } from "@/lib/campTime";
 import {
   ABSENCE_TYPE_LABELS,
@@ -69,7 +69,12 @@ function ExceptionBadge({ ex }: { ex: TransportException }) {
 export default function TransportAdminPortal() {
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
-  const [selectedDate, setSelectedDate] = useState(campTodayDateString());
+  const { operationalDateString } = useCampOperationalDate();
+  const [selectedDate, setSelectedDate] = useState(operationalDateString);
+
+  useEffect(() => {
+    setSelectedDate(operationalDateString);
+  }, [operationalDateString]);
   const [dashboard, setDashboard] = useState<DismissalDashboardData | null>(null);
   const [exceptions, setExceptions] = useState<TransportException[]>([]);
   const [campers, setCampers] = useState<Camper[]>([]);
@@ -196,7 +201,7 @@ export default function TransportAdminPortal() {
             onChange={(e) => setSelectedDate(e.target.value)}
             className="w-auto"
           />
-          <Button variant="outline" size="sm" onClick={() => setSelectedDate(campTodayDateString())}>
+          <Button variant="outline" size="sm" onClick={() => setSelectedDate(operationalDateString)}>
             Today
           </Button>
         </div>

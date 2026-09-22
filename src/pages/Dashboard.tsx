@@ -9,6 +9,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useSeasonContext } from "@/contexts/SeasonContext";
+import { useCampOperationalDate } from "@/hooks/useCampOperationalDate";
+import { campDateInSeason, campDateStringInSeason } from "@/lib/campSeasonDate";
 import { useCompany } from "@/contexts/CompanyContext";
 import { WeatherWidget } from "@/components/WeatherWidget";
 import NotesBoard from "@/components/dashboard/NotesBoard";
@@ -48,6 +50,7 @@ export default function Dashboard() {
   const { userRole } = useAuth();
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
+  const { now, operationalDate } = useCampOperationalDate();
   const [stats, setStats] = useState({
     totalChildren: 0,
     activeRoutes: 0,
@@ -158,7 +161,7 @@ export default function Dashboard() {
   const fetchDailyWolfContent = async () => {
     if (!currentCompany) return;
     
-    const today = format(new Date(), 'yyyy-MM-dd');
+    const today = campDateStringInSeason(currentSeason);
     
     const { data, error } = await supabase
       .from('daily_wolf_content')
@@ -188,10 +191,10 @@ export default function Dashboard() {
   const fetchDashboardData = async () => {
     if (!currentCompany?.id) return;
     
-    const todayDate = new Date();
-    const today = format(todayDate, "yyyy-MM-dd");
+    const todayDate = campDateInSeason(currentSeason);
+    const today = campDateStringInSeason(currentSeason);
     const tripWindowEnd = format(addDays(todayDate, 2), "yyyy-MM-dd");
-    const weekStart = new Date();
+    const weekStart = campDateInSeason(currentSeason);
     weekStart.setDate(weekStart.getDate() - 7);
     const divisionFilter = getDivisionFilter();
     
@@ -562,13 +565,7 @@ export default function Dashboard() {
   const widgetLinkClass = "h-auto shrink-0 p-0 text-xs font-medium text-primary hover:underline";
   const widgetIconWrapClass = "shrink-0 rounded-md p-1.5";
   
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 30_000);
-    return () => clearInterval(id);
-  }, []);
-
-  const formattedDate = now.toLocaleDateString('en-US', {
+  const formattedDate = operationalDate.toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
@@ -580,7 +577,7 @@ export default function Dashboard() {
   });
 
   const calculateAge = (dateOfBirth: string): number => {
-    const today = new Date();
+    const today = operationalDate;
     const parts = parseBirthdayCalendarParts(dateOfBirth);
     if (!parts) return 0;
     let age = today.getFullYear() - parts.year;
