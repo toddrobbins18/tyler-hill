@@ -28,6 +28,12 @@ import { resolveEnrolledWeeks } from "@/lib/enrolledWeeks";
 import { getCamperGradeDisplay, getDivisionDropdownLabel } from "@/lib/divisionFilterUtils";
 import EnrolledWeeksDisplay from "@/components/EnrolledWeeksDisplay";
 import CamperSwimHistoryTab from "@/components/CamperSwimHistoryTab";
+import {
+  fetchCamperFamilyContact,
+  hasCamperContactInfo,
+  mergeCamperContact,
+  type CamperContactDisplay,
+} from "@/lib/camperContactInfo";
 
 export default function ChildProfile() {
   const { id } = useParams();
@@ -49,6 +55,7 @@ export default function ChildProfile() {
   const [allergyText, setAllergyText] = useState("");
   const [savingAllergies, setSavingAllergies] = useState(false);
   const [conflicts, setConflicts] = useState<any[]>([]);
+  const [contactInfo, setContactInfo] = useState<CamperContactDisplay | null>(null);
 
   useEffect(() => {
     if (id && currentCompany?.id && !permissionsLoading) {
@@ -86,6 +93,13 @@ export default function ChildProfile() {
       
       setChild(childData);
       setAllergyText(childData?.allergies || "");
+
+      if (id) {
+        const { family, authorizedPickups } = await fetchCamperFamilyContact(supabase, id);
+        setContactInfo(mergeCamperContact(childData, family, authorizedPickups));
+      } else {
+        setContactInfo(null);
+      }
 
       // Fetch awards for this child - including historical awards from previous seasons
       let awardsData: any[] = [];
@@ -476,37 +490,56 @@ export default function ChildProfile() {
                 <CardDescription>Emergency contacts and guardian information</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {child.guardian_name && (
+                {contactInfo?.familyName && (
+                  <div className="p-3 rounded-lg bg-muted/50">
+                    <p className="text-sm text-muted-foreground">Family (Parent Portal)</p>
+                    <p className="font-medium">{contactInfo.familyName}</p>
+                  </div>
+                )}
+                {contactInfo?.guardianName && (
                   <div className="p-3 rounded-lg bg-muted/50">
                     <p className="text-sm text-muted-foreground">Parent 1 (P1)</p>
-                    <p className="font-medium">{child.guardian_name}</p>
+                    <p className="font-medium">{contactInfo.guardianName}</p>
                   </div>
                 )}
-                {child.guardian_name_p2 && (
+                {contactInfo?.guardianNameP2 && (
                   <div className="p-3 rounded-lg bg-muted/50">
                     <p className="text-sm text-muted-foreground">Parent 2 (P2)</p>
-                    <p className="font-medium">{child.guardian_name_p2}</p>
+                    <p className="font-medium">{contactInfo.guardianNameP2}</p>
                   </div>
                 )}
-                {child.guardian_email && (
+                {contactInfo?.guardianEmail && (
                   <div className="p-3 rounded-lg bg-muted/50">
                     <p className="text-sm text-muted-foreground">P1 Email</p>
-                    <p className="font-medium">{child.guardian_email}</p>
+                    <p className="font-medium">{contactInfo.guardianEmail}</p>
                   </div>
                 )}
-                {child.guardian_phone && (
+                {contactInfo?.guardianPhone && (
                   <div className="p-3 rounded-lg bg-muted/50">
                     <p className="text-sm text-muted-foreground">P1 Phone</p>
-                    <p className="font-medium">{child.guardian_phone}</p>
+                    <p className="font-medium">{contactInfo.guardianPhone}</p>
                   </div>
                 )}
-                {child.emergency_contact && (
+                {contactInfo?.emergencyContact && (
                   <div className="p-3 rounded-lg bg-muted/50">
                     <p className="text-sm text-muted-foreground">Emergency Contact</p>
-                    <p className="font-medium">{child.emergency_contact}</p>
+                    <p className="font-medium">{contactInfo.emergencyContact}</p>
                   </div>
                 )}
-                {!child.guardian_name && !child.guardian_name_p2 && !child.guardian_email && !child.guardian_phone && !child.emergency_contact && (
+                {contactInfo?.authorizedPickups.map((pickup) => (
+                  <div key={`${pickup.fullName}-${pickup.phone ?? ""}`} className="p-3 rounded-lg bg-muted/50">
+                    <p className="text-sm text-muted-foreground">
+                      Authorized pickup{pickup.relationship ? ` · ${pickup.relationship}` : ""}
+                    </p>
+                    <p className="font-medium">{pickup.fullName}</p>
+                    {(pickup.phone || pickup.email) && (
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {[pickup.phone, pickup.email].filter(Boolean).join(" · ")}
+                      </p>
+                    )}
+                  </div>
+                ))}
+                {contactInfo && !hasCamperContactInfo(contactInfo) && (
                   <p className="text-sm text-muted-foreground">No contact information available</p>
                 )}
               </CardContent>
