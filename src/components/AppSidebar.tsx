@@ -379,6 +379,21 @@ export function AppSidebar() {
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                     <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={location.pathname === "/parents/portal"}>
+                        <NavLink
+                          to={parentPortalUrl(currentCompany.slug, "/parents/portal")}
+                          end
+                          className={({ isActive }) =>
+                            isActive
+                              ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                              : "hover:bg-sidebar-accent/50"
+                          }
+                        >
+                          <span className="ml-6 text-sm">Family Portal</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
                       <SidebarMenuButton asChild isActive={location.pathname === "/day-camp/parent-portal-dashboard"}>
                         <NavLink
                           to="/day-camp/parent-portal-dashboard"

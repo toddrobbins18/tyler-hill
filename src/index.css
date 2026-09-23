@@ -171,6 +171,111 @@ All colors MUST be HSL.
   }
 }
 
+/* Parent portal — colors derive from camp `theme_color` via applyParentPortalTheme() */
+.parent-portal {
+  --pp-brand: 210 79% 42%;
+  --pp-brand-dark: 210 79% 28%;
+  --pp-brand-hover: 210 79% 34%;
+  --pp-brand-soft: 210 40% 94%;
+  --pp-brand-muted: 210 28% 88%;
+  --pp-brand-subtle: 210 24% 96%;
+  --pp-bg: 210 28% 97%;
+  --pp-bg-elevated: 0 0% 100%;
+  --pp-text: 210 40% 18%;
+  --pp-text-muted: 210 14% 42%;
+  --pp-text-subtle: 210 12% 50%;
+  --pp-border: 210 22% 88%;
+  --pp-border-strong: 210 28% 85%;
+  background-color: hsl(var(--pp-bg));
+  color: hsl(var(--pp-text));
+}
+
+@layer components {
+  .pp-page-bg {
+    background-color: hsl(var(--pp-bg));
+    color: hsl(var(--pp-text));
+  }
+
+  .pp-hero {
+    background-color: hsl(var(--pp-brand-dark));
+    color: white;
+  }
+
+  .pp-brand-bg {
+    background-color: hsl(var(--pp-brand));
+    color: white;
+  }
+
+  .pp-brand-dark-bg {
+    background-color: hsl(var(--pp-brand-dark));
+    color: white;
+  }
+
+  .pp-btn-primary {
+    background-color: hsl(var(--pp-brand));
+    color: white;
+  }
+
+  .pp-btn-primary:hover {
+    background-color: hsl(var(--pp-brand-hover));
+  }
+
+  .pp-card {
+    border-radius: 1rem;
+    border: 1px solid hsl(var(--pp-border));
+    background-color: hsl(var(--pp-bg-elevated));
+    box-shadow: 0 1px 2px hsl(var(--pp-text) / 0.04);
+  }
+
+  .pp-soft-panel {
+    background-color: hsl(var(--pp-brand-subtle));
+  }
+
+  .pp-text-muted {
+    color: hsl(var(--pp-text-muted));
+  }
+
+  .pp-text-subtle {
+    color: hsl(var(--pp-text-subtle));
+  }
+
+  .pp-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: hsl(var(--pp-text-subtle));
+  }
+
+  .pp-nav-active {
+    background-color: hsl(var(--pp-brand));
+    color: white;
+    box-shadow: 0 1px 2px hsl(var(--pp-brand-dark) / 0.25);
+  }
+
+  .pp-nav-idle {
+    color: hsl(var(--pp-text-muted));
+  }
+
+  .pp-nav-idle:hover {
+    background-color: hsl(var(--pp-brand-soft));
+  }
+
+  .pp-header-bar {
+    border-bottom: 1px solid hsl(var(--pp-border));
+    background-color: hsl(var(--pp-bg) / 0.92);
+    backdrop-filter: blur(12px);
+  }
+
+  .pp-accent-blur-a {
+    background-color: hsl(var(--pp-brand-soft) / 0.55);
+  }
+
+  .pp-accent-blur-b {
+    background-color: hsl(var(--pp-brand-muted) / 0.45);
+  }
+}
+
 /* Ensure Radix dialogs/popovers/tooltips render above Leaflet map panes (which use z-index up to 700) */
 [data-radix-popper-content-wrapper] { z-index: 1000 !important; }
 [role="dialog"] { z-index: 1000; }

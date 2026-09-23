@@ -1,21 +1,37 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+/** Merge camper guardian fields with parent-portal family + authorized pickup contacts. */
 
 export type CamperContactDisplay = {
-  guardianName: string | null;
-  guardianNameP2: string | null;
-  guardianEmail: string | null;
-  guardianPhone: string | null;
-  emergencyContact: string | null;
-  familyName: string | null;
+  familyName?: string | null;
+  guardianName?: string | null;
+  guardianNameP2?: string | null;
+  guardianEmail?: string | null;
+  guardianPhone?: string | null;
+  emergencyContact?: string | null;
   authorizedPickups: Array<{
     fullName: string;
-    relationship: string | null;
-    phone: string | null;
-    email: string | null;
+    relationship?: string | null;
+    phone?: string | null;
+    email?: string | null;
   }>;
 };
 
-type ChildContactFields = {
+type FamilyRow = {
+  family_name: string;
+  primary_contact_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+};
+
+type AuthorizedPickupRow = {
+  full_name: string;
+  relationship?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  is_active?: boolean | null;
+  camper_id?: string | null;
+};
+
+type CamperRow = {
   guardian_name?: string | null;
   guardian_name_p2?: string | null;
   guardian_email?: string | null;
@@ -23,103 +39,75 @@ type ChildContactFields = {
   emergency_contact?: string | null;
 };
 
-type FamilyContactRow = {
-  id: string;
-  family_name: string;
-  primary_contact_name: string | null;
-  email: string | null;
-  phone: string | null;
-};
+function trimOrNull(value?: string | null): string | null {
+  const trimmed = (value ?? "").trim();
+  return trimmed || null;
+}
 
-type AuthorizedPickupRow = {
-  full_name: string;
-  relationship: string | null;
-  phone: string | null;
-  email: string | null;
-};
+export async function fetchCamperFamilyContact(
+  supabase: { from: (table: string) => any },
+  childId: string,
+): Promise<{ family: FamilyRow | null; authorizedPickups: AuthorizedPickupRow[] }> {
+  const { data: link } = await supabase
+    .from("family_children")
+    .select("family_id, families:family_id(family_name, primary_contact_name, email, phone)")
+    .eq("child_id", childId)
+    .maybeSingle();
+
+  const row = link as {
+    family_id?: string;
+    families?: FamilyRow | FamilyRow[] | null;
+  } | null;
+
+  const familyRaw = row?.families;
+  const family = Array.isArray(familyRaw) ? familyRaw[0] ?? null : familyRaw ?? null;
+
+  if (!row?.family_id) {
+    return { family: null, authorizedPickups: [] };
+  }
+
+  const { data: pickups } = await supabase
+    .from("authorized_pickups")
+    .select("full_name, relationship, phone, email, is_active, camper_id")
+    .eq("family_id", row.family_id)
+    .eq("is_active", true);
+
+  const authorizedPickups = (pickups ?? []).filter(
+    (pickup: AuthorizedPickupRow) => !pickup.camper_id || pickup.camper_id === childId,
+  );
+
+  return { family, authorizedPickups };
+}
 
 export function mergeCamperContact(
-  child: ChildContactFields,
-  family: FamilyContactRow | null,
-  authorizedPickups: AuthorizedPickupRow[] = [],
+  child: CamperRow,
+  family: FamilyRow | null,
+  authorizedPickups: AuthorizedPickupRow[],
 ): CamperContactDisplay {
   return {
-    guardianName: child.guardian_name || family?.primary_contact_name || null,
-    guardianNameP2: child.guardian_name_p2 ?? null,
-    guardianEmail: child.guardian_email || family?.email || null,
-    guardianPhone: child.guardian_phone || family?.phone || null,
-    emergencyContact: child.emergency_contact ?? null,
-    familyName: family?.family_name ?? null,
-    authorizedPickups: authorizedPickups.map((p) => ({
-      fullName: p.full_name,
-      relationship: p.relationship,
-      phone: p.phone,
-      email: p.email,
+    familyName: trimOrNull(family?.family_name),
+    guardianName: trimOrNull(child.guardian_name) ?? trimOrNull(family?.primary_contact_name),
+    guardianNameP2: trimOrNull(child.guardian_name_p2),
+    guardianEmail: trimOrNull(child.guardian_email) ?? trimOrNull(family?.email),
+    guardianPhone: trimOrNull(child.guardian_phone) ?? trimOrNull(family?.phone),
+    emergencyContact: trimOrNull(child.emergency_contact),
+    authorizedPickups: authorizedPickups.map((pickup) => ({
+      fullName: pickup.full_name,
+      relationship: trimOrNull(pickup.relationship),
+      phone: trimOrNull(pickup.phone),
+      email: trimOrNull(pickup.email),
     })),
   };
 }
 
-export function hasCamperContactInfo(contact: CamperContactDisplay): boolean {
-  return (
-    !!contact.guardianName ||
-    !!contact.guardianNameP2 ||
-    !!contact.guardianEmail ||
-    !!contact.guardianPhone ||
-    !!contact.emergencyContact ||
-    !!contact.familyName ||
-    contact.authorizedPickups.length > 0
+export function hasCamperContactInfo(info: CamperContactDisplay): boolean {
+  return !!(
+    trimOrNull(info.familyName) ||
+    trimOrNull(info.guardianName) ||
+    trimOrNull(info.guardianNameP2) ||
+    trimOrNull(info.guardianEmail) ||
+    trimOrNull(info.guardianPhone) ||
+    trimOrNull(info.emergencyContact) ||
+    info.authorizedPickups.length > 0
   );
-}
-
-/** Load parent-portal family + authorized pickups linked to a camper. */
-export async function fetchCamperFamilyContact(
-  supabase: SupabaseClient,
-  childId: string,
-): Promise<{ family: FamilyContactRow | null; authorizedPickups: AuthorizedPickupRow[] }> {
-  const { data: linkRows } = await supabase
-    .from("family_children")
-    .select(
-      "family_id, families:family_id(id, family_name, primary_contact_name, email, phone)",
-    )
-    .eq("child_id", childId)
-    .limit(1);
-
-  const family = (linkRows?.[0]?.families as FamilyContactRow | null) ?? null;
-
-  const pickupQueries: Promise<{ data: AuthorizedPickupRow[] | null }>[] = [
-    supabase
-      .from("authorized_pickups")
-      .select("full_name, relationship, phone, email")
-      .eq("camper_id", childId)
-      .eq("is_active", true)
-      .order("full_name")
-      .then(({ data }) => ({ data: data as AuthorizedPickupRow[] | null })),
-  ];
-
-  if (family?.id) {
-    pickupQueries.push(
-      supabase
-        .from("authorized_pickups")
-        .select("full_name, relationship, phone, email")
-        .eq("family_id", family.id)
-        .is("camper_id", null)
-        .eq("is_active", true)
-        .order("full_name")
-        .then(({ data }) => ({ data: data as AuthorizedPickupRow[] | null })),
-    );
-  }
-
-  const pickupResults = await Promise.all(pickupQueries);
-  const seen = new Set<string>();
-  const authorizedPickups: AuthorizedPickupRow[] = [];
-  for (const result of pickupResults) {
-    for (const row of result.data ?? []) {
-      const key = `${row.full_name}|${row.phone ?? ""}|${row.email ?? ""}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      authorizedPickups.push(row);
-    }
-  }
-
-  return { family, authorizedPickups };
 }
