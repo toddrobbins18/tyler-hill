@@ -17,12 +17,19 @@ import { lookupChildByRfid, normalizeRfidInput } from "@/lib/rfidUtils";
 import { useCompany } from "@/contexts/CompanyContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import {
+  camperMatchesDayCampDivisionFilter,
   camperMatchesDivisionFilter,
+  camperMatchesGenderFilter,
+  compareByCamperGender,
   dedupeDivisionsForDropdown,
   getCamperEffectiveDivision,
   getCamperGradeDisplay,
+  getDayCampDivisionDropdownLabel,
+  getDayCampGradeSortIndex,
   getDivisionDropdownLabel,
   normalizeDivisionNameForFilter,
+  prepareDayCampDivisionDropdown,
+  type CamperGenderFilter,
 } from "@/lib/divisionFilterUtils";
 import { compareByLastName } from "@/lib/nameSortUtils";
 import { isDayCampCompany } from "@/lib/camps";
@@ -53,8 +60,9 @@ export default function Roster() {
   const [children, setChildren] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);
   const [selectedDivision, setSelectedDivision] = useState<string>("all");
+  const [selectedGender, setSelectedGender] = useState<CamperGenderFilter>("all");
   const [selectedSession, setSelectedSession] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<"name" | "division" | "group">("name");
+  const [sortBy, setSortBy] = useState<"name" | "division" | "gender" | "group">("name");
   const isDayCamp = isDayCampCompany(currentCompany);
   const [loading, setLoading] = useState(true);
   const [editingChild, setEditingChild] = useState<string | null>(null);
@@ -93,7 +101,7 @@ export default function Roster() {
         let query = supabase
           .from("children")
           .select(`
-            id, name, grade, status, session, season, division_id, person_id, group_name,
+            id, name, grade, gender, status, session, season, division_id, person_id, group_name,
             division:division_id(id, name, gender, sort_order),
             leader:leader_id(id, name),
             bunk:bunk_id(id, bunk_number, bunk_name)
@@ -158,12 +166,17 @@ export default function Roster() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedDivision, selectedSession, currentSeason, sortBy]);
+  }, [searchTerm, selectedDivision, selectedGender, selectedSession, currentSeason, sortBy]);
 
-  const dropdownDivisions = useMemo(
-    () => dedupeDivisionsForDropdown(divisions),
-    [divisions],
-  );
+  const dropdownDivisions = useMemo(() => {
+    if (isDayCamp) {
+      return prepareDayCampDivisionDropdown(divisions, children);
+    }
+    return dedupeDivisionsForDropdown(divisions);
+  }, [divisions, children, isDayCamp]);
+
+  const divisionDropdownLabel = (name?: string | null) =>
+    isDayCamp ? getDayCampDivisionDropdownLabel(name) : getDivisionDropdownLabel(name);
 
   const selectedDivisionRecord = dropdownDivisions.find((div) => div.id === selectedDivision);
 
@@ -176,12 +189,22 @@ export default function Roster() {
         (gradeDisplay !== "N/A" && gradeDisplay.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (effectiveDivision.name?.toLowerCase() || "").includes(searchTerm.toLowerCase());
       
-      const matchesDivision = camperMatchesDivisionFilter(
-        effectiveDivision.id,
-        effectiveDivision.name,
-        selectedDivision,
-        selectedDivisionRecord?.name,
-      );
+      const matchesDivision = isDayCamp
+        ? camperMatchesDayCampDivisionFilter(
+            effectiveDivision.id,
+            effectiveDivision.name,
+            child.grade,
+            selectedDivision,
+            selectedDivisionRecord?.name,
+          )
+        : camperMatchesDivisionFilter(
+            effectiveDivision.id,
+            effectiveDivision.name,
+            selectedDivision,
+            selectedDivisionRecord?.name,
+          );
+
+      const matchesGender = camperMatchesGenderFilter(child.gender, selectedGender);
       
       const matchesSession = 
         selectedSession === "all" || 
@@ -193,9 +216,20 @@ export default function Roster() {
       const matchesSeason = 
         child.season === currentSeason;
       
-      return matchesSearch && matchesDivision && matchesSession && matchesSeason;
+      return matchesSearch && matchesDivision && matchesGender && matchesSession && matchesSeason;
     })
     .sort((a, b) => {
+      if (sortBy === "gender") {
+        const genderCompare = compareByCamperGender(a.gender, b.gender);
+        if (genderCompare !== 0) return genderCompare;
+        const divA = getCamperEffectiveDivision(a);
+        const divB = getCamperEffectiveDivision(b);
+        const gradeCompare =
+          getDayCampGradeSortIndex(divA.name ?? a.grade) -
+          getDayCampGradeSortIndex(divB.name ?? b.grade);
+        if (gradeCompare !== 0) return gradeCompare;
+        return compareByLastName(a, b);
+      }
       if (sortBy === "group") {
         const groupA = (a.group_name || "").trim().toLowerCase();
         const groupB = (b.group_name || "").trim().toLowerCase();
@@ -209,12 +243,21 @@ export default function Roster() {
       if (sortBy === "division") {
         const divA = getCamperEffectiveDivision(a);
         const divB = getCamperEffectiveDivision(b);
-        const orderA = divA.sort_order ?? 999;
-        const orderB = divB.sort_order ?? 999;
+        const orderA = isDayCamp
+          ? getDayCampGradeSortIndex(divA.name ?? a.grade)
+          : (divA.sort_order ?? 999);
+        const orderB = isDayCamp
+          ? getDayCampGradeSortIndex(divB.name ?? b.grade)
+          : (divB.sort_order ?? 999);
         if (orderA !== orderB) return orderA - orderB;
-        const nameA = normalizeDivisionNameForFilter(divA.name);
-        const nameB = normalizeDivisionNameForFilter(divB.name);
-        if (nameA !== nameB) return nameA.localeCompare(nameB);
+        if (isDayCamp) {
+          const genderCompare = compareByCamperGender(a.gender, b.gender);
+          if (genderCompare !== 0) return genderCompare;
+        } else {
+          const nameA = normalizeDivisionNameForFilter(divA.name);
+          const nameB = normalizeDivisionNameForFilter(divB.name);
+          if (nameA !== nameB) return nameA.localeCompare(nameB);
+        }
         return compareByLastName(a, b);
       }
       return compareByLastName(a, b);
@@ -223,7 +266,13 @@ export default function Roster() {
   const cycleSortBy = () => {
     if (isDayCamp) {
       setSortBy((prev) =>
-        prev === "name" ? "division" : prev === "division" ? "group" : "name",
+        prev === "name"
+          ? "division"
+          : prev === "division"
+            ? "gender"
+            : prev === "gender"
+              ? "group"
+              : "name",
       );
       return;
     }
@@ -231,7 +280,13 @@ export default function Roster() {
   };
 
   const sortByLabel =
-    sortBy === "name" ? "Name" : sortBy === "division" ? "Division" : "Group";
+    sortBy === "name"
+      ? "Name"
+      : sortBy === "division"
+        ? "Division"
+        : sortBy === "gender"
+          ? "Gender"
+          : "Group";
 
   const totalPages = Math.ceil(filteredChildren.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -437,10 +492,21 @@ export default function Roster() {
           <option value="all">All Divisions</option>
           {dropdownDivisions.map((div) => (
             <option key={div.id} value={div.id}>
-              {getDivisionDropdownLabel(div.name)}
+              {divisionDropdownLabel(div.name)}
             </option>
           ))}
         </select>
+        {isDayCamp && (
+          <select
+            value={selectedGender}
+            onChange={(e) => setSelectedGender(e.target.value as CamperGenderFilter)}
+            className="px-4 py-2 border rounded-md bg-background"
+          >
+            <option value="all">All Genders</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+          </select>
+        )}
         {currentCompany?.slug === 'timber-lake-west' && (
           <select
             value={selectedSession}
@@ -476,7 +542,7 @@ export default function Roster() {
             {paginatedChildren.map((child) => {
             const effectiveDivision = getCamperEffectiveDivision(child);
             const gradeDisplay = getCamperGradeDisplay(child.grade, effectiveDivision.name);
-            const divisionDisplay = getDivisionDropdownLabel(effectiveDivision.name) || "N/A";
+            const divisionDisplay = divisionDropdownLabel(effectiveDivision.name) || "N/A";
             return (
             <Card 
               key={child.id} 

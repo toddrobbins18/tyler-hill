@@ -37,8 +37,8 @@ export const AGE_GROUP_FIELD_NAMES = [
 
 /** CampMinder CamperDetails.CampGradeID → display label (also used for division names). */
 export const CM_CAMP_GRADE_LABELS: Record<number, string> = {
-  0: "Pre-K",
-  1: "K",
+  0: "Pre - K",
+  1: "Kindergarten",
   2: "1st",
   3: "2nd",
   4: "3rd",
@@ -52,6 +52,78 @@ export const CM_CAMP_GRADE_LABELS: Record<number, string> = {
   12: "11th",
   13: "12th",
 };
+
+const DAY_CAMP_GRADE_SORT_KEYS = [
+  "nursery",
+  "pre-k",
+  "kindergarten",
+  "1st",
+  "2nd",
+  "3rd",
+  "4th",
+  "5th",
+  "6th",
+  "7th",
+  "8th",
+  "9th",
+] as const;
+
+type DayCampGradeSortKey = (typeof DAY_CAMP_GRADE_SORT_KEYS)[number];
+
+const DAY_CAMP_GRADE_DISPLAY: Record<DayCampGradeSortKey, string> = {
+  nursery: "Nursery",
+  "pre-k": "Pre - K",
+  kindergarten: "Kindergarten",
+  "1st": "1st",
+  "2nd": "2nd",
+  "3rd": "3rd",
+  "4th": "4th",
+  "5th": "5th",
+  "6th": "6th",
+  "7th": "7th",
+  "8th": "8th",
+  "9th": "9th",
+};
+
+const ORDINAL_SUFFIX: Record<number, string> = { 1: "st", 2: "nd", 3: "rd" };
+
+function ordinalGradeKey(n: number): DayCampGradeSortKey | null {
+  if (n < 1 || n > 9) return null;
+  const suffix = ORDINAL_SUFFIX[n] ?? "th";
+  const key = `${n}${suffix}` as DayCampGradeSortKey;
+  return DAY_CAMP_GRADE_SORT_KEYS.includes(key) ? key : null;
+}
+
+function normalizeDayCampGradeKey(value?: string | null): DayCampGradeSortKey | null {
+  const raw = (value ?? "").trim().toLowerCase();
+  if (!raw) return null;
+
+  const compact = raw.replace(/\s+/g, " ").replace(/\s-\s/g, "-");
+  if (/^nursery(\s+campers?)?$/.test(compact)) return "nursery";
+  if (/^pre\s*-?\s*k(inder(garten)?)?$/.test(compact)) return "pre-k";
+  if (/^k(inder(garten)?)?$/.test(compact)) return "kindergarten";
+
+  const ordinalMatch = compact.match(/^(\d+)(st|nd|rd|th)?$/);
+  if (ordinalMatch) return ordinalGradeKey(Number(ordinalMatch[1]));
+
+  const gradeWordMatch = compact.match(/^grade\s*(\d+)/);
+  if (gradeWordMatch) return ordinalGradeKey(Number(gradeWordMatch[1]));
+
+  return null;
+}
+
+function getDayCampGradeSortIndex(value?: string | null): number {
+  const key = normalizeDayCampGradeKey(value);
+  if (!key) return 9999;
+  const idx = DAY_CAMP_GRADE_SORT_KEYS.indexOf(key);
+  return idx >= 0 ? idx : 9999;
+}
+
+function getCanonicalDayCampGradeLabel(label: string): string {
+  const key = normalizeDayCampGradeKey(label);
+  if (key) return DAY_CAMP_GRADE_DISPLAY[key];
+  return label.trim();
+}
 
 export function campGradeLabelFromId(
   campGradeId: number | null | undefined,
@@ -1427,7 +1499,9 @@ export async function ensureDivisionsForAgeGroupLabels(
   labels: string[],
 ): Promise<Map<string, string>> {
   const map = new Map<string, string>();
-  const unique = [...new Set(labels.map((l) => l.trim()).filter(Boolean))];
+  const unique = [
+    ...new Set(labels.map((l) => getCanonicalDayCampGradeLabel(l)).filter(Boolean)),
+  ];
   if (!unique.length) return map;
 
   const { data: existing } = await supabase
@@ -1439,13 +1513,42 @@ export async function ensureDivisionsForAgeGroupLabels(
     (existing || []).map((d: { id: string; name: string; sort_order?: number }) => [d.name.toLowerCase().trim(), d]),
   );
 
+  const existingByGradeKey = new Map<string, { id: string; name: string; sort_order?: number }>();
+  for (const division of existing || []) {
+    const gradeKey = normalizeDayCampGradeKey(division.name);
+    if (gradeKey && !existingByGradeKey.has(gradeKey)) {
+      existingByGradeKey.set(gradeKey, division);
+    }
+  }
+
   let nextSort = Math.max(0, ...(existing || []).map((d: { sort_order?: number }) => d.sort_order ?? 0)) + 1;
 
-  for (const label of unique.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))) {
-    const key = label.toLowerCase().trim();
-    const found = existingByName.get(key);
+  const registerMapKeys = (label: string, divisionId: string) => {
+    map.set(label.toLowerCase().trim(), divisionId);
+    const gradeKey = normalizeDayCampGradeKey(label);
+    if (gradeKey) {
+      map.set(gradeKey, divisionId);
+      map.set(DAY_CAMP_GRADE_DISPLAY[gradeKey].toLowerCase().trim(), divisionId);
+    }
+  };
+
+  for (const label of unique.sort(
+    (a, b) => getDayCampGradeSortIndex(a) - getDayCampGradeSortIndex(b),
+  )) {
+    const gradeKey = normalizeDayCampGradeKey(label);
+    const sortOrder = gradeKey != null ? getDayCampGradeSortIndex(label) + 1 : nextSort++;
+    const found =
+      (gradeKey ? existingByGradeKey.get(gradeKey) : undefined) ??
+      existingByName.get(label.toLowerCase().trim());
+
     if (found) {
-      map.set(key, found.id);
+      if ((found.sort_order ?? 0) !== sortOrder) {
+        await supabase
+          .from("divisions")
+          .update({ sort_order: sortOrder })
+          .eq("id", found.id);
+      }
+      registerMapKeys(label, found.id);
       continue;
     }
 
@@ -1456,7 +1559,7 @@ export async function ensureDivisionsForAgeGroupLabels(
         name: label,
         gender: "Coed",
         is_active: true,
-        sort_order: nextSort++,
+        sort_order: sortOrder,
       })
       .select("id, name")
       .single();
@@ -1466,8 +1569,9 @@ export async function ensureDivisionsForAgeGroupLabels(
       continue;
     }
     if (inserted) {
-      map.set(key, inserted.id);
-      existingByName.set(key, inserted);
+      existingByName.set(label.toLowerCase().trim(), inserted);
+      if (gradeKey) existingByGradeKey.set(gradeKey, inserted);
+      registerMapKeys(label, inserted.id);
     }
   }
 
@@ -1479,7 +1583,14 @@ export function resolveDivisionIdFromAgeGroupLabel(
   ageGroupDivisionMap: Map<string, string>,
 ): string | null {
   if (!ageGroupLabel?.trim()) return null;
-  return ageGroupDivisionMap.get(ageGroupLabel.toLowerCase().trim()) ?? null;
+  const canonical = getCanonicalDayCampGradeLabel(ageGroupLabel);
+  const gradeKey = normalizeDayCampGradeKey(canonical);
+  return (
+    ageGroupDivisionMap.get(canonical.toLowerCase().trim()) ??
+    (gradeKey ? ageGroupDivisionMap.get(gradeKey) : undefined) ??
+    ageGroupDivisionMap.get(ageGroupLabel.toLowerCase().trim()) ??
+    null
+  );
 }
 
 /** Apply CampMinder CamperDetails.CampGradeID as division labels (authoritative for North Shore). */
