@@ -3,6 +3,8 @@ import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, getDay, par
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
+import { useOdCampDay } from "@/hooks/useOdCampDay";
+import { formatDateAsOdCampDayYmd, odCampDayDateInSeason } from "@/lib/odCampDay";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -109,7 +111,9 @@ export default function ODManagement() {
   const { user } = useAuth();
   const { userRole } = usePermissions();
   
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const { today: odToday } = useOdCampDay(currentSeason);
+  const followingOdTodayRef = useRef(true);
+  const [selectedDate, setSelectedDate] = useState<Date>(() => odCampDayDateInSeason(currentSeason));
   const [activeTab, setActiveTab] = useState("od");
   const [loading, setLoading] = useState(true);
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -150,6 +154,17 @@ export default function ODManagement() {
   // OD Management is available globally for all camps
 
   useEffect(() => {
+    followingOdTodayRef.current = true;
+    setSelectedDate(odCampDayDateInSeason(currentSeason));
+  }, [currentSeason]);
+
+  useEffect(() => {
+    if (followingOdTodayRef.current) {
+      setSelectedDate(odToday);
+    }
+  }, [odToday]);
+
+  useEffect(() => {
     if (currentCompany?.id) {
       fetchData();
     }
@@ -175,7 +190,7 @@ export default function ODManagement() {
   const fetchDaysOffRecords = async (): Promise<DayOff[]> => {
     if (!currentCompany?.id) return [];
 
-    const dateStr = format(selectedDate, "yyyy-MM-dd");
+    const dateStr = formatDateAsOdCampDayYmd(selectedDate);
     const { data, error } = await supabase
       .from("staff_days_off")
       .select(`
@@ -382,7 +397,7 @@ export default function ODManagement() {
       return;
     }
 
-    const dateStr = format(selectedDate, "yyyy-MM-dd");
+    const dateStr = formatDateAsOdCampDayYmd(selectedDate);
     
     try {
       // Create a new day off record with late override
@@ -423,7 +438,7 @@ export default function ODManagement() {
   const handleToggleDayOff = async (staffId: string, field: 'is_day_off' | 'is_night_off' | 'is_sleeping_out') => {
     if (!currentCompany?.id) return;
 
-    const dateStr = format(selectedDate, "yyyy-MM-dd");
+    const dateStr = formatDateAsOdCampDayYmd(selectedDate);
     const existing = daysOff.find(d => d.staff_id === staffId);
 
     try {
@@ -554,7 +569,7 @@ export default function ODManagement() {
       }
 
       await loadNightOffSchedule(staffId);
-      if (dateYmd === format(selectedDate, "yyyy-MM-dd")) {
+      if (dateYmd === formatDateAsOdCampDayYmd(selectedDate)) {
         await fetchData();
       }
       toast({ title: enabled ? "Night off added" : "Night off removed" });
@@ -668,7 +683,7 @@ export default function ODManagement() {
   ): Promise<boolean> => {
     if (!currentCompany?.id || !user?.id) return false;
 
-    const dateStr = format(selectedDate, "yyyy-MM-dd");
+    const dateStr = formatDateAsOdCampDayYmd(selectedDate);
 
     switch (result.kind) {
       case "noop":
@@ -756,7 +771,7 @@ export default function ODManagement() {
   const handleSwapDayOff = async () => {
     if (!selectedStaffForSwap || !newSwapDate || !currentCompany?.id) return;
 
-    const oldDateStr = format(selectedDate, "yyyy-MM-dd");
+    const oldDateStr = formatDateAsOdCampDayYmd(selectedDate);
     const newDateStr = format(newSwapDate, "yyyy-MM-dd");
 
     try {
@@ -835,7 +850,13 @@ export default function ODManagement() {
   const canManualCheckInOut = userRole && ['admin', 'super_admin', 'staff', 'health_center'].includes(userRole);
 
   const navigateDate = (days: number) => {
+    followingOdTodayRef.current = false;
     setSelectedDate(addDays(selectedDate, days));
+  };
+
+  const goToOdToday = () => {
+    followingOdTodayRef.current = true;
+    setSelectedDate(odToday);
   };
 
   return (
@@ -844,7 +865,7 @@ export default function ODManagement() {
         <div>
           <h1 className="text-3xl font-bold">OD Management</h1>
           <p className="text-muted-foreground">
-            Manage staff days off and bunk coverage
+            Manage staff days off and bunk coverage · camp day rolls at 1:00 AM
           </p>
         </div>
 
@@ -885,13 +906,20 @@ export default function ODManagement() {
               <Calendar
                 mode="single"
                 selected={selectedDate}
-                onSelect={(date) => date && setSelectedDate(date)}
+                onSelect={(date) => {
+                  if (!date) return;
+                  followingOdTodayRef.current = false;
+                  setSelectedDate(date);
+                }}
                 initialFocus
               />
             </PopoverContent>
           </Popover>
           <Button variant="outline" size="icon" onClick={() => navigateDate(1)}>
             <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" onClick={goToOdToday}>
+            Today
           </Button>
         </div>
       </div>
@@ -1401,7 +1429,7 @@ export default function ODManagement() {
                   <div className="min-w-0">
                     <p className="font-medium text-sm">{formatNightOffScheduleLabel(entry.date)}</p>
                     <div className="flex gap-1 mt-1 flex-wrap">
-                      {entry.date === format(selectedDate, "yyyy-MM-dd") && (
+                      {entry.date === formatDateAsOdCampDayYmd(selectedDate) && (
                         <Badge variant="outline" className="text-xs">Selected day</Badge>
                       )}
                       {entry.is_day_off && <Badge className="text-xs">Day Off</Badge>}
