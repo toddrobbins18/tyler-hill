@@ -13,6 +13,7 @@ import { SeasonProvider } from "@/contexts/SeasonContext";
 import { CompanyProvider, useCompany } from "@/contexts/CompanyContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useSessionInitialization } from "@/hooks/useSessionInitialization";
+import { useCampRouteGuard } from "@/hooks/useCampRouteGuard";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import Dashboard from "./pages/Dashboard";
@@ -159,10 +160,37 @@ function CompanyScopedMainRoutes() {
   );
 }
 
+function ProtectedAppLayout() {
+  useCampRouteGuard();
+
+  return (
+    <SidebarProvider>
+      <div className="flex min-h-screen w-full">
+        <AppSidebar />
+        <div className="flex-1 flex flex-col min-w-0">
+          <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-4 border-b bg-background/95 backdrop-blur px-6">
+            <div className="flex items-center gap-4 flex-1 min-w-0">
+              <SidebarTrigger />
+              <GlobalSearch />
+            </div>
+            <div className="flex items-center gap-1">
+              <NotificationBell />
+              <UserProfileDropdown />
+            </div>
+          </header>
+          <main className="flex-1 overflow-auto p-6 md:p-8 bg-background min-w-0">
+            <CompanyScopedMainRoutes />
+          </main>
+        </div>
+      </div>
+    </SidebarProvider>
+  );
+}
+
 function AppContent() {
   useSessionInitialization();
   usePasswordRecoveryRedirect();
-  
+
   return (
     <>
       <Toaster />
@@ -184,26 +212,7 @@ function AppContent() {
                   path="*"
                   element={
                     <ProtectedRoute>
-                      <SidebarProvider>
-                        <div className="flex min-h-screen w-full">
-                          <AppSidebar />
-                          <div className="flex-1 flex flex-col min-w-0">
-                            <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-4 border-b bg-background/95 backdrop-blur px-6">
-                              <div className="flex items-center gap-4 flex-1 min-w-0">
-                                <SidebarTrigger />
-                                <GlobalSearch />
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <NotificationBell />
-                                <UserProfileDropdown />
-                              </div>
-                            </header>
-                            <main className="flex-1 overflow-auto p-6 md:p-8 bg-background min-w-0">
-                              <CompanyScopedMainRoutes />
-                            </main>
-                          </div>
-                        </div>
-                      </SidebarProvider>
+                      <ProtectedAppLayout />
                     </ProtectedRoute>
                   }
                 />
