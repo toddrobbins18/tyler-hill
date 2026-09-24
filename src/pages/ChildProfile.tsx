@@ -34,6 +34,7 @@ import {
   mergeCamperContact,
   type CamperContactDisplay,
 } from "@/lib/camperContactInfo";
+import { resolveChildForCampView } from "@/lib/profileCampResolution";
 
 export default function ChildProfile() {
   const { id } = useParams();
@@ -61,12 +62,39 @@ export default function ChildProfile() {
     if (id && currentCompany?.id && !permissionsLoading) {
       setLoading(true);
       setAccessDenied(false);
+      setChild(null);
       fetchChildData();
     }
-  }, [id, currentCompany?.id, permissionsLoading]);
+  }, [id, currentCompany?.id, currentSeason, permissionsLoading]);
 
   const fetchChildData = async () => {
+    if (!id || !currentCompany?.id) return;
+
     try {
+      const resolution = await resolveChildForCampView(
+        supabase,
+        id,
+        currentCompany.id,
+        currentSeason,
+      );
+
+      if (resolution.kind === "redirect") {
+        navigate(`/child/${resolution.recordId}`, { replace: true });
+        return;
+      }
+
+      if (resolution.kind === "not_found") {
+        sonnerToast.error(
+          resolution.name
+            ? `${resolution.name} is not on the ${currentCompany.name} roster for ${currentSeason}.`
+            : `This camper is not on the ${currentCompany.name} roster for ${currentSeason}.`,
+        );
+        navigate("/roster", { replace: true });
+        return;
+      }
+
+      const childId = resolution.recordId;
+
       // Fetch child details with bunk info
       const { data: childData, error: childError } = await supabase
         .from("children")
@@ -76,7 +104,7 @@ export default function ChildProfile() {
           leader:leader_id(id, name, role),
           division:division_id(id, name)
         `)
-        .eq("id", id)
+        .eq("id", childId)
         .single();
 
       if (childError) throw childError;
@@ -94,8 +122,8 @@ export default function ChildProfile() {
       setChild(childData);
       setAllergyText(childData?.allergies || "");
 
-      if (id) {
-        const { family, authorizedPickups } = await fetchCamperFamilyContact(supabase, id);
+      if (childId) {
+        const { family, authorizedPickups } = await fetchCamperFamilyContact(supabase, childId);
         setContactInfo(mergeCamperContact(childData, family, authorizedPickups));
       } else {
         setContactInfo(null);
@@ -130,7 +158,7 @@ export default function ChildProfile() {
         const { data: currentAwards } = await supabase
           .from("awards")
           .select("*")
-          .eq("child_id", id)
+          .eq("child_id", childId)
           .eq("company_id", currentCompany?.id || '')
           .order("date", { ascending: false });
 
@@ -157,7 +185,7 @@ export default function ChildProfile() {
             created_at
           )
         `)
-        .eq("child_id", id);
+        .eq("child_id", childId);
 
       // Flatten the nested structure and sort by date
       const flattenedIncidents = incidentLinks
@@ -183,7 +211,7 @@ export default function ChildProfile() {
             opponent
           )
         `)
-        .eq("child_id", id)
+        .eq("child_id", childId)
         .eq("company_id", currentCompany?.id || '');
 
       setSportsRoster(sportsData || []);
@@ -203,7 +231,7 @@ export default function ChildProfile() {
             return_time
           )
         `)
-        .eq("child_id", id)
+        .eq("child_id", childId)
         .eq("company_id", currentCompany?.id || '');
 
       setTripAttendance(tripData || []);
@@ -212,7 +240,7 @@ export default function ChildProfile() {
       const { data: academyData } = await supabase
         .from("sports_academy")
         .select("*")
-        .eq("child_id", id)
+        .eq("child_id", childId)
         .eq("company_id", currentCompany?.id || '')
         .order("sport_name", { ascending: true });
 
@@ -222,7 +250,7 @@ export default function ChildProfile() {
       const { data: conflictsData } = await supabase
         .from("schedule_conflicts")
         .select("*")
-        .eq("entity_id", id)
+        .eq("entity_id", childId)
         .eq("entity_type", "child")
         .eq("resolved", false)
         .eq("company_id", currentCompany?.id || '');
@@ -233,7 +261,7 @@ export default function ChildProfile() {
       const { data: appointmentsData } = await supabase
         .from("appointments")
         .select("*")
-        .eq("child_id", id)
+        .eq("child_id", childId)
         .eq("company_id", currentCompany?.id || '')
         .order("appointment_date", { ascending: false });
 

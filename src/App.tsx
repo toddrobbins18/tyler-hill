@@ -59,6 +59,7 @@ import SportsAcademyCalendar from "./pages/SportsAcademyCalendar";
 import Reports from "./pages/Reports";
 import RosterTemplates from "./pages/RosterTemplates";
 import ODManagement from "./pages/ODManagement";
+import StaffTimeClock from "./pages/StaffTimeClock";
 import DailySchedule from "./pages/DailySchedule";
 import Appointments from "./pages/Appointments";
 import NotificationPreferences from "./pages/NotificationPreferences";
@@ -146,6 +147,7 @@ function CompanyScopedMainRoutes() {
       <Route path="/reports" element={<Reports />} />
       <Route path="/roster-templates" element={<RosterTemplates />} />
       <Route path="/od-management" element={<ODManagement />} />
+      <Route path="/staff-time-clock" element={<StaffTimeClock />} />
       <Route path="/appointments" element={<Appointments />} />
       <Route path="/daily-schedule" element={<DailySchedule />} />
       <Route path="/elective-signup" element={<ElectiveSignUp />} />

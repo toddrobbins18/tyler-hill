@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Star, Calendar, TrendingUp, Award, Pencil, ClipboardCheck, FileText, Plus, Stethoscope, Clock, MapPin, Hospital, Trophy } from "lucide-react";
+import { ArrowLeft, Star, Calendar, TrendingUp, Award, Pencil, ClipboardCheck, FileText, Plus, Stethoscope, Clock, MapPin, Hospital, Trophy, QrCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,10 @@ import ProfilePhotoUpload from "@/components/ProfilePhotoUpload";
 import { AwardCategoryDisplay } from "@/components/AwardCategoryDisplay";
 import ProfileQuickSearch from "@/components/ProfileQuickSearch";
 import PersonThreeDayOutlook from "@/components/PersonThreeDayOutlook";
+import { resolveStaffForCampView } from "@/lib/profileCampResolution";
+import { staffTimeClockEnabledForCompany } from "@/lib/camps";
+import { ensureStaffQrToken } from "@/lib/staffTimeClock";
+import { StaffQrBadge } from "@/components/staff/StaffQrBadge";
 
 export default function StaffProfile() {
   const { id } = useParams();
@@ -38,17 +42,45 @@ export default function StaffProfile() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [evaluateDialogOpen, setEvaluateDialogOpen] = useState(false);
   const [conflicts, setConflicts] = useState<any[]>([]);
+  const [qrToken, setQrToken] = useState<string | null>(null);
+  const showTimeClockQr = staffTimeClockEnabledForCompany(currentCompany);
 
   useEffect(() => {
-    if (id) {
+    if (id && currentCompany?.id) {
       fetchStaffData();
     }
-  }, [id, navigate]);
+  }, [id, currentCompany?.id, currentSeason]);
 
   const fetchStaffData = async () => {
+    if (!id || !currentCompany?.id) return;
+
     setLoading(true);
-    
-    // Fetch staff member
+
+    const resolution = await resolveStaffForCampView(
+      supabase,
+      id,
+      currentCompany.id,
+      currentSeason,
+    );
+
+    if (resolution.kind === "redirect") {
+      navigate(`/staff/${resolution.recordId}`, { replace: true });
+      return;
+    }
+
+    if (resolution.kind === "not_found") {
+      toast.error(
+        resolution.name
+          ? `${resolution.name} is not on the ${currentCompany.name} roster for ${currentSeason}.`
+          : `This staff member is not on the ${currentCompany.name} roster for ${currentSeason}.`,
+      );
+      navigate("/staff", { replace: true });
+      return;
+    }
+
+    const staffId = resolution.recordId;
+
+    // Fetch staff member for the active camp + season
     const { data: staffData, error: staffError } = await supabase
       .from("staff")
       .select(`
@@ -56,7 +88,7 @@ export default function StaffProfile() {
         division:division_id(id, name),
         supervisor:leader_id(id, name, role)
       `)
-      .eq("id", id)
+      .eq("id", staffId)
       .single();
 
     if (staffError) {
@@ -65,11 +97,20 @@ export default function StaffProfile() {
       return;
     }
 
+    if (staffTimeClockEnabledForCompany(currentCompany)) {
+      const token =
+        (staffData.qr_token as string | null) ||
+        (await ensureStaffQrToken(supabase, staffId));
+      setQrToken(token);
+    } else {
+      setQrToken(null);
+    }
+
     // Fetch evaluations
     const { data: evalsData, error: evalsError } = await supabase
       .from("staff_evaluations")
       .select("*")
-      .eq("staff_id", id)
+      .eq("staff_id", staffId)
       .eq("company_id", currentCompany?.id || '')
       .order("date", { ascending: false });
 
@@ -77,7 +118,7 @@ export default function StaffProfile() {
     const { data: notesData, error: notesError } = await supabase
       .from("staff_notes")
       .select("*")
-      .eq("staff_id", id)
+      .eq("staff_id", staffId)
       .eq("company_id", currentCompany?.id || '')
       .order("created_at", { ascending: false });
 
@@ -89,7 +130,7 @@ export default function StaffProfile() {
     const { data: conflictsData } = await supabase
       .from("schedule_conflicts")
       .select("*")
-      .eq("entity_id", id)
+      .eq("entity_id", staffId)
       .eq("entity_type", "staff")
       .eq("resolved", false)
       .eq("company_id", currentCompany?.id || '');
@@ -101,7 +142,7 @@ export default function StaffProfile() {
       const { data: appointmentsData } = await supabase
         .from("appointments")
         .select("*")
-        .eq("staff_id", id)
+        .eq("staff_id", staffId)
         .eq("company_id", currentCompany?.id || '')
         .order("appointment_date", { ascending: false });
 
@@ -132,7 +173,7 @@ export default function StaffProfile() {
       const { data: currentAwards } = await supabase
         .from("awards")
         .select("*")
-        .eq("staff_id", id)
+        .eq("staff_id", staffId)
         .eq("company_id", currentCompany?.id || '')
         .order("date", { ascending: false });
 
@@ -148,7 +189,7 @@ export default function StaffProfile() {
         *,
         bunk:bunk_id(id, bunk_number, bunk_name)
       `)
-      .eq("staff_id", id)
+      .eq("staff_id", staffId)
       .eq("company_id", currentCompany?.id || '')
       .eq("season", currentSeason);
 
@@ -160,7 +201,7 @@ export default function StaffProfile() {
         id,
         leader:leader_id(id, name, role)
       `)
-      .eq("staff_id", id)
+      .eq("staff_id", staffId)
       .eq("company_id", currentCompany?.id || "")
       .eq("season", currentSeason);
 
@@ -439,6 +480,29 @@ export default function StaffProfile() {
               </CardContent>
             </Card>
           </div>
+
+          {showTimeClockQr && (
+            <Card className="shadow-card">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <QrCode className="h-5 w-5" />
+                  Time Clock QR Badge
+                </CardTitle>
+                <CardDescription>
+                  Print or download this badge for Staff Time Clock sign-in and sign-out
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {qrToken ? (
+                  <StaffQrBadge staffName={staff.name} qrToken={qrToken} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Unable to load QR badge. Confirm the staff time clock migration has been applied.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="birthday" className="space-y-4">

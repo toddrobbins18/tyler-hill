@@ -68,6 +68,20 @@ export function appointmentsEnabledForCompany(company: CampLike): boolean {
   return APPOINTMENTS_ENABLED_OVERNIGHT_SLUGS.includes(slug as (typeof APPOINTMENTS_ENABLED_OVERNIGHT_SLUGS)[number]);
 }
 
+const STAFF_TIME_CLOCK_SLUGS = [
+  CAMP_SLUG.TYLER_HILL_CAMP,
+  CAMP_SLUG.TIMBER_LAKE_CAMP,
+  CAMP_SLUG.TIMBER_LAKE_WEST,
+] as const;
+
+/** Staff Time Clock + QR badges — Tyler Hill, Timber Lake, Timber Lake West only. */
+export function staffTimeClockEnabledForCompany(company: CampLike): boolean {
+  if (!company?.slug) return false;
+  return STAFF_TIME_CLOCK_SLUGS.includes(
+    company.slug as (typeof STAFF_TIME_CLOCK_SLUGS)[number],
+  );
+}
+
 /** Timber Lake West — slug first, then company name fallback if slug was misconfigured. */
 export function isTimberLakeWestCompany(company: CampLike): boolean {
   if (!company) return false;

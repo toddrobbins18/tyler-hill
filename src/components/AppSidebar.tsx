@@ -1,4 +1,4 @@
-import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, ClipboardEdit, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree, BookOpen, Building2, LogOut, BarChart3, ListChecks, ClipboardCheck, Stethoscope, ExternalLink, ClipboardPen, CreditCard, ChevronDown } from "lucide-react";
+import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, ClipboardEdit, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree, BookOpen, Building2, LogOut, BarChart3, ListChecks, ClipboardCheck, Stethoscope, ExternalLink, ClipboardPen, CreditCard, ChevronDown, Clock } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -66,6 +66,7 @@ const getOvernightMenuItems = (company?: MenuCompany) => {
     { title: "Transportation", url: "/transportation", icon: Truck, menuId: "transportation" },
     // OD Management available for all camps
     { title: "OD Management", url: "/od-management", icon: ClipboardCheck, menuId: "od-management" },
+    { title: "Staff Time Clock", url: "/staff-time-clock", icon: Clock, menuId: "staff-time-clock" },
     { title: "Appointments", url: "/appointments", icon: Stethoscope, menuId: "appointments" }
   );
 

@@ -156,8 +156,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fetchAuthData();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        // Defer to avoid recursive state updates
+      // SIGNED_IN also fires when a background tab regains focus — skip refetch then.
+      if (event === 'SIGNED_IN' && session && !hasInitializedRef.current) {
         setTimeout(() => fetchAuthData(), 0);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);

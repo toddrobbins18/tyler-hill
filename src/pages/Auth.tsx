@@ -2,8 +2,9 @@ import { Auth as SupabaseAuth } from "@supabase/auth-ui-react";
 import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { DEFAULT_SEASON } from "@/lib/seasonConstants";
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -16,6 +17,8 @@ export default function Auth() {
   // Extract company_id and email from URL query parameters
   const companyId = searchParams.get('company_id');
   const inviteEmail = searchParams.get('email');
+
+  const awaitingFreshLoginRef = useRef(true);
 
   useEffect(() => {
     // Handle password recovery redirects (hash-based and query-based)
@@ -34,7 +37,8 @@ export default function Auth() {
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        checkUserCompany(session.user.id);
+        awaitingFreshLoginRef.current = false;
+        checkUserCompany(session.user.id, false);
       }
     });
 
@@ -46,16 +50,25 @@ export default function Auth() {
         navigate('/update-password' + window.location.search + window.location.hash);
         return;
       }
+
+      if (event === 'SIGNED_OUT') {
+        awaitingFreshLoginRef.current = true;
+        return;
+      }
       
       if (session) {
-        checkUserCompany(session.user.id);
+        const applyLoginDefaults = event === 'SIGNED_IN' && awaitingFreshLoginRef.current;
+        if (applyLoginDefaults) {
+          awaitingFreshLoginRef.current = false;
+        }
+        checkUserCompany(session.user.id, applyLoginDefaults);
       }
     });
 
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const checkUserCompany = async (userId: string) => {
+  const checkUserCompany = async (userId: string, applyLoginDefaults: boolean) => {
     setLoading(true);
     try {
       const { data: profile, error } = await supabase
@@ -86,6 +99,11 @@ export default function Auth() {
         return;
       }
 
+      if (applyLoginDefaults) {
+        sessionStorage.removeItem('viewing_company_id');
+        sessionStorage.setItem('nest_login_defaults', '1');
+        localStorage.setItem('currentSeason', DEFAULT_SEASON);
+      }
       navigate("/");
     } catch (error) {
       console.error('Error checking user company:', error);

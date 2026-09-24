@@ -15,6 +15,9 @@ import { Radio, CheckCircle2 } from "lucide-react";
 import { sortDivisionsAlternatingGender, Division } from "@/lib/divisionUtils";
 import { normalizeRfidInput } from "@/lib/rfidUtils";
 import { filterSupervisorCandidates } from "@/lib/staffSupervisorUtils";
+import { ensureStaffQrToken } from "@/lib/staffTimeClock";
+import { StaffQrBadge } from "@/components/staff/StaffQrBadge";
+import { staffTimeClockEnabledForCompany } from "@/lib/camps";
 
 interface EditStaffDialogProps {
   staffId: string;
@@ -34,6 +37,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
   const [staffType, setStaffType] = useState<string>("");
   const [session, setSession] = useState<string>("");
   const [rfidValue, setRfidValue] = useState("");
+  const [qrToken, setQrToken] = useState<string | null>(null);
   const [rfidJustScanned, setRfidJustScanned] = useState(false);
   const [tshirtSize, setTshirtSize] = useState<string>("");
   const [divisionId, setDivisionId] = useState<string>("");
@@ -102,6 +106,8 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
       setStaffType(data.staff_type || "");
       setSession(data.session || "");
       setRfidValue(data.rfid || "");
+      const token = (data.qr_token as string | null) || (await ensureStaffQrToken(supabase, staffId));
+      setQrToken(token);
       setTshirtSize(data.tshirt_size || "");
       setDivisionId(data.division_id || "");
 
@@ -488,6 +494,12 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
               Scan the staff member's ISO 14443 Type A wristband
             </p>
           </div>
+          {staffTimeClockEnabledForCompany(currentCompany) && qrToken && staff?.name && (
+            <div>
+              <Label className="mb-2 block">Time Clock QR Badge</Label>
+              <StaffQrBadge staffName={staff.name} qrToken={qrToken} />
+            </div>
+          )}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel

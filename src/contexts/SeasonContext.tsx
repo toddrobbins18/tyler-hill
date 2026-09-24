@@ -45,11 +45,17 @@ export function SeasonProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('currentSeason', currentSeason);
   }, [currentSeason]);
 
-  // Reset to the current camp year whenever a user signs in (not on token refresh).
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN') {
+      if (event === 'SIGNED_OUT') {
         setCurrentSeason(DEFAULT_SEASON);
+        localStorage.setItem('currentSeason', DEFAULT_SEASON);
+        return;
+      }
+      // Only reset season when Auth page set nest_login_defaults for a real login.
+      if (sessionStorage.getItem('nest_login_defaults') === '1') {
+        setCurrentSeason(DEFAULT_SEASON);
+        localStorage.setItem('currentSeason', DEFAULT_SEASON);
       }
     });
     return () => subscription.unsubscribe();

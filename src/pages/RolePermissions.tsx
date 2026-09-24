@@ -37,6 +37,7 @@ const getCompanyMenuItems = (company?: MenuCompany) => {
     { id: "transportation", label: "Transportation", icon: "🚌" },
     { id: "tutoring-therapy", label: "Tutoring & Therapy", icon: "📖" },
     { id: "od-management", label: "OD Management", icon: "✅" },
+    { id: "staff-time-clock", label: "Staff Time Clock", icon: "🕐" },
     { id: "appointments", label: "Appointments", icon: "🩺" },
     { id: "reports", label: "Reports", icon: "📈" },
     { id: "nurse", label: "Nurse", icon: "💊" },
