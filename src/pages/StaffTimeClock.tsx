@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { staffTimeClockEnabledForCompany } from "@/lib/camps";
 import {
   loadStaffTimeClockForDate,
   processStaffTimeClockScan,
@@ -94,6 +95,15 @@ export default function StaffTimeClock() {
 
   const signedIn = rows.filter((r) => r.signed_in_at && !r.signed_out_at).length;
   const completed = rows.filter((r) => r.signed_in_at && r.signed_out_at).length;
+
+  if (!staffTimeClockEnabledForCompany(currentCompany)) {
+    return (
+      <div className="max-w-5xl mx-auto p-6">
+        <h1 className="text-2xl font-bold">HootTrack</h1>
+        <p className="text-muted-foreground mt-2">HootTrack is only available for day camps.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">

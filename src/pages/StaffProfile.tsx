@@ -486,10 +486,10 @@ export default function StaffProfile() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <QrCode className="h-5 w-5" />
-                  Time Clock QR Badge
+                  HootTrack QR Badge
                 </CardTitle>
                 <CardDescription>
-                  Print or download this badge for Staff Time Clock sign-in and sign-out
+                  Print or download this badge for HootTrack sign-in and sign-out
                 </CardDescription>
               </CardHeader>
               <CardContent>
