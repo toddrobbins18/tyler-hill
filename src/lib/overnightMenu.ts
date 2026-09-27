@@ -6,7 +6,6 @@ import {
   ClipboardCheck,
   ClipboardEdit,
   ClipboardPen,
-  Clock,
   CreditCard,
   FileText,
   Home,
@@ -65,7 +64,6 @@ export function getOvernightMenuItems(company?: CampLike): OvernightMenuItem[] {
     { title: "Messages", url: "/messages", icon: Mail, menuId: "messages" },
     { title: "Transportation", url: "/transportation", icon: Truck, menuId: "transportation" },
     { title: "OD Management", url: "/od-management", icon: ClipboardCheck, menuId: "od-management" },
-    { title: "Staff Time Clock", url: "/staff-time-clock", icon: Clock, menuId: "staff-time-clock" },
     { title: "Appointments", url: "/appointments", icon: Stethoscope, menuId: "appointments" },
   );
 

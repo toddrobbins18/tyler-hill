@@ -100,7 +100,7 @@ export default function StaffTimeClock() {
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2">
             <Clock className="h-8 w-8" />
-            Staff Time Clock
+            HootTrack
           </h1>
           <p className="text-muted-foreground">
             Scan QR badge or wristband · {format(new Date(`${workDate}T12:00:00`), "EEEE, MMMM d, yyyy")} · auto sign-out 4:15 PM

@@ -33,6 +33,9 @@ function getAllowedPathsForCompany(company: CampLike): Set<string> {
 
   if (isDayCampCompany(company)) {
     for (const item of getDayCampMainMenuItems()) {
+      if (item.menuId === "staff-time-clock" && !staffTimeClockEnabledForCompany(company)) {
+        continue;
+      }
       paths.add(item.url);
     }
     for (const item of getDayCampSidebarPocItems(company)) {
@@ -43,9 +46,6 @@ function getAllowedPathsForCompany(company: CampLike): Set<string> {
     paths.add("/parents/portal");
   } else {
     for (const item of getOvernightMenuItems(company)) {
-      if (item.menuId === "staff-time-clock" && !staffTimeClockEnabledForCompany(company)) {
-        continue;
-      }
       if (item.menuId === "appointments" && !appointmentsEnabledForCompany(company)) {
         continue;
       }

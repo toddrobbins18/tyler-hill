@@ -66,6 +66,7 @@ export function getDayCampNestCarryoverItems(): DayCampMenuItem[] {
     { title: "Rainy Day Schedule", url: "/rainy-day", icon: CloudRain, menuId: "rainy-day" },
     { title: "Special Events", url: "/special-events", icon: Calendar, menuId: "special-events" },
     { title: "Staff", url: "/staff", icon: UserCog, menuId: "staff" },
+    { title: "HootTrack", url: "/staff-time-clock", icon: Clock, menuId: "staff-time-clock" },
   ];
 }
 
