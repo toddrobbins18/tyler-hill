@@ -67,6 +67,7 @@ export default function Bunking() {
   const [hydrated, setHydrated] = useState(false);
   const [loadingRoster, setLoadingRoster] = useState(false);
   const [rosterCount, setRosterCount] = useState<number | null>(null);
+  const [rosterLoadError, setRosterLoadError] = useState<string | null>(null);
   const [locked, setLocked] = useState(false);
   const [dragItem, setDragItem] = useState<{ camperId: string; fromCabinId: string } | null>(null);
   const [dragOverCabin, setDragOverCabin] = useState<string | null>(null);
@@ -84,47 +85,74 @@ export default function Bunking() {
   // Track the latest data we've written so realtime echoes don't loop.
   const lastWrittenRef = useRef<string>("");
 
-  // Load shared board on mount
+  // Load shared board for the active company + season
   useEffect(() => {
     let cancelled = false;
+    setHydrated(false);
+    setCabins([]);
+    lastWrittenRef.current = "";
     (async () => {
-      if (!user || !currentCompany) {
+      if (!user || !currentCompany?.id || !currentSeason) {
         setHydrated(true);
         return;
       }
+      const storageKey = `${BUNKING_STORAGE_KEY}-${currentCompany.id}-${currentSeason}`;
       const { data, error } = await supabase
         .from("bunking_boards")
         .select("data")
         .eq("company_id", currentCompany.id)
+        .eq("season", currentSeason)
         .maybeSingle();
       if (cancelled) return;
       if (error) {
         console.error("Failed to load bunking board:", error);
         toast.error("Couldn't load shared board — using local copy.");
+        try {
+          const raw = window.localStorage.getItem(storageKey);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.every(isCabin)) {
+              lastWrittenRef.current = raw;
+              setCabins(parsed);
+            }
+          }
+        } catch {
+          /* ignore bad local copy */
+        }
       } else if (data?.data && Array.isArray(data.data) && (data.data as unknown[]).every(isCabin)) {
         const next = data.data as unknown as Cabin[];
         lastWrittenRef.current = JSON.stringify(next);
         setCabins(next);
-      } else if (!data) {
+      } else {
         setCabins([]);
       }
       setHydrated(true);
     })();
     return () => { cancelled = true; };
-  }, [user, currentCompany]);
+  }, [user, currentCompany?.id, currentSeason]);
 
   useEffect(() => {
     if (!currentCompany?.id || !currentSeason) {
       setRosterCount(null);
+      setRosterLoadError(null);
       return;
     }
     let cancelled = false;
+    setRosterLoadError(null);
     fetchBunkingCampersFromRoster(currentCompany.id, currentSeason)
       .then((campers) => {
-        if (!cancelled) setRosterCount(campers.length);
+        if (!cancelled) {
+          setRosterCount(campers.length);
+          setRosterLoadError(null);
+        }
       })
-      .catch(() => {
-        if (!cancelled) setRosterCount(null);
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error("[Bunking] roster preview failed:", err);
+          setRosterCount(null);
+          setRosterLoadError(message);
+        }
       });
     return () => { cancelled = true; };
   }, [currentCompany?.id, currentSeason]);
@@ -138,7 +166,8 @@ export default function Bunking() {
         "postgres_changes",
         { event: "*", schema: "public", table: "bunking_boards", filter: `company_id=eq.${currentCompany.id}` },
         (payload) => {
-          const newRow = (payload.new ?? {}) as { data?: unknown };
+          const newRow = (payload.new ?? {}) as { data?: unknown; season?: string };
+          if (newRow.season && newRow.season !== currentSeason) return;
           if (!newRow.data || !Array.isArray(newRow.data)) return;
           if (!(newRow.data as unknown[]).every(isCabin)) return;
           const incoming = JSON.stringify(newRow.data);
@@ -149,12 +178,12 @@ export default function Bunking() {
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user, currentCompany]);
+  }, [user, currentCompany, currentSeason]);
 
   // Persist locally + to shared board (after hydration)
   useEffect(() => {
-    if (!currentCompany) return;
-    window.localStorage.setItem(`${BUNKING_STORAGE_KEY}-${currentCompany.id}`, JSON.stringify(cabins));
+    if (!currentCompany?.id || !currentSeason) return;
+    window.localStorage.setItem(`${BUNKING_STORAGE_KEY}-${currentCompany.id}-${currentSeason}`, JSON.stringify(cabins));
     if (!hydrated || !user) return;
     const serialized = JSON.stringify(cabins);
     if (serialized === lastWrittenRef.current) return;
@@ -163,13 +192,18 @@ export default function Bunking() {
       const { error } = await supabase
         .from("bunking_boards")
         .upsert(
-          { company_id: currentCompany.id, data: cabins as unknown as never, updated_by: user.id },
-          { onConflict: "company_id" }
+          {
+            company_id: currentCompany.id,
+            season: currentSeason,
+            data: cabins as unknown as never,
+            updated_by: user.id,
+          },
+          { onConflict: "company_id,season" }
         );
       if (error) console.error("Failed to save bunking board:", error);
     }, 600);
     return () => clearTimeout(t);
-  }, [cabins, hydrated, user, currentCompany]);
+  }, [cabins, hydrated, user, currentCompany, currentSeason]);
 
   const handleSaveCabin = () => {
     if (!newCabin.name.trim()) { toast.error("Cabin name required."); return; }
@@ -228,7 +262,9 @@ export default function Bunking() {
     try {
       const campers = await fetchBunkingCampersFromRoster(currentCompany.id, currentSeason);
       if (!campers.length) {
-        toast.error(`No active campers found for ${currentSeason}.`);
+        toast.error(
+          `No active campers found for season ${currentSeason}. Check the season in the sidebar and confirm CampMinder sync ran for North Shore.`,
+        );
         return;
       }
       setRosterCount(campers.length);
@@ -365,8 +401,9 @@ export default function Bunking() {
     setOptimizeOpen(false);
     setPendingImport(null);
     const placed = optCabins.reduce((s, c) => s + c.campers.length, 0);
+    const loaded = pendingImport.length;
     toast.success(
-      `Placed ${placed} camper${placed === 1 ? "" : "s"} across ${optCabins.length} cabin${optCabins.length === 1 ? "" : "s"}` +
+      `Placed ${placed} of ${loaded} camper${loaded === 1 ? "" : "s"} across ${optCabins.length} cabin${optCabins.length === 1 ? "" : "s"}` +
       (createdCount ? ` (added ${createdCount} new).` : ".")
     );
   };
@@ -438,8 +475,18 @@ export default function Bunking() {
           <h1 className="text-3xl font-bold tracking-tight">Bunking Boards</h1>
           <p className="text-muted-foreground mt-1">
             Group campers into cabins — season {currentSeason}
-            {rosterCount != null ? ` · ${rosterCount} on roster` : ""}
+            {rosterCount != null ? ` · ${rosterCount} campers on roster` : ""}
+            {rosterLoadError ? " · could not read roster" : ""}
           </p>
+          {rosterLoadError ? (
+            <p className="text-sm text-destructive mt-1">
+              Could not load campers from roster: {rosterLoadError}
+            </p>
+          ) : rosterCount != null && rosterCount > 0 ? (
+            <p className="text-sm text-muted-foreground mt-1">
+              Same roster as the Camper page — click <strong>Load from Roster</strong>, then run the optimizer.
+            </p>
+          ) : null}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Button
@@ -545,8 +592,10 @@ export default function Bunking() {
             <Users className="h-10 w-10 mx-auto text-muted-foreground" />
             <p className="font-medium">No cabins yet</p>
             <p className="text-sm text-muted-foreground max-w-md mx-auto">
-              Click <strong>Load from Roster</strong> to pull {currentSeason} campers from North Shore, then run the optimizer.
-              Or add cabins manually / import a CSV.
+              {rosterCount != null && rosterCount > 0
+                ? `${rosterCount} campers are on the ${currentSeason} roster. Click Load from Roster, then run the optimizer.`
+                : `Click Load from Roster to pull ${currentSeason} campers from the Camper roster, then run the optimizer.`}
+              {" "}Or add cabins manually / import a CSV.
             </p>
             <Button onClick={handleLoadFromRoster} disabled={loadingRoster} className="gap-2">
               <RefreshCw className={`h-4 w-4 ${loadingRoster ? "animate-spin" : ""}`} />

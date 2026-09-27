@@ -1,42 +1,34 @@
-import { supabase } from "@/integrations/supabase/client";
+import { normCamperNameKey } from "@/lib/routeReferenceWarehouse";
+import { buildMappoint2026AddressHints } from "@/lib/transportRoster";
+import { fetchActiveRosterChildren, type ActiveRosterChildRow } from "@/lib/rosterChildren";
 import { filterActiveRoster } from "@/lib/rosterStatus";
 import type { OptCamper } from "@/lib/bunking-optimizer";
 
-type RosterChildRow = {
-  id: string;
-  name: string;
-  gender: string | null;
-  grade: string | null;
-  group_name: string | null;
-  category: string | null;
-  status: string | null;
-  division: { name: string } | null;
-};
+export type BunkingRosterChildRow = ActiveRosterChildRow;
 
-/** Load enrolled campers from Nest roster for bunking boards. */
-export async function fetchBunkingCampersFromRoster(
-  companyId: string,
-  season: string,
-): Promise<OptCamper[]> {
-  const { data, error } = await supabase
-    .from("children")
-    .select(`
-      id,
-      name,
-      gender,
-      grade,
-      group_name,
-      category,
-      status,
-      division:division_id(name)
-    `)
-    .eq("company_id", companyId)
-    .eq("season", season)
-    .order("name");
+function cityFromAddress(address: string): string {
+  const parts = address.split(",").map((p) => p.trim()).filter(Boolean);
+  if (parts.length >= 2) return parts[parts.length - 2];
+  return "";
+}
 
-  if (error) throw error;
+function buildTownLookup(): Map<string, string> {
+  const hints = buildMappoint2026AddressHints();
+  const towns = new Map<string, string>();
+  for (const [nameKey, hint] of hints) {
+    const city = cityFromAddress(hint.address);
+    if (city) towns.set(nameKey, city);
+  }
+  return towns;
+}
 
-  return filterActiveRoster(data as RosterChildRow[] | null).map((child) => ({
+/** Map a roster row to bunking optimizer input (exported for tests). */
+export function mapBunkingRosterChild(
+  child: BunkingRosterChildRow,
+  townByName?: Map<string, string>,
+): OptCamper {
+  const nameKey = normCamperNameKey(child.name);
+  return {
     id: child.id,
     name: child.name,
     gender: child.gender || undefined,
@@ -44,10 +36,19 @@ export async function fetchBunkingCampersFromRoster(
       child.division?.name?.trim() ||
       child.grade?.trim() ||
       child.group_name?.trim() ||
-      child.category?.trim() ||
       "",
-    town: "",
+    town: townByName?.get(nameKey) || "",
     requests: [],
     disrequests: [],
-  }));
+  };
+}
+
+/** Load all active enrolled campers from Nest roster for bunking boards. */
+export async function fetchBunkingCampersFromRoster(
+  companyId: string,
+  season: string,
+): Promise<OptCamper[]> {
+  const rows = await fetchActiveRosterChildren(companyId, season);
+  const townByName = buildTownLookup();
+  return filterActiveRoster(rows).map((child) => mapBunkingRosterChild(child, townByName));
 }
