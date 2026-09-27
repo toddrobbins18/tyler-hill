@@ -795,8 +795,37 @@ const TRACKED_FIELDS: Record<string, string[]> = {
 
 /** When CampMinder omits MedicalInfo, do not wipe manually-entered Nest values on upsert. */
 const PRESERVE_IF_NULL_FIELDS: Record<string, string[]> = {
-  children: ['allergies', 'medical_notes', 'group_name', 'division_id'],
+  children: ['allergies', 'medical_notes', 'group_name', 'division_id', 'guardian_name', 'guardian_email', 'guardian_phone'],
 };
+
+function resolveGuardianContact(
+  personId: string,
+  person: any | undefined,
+  camperToParentMap: Map<string, string>,
+  parentEmailMap: Map<string, string>,
+  parentPhoneMap: Map<string, string>,
+  parentNameMap: Map<string, string>,
+): { guardianEmail: string; guardianPhone: string; guardianName: string } {
+  const parentPersonId = camperToParentMap.get(personId);
+  let guardianEmail = parentPersonId ? parentEmailMap.get(parentPersonId) || '' : '';
+  let guardianPhone = parentPersonId ? parentPhoneMap.get(parentPersonId) || '' : '';
+  let guardianName = parentPersonId ? parentNameMap.get(parentPersonId) || '' : '';
+
+  if (!guardianEmail && person?.ContactDetails?.Emails?.length > 0) {
+    const emailObj =
+      person.ContactDetails.Emails.find((e: any) => e.IsLogin || e.IsPrimary) ||
+      person.ContactDetails.Emails[0];
+    if (emailObj?.Address) {
+      guardianEmail = emailObj.Address;
+    }
+  }
+
+  if (!guardianPhone && person?.ContactDetails?.PhoneNumbers?.length > 0) {
+    guardianPhone = person.ContactDetails.PhoneNumbers[0].Number;
+  }
+
+  return { guardianEmail, guardianPhone, guardianName };
+}
 
 function mergePreservedFields(table: string, record: any, existingRecord?: any): any {
   if (!existingRecord) return record;
@@ -2298,24 +2327,14 @@ async function performFullSync(
       const attendeeRow = attendeeDataMap.get(String(person.ID));
       const grade = campGradeLabelFromId(person.CamperDetails?.CampGradeID);
 
-      // Get parent contact info
-      const parentPersonId = camperToParentMap.get(String(person.ID));
-      let guardianEmail = parentPersonId ? parentEmailMap.get(parentPersonId) || '' : '';
-      let guardianPhone = parentPersonId ? parentPhoneMap.get(parentPersonId) || '' : '';
-      let guardianName = parentPersonId ? parentNameMap.get(parentPersonId) || '' : '';
-      
-      // Fallback to camper's ContactDetails for email if not found on parent
-      if (!guardianEmail && person.ContactDetails?.Emails?.length > 0) {
-        const emailObj = person.ContactDetails.Emails.find((e: any) => e.IsLogin || e.IsPrimary) || person.ContactDetails.Emails[0];
-        if (emailObj && emailObj.Address) {
-          guardianEmail = emailObj.Address;
-        }
-      }
-
-      // Fallback to camper's ContactDetails for phone if not found on parent
-      if (!guardianPhone && person.ContactDetails?.PhoneNumbers?.length > 0) {
-        guardianPhone = person.ContactDetails.PhoneNumbers[0].Number;
-      }
+      const { guardianEmail, guardianPhone, guardianName } = resolveGuardianContact(
+        String(person.ID),
+        person,
+        camperToParentMap,
+        parentEmailMap,
+        parentPhoneMap,
+        parentNameMap,
+      );
 
       // Prefer CamperDetails.DivisionID; fall back to session attendee when CamperDetails is absent.
       const cmDivisionId = person.CamperDetails?.DivisionID ?? attendeeRow?.DivisionID;
@@ -2414,15 +2433,24 @@ async function performFullSync(
         bunkGroupByPerson,
       );
 
+      const { guardianEmail, guardianPhone, guardianName } = resolveGuardianContact(
+        personIdStr,
+        person,
+        camperToParentMap,
+        parentEmailMap,
+        parentPhoneMap,
+        parentNameMap,
+      );
+
       camperData.push({
         person_id: personIdStr,
         name,
         gender,
         date_of_birth: normalizeDateOfBirthForDb(person?.DateOfBirth || fallbackData?.DateOfBirth),
         grade: campGradeLabelFromId(person?.CamperDetails?.CampGradeID),
-        guardian_name: null,
-        guardian_email: null,
-        guardian_phone: null,
+        guardian_name: guardianName || null,
+        guardian_email: guardianEmail || null,
+        guardian_phone: guardianPhone || null,
         allergies: normalizeAllergyFromCm(person),
         medical_notes: normalizeMedicalNotesFromCm(person),
         company_id: companyId,

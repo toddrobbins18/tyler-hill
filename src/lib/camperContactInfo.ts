@@ -48,11 +48,14 @@ export async function fetchCamperFamilyContact(
   supabase: { from: (table: string) => any },
   childId: string,
 ): Promise<{ family: FamilyRow | null; authorizedPickups: AuthorizedPickupRow[] }> {
-  const { data: link } = await supabase
+  const { data: links } = await supabase
     .from("family_children")
     .select("family_id, families:family_id(family_name, primary_contact_name, email, phone)")
     .eq("child_id", childId)
-    .maybeSingle();
+    .order("created_at", { ascending: true })
+    .limit(1);
+
+  const link = links?.[0] ?? null;
 
   const row = link as {
     family_id?: string;

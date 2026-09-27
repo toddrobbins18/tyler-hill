@@ -25,6 +25,7 @@ import {
   type SwimLesson,
   userIsCampStaff,
 } from "@/lib/parentPortalConstants";
+import { linkFamilyChildrenByGuardianEmail } from "@/lib/parentFamilyLink";
 
 function ParentPortalSkeleton({
   rootRef,
@@ -76,6 +77,12 @@ export default function ParentPortal() {
     setFamilyId(fam.id);
     setFamilyName(fam.family_name);
     setContactName(fam.primary_contact_name);
+
+    try {
+      await linkFamilyChildrenByGuardianEmail(supabase, fam.id);
+    } catch (err) {
+      console.warn("[ParentPortal] auto-link by guardian email failed:", err);
+    }
 
     const { data: fc } = await supabase
       .from("family_children")

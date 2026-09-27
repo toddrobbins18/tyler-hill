@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { formatCampDateTime } from "@/lib/campTime";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
 import { approveDismissalSwim, DISMISSAL_REALTIME_TABLES } from "@/lib/dismissalDashboard";
+import { linkFamilyChildrenByGuardianEmail } from "@/lib/parentFamilyLink";
 
 const CHANGE_TYPES: Record<string, string> = {
   early_pickup: "Early Pickup",
@@ -318,6 +319,21 @@ export default function ParentPortalDashboard() {
     }
   };
 
+  const autoLinkFamily = async (familyId: string, familyName: string) => {
+    try {
+      const linked = await linkFamilyChildrenByGuardianEmail(supabase, familyId);
+      if (linked > 0) {
+        toast.success(`Linked ${linked} camper${linked === 1 ? "" : "s"} to ${familyName}`);
+      } else {
+        toast.message(`No new campers matched ${familyName}'s email on the roster`);
+      }
+      void load();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Auto-link failed";
+      toast.error(message);
+    }
+  };
+
   const unlinkChild = async (familyId: string, childId: string) => {
     const { error } = await supabase
       .from("family_children")
@@ -416,14 +432,26 @@ export default function ParentPortalDashboard() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <LinkCamperDialog
-                            companyId={currentCompany!.id}
-                            familyId={f.id}
-                            familyName={f.family_name}
-                            rosterChildren={rosterChildren}
-                            linkedIds={new Set(f.linkedChildren.map((c) => c.id))}
-                            onLinked={load}
-                          />
+                          <div className="flex flex-col gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 justify-start px-2"
+                              onClick={() => void autoLinkFamily(f.id, f.family_name)}
+                            >
+                              <Link2 className="h-4 w-4 mr-1" />
+                              Match by email
+                            </Button>
+                            <LinkCamperDialog
+                              companyId={currentCompany!.id}
+                              familyId={f.id}
+                              familyName={f.family_name}
+                              rosterChildren={rosterChildren}
+                              linkedIds={new Set(f.linkedChildren.map((c) => c.id))}
+                              onLinked={load}
+                            />
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
