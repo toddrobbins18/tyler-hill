@@ -83,11 +83,27 @@ Deno.serve(async (req) => {
     const season = easternSeasonYear(now);
     const signedOutAt = autoSignOutTimestamp(workDate);
 
+    const { data: dayCampCompanies, error: companiesError } = await supabase
+      .from("companies")
+      .select("id")
+      .or("camp_type.eq.day_camp,slug.eq.north-shore-day-camp");
+
+    if (companiesError) throw companiesError;
+
+    const dayCampCompanyIds = (dayCampCompanies ?? []).map((row) => row.id);
+    if (dayCampCompanyIds.length === 0) {
+      return new Response(
+        JSON.stringify({ success: true, autoSignedOut: 0, workDate, reason: "No day camp companies" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     const { data: openRows, error: loadError } = await supabase
       .from("staff_time_clock")
       .select("id, staff_id, company_id")
       .eq("work_date", workDate)
       .eq("season", season)
+      .in("company_id", dayCampCompanyIds)
       .not("signed_in_at", "is", null)
       .is("signed_out_at", null);
 

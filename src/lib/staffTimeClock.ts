@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { staffTimeClockEnabledForCompany } from "@/lib/camps";
 import { campTodayDateString } from "@/lib/parentPortalCutoff";
 import { normalizeRfidInput, lookupStaffByRfid } from "@/lib/rfidUtils";
 import {
@@ -106,8 +107,13 @@ export async function processStaffTimeClockScan(
     season: string;
     userId?: string | null;
     workDate?: string;
+    company?: { slug?: string | null; camp_type?: string | null };
   },
 ): Promise<StaffTimeClockPunchResult> {
+  if (options.company && !staffTimeClockEnabledForCompany(options.company)) {
+    return { ok: false, message: "HootTrack is only available for day camps" };
+  }
+
   const workDate = options.workDate ?? staffTimeClockWorkDate();
   const staff = await resolveStaffFromScan(
     supabase,

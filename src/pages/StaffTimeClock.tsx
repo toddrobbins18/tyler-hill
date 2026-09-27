@@ -66,6 +66,7 @@ export default function StaffTimeClock() {
         season,
         userId: user?.id,
         workDate,
+        company: currentCompany,
       });
 
       if (!result.ok) {
