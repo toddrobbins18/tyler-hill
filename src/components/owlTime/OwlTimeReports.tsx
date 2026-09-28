@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { BarChart3, ClipboardList, Download, Filter, History, Users } from "lucide-react";
+import { OwlTimeExportDialog } from "@/components/owlTime/OwlTimeExportDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,10 +29,6 @@ import {
   buildAttendanceSummary,
   buildDailyRollCall,
   buildSignInOutHistory,
-  exportDailyRollCallCsv,
-  exportDetailCsv,
-  exportHistoryCsv,
-  exportSummaryCsv,
   formatOwlTimeCampClock,
   indexPunchesByDateForStaff,
   indexPunchesByStaffDate,
@@ -45,6 +42,13 @@ import {
   type OwlTimeReportDateMode,
   type OwlTimeSeasonSettings,
 } from "@/lib/owlTimeAttendance";
+import {
+  buildDailyRollCallDataset,
+  buildDetailDataset,
+  buildHistoryDataset,
+  buildSummaryDataset,
+  type OwlTimeReportDataset,
+} from "@/lib/owlTimeReportExport";
 
 type Props = {
   companyId: string;
@@ -84,6 +88,13 @@ export function OwlTimeReportsPanel({ companyId, season, settingsVersion = 0 }: 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [summaryStaffFilter, setSummaryStaffFilter] = useState<string>("all");
   const [activeTab, setActiveTab] = useState("summary");
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportDataset, setExportDataset] = useState<OwlTimeReportDataset | null>(null);
+
+  const openExport = (dataset: OwlTimeReportDataset) => {
+    setExportDataset(dataset);
+    setExportOpen(true);
+  };
 
   useEffect(() => {
     if (dateMode === "day") {
@@ -191,12 +202,58 @@ export function OwlTimeReportsPanel({ companyId, season, settingsVersion = 0 }: 
     return "Custom range";
   }, [dateMode, singleDay, rangeFrom, rangeTo]);
 
+  const currentExportDataset = useMemo((): OwlTimeReportDataset | null => {
+    if (!settings) return null;
+    if (activeTab === "daily") {
+      return buildDailyRollCallDataset(filteredDailyRollCallRows, season, singleDay, filterDescription);
+    }
+    if (activeTab === "summary") {
+      return buildSummaryDataset(summaryRows, season, exportDateLabel, filterDescription);
+    }
+    if (activeTab === "detail") {
+      return buildDetailDataset(
+        filteredDetailRows,
+        selectedStaff?.name ?? "Staff",
+        season,
+        exportDateLabel,
+        filterDescription,
+      );
+    }
+    if (activeTab === "history") {
+      return buildHistoryDataset(
+        historyRows,
+        selectedStaff?.name ?? "Staff",
+        season,
+        exportDateLabel,
+        filterDescription,
+      );
+    }
+    return null;
+  }, [
+    settings,
+    activeTab,
+    filteredDailyRollCallRows,
+    season,
+    singleDay,
+    filterDescription,
+    summaryRows,
+    exportDateLabel,
+    filteredDetailRows,
+    selectedStaff?.name,
+    historyRows,
+  ]);
+
   if (loading || !settings) {
     return <p className="text-sm text-muted-foreground p-4">Loading reports…</p>;
   }
 
   return (
     <div className="space-y-4">
+      <OwlTimeExportDialog
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        dataset={exportDataset}
+      />
       <p className="text-sm text-muted-foreground">
         Season {season}: {format(parseISO(settings.start_date), "MMM d")} –{" "}
         {format(parseISO(settings.end_date), "MMM d, yyyy")} · {allScheduledDays.length} work days ·
@@ -204,14 +261,24 @@ export function OwlTimeReportsPanel({ companyId, season, settingsVersion = 0 }: 
       </p>
 
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Filter className="h-4 w-4" />
-            Filters
-          </CardTitle>
-          <CardDescription>
-            Showing {filteredDays.length} work day{filteredDays.length !== 1 ? "s" : ""} · {filterDescription}
-          </CardDescription>
+        <CardHeader className="pb-3 flex flex-row flex-wrap items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Filter className="h-4 w-4" />
+              Filters
+            </CardTitle>
+            <CardDescription>
+              Showing {filteredDays.length} work day{filteredDays.length !== 1 ? "s" : ""} · {filterDescription}
+            </CardDescription>
+          </div>
+          <Button
+            className="shrink-0"
+            disabled={!currentExportDataset?.rows.length}
+            onClick={() => currentExportDataset && openExport(currentExportDataset)}
+          >
+            <Download className="h-4 w-4 mr-1.5" />
+            Export report
+          </Button>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-2">
@@ -318,9 +385,18 @@ export function OwlTimeReportsPanel({ companyId, season, settingsVersion = 0 }: 
                   variant="outline"
                   size="sm"
                   disabled={filteredDailyRollCallRows.length === 0}
-                  onClick={() => exportDailyRollCallCsv(filteredDailyRollCallRows, season, singleDay)}
+                  onClick={() =>
+                    openExport(
+                      buildDailyRollCallDataset(
+                        filteredDailyRollCallRows,
+                        season,
+                        singleDay,
+                        filterDescription,
+                      ),
+                    )
+                  }
                 >
-                  <Download className="h-4 w-4 mr-1" /> Export CSV
+                  <Download className="h-4 w-4 mr-1" /> Export
                 </Button>
               </CardHeader>
               <CardContent className="overflow-x-auto">
@@ -395,9 +471,11 @@ export function OwlTimeReportsPanel({ companyId, season, settingsVersion = 0 }: 
                 variant="outline"
                 size="sm"
                 disabled={summaryRows.length === 0}
-                onClick={() => exportSummaryCsv(summaryRows, season, exportDateLabel)}
+                onClick={() =>
+                  openExport(buildSummaryDataset(summaryRows, season, exportDateLabel, filterDescription))
+                }
               >
-                <Download className="h-4 w-4 mr-1" /> Export CSV
+                <Download className="h-4 w-4 mr-1" /> Export
               </Button>
             </CardHeader>
             <CardContent className="overflow-x-auto">
@@ -470,15 +548,18 @@ export function OwlTimeReportsPanel({ companyId, season, settingsVersion = 0 }: 
                 size="sm"
                 disabled={filteredDetailRows.length === 0}
                 onClick={() =>
-                  exportDetailCsv(
-                    filteredDetailRows,
-                    selectedStaff?.name ?? "Staff",
-                    season,
-                    exportDateLabel,
+                  openExport(
+                    buildDetailDataset(
+                      filteredDetailRows,
+                      selectedStaff?.name ?? "Staff",
+                      season,
+                      exportDateLabel,
+                      filterDescription,
+                    ),
                   )
                 }
               >
-                <Download className="h-4 w-4 mr-1" /> Export CSV
+                <Download className="h-4 w-4 mr-1" /> Export
               </Button>
             </CardHeader>
             <CardContent className="overflow-x-auto max-h-[60vh]">
@@ -550,15 +631,18 @@ export function OwlTimeReportsPanel({ companyId, season, settingsVersion = 0 }: 
                 size="sm"
                 disabled={historyRows.length === 0}
                 onClick={() =>
-                  exportHistoryCsv(
-                    historyRows,
-                    selectedStaff?.name ?? "Staff",
-                    season,
-                    exportDateLabel,
+                  openExport(
+                    buildHistoryDataset(
+                      historyRows,
+                      selectedStaff?.name ?? "Staff",
+                      season,
+                      exportDateLabel,
+                      filterDescription,
+                    ),
                   )
                 }
               >
-                <Download className="h-4 w-4 mr-1" /> Export CSV
+                <Download className="h-4 w-4 mr-1" /> Export
               </Button>
             </CardHeader>
             <CardContent className="overflow-x-auto max-h-[60vh]">
