@@ -79,6 +79,13 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSearchParams } from "react-router-dom";
+import {
+  CAMP_LOCATION,
+  haversineMiles,
+  buildAMStops,
+  buildPMStops,
+  displayStopToCoreIndex,
+} from "@/lib/transportStopTimes";
 
 const TRANSPORT_TABS = ["map", "unplotted", "daycamp"] as const;
 type TransportTab = (typeof TRANSPORT_TABS)[number];
@@ -99,15 +106,6 @@ const ROUTE_COLORS = [
   "#be185d", "#4338ca", "#047857", "#92400e", "#881337",
   "#1e40af", "#166534", "#854d0e", "#6b21a8", "#134e4a",
 ];
-
-const CAMP_LOCATION = {
-  name: "Camp — 85 Crescent Beach Rd",
-  address: "85 Crescent Beach Road, Glen Cove, NY 11542",
-  lat: 40.879993,
-  lng: -73.642634,
-  pickupTime: "",
-  passengers: 0,
-};
 
 interface RouteStop {
   name: string;
@@ -132,63 +130,12 @@ interface Route {
   color: string;
 }
 
-// Haversine distance in miles between two lat/lng points
-const haversineMiles = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
-  const R = 3958.8; // Earth radius in miles
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-};
-
-// Estimate driving minutes between two points (~25 mph avg on LI roads, 1.4x road factor)
-const drivingMinutes = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
-  const miles = haversineMiles(lat1, lng1, lat2, lng2) * 1.4; // road winding factor
-  return Math.round((miles / 25) * 60); // 25 mph average
-};
-
-// Assign "Start", "+X min" labels to an ordered list of stops
-const assignDrivingTimes = (stops: RouteStop[]): RouteStop[] => {
-  if (stops.length === 0) return stops;
-  let cumulativeMin = 0;
-  return stops.map((stop, i) => {
-    if (i === 0) {
-      return { ...stop, pickupTime: "Start" };
-    }
-    const prev = stops[i - 1];
-    const legMin = Math.max(drivingMinutes(prev.lat, prev.lng, stop.lat, stop.lng), 2);
-    cumulativeMin += legMin;
-    return { ...stop, pickupTime: `+${cumulativeMin} min` };
-  });
-};
-
 const MAP_PANEL_HEIGHT: Record<"sm" | "md" | "lg" | "xl", string> = {
   sm: "h-[480px]",
   md: "h-[760px]",
   lg: "h-[1000px]",
   xl: "h-[80vh]",
 };
-
-// AM routes: stops → camp (camp is last stop)
-const buildAMStops = (stops: RouteStop[]): RouteStop[] =>
-  assignDrivingTimes([...stops, { ...CAMP_LOCATION, pickupTime: "", passengers: 0 }]);
-
-// PM routes: camp first, then same stop order as AM (first on = first off)
-const buildPMStops = (stops: RouteStop[]): RouteStop[] =>
-  assignDrivingTimes([{ ...CAMP_LOCATION, pickupTime: "", passengers: 0 }, ...stops]);
-
-// Core stops without camp (same order for AM and PM)
-const coreStopsFromAM = (stops: RouteStop[]): RouteStop[] =>
-  stops.filter(s => s.address !== CAMP_LOCATION.address);
-
-const coreStopsFromPM = (stops: RouteStop[]): RouteStop[] =>
-  stops.filter(s => s.address !== CAMP_LOCATION.address);
-
-/** Map marker / sidebar display index → index in core stop array. */
-const displayStopToCoreIndex = (displayIdx: number, isAM: boolean): number =>
-  isAM ? displayIdx : displayIdx - 1;
 
 const initialCoreStops: Record<number, RouteStop[]> = {
   1: [],
@@ -1257,7 +1204,8 @@ export default function Transport() {
   const buildRoutes = useCallback((tod: "am" | "pm"): Route[] => {
     return routeMeta.map(meta => {
       const core = getEffectiveCore(meta.id);
-      const stops = tod === "am" ? buildAMStops(core) : buildPMStops(core);
+      const stops =
+        tod === "am" ? buildAMStops(core, meta.departure) : buildPMStops(core, meta.departure);
       const campers = core.reduce((sum, s) => sum + s.passengers, 0);
       return {
         ...meta,
