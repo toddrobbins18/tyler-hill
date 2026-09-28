@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
@@ -20,6 +20,17 @@ import { toast } from "sonner";
 import { campDateTimeToIso, formatCampDate, formatCampTime } from "@/lib/campTime";
 import { campDateStringInSeason } from "@/lib/campSeasonDate";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
+import { SwimLessonRecurringFields } from "@/components/swim/SwimLessonRecurringFields";
+import {
+  buildSwimLessonRows,
+  generateRecurringSwimLessonDates,
+  resolveSwimLessonWeekCalendar,
+  type CampWeekday,
+} from "@/lib/swimLessonSchedule";
+import {
+  loadEnrollmentWeekCalendar,
+  type EnrollmentWeekCalendar,
+} from "@/lib/enrollmentWeekCalendar";
 
 type Camper = { id: string; name: string; guardian_email: string | null };
 type Lesson = {
@@ -181,12 +192,19 @@ export default function SwimLessons() {
   );
 }
 
+type ScheduleMode = "once" | "recurring";
+
 function LessonDialog({
   campers, onSaved,
 }: { campers: Camper[]; onSaved: () => void }) {
   const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
   const [open, setOpen] = useState(false);
   const [camperId, setCamperId] = useState("");
+  const [scheduleMode, setScheduleMode] = useState<ScheduleMode>("once");
+  const [weekCalendar, setWeekCalendar] = useState<EnrollmentWeekCalendar>([]);
+  const [selectedWeeks, setSelectedWeeks] = useState<number[]>([]);
+  const [selectedDays, setSelectedDays] = useState<CampWeekday[]>([]);
   const [date, setDate] = useState(() => campDateStringInSeason(currentSeason));
 
   useEffect(() => {
@@ -200,38 +218,113 @@ function LessonDialog({
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const resolvedCalendar = useMemo(
+    () => resolveSwimLessonWeekCalendar(weekCalendar, currentSeason),
+    [weekCalendar, currentSeason],
+  );
+
+  const recurringDates = useMemo(
+    () =>
+      scheduleMode === "recurring"
+        ? generateRecurringSwimLessonDates(resolvedCalendar, selectedWeeks, selectedDays)
+        : [],
+    [scheduleMode, resolvedCalendar, selectedWeeks, selectedDays],
+  );
+
+  const resetForm = () => {
+    setCamperId("");
+    setScheduleMode("once");
+    setSelectedWeeks([]);
+    setSelectedDays([]);
+    setDate(campDateStringInSeason(currentSeason));
+    setTime("10:00");
+    setDuration("30");
+    setInstructor("");
+    setLocation("");
+    setCost("45");
+    setNotes("");
+  };
+
+  useEffect(() => {
+    if (!open || !currentCompany?.id) return;
+    void loadEnrollmentWeekCalendar(supabase, currentCompany.id, currentSeason).then(setWeekCalendar);
+  }, [open, currentCompany?.id, currentSeason]);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentCompany?.id) return;
     if (!camperId) return toast.error("Pick a camper");
-    
+
+    const durationMinutes = parseInt(duration) || 30;
+    const costCents = Math.round(parseFloat(cost || "0") * 100);
+    const instructorVal = instructor || null;
+    const locationVal = location || null;
+    const notesVal = notes || null;
+
     setSaving(true);
-    const scheduled_at = campDateTimeToIso(date, time);
-    
-    const { error } = await supabase.from("swim_lessons").insert({
-      company_id: currentCompany.id,
-      camper_id: camperId,
-      scheduled_at,
-      duration_minutes: parseInt(duration) || 30,
-      instructor: instructor || null,
-      location: location || null,
-      cost_cents: Math.round(parseFloat(cost || "0") * 100),
-      notes: notes || null,
-    });
-    
-    setSaving(false);
-    if (error) return toast.error(error.message);
-    toast.success("Swim lesson scheduled");
-    setOpen(false); 
+
+    if (scheduleMode === "recurring") {
+      if (selectedWeeks.length === 0 || selectedDays.length === 0) {
+        setSaving(false);
+        return toast.error("Pick at least one week and one day");
+      }
+      if (recurringDates.length === 0) {
+        setSaving(false);
+        return toast.error("No lesson dates match your selection");
+      }
+
+      const seriesId = crypto.randomUUID();
+      const rows = buildSwimLessonRows({
+        companyId: currentCompany.id,
+        camperId,
+        dates: recurringDates,
+        time,
+        durationMinutes,
+        instructor: instructorVal,
+        location: locationVal,
+        costCents,
+        notes: notesVal,
+        recurrenceSeriesId: seriesId,
+      });
+
+      const { error } = await supabase.from("swim_lessons").insert(rows);
+      setSaving(false);
+      if (error) return toast.error(error.message);
+      toast.success(`${rows.length} swim lessons scheduled`);
+    } else {
+      const scheduled_at = campDateTimeToIso(date, time);
+      const { error } = await supabase.from("swim_lessons").insert({
+        company_id: currentCompany.id,
+        camper_id: camperId,
+        scheduled_at,
+        duration_minutes: durationMinutes,
+        instructor: instructorVal,
+        location: locationVal,
+        cost_cents: costCents,
+        notes: notesVal,
+      });
+      setSaving(false);
+      if (error) return toast.error(error.message);
+      toast.success("Swim lesson scheduled");
+    }
+
+    setOpen(false);
+    resetForm();
     onSaved();
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) resetForm();
+      }}
+    >
       <DialogTrigger asChild>
         <Button><Plus className="h-4 w-4 mr-2" />Schedule lesson</Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Schedule a swim lesson</DialogTitle></DialogHeader>
         <form onSubmit={submit} className="space-y-3">
           <div className="space-y-2">
@@ -243,20 +336,66 @@ function LessonDialog({
               placeholder="Search campers..." 
             />
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-2">
-              <Label>Date</Label>
-              <Input type="date" value={date} onChange={e => setDate(e.target.value)} required />
-            </div>
-            <div className="space-y-2">
-              <Label>Time</Label>
-              <Input type="time" value={time} onChange={e => setTime(e.target.value)} required />
-            </div>
-            <div className="space-y-2">
-              <Label>Minutes</Label>
-              <Input type="number" value={duration} onChange={e => setDuration(e.target.value)} />
+
+          <div className="space-y-2">
+            <Label>Schedule type</Label>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={scheduleMode === "once" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setScheduleMode("once")}
+              >
+                One-time
+              </Button>
+              <Button
+                type="button"
+                variant={scheduleMode === "recurring" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setScheduleMode("recurring")}
+              >
+                Recurring by week
+              </Button>
             </div>
           </div>
+
+          {scheduleMode === "once" ? (
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <Label>Date</Label>
+                <Input type="date" value={date} onChange={e => setDate(e.target.value)} required />
+              </div>
+              <div className="space-y-2">
+                <Label>Time</Label>
+                <Input type="time" value={time} onChange={e => setTime(e.target.value)} required />
+              </div>
+              <div className="space-y-2">
+                <Label>Minutes</Label>
+                <Input type="number" value={duration} onChange={e => setDuration(e.target.value)} />
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Time</Label>
+                  <Input type="time" value={time} onChange={e => setTime(e.target.value)} required />
+                </div>
+                <div className="space-y-2">
+                  <Label>Minutes</Label>
+                  <Input type="number" value={duration} onChange={e => setDuration(e.target.value)} />
+                </div>
+              </div>
+              <SwimLessonRecurringFields
+                calendar={resolvedCalendar}
+                selectedWeeks={selectedWeeks}
+                onWeeksChange={setSelectedWeeks}
+                selectedDays={selectedDays}
+                onDaysChange={setSelectedDays}
+                previewCount={recurringDates.length}
+              />
+            </>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Instructor</Label>
@@ -276,7 +415,13 @@ function LessonDialog({
             <Input value={notes} onChange={e => setNotes(e.target.value)} />
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={saving}>{saving ? "Saving…" : "Schedule"}</Button>
+            <Button type="submit" disabled={saving}>
+              {saving
+                ? "Saving…"
+                : scheduleMode === "recurring" && recurringDates.length > 1
+                  ? `Schedule ${recurringDates.length} lessons`
+                  : "Schedule"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

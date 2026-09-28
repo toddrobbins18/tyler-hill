@@ -5,6 +5,7 @@ import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import HealthCenterDayCampPanel from "@/components/health/HealthCenterDayCampPanel";
+import { ROSTER_PAGE_SIZE } from "@/lib/rosterChildren";
 
 export default function Nurse() {
   const { currentCompany } = useCompany();
@@ -24,31 +25,43 @@ export default function Nurse() {
     }
 
     const divisionFilter = getDivisionFilter();
-    let query = supabase
-      .from("children")
-      .select(`
-        id,
-        name,
-        group_name,
-        division:divisions(id, name),
-        leader:leader_id(id, name)
-      `)
-      .eq("status", "active")
-      .eq("season", currentSeason)
-      .eq("company_id", currentCompany.id);
+    const rows: typeof children = [];
+    let from = 0;
 
-    if (divisionFilter !== null && divisionFilter.length > 0) {
-      query = query.in("division_id", divisionFilter);
+    for (;;) {
+      const to = from + ROSTER_PAGE_SIZE - 1;
+      let query = supabase
+        .from("children")
+        .select(`
+          id,
+          name,
+          group_name,
+          division:divisions(id, name),
+          leader:leader_id(id, name)
+        `)
+        .neq("status", "inactive")
+        .eq("season", currentSeason)
+        .eq("company_id", currentCompany.id);
+
+      if (divisionFilter !== null && divisionFilter.length > 0) {
+        query = query.in("division_id", divisionFilter);
+      }
+
+      const { data, error } = await query.order("name").range(from, to);
+      if (error) {
+        console.error("Error fetching children:", error);
+        toast({ title: "Error loading campers", variant: "destructive" });
+        setChildren([]);
+        return;
+      }
+
+      const batch = data ?? [];
+      rows.push(...batch);
+      if (batch.length < ROSTER_PAGE_SIZE) break;
+      from += ROSTER_PAGE_SIZE;
     }
 
-    const { data, error } = await query.order("name");
-    if (error) {
-      console.error("Error fetching children:", error);
-      toast({ title: "Error loading campers", variant: "destructive" });
-      setChildren([]);
-      return;
-    }
-    setChildren(data ?? []);
+    setChildren(rows);
   }, [currentCompany?.id, currentSeason, getDivisionFilter, toast]);
 
   const fetchStaff = useCallback(async () => {

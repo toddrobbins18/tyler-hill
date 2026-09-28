@@ -284,7 +284,15 @@ export default function HealthCenterDayCampPanel({
           </div>
 
           <div className="space-y-2">
-            <Label>Search {entityType === "camper" ? "campers" : "staff"}</Label>
+            <Label>
+              Search {entityType === "camper" ? "campers" : "staff"}
+              {filteredPeople.length > 0 && (
+                <span className="ml-2 font-normal text-muted-foreground">
+                  ({filteredPeople.length}
+                  {search.trim() ? " matches" : " total"})
+                </span>
+              )}
+            </Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -294,13 +302,19 @@ export default function HealthCenterDayCampPanel({
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
+            {!search.trim() && filteredPeople.length > 50 && (
+              <p className="text-xs text-muted-foreground">
+                Scroll the list or type to search all {filteredPeople.length}{" "}
+                {entityType === "camper" ? "campers" : "staff members"}.
+              </p>
+            )}
           </div>
 
-          <div className="border rounded-lg max-h-48 overflow-y-auto divide-y">
+          <div className="border rounded-lg max-h-72 overflow-y-auto divide-y">
             {filteredPeople.length === 0 ? (
               <p className="p-4 text-sm text-muted-foreground text-center">No matches</p>
             ) : (
-              filteredPeople.slice(0, 50).map((person) => (
+              filteredPeople.map((person) => (
                 <button
                   key={person.id}
                   type="button"
