@@ -13,7 +13,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Waves, Plus, Trash2, CheckCircle2, Clock, Bus } from "lucide-react";
+import { Waves, Plus, Trash2, CheckCircle2, Clock, Bus, Repeat } from "lucide-react";
 import { approveDismissalSwim } from "@/lib/dismissalDashboard";
 import { swimLessonBusRun } from "@/lib/campTime";
 import { toast } from "sonner";
@@ -21,8 +21,11 @@ import { campDateTimeToIso, formatCampDate, formatCampTime } from "@/lib/campTim
 import { campDateStringInSeason } from "@/lib/campSeasonDate";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
 import { SwimLessonRecurringFields } from "@/components/swim/SwimLessonRecurringFields";
+import { SwimLessonInstructorSelect } from "@/components/swim/SwimLessonInstructorSelect";
+import { SwimLessonTimeSelect } from "@/components/swim/SwimLessonTimeSelect";
 import {
   buildSwimLessonRows,
+  DEFAULT_SWIM_LESSON_TIME,
   generateRecurringSwimLessonDates,
   resolveSwimLessonWeekCalendar,
   type CampWeekday,
@@ -128,7 +131,6 @@ export default function SwimLessons() {
                   <TableHead>Camper</TableHead>
                   <TableHead>Parent Email</TableHead>
                   <TableHead>Instructor</TableHead>
-                  <TableHead>Location</TableHead>
                   <TableHead>Cost</TableHead>
                   <TableHead>Parent</TableHead>
                   <TableHead>Bus</TableHead>
@@ -148,7 +150,6 @@ export default function SwimLessons() {
                     <TableCell>{camperName(l.camper_id)}</TableCell>
                     <TableCell>{familyEmail(l.camper_id)}</TableCell>
                     <TableCell>{l.instructor ?? "—"}</TableCell>
-                    <TableCell>{l.location ?? "—"}</TableCell>
                     <TableCell>${(l.cost_cents / 100).toFixed(2)}</TableCell>
                     <TableCell>
                       {l.parent_confirmed ? (
@@ -210,10 +211,9 @@ function LessonDialog({
   useEffect(() => {
     setDate(campDateStringInSeason(currentSeason));
   }, [currentSeason]);
-  const [time, setTime] = useState("10:00");
+  const [time, setTime] = useState(DEFAULT_SWIM_LESSON_TIME);
   const [duration, setDuration] = useState("30");
   const [instructor, setInstructor] = useState("");
-  const [location, setLocation] = useState("");
   const [cost, setCost] = useState("45");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
@@ -237,10 +237,9 @@ function LessonDialog({
     setSelectedWeeks([]);
     setSelectedDays([]);
     setDate(campDateStringInSeason(currentSeason));
-    setTime("10:00");
+    setTime(DEFAULT_SWIM_LESSON_TIME);
     setDuration("30");
     setInstructor("");
-    setLocation("");
     setCost("45");
     setNotes("");
   };
@@ -258,7 +257,6 @@ function LessonDialog({
     const durationMinutes = parseInt(duration) || 30;
     const costCents = Math.round(parseFloat(cost || "0") * 100);
     const instructorVal = instructor || null;
-    const locationVal = location || null;
     const notesVal = notes || null;
 
     setSaving(true);
@@ -281,7 +279,7 @@ function LessonDialog({
         time,
         durationMinutes,
         instructor: instructorVal,
-        location: locationVal,
+        location: null,
         costCents,
         notes: notesVal,
         recurrenceSeriesId: seriesId,
@@ -299,7 +297,6 @@ function LessonDialog({
         scheduled_at,
         duration_minutes: durationMinutes,
         instructor: instructorVal,
-        location: locationVal,
         cost_cents: costCents,
         notes: notesVal,
       });
@@ -354,37 +351,32 @@ function LessonDialog({
                 size="sm"
                 onClick={() => setScheduleMode("recurring")}
               >
-                Recurring by week
+                <Repeat className="h-3.5 w-3.5 mr-1.5" />
+                Repeat weekly
               </Button>
             </div>
           </div>
 
           {scheduleMode === "once" ? (
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-2">
-                <Label>Date</Label>
-                <Input type="date" value={date} onChange={e => setDate(e.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <Label>Time</Label>
-                <Input type="time" value={time} onChange={e => setTime(e.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <Label>Minutes</Label>
-                <Input type="number" value={duration} onChange={e => setDuration(e.target.value)} />
-              </div>
-            </div>
-          ) : (
-            <>
+            <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label>Time</Label>
-                  <Input type="time" value={time} onChange={e => setTime(e.target.value)} required />
+                  <Label>Date</Label>
+                  <Input type="date" value={date} onChange={e => setDate(e.target.value)} required />
                 </div>
                 <div className="space-y-2">
                   <Label>Minutes</Label>
                   <Input type="number" value={duration} onChange={e => setDuration(e.target.value)} />
                 </div>
+              </div>
+              <SwimLessonTimeSelect value={time} onChange={setTime} />
+            </div>
+          ) : (
+            <>
+              <SwimLessonTimeSelect value={time} onChange={setTime} />
+              <div className="space-y-2">
+                <Label>Minutes</Label>
+                <Input type="number" value={duration} onChange={e => setDuration(e.target.value)} />
               </div>
               <SwimLessonRecurringFields
                 calendar={resolvedCalendar}
@@ -396,16 +388,12 @@ function LessonDialog({
               />
             </>
           )}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label>Instructor</Label>
-              <Input value={instructor} onChange={e => setInstructor(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Location</Label>
-              <Input value={location} onChange={e => setLocation(e.target.value)} placeholder="Main Pool" />
-            </div>
-          </div>
+          <SwimLessonInstructorSelect
+            companyId={currentCompany?.id}
+            season={currentSeason}
+            value={instructor}
+            onChange={setInstructor}
+          />
           <div className="space-y-2">
             <Label>Cost (USD)</Label>
             <Input type="number" step="0.01" value={cost} onChange={e => setCost(e.target.value)} />

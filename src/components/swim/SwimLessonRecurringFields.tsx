@@ -2,6 +2,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
+  ALL_CAMP_WEEKDAYS,
   CAMP_WEEKDAY_OPTIONS,
   type CampWeekday,
   swimLessonWeekOptions,
@@ -43,10 +44,34 @@ export function SwimLessonRecurringFields({
     );
   };
 
+  const allWeekNumbers = weekOptions.map((w) => w.weekNumber);
+
   return (
     <div className="space-y-4 rounded-lg border bg-muted/30 p-3">
       <div className="space-y-2">
-        <Label>Weeks</Label>
+        <div className="flex items-center justify-between gap-2">
+          <Label>Weeks</Label>
+          <div className="flex gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => onWeeksChange(allWeekNumbers)}
+            >
+              All weeks
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => onWeeksChange([])}
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
         <div className="grid grid-cols-2 gap-2">
           {weekOptions.map((week) => (
             <Button
@@ -65,7 +90,29 @@ export function SwimLessonRecurringFields({
       </div>
 
       <div className="space-y-2">
-        <Label>Days</Label>
+        <div className="flex items-center justify-between gap-2">
+          <Label>Days</Label>
+          <div className="flex gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => onDaysChange([...ALL_CAMP_WEEKDAYS])}
+            >
+              Mon–Fri
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => onDaysChange([])}
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
         <div className="flex flex-wrap gap-2">
           {CAMP_WEEKDAY_OPTIONS.map((day) => (
             <Button

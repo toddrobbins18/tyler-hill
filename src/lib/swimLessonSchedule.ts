@@ -18,6 +18,20 @@ export const CAMP_WEEKDAY_OPTIONS: { value: CampWeekday; short: string; label: s
   { value: 5, short: "Fri", label: "Friday" },
 ];
 
+export const ALL_CAMP_WEEKDAYS: CampWeekday[] = [1, 2, 3, 4, 5];
+
+/** 24h HH:mm — only two lesson slots per North Shore private swim. */
+export const DEFAULT_SWIM_LESSON_TIME = "15:45";
+
+export const SWIM_LESSON_TIME_OPTIONS = [
+  { value: "15:45", label: "3:45 PM" },
+  { value: "16:15", label: "4:15 PM" },
+] as const;
+
+export function allEnrollmentWeekNumbers(): number[] {
+  return Array.from({ length: DAY_CAMP_ENROLLMENT_WEEKS }, (_, i) => i + 1);
+}
+
 export function defaultCampWeekCalendar(season: string): EnrollmentWeekCalendar {
   const year = Number.parseInt(season, 10);
   const week1Start = Number.isFinite(year) ? `${year}-06-28` : "2027-06-28";
