@@ -39,6 +39,15 @@ import {
   isNorthShoreSunshineGroup,
   sunshineGroupSortOrder,
 } from "@/lib/sunshineGroups";
+import { NORTH_SHORE_SUNSHINE_TAG_OPTIONS } from "@/lib/sunshineReportOptions";
+import { ensureSunshineTagOptions } from "@/lib/ensureSunshineTagOptions";
+import {
+  collectSunshineTagSeedsFromRows,
+  isAirtableSunshineCsv,
+  normalizeSunshineName,
+  parseAirtableSunshineRow,
+  SUNSHINE_TAG_COLOR_PALETTE,
+} from "@/lib/sunshineAirtableImport";
 
 type Group = { id: string; name: string; sort_order: number };
 type Camper = { id: string; full_name: string; group_id: string | null; parent_email: string | null; sort_order: number };
@@ -136,8 +145,21 @@ export default function SunshineReport() {
     }
   }, [currentCompany, currentSeason]);
 
-  async function refreshAll(options?: { syncRoster?: boolean }) {
+  async function refreshAll(options?: { syncRoster?: boolean; skipAutoSync?: boolean }) {
     if (!currentCompany) return;
+
+    if (isNorthShoreDayCamp(currentCompany.slug)) {
+      try {
+        await ensureSunshineTagOptions(
+          supabase,
+          currentCompany.id,
+          NORTH_SHORE_SUNSHINE_TAG_OPTIONS,
+        );
+      } catch (e) {
+        console.error("sunshine tag seed failed:", e);
+      }
+    }
+
     if (options?.syncRoster) {
       setSyncingRoster(true);
       try {
@@ -215,6 +237,21 @@ export default function SunshineReport() {
       console.error("sunshine_tag_options load failed:", t.error);
     } else if (t.data) {
       setTagOptions(t.data as TagOption[]);
+    }
+
+    if (
+      northShoreSunshineOnly &&
+      !options?.syncRoster &&
+      !options?.skipAutoSync &&
+      (c.data ?? []).filter(
+        (camper) =>
+          camper.group_id &&
+          (g.data ?? [])
+            .filter((group) => isNorthShoreSunshineGroup(group.name))
+            .some((group) => group.id === camper.group_id),
+      ).length === 0
+    ) {
+      await refreshAll({ syncRoster: true, skipAutoSync: true });
     }
   }
 
@@ -413,6 +450,151 @@ export default function SunshineReport() {
     toast.success("Camper removed.");
   }
 
+  async function handleAirtableImport(rows: Record<string, string>[]) {
+    if (!currentCompany) return;
+
+    const parsed = rows
+      .map((row) => parseAirtableSunshineRow(row))
+      .filter((row): row is NonNullable<typeof row> => row !== null);
+
+    if (!parsed.length) {
+      toast.error("No camper rows found. Expected Airtable columns like Child's Name, Group, Sports…");
+      return;
+    }
+
+    const extraTags = collectSunshineTagSeedsFromRows(parsed, SUNSHINE_TAG_COLOR_PALETTE);
+    await ensureSunshineTagOptions(supabase, currentCompany.id, [
+      ...NORTH_SHORE_SUNSHINE_TAG_OPTIONS,
+      ...extraTags,
+    ]);
+
+    const groupByName = new Map(groups.map((g) => [normalizeGroupName(g.name), g]));
+    let createdGroups = 0;
+    let nextGroupOrder = Math.max(0, ...groups.map((g) => g.sort_order));
+
+    for (const row of parsed) {
+      if (!row.groupName || groupByName.has(normalizeGroupName(row.groupName))) continue;
+      nextGroupOrder += 1;
+      const { data, error } = await supabase
+        .from("sunshine_groups")
+        .insert({
+          company_id: currentCompany.id,
+          name: row.groupName,
+          sort_order: nextGroupOrder,
+          season: currentSeason,
+        })
+        .select()
+        .single();
+      if (error) {
+        const existing = await fetchGroupByName(row.groupName);
+        if (existing) groupByName.set(normalizeGroupName(row.groupName), existing);
+        continue;
+      }
+      if (data) {
+        groupByName.set(normalizeGroupName(row.groupName), data as Group);
+        createdGroups++;
+      }
+    }
+
+    const camperByKey = new Map(
+      campers.map((c) => {
+        const groupName = groups.find((g) => g.id === c.group_id)?.name ?? "";
+        return [`${normalizeSunshineName(c.full_name)}:${normalizeGroupName(groupName)}`, c];
+      }),
+    );
+
+    let createdCampers = 0;
+    let importedReports = 0;
+    let skipped = 0;
+
+    for (const row of parsed) {
+      const group = row.groupName
+        ? groupByName.get(normalizeGroupName(row.groupName))
+        : groups.find((g) => g.id === activeGroupId);
+      if (!group) {
+        skipped++;
+        continue;
+      }
+
+      const camperKey = `${normalizeSunshineName(row.childName)}:${normalizeGroupName(group.name)}`;
+      let camper = camperByKey.get(camperKey);
+      if (!camper) {
+        const maxOrder = Math.max(
+          0,
+          ...campers.filter((c) => c.group_id === group.id).map((c) => c.sort_order),
+        );
+        const { data, error } = await supabase
+          .from("sunshine_campers")
+          .insert({
+            company_id: currentCompany.id,
+            full_name: row.childName,
+            parent_email: null,
+            group_id: group.id,
+            sort_order: maxOrder + 1,
+            season: currentSeason,
+          })
+          .select()
+          .single();
+        if (error || !data) {
+          skipped++;
+          continue;
+        }
+        camper = data as Camper;
+        camperByKey.set(camperKey, camper);
+        createdCampers++;
+      }
+
+      const hasReportData =
+        row.sports.length > 0 ||
+        row.activities.length > 0 ||
+        row.lunch.length > 0 ||
+        row.bm !== null ||
+        row.napped !== null;
+
+      if (!hasReportData) continue;
+
+      const { error } = await supabase.from("sunshine_reports").upsert(
+        {
+          company_id: currentCompany.id,
+          camper_id: camper.id,
+          report_date: date,
+          sports: row.sports,
+          activities: row.activities,
+          lunch: row.lunch,
+          bm: row.bm ?? false,
+          napped: row.napped ?? false,
+          send_email: row.sendEmail,
+        },
+        { onConflict: "camper_id,report_date" },
+      );
+
+      if (error) {
+        skipped++;
+        continue;
+      }
+      importedReports++;
+    }
+
+    await refreshAll();
+    const { data: reportRows } = await supabase
+      .from("sunshine_reports")
+      .select("*")
+      .eq("company_id", currentCompany.id)
+      .eq("report_date", date);
+    const map: Record<string, Report> = {};
+    (reportRows ?? []).forEach((r: Report) => {
+      map[r.camper_id] = r;
+    });
+    setReports(map);
+
+    toast.success(
+      `Imported ${importedReports} report${importedReports === 1 ? "" : "s"} for ${date}` +
+        (createdCampers ? ` · ${createdCampers} new camper${createdCampers === 1 ? "" : "s"}` : "") +
+        (createdGroups ? ` · ${createdGroups} group${createdGroups === 1 ? "" : "s"}` : "") +
+        (skipped ? ` · skipped ${skipped}` : ""),
+    );
+  }
+
   // ---- CSV import / export ----
   async function handleCSVImport(file: File) {
     if (!currentCompany) return;
@@ -424,6 +606,10 @@ export default function SunshineReport() {
       const rows = await loadSpreadsheetRowsFromFile(file);
       if (!rows.length) {
         toast.error("CSV appears empty.");
+        return;
+      }
+      if (isAirtableSunshineCsv(rows)) {
+        await handleAirtableImport(rows);
         return;
       }
       // Build group lookup by lowercase name
@@ -515,7 +701,9 @@ export default function SunshineReport() {
   }
 
   function handleCSVDownloadTemplate() {
-    const csv = "name,parent_email,group\nJane Doe,parent@example.com,Pandas\nJohn Smith,,Bunnies\n";
+    const csv =
+      "Child's Name,Group,Sports,Activities,Lunch,BM,Napped?,Send Email\n" +
+      "Jane Doe,Bunnies,\"Swimming,Soccer\",\"Arts + Crafts,Glow party\",\"Pizza,Pasta,Fruit,Jelly Sandwich\",No,Yes,checked\n";
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -533,7 +721,7 @@ export default function SunshineReport() {
         <div>
           <h1 className="text-3xl font-bold mb-1 text-foreground">Sunshine Report</h1>
           <p className="text-muted-foreground">
-            Daily camper tracking — groups and campers load from roster (FULLSUMMERGROUP) for {currentSeason}.
+            Daily camper tracking — Airtable-style fields. Campers load from roster; use Import File for Airtable CSV.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
