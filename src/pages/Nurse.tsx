@@ -57,6 +57,8 @@ import {
 } from "@/lib/medicationMealTimeDisplay";
 import { MedicationMealTimeBadges } from "@/components/nurse/MedicationMealTimeBadges";
 import HealthCenterReportsPanel from "@/components/health/HealthCenterReportsPanel";
+import HealthCenterDayCampPanel from "@/components/health/HealthCenterDayCampPanel";
+import { isDayCampCompany } from "@/lib/camps";
 import {
   insertMedicationLog,
   medicationWriteErrorDescription,
@@ -80,6 +82,7 @@ export default function Nurse() {
   const isTimberLake = useTimberLakeMode();
   const { currentSeason } = useSeasonContext();
   const { currentCompany } = useCompany();
+  const isDayCamp = isDayCampCompany(currentCompany);
   const { getDivisionFilter, loading: permissionsLoading, userDivisionsKey } = usePermissions();
   const [children, setChildren] = useState<any[]>([]);
   const [staff, setStaff] = useState<any[]>([]);
@@ -256,7 +259,8 @@ export default function Nurse() {
       .from("children")
       .select(`
         *,
-        division:divisions(id, name, gender, sort_order)
+        division:divisions(id, name, gender, sort_order),
+        leader:leader_id(id, name)
       `)
       .eq("status", "active")
       .eq("season", currentSeason)
@@ -2609,6 +2613,16 @@ export default function Nurse() {
         </TabsContent>
 
         <TabsContent value="health-center">
+          {isDayCamp ? (
+            <HealthCenterDayCampPanel
+              children={children}
+              staff={staff}
+              visits={admissionHistory}
+              onVisitLogged={() => {
+                fetchAdmissionHistory();
+              }}
+            />
+          ) : (
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
@@ -3000,10 +3014,20 @@ export default function Nurse() {
 
             </CardContent>
           </Card>
+          )}
         </TabsContent>
 
         {/* Health Center Log Tab */}
         <TabsContent value="health-log">
+          {isDayCamp ? (
+            <HealthCenterDayCampPanel
+              children={children}
+              staff={staff}
+              visits={admissionHistory}
+              onVisitLogged={() => fetchAdmissionHistory()}
+              mode="log-only"
+            />
+          ) : (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -3133,6 +3157,7 @@ export default function Nurse() {
               </div>
             </CardContent>
           </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="reports">

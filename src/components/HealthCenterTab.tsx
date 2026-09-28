@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -211,7 +211,14 @@ export function HealthCenterTab({ entityId, entityType, visitsOnly = false }: He
                       </p>
                     )}
                     {admission.reason && (
-                      <p className="text-sm text-muted-foreground">{admission.reason}</p>
+                      <p className="text-sm">{admission.reason}</p>
+                    )}
+                    <VisitDetailGrid admission={admission} />
+                    {admission.notes && (
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium">Notes: </span>
+                        {admission.notes}
+                      </p>
                     )}
                   </div>
                 );
@@ -222,6 +229,33 @@ export function HealthCenterTab({ entityId, entityType, visitsOnly = false }: He
       </Card>
     );
   }
+
+function VisitDetailGrid({ admission }: { admission: Record<string, unknown> }) {
+  const rows: { label: string; key: string }[] = [
+    { label: "Treatment", key: "treatment" },
+    { label: "Location", key: "incident_location" },
+    { label: "Group", key: "group_name" },
+    { label: "Counselor", key: "counselor_name" },
+    { label: "Nurse", key: "nurse_name" },
+    { label: "Sent home", key: "sent_home" },
+    { label: "Called home", key: "called_home" },
+  ];
+  const filled = rows.filter((r) => {
+    const v = admission[r.key];
+    return typeof v === "string" && v.trim().length > 0;
+  });
+  if (filled.length === 0) return null;
+  return (
+    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs mt-2">
+      {filled.map(({ label, key }) => (
+        <Fragment key={key}>
+          <dt className="text-muted-foreground font-medium">{label}</dt>
+          <dd className="text-foreground">{String(admission[key])}</dd>
+        </Fragment>
+      ))}
+    </dl>
+  );
+}
 
   const renderAdmissionNotes = (admissionId: string, initialNotes?: string | null) => (
     <div className="space-y-2">

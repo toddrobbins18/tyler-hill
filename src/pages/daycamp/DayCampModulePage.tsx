@@ -23,8 +23,8 @@ const DAY_CAMP_MODULES: Record<string, { title: string; description: string }> =
     description: "Swim Bracelets and Level Reports.",
   },
   "nurse": {
-    title: "Nurse",
-    description: "Track incidents and treatments.",
+    title: "Health Center",
+    description: "Log visits with searchable camper/staff pickers — linked to profiles.",
   },
   "transport": {
     title: "Transport",
