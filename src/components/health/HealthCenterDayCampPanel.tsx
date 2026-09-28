@@ -16,6 +16,11 @@ import {
   type HealthCenterVisitFormState,
 } from "./HealthCenterVisitFormFields";
 import type { HealthCenterVisitExtraFields } from "@/lib/healthCenterVisitOptions";
+import {
+  healthVisitCalledHomeToBoolean,
+  isHealthVisitSentHome,
+  submitNurseSentHomeTransportException,
+} from "@/lib/nurseTransportException";
 
 type CamperRow = {
   id: string;
@@ -192,7 +197,43 @@ export default function HealthCenterDayCampPanel({
       const { error } = await supabase.from("health_center_admissions").insert(insertData);
       if (error) throw error;
 
-      toast({ title: "Visit logged" });
+      const camperSentHome =
+        entityType === "camper" && isHealthVisitSentHome(form.sent_home);
+      if (camperSentHome && selectedCamper) {
+        try {
+          const transport = await submitNurseSentHomeTransportException(supabase, {
+            companyId: currentCompany.id,
+            date: visitDate,
+            camperName: selectedCamper.name,
+            groupName: form.group_name || selectedCamper.group_name,
+            reason: form.reason.trim(),
+            nurseName: form.nurse_name,
+            counselorName: form.counselor_name,
+            calledHome: healthVisitCalledHomeToBoolean(form.called_home),
+          });
+          if (transport.skipped) {
+            toast({
+              title: "Visit logged",
+              description: "Transport already approved this camper for today.",
+            });
+          } else {
+            toast({
+              title: "Visit logged — sent to transport",
+              description: "Pending approval in Transport Admin. No need to re-enter under Log change.",
+            });
+          }
+        } catch (transportErr) {
+          console.error(transportErr);
+          toast({
+            title: "Visit logged",
+            description:
+              "Could not queue transport exception. Ask transport staff to log sent home under Transport Admin.",
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({ title: "Visit logged" });
+      }
       setForm(emptyHealthCenterVisitForm());
       setSelectedId(null);
       setSearch("");

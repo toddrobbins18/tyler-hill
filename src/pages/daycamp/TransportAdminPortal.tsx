@@ -22,6 +22,7 @@ import {
   fetchTransportExceptionsForReport,
   type TransportException,
 } from "@/lib/transportDailyOverrides";
+import { submitNurseSentHomeTransportException } from "@/lib/nurseTransportException";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -624,16 +625,13 @@ function StaffNurseForm({
     setSaving(true);
     try {
       const child = campers.find((c) => c.id === camperId);
-      const { error } = await supabase.from("nurse_records").insert({
-        company_id: companyId,
+      await submitNurseSentHomeTransportException(supabase, {
+        companyId,
         date: recordDate,
-        camper_name: camperName,
-        group_name: child?.group_name ?? null,
+        camperName,
+        groupName: child?.group_name ?? null,
         reason: reason || null,
-        sent_home: true,
-        transport_status: "submitted",
       });
-      if (error) throw error;
       toast.success("Sent home logged — approve to remove camper from bus");
       setReason("");
       onSaved();
