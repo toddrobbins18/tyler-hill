@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { StaffMember } from "@/types/staff";
 import { HiringStats } from "@/components/hiring/HiringStats";
-import { KanbanBoard } from "@/components/hiring/KanbanBoard";
+import { HiredStaffRoster } from "@/components/hiring/HiredStaffRoster";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, Briefcase, RefreshCw, Trash2 } from "lucide-react";
@@ -102,8 +102,8 @@ export default function Hiring() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Staff Hiring {currentSeason}</h1>
             <p className="text-sm text-muted-foreground">
-              Hired staff from {currentSeason} roster
-              {rosterCount != null ? ` · ${rosterCount} on roster` : ""}
+              Active hired staff for {currentSeason} only
+              {rosterCount != null ? ` · ${rosterCount} people` : ""}
             </p>
           </div>
         </div>
@@ -149,9 +149,9 @@ export default function Hiring() {
 
         <section className="xl:col-span-3">
           <div className="mb-4">
-            <h2 className="text-base font-semibold mb-1">Hiring Pipeline</h2>
+            <h2 className="text-base font-semibold mb-1">{currentSeason} Hired Staff</h2>
             <p className="text-xs text-muted-foreground">
-              Staff load from Nest roster (active/hired for this season). Drag cards to track pipeline status; budgets can be edited on cards.
+              Pulled from this camp&apos;s active staff roster for {currentSeason}. No other seasons or inactive staff.
             </p>
           </div>
           {loading ? (
@@ -161,7 +161,7 @@ export default function Hiring() {
               No hired staff for {currentSeason}. Run CampMinder staff sync, then click Reload from Roster.
             </p>
           ) : (
-            <KanbanBoard staff={filteredStaff} onStaffUpdate={setStaff} />
+            <HiredStaffRoster staff={filteredStaff} />
           )}
         </section>
       </div>

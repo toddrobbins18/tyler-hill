@@ -1,21 +1,14 @@
 import { Card } from "@/components/ui/card";
 import { StaffMember, DepartmentStats } from "@/types/staff";
-import { Users, UserCheck, UserPlus } from "lucide-react";
+import { Users, Building2 } from "lucide-react";
 
 interface HiringStatsProps {
   staff: StaffMember[];
 }
 
 export function HiringStats({ staff }: HiringStatsProps) {
-  const totalPositions = staff.length;
-  const hiredCount = staff.filter((s) => s.status === "hired").length;
-  const toHireCount = staff.filter((s) => s.status === "to-hire").length;
-  const interviewingCount = staff.filter((s) => s.status === "interviewing").length;
-
+  const hiredCount = staff.length;
   const totalBudget = staff.reduce((sum, s) => sum + s.netBudget, 0);
-  const usedBudget = staff
-    .filter((s) => s.status === "hired")
-    .reduce((sum, s) => sum + s.netBudget, 0);
 
   const departments = Array.from(new Set(staff.map((s) => s.department)));
   const departmentStats: DepartmentStats[] = departments.map((dept) => {
@@ -23,23 +16,17 @@ export function HiringStats({ staff }: HiringStatsProps) {
     return {
       name: dept,
       totalPositions: deptStaff.length,
-      filled: deptStaff.filter((s) => s.status === "hired").length,
-      toHire: deptStaff.filter((s) => s.status === "to-hire").length,
+      filled: deptStaff.length,
+      toHire: 0,
       budgetTotal: deptStaff.reduce((sum, s) => sum + s.netBudget, 0),
-      budgetUsed: deptStaff
-        .filter((s) => s.status === "hired")
-        .reduce((sum, s) => sum + s.netBudget, 0),
+      budgetUsed: deptStaff.reduce((sum, s) => sum + s.netBudget, 0),
     };
   });
 
   const stats = [
-    { title: "Total Positions", value: totalPositions, icon: Users, color: "text-foreground" },
-    { title: "Hired", value: hiredCount, icon: UserCheck, color: "text-success" },
-    { title: "To Hire", value: toHireCount, icon: UserPlus, color: "text-primary" },
-    { title: "In Progress", value: interviewingCount, icon: Users, color: "text-warning" },
+    { title: "Hired Staff", value: hiredCount, icon: Users, color: "text-success" },
+    { title: "Departments", value: departments.length, icon: Building2, color: "text-primary" },
   ];
-
-  const budgetPct = totalBudget > 0 ? (usedBudget / totalBudget) * 100 : 0;
 
   return (
     <div className="space-y-4">
@@ -62,63 +49,23 @@ export function HiringStats({ staff }: HiringStatsProps) {
         })}
       </div>
 
-      <Card className="p-5">
-        <h3 className="text-sm font-semibold mb-3">Budget Overview</h3>
-        <div className="space-y-1.5 mb-3">
+      {totalBudget > 0 && (
+        <Card className="p-5">
+          <h3 className="text-sm font-semibold mb-3">Budget Overview</h3>
           <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground">Total Budget</span>
+            <span className="text-muted-foreground">Total on roster</span>
             <span className="font-semibold">${totalBudget.toLocaleString()}</span>
           </div>
-          <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground">Committed</span>
-            <span className="font-semibold text-success">${usedBudget.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground">Available</span>
-            <span className="font-semibold text-primary">
-              ${(totalBudget - usedBudget).toLocaleString()}
-            </span>
-          </div>
-        </div>
-        <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-success to-secondary transition-all duration-500"
-            style={{ width: `${budgetPct}%` }}
-          />
-        </div>
-        <p className="text-[11px] text-muted-foreground mt-2 text-center">
-          {budgetPct.toFixed(1)}% of budget committed
-        </p>
-      </Card>
+        </Card>
+      )}
 
       <Card className="p-5">
-        <h3 className="text-sm font-semibold mb-3">Department Breakdown</h3>
+        <h3 className="text-sm font-semibold mb-3">By Department</h3>
         <div className="space-y-3">
           {departmentStats.map((dept) => (
-            <div key={dept.name} className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <span className="font-medium text-xs text-foreground">{dept.name}</span>
-                <span className="text-[11px] text-muted-foreground">
-                  {dept.filled}/{dept.totalPositions} filled
-                </span>
-              </div>
-              <div className="flex gap-2 items-center">
-                <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
-                  <div
-                    className="h-full bg-success transition-all duration-500"
-                    style={{
-                      width: `${
-                        dept.totalPositions > 0
-                          ? (dept.filled / dept.totalPositions) * 100
-                          : 0
-                      }%`,
-                    }}
-                  />
-                </div>
-                <span className="text-[11px] font-medium min-w-12 text-right text-foreground">
-                  ${(dept.budgetUsed / 1000).toFixed(0)}k
-                </span>
-              </div>
+            <div key={dept.name} className="flex justify-between items-center text-xs">
+              <span className="font-medium text-foreground">{dept.name}</span>
+              <span className="text-muted-foreground">{dept.filled} hired</span>
             </div>
           ))}
         </div>

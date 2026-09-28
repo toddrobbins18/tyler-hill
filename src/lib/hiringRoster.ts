@@ -10,12 +10,16 @@ type StaffRow = {
   staff_type: string | null;
 };
 
-/** CampMinder / Nest: active (or empty) staff are current hired staff for the season. */
-export function isHiredStaffStatus(status: unknown): boolean {
-  if (status == null) return true;
-  const s = String(status).trim().toLowerCase();
+/** Active hired staff for the season — same rules as the Staff roster page. */
+export function isActiveHiredStaffRow(row: {
+  status?: unknown;
+  name?: unknown;
+}): boolean {
+  const name = String(row.name ?? "").trim();
+  if (!name || name.toLowerCase() === "unknown") return false;
+  const s = String(row.status ?? "active").trim().toLowerCase();
   if (!s) return true;
-  return !["inactive", "resigned", "dismissed", "cancelled", "terminated"].includes(s);
+  return s === "active" || s !== "inactive";
 }
 
 function mapStaffRow(row: StaffRow): StaffMember {
@@ -32,7 +36,7 @@ function mapStaffRow(row: StaffRow): StaffMember {
   };
 }
 
-/** Active/hired staff for the selected camp season (CampMinder roster). */
+/** Active hired staff for the selected camp + season (e.g. 2027). */
 export async function fetchHiredStaffForHiring(
   companyId: string,
   season: string,
@@ -42,16 +46,19 @@ export async function fetchHiredStaffForHiring(
     .select("id, name, role, department, status, staff_type")
     .eq("company_id", companyId)
     .eq("season", season)
+    .or("status.eq.active,status.is.null,status.eq.Active")
+    .neq("name", "Unknown")
+    .not("name", "is", null)
     .order("name");
 
   if (error) throw error;
 
   return (data as StaffRow[] | null || [])
-    .filter((row) => isHiredStaffStatus(row.status))
+    .filter(isActiveHiredStaffRow)
     .map(mapStaffRow);
 }
 
-/** Keep kanban edits (status, budgets, notes) for staff still on the roster. */
+/** Keep local budget/notes edits; roster is always hired for this season. */
 export function mergeHiringPipelineWithSaved(
   roster: StaffMember[],
   saved: StaffMember[] | null | undefined,
@@ -63,25 +70,18 @@ export function mergeHiringPipelineWithSaved(
     if (!prev) return member;
     return {
       ...member,
-      status: prev.status,
-      actualBudget: prev.actualBudget,
-      proposedBudget: prev.proposedBudget,
-      kidCredit: prev.kidCredit,
-      netBudget: prev.netBudget,
-      notes: prev.notes,
-      position: prev.position || member.position,
-      department: prev.department || member.department,
+      status: "hired" as HiringStatus,
+      actualBudget: prev.actualBudget ?? member.actualBudget,
+      proposedBudget: prev.proposedBudget ?? member.proposedBudget,
+      kidCredit: prev.kidCredit ?? member.kidCredit,
+      netBudget: prev.netBudget ?? member.netBudget,
+      notes: prev.notes ?? member.notes,
     };
   });
 }
 
 export function countHiredPipeline(staff: StaffMember[]): number {
-  return staff.filter((s) => s.status === "hired").length;
+  return staff.length;
 }
 
-export const HIRING_PIPELINE_STATUSES: HiringStatus[] = [
-  "to-hire",
-  "interviewing",
-  "offered",
-  "hired",
-];
+export const HIRING_PIPELINE_STATUSES: HiringStatus[] = ["hired"];
