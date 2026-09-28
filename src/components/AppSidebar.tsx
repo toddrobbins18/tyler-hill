@@ -28,6 +28,8 @@ import {
 } from "@/lib/dayCampMenu";
 import { getOvernightMenuItems } from "@/lib/overnightMenu";
 import { DayCampSidebarMenuList } from "@/components/daycamp/DayCampSidebarMenuList";
+import { SidebarNavItem } from "@/components/sidebar/SidebarNavItem";
+import { isSidebarNavActive } from "@/lib/sidebarNavActive";
 import { useDayCampMenuVisibility } from "@/hooks/useDayCampMenuVisibility";
 import { parentPortalUrl } from "@/hooks/useParentCompany";
 import {
@@ -187,36 +189,28 @@ export function AppSidebar() {
               <DayCampSidebarMenuList items={visibleItems} />
             ) : (
             <SidebarMenu>
-              {visibleItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    {item.external ? (
+              {visibleItems.map((item) =>
+                item.external ? (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild>
                       <a
                         href={item.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="hover:bg-sidebar-accent/50 flex items-center gap-2"
+                        className="flex items-center gap-2"
                       >
                         <item.icon className="h-4 w-4" />
                         <span>{item.title}</span>
                       </a>
-                    ) : (
-                      <NavLink
-                        to={item.url}
-                        end
-                        className={({ isActive }) =>
-                          isActive
-                            ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                            : "hover:bg-sidebar-accent/50"
-                        }
-                      >
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </NavLink>
-                    )}
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ) : (
+                  <SidebarNavItem key={item.title} to={item.url}>
+                    <item.icon className="h-4 w-4" />
+                    <span>{item.title}</span>
+                  </SidebarNavItem>
+                ),
+              )}
             </SidebarMenu>
             )}
           </SidebarGroupContent>
@@ -252,46 +246,34 @@ export function AppSidebar() {
                   </SidebarMenuItem>
                   <CollapsibleContent>
                     <SidebarMenuItem>
-                      <SidebarMenuButton asChild isActive={location.pathname === "/parents"}>
-                        <NavLink
-                          to={parentPortalUrl(currentCompany.slug, "/parents")}
-                          end
-                          className={({ isActive }) =>
-                            isActive
-                              ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                              : "hover:bg-sidebar-accent/50"
-                          }
-                        >
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isSidebarNavActive(location.pathname, "/parents")}
+                      >
+                        <NavLink to={parentPortalUrl(currentCompany.slug, "/parents")} end>
                           <span className="ml-6 text-sm">Login / Signup</span>
                         </NavLink>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                     <SidebarMenuItem>
-                      <SidebarMenuButton asChild isActive={location.pathname === "/parents/portal"}>
-                        <NavLink
-                          to={parentPortalUrl(currentCompany.slug, "/parents/portal")}
-                          end
-                          className={({ isActive }) =>
-                            isActive
-                              ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                              : "hover:bg-sidebar-accent/50"
-                          }
-                        >
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isSidebarNavActive(location.pathname, "/parents/portal")}
+                      >
+                        <NavLink to={parentPortalUrl(currentCompany.slug, "/parents/portal")} end>
                           <span className="ml-6 text-sm">Family Portal</span>
                         </NavLink>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                     <SidebarMenuItem>
-                      <SidebarMenuButton asChild isActive={location.pathname === "/day-camp/parent-portal-dashboard"}>
-                        <NavLink
-                          to="/day-camp/parent-portal-dashboard"
-                          end
-                          className={({ isActive }) =>
-                            isActive
-                              ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                              : "hover:bg-sidebar-accent/50"
-                          }
-                        >
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isSidebarNavActive(
+                          location.pathname,
+                          "/day-camp/parent-portal-dashboard",
+                        )}
+                      >
+                        <NavLink to="/day-camp/parent-portal-dashboard" end>
                           <span className="ml-6 text-sm">Portal Dashboard</span>
                         </NavLink>
                       </SidebarMenuButton>
@@ -308,96 +290,30 @@ export function AppSidebar() {
             <SidebarGroupLabel>Administration</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <NavLink
-                      to="/admin"
-                      className={({ isActive }) =>
-                        isActive
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                          : "hover:bg-sidebar-accent/50"
-                      }
-                    >
-                      <Shield className="h-4 w-4" />
-                      <span>Admin Panel</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <NavLink
-                      to="/evaluation-questions"
-                      className={({ isActive }) =>
-                        isActive
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                          : "hover:bg-sidebar-accent/50"
-                      }
-                    >
-                      <ClipboardList className="h-4 w-4" />
-                      <span>Evaluation Questions</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <NavLink
-                      to="/role-permissions"
-                      className={({ isActive }) =>
-                        isActive
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                          : "hover:bg-sidebar-accent/50"
-                      }
-                    >
-                      <Settings className="h-4 w-4" />
-                      <span>Role Permissions</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <NavLink
-                      to="/division-permissions"
-                      className={({ isActive }) =>
-                        isActive
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                          : "hover:bg-sidebar-accent/50"
-                      }
-                    >
-                      <Settings className="h-4 w-4" />
-                      <span>Division Permissions</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <NavLink
-                      to="/specialist-sport-assignments"
-                      className={({ isActive }) =>
-                        isActive
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                          : "hover:bg-sidebar-accent/50"
-                      }
-                    >
-                      <Trophy className="h-4 w-4" />
-                      <span>Specialist Sport Assignments</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <NavLink
-                      to="/user-approvals"
-                      className={({ isActive }) =>
-                        isActive
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                          : "hover:bg-sidebar-accent/50"
-                      }
-                    >
-                      <ClipboardList className="h-4 w-4" />
-                      <span>User Approvals</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                <SidebarNavItem to="/admin">
+                  <Shield className="h-4 w-4" />
+                  <span>Admin Panel</span>
+                </SidebarNavItem>
+                <SidebarNavItem to="/evaluation-questions">
+                  <ClipboardList className="h-4 w-4" />
+                  <span>Evaluation Questions</span>
+                </SidebarNavItem>
+                <SidebarNavItem to="/role-permissions">
+                  <Settings className="h-4 w-4" />
+                  <span>Role Permissions</span>
+                </SidebarNavItem>
+                <SidebarNavItem to="/division-permissions">
+                  <Settings className="h-4 w-4" />
+                  <span>Division Permissions</span>
+                </SidebarNavItem>
+                <SidebarNavItem to="/specialist-sport-assignments">
+                  <Trophy className="h-4 w-4" />
+                  <span>Specialist Sport Assignments</span>
+                </SidebarNavItem>
+                <SidebarNavItem to="/user-approvals">
+                  <ClipboardList className="h-4 w-4" />
+                  <span>User Approvals</span>
+                </SidebarNavItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
