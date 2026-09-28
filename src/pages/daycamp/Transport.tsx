@@ -51,6 +51,7 @@ import {
 import {
   camperEnrolledInWeek,
   enrollmentWeekForDate,
+  enrollmentWeekDayColumns,
   formatEnrollmentWeekRange,
   getEnrollmentWeekRow,
   loadEnrollmentWeekCalendar,
@@ -2288,6 +2289,7 @@ export default function Transport() {
         runPeriod: timeOfDay,
         enrollmentWeek: enrollmentWeekForReport ?? undefined,
         weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : undefined,
+        weekDays: enrollmentWeekDayColumns(weekRow),
         busRoutes: sheetRoutes,
         groups,
       });

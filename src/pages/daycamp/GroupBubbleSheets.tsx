@@ -10,6 +10,7 @@ import {
   buildMonFriEnrollmentWeeks,
   enrollmentWeekForDate,
   formatEnrollmentWeekLabel,
+  enrollmentWeekDayColumns,
   formatEnrollmentWeekRange,
   mergeEnrollmentWeekCalendars,
   resolveEnrollmentWeekRow,
@@ -187,6 +188,7 @@ export default function GroupBubbleSheets() {
       weekDateRange: selectedWeekDates.row
         ? formatEnrollmentWeekRange(selectedWeekDates.row)
         : undefined,
+      weekDays: enrollmentWeekDayColumns(selectedWeekDates.row),
       groups,
     });
 
@@ -298,7 +300,7 @@ export default function GroupBubbleSheets() {
             Print bubble sheets
           </CardTitle>
           <CardDescription>
-            One section per team — same P/A bubble layout as bus attendance sheets.
+            One section per team — five Present (P) bubbles per camper (Mon–Fri for the enrollment week).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

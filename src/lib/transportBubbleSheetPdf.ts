@@ -11,7 +11,22 @@ export type BubbleSheetSection = {
   campers: BubbleSheetCamper[];
 };
 
+export type WeekDayColumn = {
+  label: string;
+  sublabel?: string;
+};
+
+const DAILY_SHEET_INSTRUCTION =
+  "Mark one bubble per camper: Present (P) or Absent (A). Use when digital attendance is unavailable.";
+
+const WEEKLY_GROUP_INSTRUCTION =
+  "Mark Present (P) in the bubble for each weekday the camper attends. Five bubbles per row — one per day.";
+
+const COMBINED_SHEET_INSTRUCTION =
+  "Bus sections: mark Present (P) or Absent (A) for today. Group sections: mark Present (P) for each weekday.";
+
 const FOOTER_BLOCK = 12;
+const WEEKLY_HEADER_HEIGHT = 10;
 const ROW_HEIGHT = 9;
 const HEADER_HEIGHT = 8;
 const SECTION_GAP = 6;
@@ -79,6 +94,64 @@ function createLayout(doc: jsPDF): SheetLayout {
   };
 }
 
+type WeeklySheetLayout = {
+  pageWidth: number;
+  pageHeight: number;
+  margin: number;
+  tableLeft: number;
+  tableRight: number;
+  colNumRight: number;
+  colNameRight: number;
+  dayColumnCenters: number[];
+  dayColumnBounds: number[];
+  footerCol2Left: number;
+  footerCol3Left: number;
+  textNum: number;
+  textName: number;
+  usableBottom: number;
+};
+
+function createWeeklyLayout(doc: jsPDF, dayCount = 5): WeeklySheetLayout {
+  const pageWidth = doc.internal.pageSize.width;
+  const pageHeight = doc.internal.pageSize.height;
+  const margin = 15;
+  const tableLeft = margin;
+  const tableRight = pageWidth - margin;
+  const numWidth = 8;
+  const nameWidth = 50;
+  const colNumRight = tableLeft + numWidth;
+  const colNameRight = colNumRight + nameWidth;
+  const dayWidth = (tableRight - colNameRight) / dayCount;
+  const dayColumnCenters: number[] = [];
+  const dayColumnBounds: number[] = [tableLeft, colNumRight, colNameRight];
+
+  for (let i = 0; i < dayCount; i++) {
+    const left = colNameRight + i * dayWidth;
+    dayColumnBounds.push(left + dayWidth);
+    dayColumnCenters.push(left + dayWidth / 2);
+  }
+
+  const footerCol2Left = tableLeft + (tableRight - tableLeft) * 0.5;
+  const footerCol3Left = tableLeft + (tableRight - tableLeft) * 0.72;
+
+  return {
+    pageWidth,
+    pageHeight,
+    margin,
+    tableLeft,
+    tableRight,
+    colNumRight,
+    colNameRight,
+    dayColumnCenters,
+    dayColumnBounds,
+    footerCol2Left,
+    footerCol3Left,
+    textNum: tableLeft + 2.5,
+    textName: colNumRight + 2,
+    usableBottom: pageHeight - FOOTER_BLOCK,
+  };
+}
+
 function columnBounds(layout: SheetLayout): number[] {
   return [
     layout.tableLeft,
@@ -118,43 +191,45 @@ function addPageFooters(doc: jsPDF) {
 
 function drawTitleBlock(
   doc: jsPDF,
-  layout: SheetLayout,
+  tableLeft: number,
+  tableRight: number,
+  pageWidth: number,
+  margin: number,
   companyName: string,
   sheetTitle: string,
   metaLines: string[],
+  instruction: string,
 ): number {
-  let y = layout.margin;
+  let y = margin;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
-  doc.text(companyName, layout.pageWidth / 2, y, { align: "center" });
+  doc.text(companyName, pageWidth / 2, y, { align: "center" });
   y += 6;
 
   doc.setFontSize(11);
-  doc.text(sheetTitle, layout.pageWidth / 2, y, { align: "center" });
+  doc.text(sheetTitle, pageWidth / 2, y, { align: "center" });
   y += 5;
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
-  doc.text(metaLines.join("    "), layout.pageWidth / 2, y, { align: "center" });
+  doc.text(metaLines.join("    "), pageWidth / 2, y, { align: "center" });
   y += 5;
 
   doc.setFontSize(7.5);
   doc.setFont("helvetica", "italic");
-  doc.text(
-    "Mark one bubble per camper: Present (P) or Absent (A). Use when digital attendance is unavailable.",
-    layout.pageWidth / 2,
-    y,
-    { align: "center", maxWidth: layout.tableRight - layout.tableLeft },
-  );
+  doc.text(instruction, pageWidth / 2, y, {
+    align: "center",
+    maxWidth: tableRight - tableLeft,
+  });
   doc.setFont("helvetica", "normal");
   y += 4;
 
   doc.setDrawColor(0);
   doc.setLineWidth(0.4);
-  doc.line(layout.tableLeft, y, layout.tableRight, y);
+  doc.line(tableLeft, y, tableRight, y);
   doc.setLineWidth(0.15);
-  doc.line(layout.tableLeft, y + 1.2, layout.tableRight, y + 1.2);
+  doc.line(tableLeft, y + 1.2, tableRight, y + 1.2);
 
   return y + 6;
 }
@@ -189,7 +264,7 @@ function drawTableHeader(
 
 function drawSectionHeader(
   doc: jsPDF,
-  layout: SheetLayout,
+  layout: { tableLeft: number; tableRight: number },
   title: string,
   subtitle: string | undefined,
   y: number,
@@ -252,7 +327,93 @@ function drawTableRow(
   drawBubble(doc, layout.colAbsentCenter, bubbleCy, "A");
 }
 
-function drawSignatureBlock(doc: jsPDF, layout: SheetLayout, y: number): number {
+function drawWeeklyVerticalGrid(
+  doc: jsPDF,
+  layout: WeeklySheetLayout,
+  top: number,
+  bottom: number,
+  lineWidth = 0.2,
+) {
+  doc.setDrawColor(0);
+  doc.setLineWidth(lineWidth);
+  for (const x of layout.dayColumnBounds) {
+    doc.line(x, top, x, bottom);
+  }
+}
+
+function drawWeeklyTableHeader(
+  doc: jsPDF,
+  layout: WeeklySheetLayout,
+  y: number,
+  weekDays: WeekDayColumn[],
+): number {
+  const rowTop = y;
+  const rowBottom = y + WEEKLY_HEADER_HEIGHT;
+
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.35);
+  doc.line(layout.tableLeft, rowTop, layout.tableRight, rowTop);
+  doc.line(layout.tableLeft, rowBottom, layout.tableRight, rowBottom);
+  drawWeeklyVerticalGrid(doc, layout, rowTop, rowBottom, 0.25);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.text("#", layout.textNum, rowTop + 5.5);
+  doc.text("Camper", layout.textName, rowTop + 5.5);
+
+  weekDays.forEach((day, index) => {
+    const cx = layout.dayColumnCenters[index];
+    if (!cx) return;
+    doc.text(day.label, cx, rowTop + 4.5, { align: "center" });
+    if (day.sublabel) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.5);
+      doc.text(day.sublabel, cx, rowTop + 8, { align: "center" });
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+    }
+  });
+  doc.setFont("helvetica", "normal");
+
+  return rowBottom;
+}
+
+function drawWeeklyTableRow(
+  doc: jsPDF,
+  layout: WeeklySheetLayout,
+  y: number,
+  index: number,
+  camper: BubbleSheetCamper,
+  weekDays: WeekDayColumn[],
+) {
+  const rowTop = y;
+  const rowBottom = y + ROW_HEIGHT;
+
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.15);
+  doc.line(layout.tableLeft, rowBottom, layout.tableRight, rowBottom);
+  drawWeeklyVerticalGrid(doc, layout, rowTop, rowBottom, 0.15);
+
+  const textY = rowTop + 5.8;
+  doc.setFontSize(8);
+  doc.text(String(index), layout.textNum, textY);
+  doc.text(camper.name.slice(0, 36), layout.textName, textY);
+
+  const bubbleCy = rowTop + ROW_HEIGHT / 2;
+  weekDays.forEach((_, dayIndex) => {
+    const cx = layout.dayColumnCenters[dayIndex];
+    if (cx) drawBubble(doc, cx, bubbleCy, "P");
+  });
+}
+
+function drawSignatureBlock(
+  doc: jsPDF,
+  tableLeft: number,
+  tableRight: number,
+  footerCol2Left: number,
+  footerCol3Left: number,
+  y: number,
+): number {
   const blockTop = y;
   const blockHeight = 15;
   const blockBottom = blockTop + blockHeight;
@@ -260,9 +421,9 @@ function drawSignatureBlock(doc: jsPDF, layout: SheetLayout, y: number): number 
 
   doc.setDrawColor(0);
   doc.setLineWidth(0.25);
-  doc.rect(layout.tableLeft, blockTop, layout.tableRight - layout.tableLeft, blockHeight, "S");
-  doc.line(layout.footerCol2Left, blockTop, layout.footerCol2Left, blockBottom);
-  doc.line(layout.footerCol3Left, blockTop, layout.footerCol3Left, blockBottom);
+  doc.rect(tableLeft, blockTop, tableRight - tableLeft, blockHeight, "S");
+  doc.line(footerCol2Left, blockTop, footerCol2Left, blockBottom);
+  doc.line(footerCol3Left, blockTop, footerCol3Left, blockBottom);
 
   const labelY = blockTop + 5;
   const lineY = blockTop + 11.5;
@@ -270,16 +431,123 @@ function drawSignatureBlock(doc: jsPDF, layout: SheetLayout, y: number): number 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
 
-  doc.text("Supervisor signature", layout.tableLeft + pad, labelY);
-  doc.line(layout.tableLeft + pad, lineY, layout.footerCol2Left - pad, lineY);
+  doc.text("Supervisor signature", tableLeft + pad, labelY);
+  doc.line(tableLeft + pad, lineY, footerCol2Left - pad, lineY);
 
-  doc.text("Bus arrived", layout.footerCol2Left + pad, labelY);
-  doc.line(layout.footerCol2Left + pad, lineY, layout.footerCol3Left - pad, lineY);
+  doc.text("Bus arrived", footerCol2Left + pad, labelY);
+  doc.line(footerCol2Left + pad, lineY, footerCol3Left - pad, lineY);
 
-  doc.text("Ready to depart", layout.footerCol3Left + pad, labelY);
-  doc.line(layout.footerCol3Left + pad, lineY, layout.tableRight - pad, lineY);
+  doc.text("Ready to depart", footerCol3Left + pad, labelY);
+  doc.line(footerCol3Left + pad, lineY, tableRight - pad, lineY);
 
   return blockBottom;
+}
+
+type BubbleSheetPart =
+  | { layout: "daily"; sections: BubbleSheetSection[]; detailColumnLabel?: string }
+  | { layout: "weekly"; sections: BubbleSheetSection[]; weekDays: WeekDayColumn[] };
+
+function renderBubbleDocument(
+  doc: jsPDF,
+  companyName: string,
+  sheetTitle: string,
+  metaLines: string[],
+  parts: BubbleSheetPart[],
+  instruction?: string,
+) {
+  const dailyLayout = createLayout(doc);
+  const weeklyLayout = createWeeklyLayout(doc);
+  const activeParts = parts.filter((part) => part.sections.some((s) => s.campers.length));
+  if (!activeParts.length) return;
+
+  const resolvedInstruction =
+    instruction ??
+    (activeParts.every((part) => part.layout === "weekly")
+      ? WEEKLY_GROUP_INSTRUCTION
+      : activeParts.every((part) => part.layout === "daily")
+        ? DAILY_SHEET_INSTRUCTION
+        : COMBINED_SHEET_INSTRUCTION);
+
+  let y = drawTitleBlock(
+    doc,
+    dailyLayout.tableLeft,
+    dailyLayout.tableRight,
+    dailyLayout.pageWidth,
+    dailyLayout.margin,
+    companyName,
+    sheetTitle,
+    metaLines,
+    resolvedInstruction,
+  );
+
+  const SIGNATURE_BLOCK_HEIGHT = 18;
+
+  for (const part of activeParts) {
+    if (part.layout === "daily") {
+      const detailColumnLabel = part.detailColumnLabel ?? "Stop / Group";
+      for (const section of part.sections) {
+        if (!section.campers.length) continue;
+        if (y + HEADER_HEIGHT + ROW_HEIGHT + 14 > dailyLayout.usableBottom) {
+          doc.addPage();
+          y = dailyLayout.margin;
+        }
+
+        y = drawSectionHeader(doc, dailyLayout, section.title, section.subtitle, y);
+        y = drawTableHeader(doc, dailyLayout, y, detailColumnLabel);
+
+        for (let idx = 0; idx < section.campers.length; idx++) {
+          if (y + ROW_HEIGHT > dailyLayout.usableBottom) {
+            doc.addPage();
+            y = dailyLayout.margin;
+            y = drawSectionHeader(doc, dailyLayout, `${section.title} (continued)`, undefined, y);
+            y = drawTableHeader(doc, dailyLayout, y, detailColumnLabel);
+          }
+          drawTableRow(doc, dailyLayout, y, idx + 1, section.campers[idx]);
+          y += ROW_HEIGHT;
+        }
+        y += SECTION_GAP;
+      }
+    } else {
+      const weekDays = part.weekDays.slice(0, 5);
+      for (const section of part.sections) {
+        if (!section.campers.length) continue;
+        if (y + WEEKLY_HEADER_HEIGHT + ROW_HEIGHT + 14 > weeklyLayout.usableBottom) {
+          doc.addPage();
+          y = weeklyLayout.margin;
+        }
+
+        y = drawSectionHeader(doc, weeklyLayout, section.title, section.subtitle, y);
+        y = drawWeeklyTableHeader(doc, weeklyLayout, y, weekDays);
+
+        for (let idx = 0; idx < section.campers.length; idx++) {
+          if (y + ROW_HEIGHT > weeklyLayout.usableBottom) {
+            doc.addPage();
+            y = weeklyLayout.margin;
+            y = drawSectionHeader(doc, weeklyLayout, `${section.title} (continued)`, undefined, y);
+            y = drawWeeklyTableHeader(doc, weeklyLayout, y, weekDays);
+          }
+          drawWeeklyTableRow(doc, weeklyLayout, y, idx + 1, section.campers[idx], weekDays);
+          y += ROW_HEIGHT;
+        }
+        y += SECTION_GAP;
+      }
+    }
+  }
+
+  if (y + SIGNATURE_BLOCK_HEIGHT > dailyLayout.usableBottom) {
+    doc.addPage();
+    y = dailyLayout.margin;
+  }
+  drawSignatureBlock(
+    doc,
+    dailyLayout.tableLeft,
+    dailyLayout.tableRight,
+    dailyLayout.footerCol2Left,
+    dailyLayout.footerCol3Left,
+    y + 4,
+  );
+
+  addPageFooters(doc);
 }
 
 function renderBubbleSections(
@@ -290,45 +558,13 @@ function renderBubbleSections(
   sections: BubbleSheetSection[],
   options?: { detailColumnLabel?: string },
 ) {
-  const layout = createLayout(doc);
-  const detailColumnLabel = options?.detailColumnLabel ?? "Stop / Group";
-  let y = drawTitleBlock(doc, layout, companyName, sheetTitle, metaLines);
-
-  const drawSectionTable = (section: BubbleSheetSection) => {
-    y = drawSectionHeader(doc, layout, section.title, section.subtitle, y);
-    y = drawTableHeader(doc, layout, y, detailColumnLabel);
-
-    for (let idx = 0; idx < section.campers.length; idx++) {
-      if (y + ROW_HEIGHT > layout.usableBottom) {
-        doc.addPage();
-        y = layout.margin;
-        y = drawSectionHeader(doc, layout, `${section.title} (continued)`, undefined, y);
-        y = drawTableHeader(doc, layout, y, detailColumnLabel);
-      }
-      drawTableRow(doc, layout, y, idx + 1, section.campers[idx]);
-      y += ROW_HEIGHT;
-    }
-    y += SECTION_GAP;
-  };
-
-  const SIGNATURE_BLOCK_HEIGHT = 18;
-
-  for (const section of sections) {
-    if (!section.campers.length) continue;
-    if (y + HEADER_HEIGHT + ROW_HEIGHT + 14 > layout.usableBottom) {
-      doc.addPage();
-      y = layout.margin;
-    }
-    drawSectionTable(section);
-  }
-
-  if (y + SIGNATURE_BLOCK_HEIGHT > layout.usableBottom) {
-    doc.addPage();
-    y = layout.margin;
-  }
-  drawSignatureBlock(doc, layout, y + 4);
-
-  addPageFooters(doc);
+  renderBubbleDocument(doc, companyName, sheetTitle, metaLines, [
+    {
+      layout: "daily",
+      sections,
+      detailColumnLabel: options?.detailColumnLabel,
+    },
+  ]);
 }
 
 export type TransportReportPdf = {
@@ -401,6 +637,7 @@ export function buildGroupBubbleSheetPdf(options: {
   companyName: string;
   enrollmentWeek: number;
   weekDateRange?: string;
+  weekDays: WeekDayColumn[];
   groups: {
     groupName: string;
     campers: BubbleSheetCamper[];
@@ -420,13 +657,12 @@ export function buildGroupBubbleSheetPdf(options: {
   if (options.weekDateRange) metaLines.push(`Dates: ${options.weekDateRange}`);
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
-  renderBubbleSections(
+  renderBubbleDocument(
     doc,
     options.companyName,
     "Group Attendance Bubble Sheet",
     metaLines,
-    sections,
-    { detailColumnLabel: "Team" },
+    [{ layout: "weekly", sections, weekDays: options.weekDays }],
   );
 
   return {
@@ -439,6 +675,7 @@ export function downloadGroupBubbleSheetPdf(options: {
   companyName: string;
   enrollmentWeek: number;
   weekDateRange?: string;
+  weekDays: WeekDayColumn[];
   groups: {
     groupName: string;
     campers: BubbleSheetCamper[];
@@ -456,6 +693,7 @@ export function buildCombinedAttendanceBubbleSheetPdf(options: {
   runPeriod: "am" | "pm";
   enrollmentWeek?: number;
   weekDateRange?: string;
+  weekDays?: WeekDayColumn[];
   busRoutes: {
     bus: string;
     routeName: string;
@@ -482,8 +720,7 @@ export function buildCombinedAttendanceBubbleSheetPdf(options: {
       campers: g.campers,
     }));
 
-  const sections = [...busSections, ...groupSections];
-  if (!sections.length) return null;
+  if (!busSections.length && !groupSections.length) return null;
 
   const metaLines = [`Date: ${options.date}`, `Run: ${options.runPeriod.toUpperCase()}`];
   if (options.enrollmentWeek != null) {
@@ -491,15 +728,26 @@ export function buildCombinedAttendanceBubbleSheetPdf(options: {
     if (options.weekDateRange) metaLines.push(`Week dates: ${options.weekDateRange}`);
   }
 
+  const parts: BubbleSheetPart[] = [];
+  if (busSections.length) {
+    parts.push({ layout: "daily", sections: busSections, detailColumnLabel: "Stop / Group" });
+  }
+  if (groupSections.length) {
+    parts.push({
+      layout: "weekly",
+      sections: groupSections,
+      weekDays: options.weekDays?.length ? options.weekDays.slice(0, 5) : [
+        { label: "Mon" },
+        { label: "Tue" },
+        { label: "Wed" },
+        { label: "Thu" },
+        { label: "Fri" },
+      ],
+    });
+  }
+
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
-  renderBubbleSections(
-    doc,
-    options.companyName,
-    "Day Camp Attendance Bubble Sheet",
-    metaLines,
-    sections,
-    { detailColumnLabel: options.enrollmentWeek != null ? "Team" : "Stop / Group" },
-  );
+  renderBubbleDocument(doc, options.companyName, "Day Camp Attendance Bubble Sheet", metaLines, parts);
 
   const safeDate = options.date.replace(/[^0-9-]/g, "");
   return {

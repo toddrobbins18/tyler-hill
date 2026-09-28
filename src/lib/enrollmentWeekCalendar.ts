@@ -73,6 +73,40 @@ export function formatEnrollmentWeekRange(row: EnrollmentWeekRow): string {
   return `${startFmt} – ${endFmt}`;
 }
 
+export type EnrollmentWeekDayColumn = {
+  label: string;
+  sublabel?: string;
+};
+
+const DEFAULT_WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri"] as const;
+
+/** Five weekday columns for group bubble sheets (Mon–Fri from enrollment week dates). */
+export function enrollmentWeekDayColumns(
+  row: EnrollmentWeekRow | null | undefined,
+): EnrollmentWeekDayColumn[] {
+  if (!row?.startDate || !row?.endDate) {
+    return DEFAULT_WEEKDAY_LABELS.map((label) => ({ label }));
+  }
+
+  const days: EnrollmentWeekDayColumn[] = [];
+  let cursor = parseISO(row.startDate);
+  const end = parseISO(row.endDate);
+
+  while (cursor <= end && days.length < 5) {
+    days.push({
+      label: format(cursor, "EEE"),
+      sublabel: format(cursor, "M/d"),
+    });
+    cursor = addDays(cursor, 1);
+  }
+
+  while (days.length < 5) {
+    days.push({ label: DEFAULT_WEEKDAY_LABELS[days.length] ?? `Day ${days.length + 1}` });
+  }
+
+  return days.slice(0, 5);
+}
+
 export function formatEnrollmentWeekLabel(
   weekNumber: number,
   calendar: EnrollmentWeekCalendar,
