@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/pagination";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import { SortableHeader } from "@/components/SortableHeader";
+import { SwimGroupFormationPanel } from "@/components/swim/SwimGroupFormationPanel";
 import { useSortable } from "@/hooks/use-sortable";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -991,6 +992,7 @@ export default function SwimProgram() {
         <TabsList>
           <TabsTrigger value="bracelets">Swim Bracelets</TabsTrigger>
           <TabsTrigger value="levels">Swim Level Report</TabsTrigger>
+          <TabsTrigger value="formation">Group Formation</TabsTrigger>
           <TabsTrigger value="history">Prior Seasons Report</TabsTrigger>
         </TabsList>
 
@@ -1244,6 +1246,16 @@ export default function SwimProgram() {
               />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="formation" className="mt-4">
+          {currentCompany?.id ? (
+            <SwimGroupFormationPanel companyId={currentCompany.id} season={viewSeason} />
+          ) : (
+            <Alert>
+              <AlertDescription>Select a camp to build swim groups.</AlertDescription>
+            </Alert>
+          )}
         </TabsContent>
 
         <TabsContent value="history" className="mt-4">
