@@ -406,13 +406,28 @@ async function fetchAllPaginated(
     }
 
     // Decide whether there are more pages
+    const gotFullPage = pageSize > 0 && items.length === pageSize;
     if (Number.isFinite(metaTotalPages) && metaTotalPages > 0) {
       hasMore = metaPageNumber < metaTotalPages;
+      // CM sometimes reports TotalPages=1 even when a second page exists (e.g. TH staff 124 capped at 100)
+      if (!hasMore && gotFullPage && pageNumber === 1 && metaTotalPages === 1) {
+        console.warn(
+          `[Pagination] TotalPages=1 but first page full (${items.length}); probing next page for ${baseUrl}`,
+        );
+        hasMore = true;
+      }
     } else if (Number.isFinite(metaTotalResults) && metaTotalResults >= 0 && pageSize > 0) {
       hasMore = allItems.length < metaTotalResults;
+      // CM sometimes sets TotalResults to first-page count only
+      if (!hasMore && gotFullPage && pageNumber === 1 && metaTotalResults === items.length) {
+        console.warn(
+          `[Pagination] TotalResults=${metaTotalResults} equals first page; probing next page for ${baseUrl}`,
+        );
+        hasMore = true;
+      }
     } else {
       // Fallback: continue if we got a "full" page
-      hasMore = pageSize > 0 && items.length === pageSize;
+      hasMore = gotFullPage;
     }
 
     pageNumber++;
@@ -3165,10 +3180,20 @@ async function performFullSync(
         }
 
         const dbActive = dbActiveStaffCount ?? 0;
-        // Skip cleanup when CM response looks incomplete (prevents mass wrongful inactivation)
+        // Skip cleanup when CM response looks incomplete (prevents mass wrongful inactivation).
+        // Early-season / small rosters (e.g. TLW 2027 with ~13 hires) must still inactivate rollover copies.
+        const looksLikePartialMidSeasonResponse =
+          cmActiveCount >= 50 &&
+          cmActiveCount < 100 &&
+          dbActive > 0 &&
+          cmActiveCount >= Math.floor(dbActive * 0.15) &&
+          cmActiveCount < Math.floor(dbActive * 0.85);
         const skipStaffInactivation =
-          cmActiveCount < 100 ||
-          (dbActive > 0 && cmActiveCount < Math.floor(dbActive * 0.85));
+          cmActiveCount === 0 ||
+          (cmActiveCount >= 100 &&
+            dbActive > 0 &&
+            cmActiveCount < Math.floor(dbActive * 0.85)) ||
+          looksLikePartialMidSeasonResponse;
 
         if (skipStaffInactivation) {
           console.warn(
@@ -3273,6 +3298,7 @@ async function performFullSync(
       staff_synced: staffInsertedCount + staffUpdatedCount,
       staff_inserted: staffInsertedCount,
       staff_updated: staffUpdatedCount,
+      staff_inactivated: staffInactivated,
       parentEmails: parentEmailMap.size,
       parentPhones: parentPhoneMap.size,
       financial_deposits: financialDeposits,
@@ -3305,6 +3331,7 @@ async function performFullSync(
         campers_updated: camperUpdatedCount,
         staff_inserted: staffInsertedCount,
         staff_updated: staffUpdatedCount,
+        staff_inactivated: staffInactivated,
         fallback_campers: usedCamperFallbackData,
         fallback_staff: usedFallbackData,
       },

@@ -18,6 +18,7 @@ import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { lookupStaffByRfid, normalizeRfidInput } from "@/lib/rfidUtils";
+import { fetchStaffRoster } from "@/lib/staffRoster";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   AlertDialog,
@@ -33,6 +34,7 @@ import {
 export default function Staff() {
   const [searchTerm, setSearchTerm] = useState("");
   const [staff, setStaff] = useState<any[]>([]);
+  const [inactiveHidden, setInactiveHidden] = useState(0);
   const [selectedSession, setSelectedSession] = useState<string>("all");
   const [selectedGender, setSelectedGender] = useState<string>("all");
   const [loading, setLoading] = useState(true);
@@ -63,35 +65,32 @@ export default function Staff() {
 
     if (!currentCompany?.id) {
       setStaff([]);
+      setInactiveHidden(0);
       setLoading(false);
       return;
     }
 
     try {
-      console.log("[Staff] Fetching staff for company:", currentCompany.id, "season:", currentSeason);
+      console.log(
+        "[Staff] Fetching staff for company:",
+        currentCompany.name,
+        currentCompany.id,
+        "season:",
+        currentSeason,
+      );
 
-      const { data: staffData, error: staffQueryError } = await supabase
+      const { count: inactiveCount } = await supabase
         .from("staff")
-        .select("*")
+        .select("*", { count: "exact", head: true })
         .eq("company_id", currentCompany.id)
         .eq("season", currentSeason)
-        .or("status.eq.active,status.is.null,status.eq.Active")
-        .neq("name", "Unknown")
-        .not("name", "is", null)
-        .order("name");
+        .eq("status", "inactive");
 
-      console.log("[Staff] Fetched", staffData?.length || 0, "staff members, error:", staffQueryError);
+      setInactiveHidden(inactiveCount ?? 0);
 
-      if (staffQueryError) {
-        console.error("[Staff] Failed to fetch staff:", staffQueryError);
-        setStaff([]);
-        setStaffError(staffQueryError.message || "Failed to load staff");
-        return;
-      }
+      const staffRows = await fetchStaffRoster(currentCompany.id, currentSeason);
 
-      const staffRows = (staffData || []).filter(
-        (member: any) => String(member.status ?? "active").toLowerCase() !== "inactive",
-      );
+      console.log("[Staff] Fetched", staffRows.length, "staff members");
 
       const staffIdSet = new Set(staffRows.map((s: any) => String(s.id)).filter(Boolean));
       const evalsByStaffId = new Map<string, any[]>();
@@ -455,7 +454,16 @@ export default function Staff() {
             </div>
           )}
           <div className="text-sm text-muted-foreground">
-            Showing {filteredStaff.length} of {staff.length} staff members for {currentSeason}
+            Showing {filteredStaff.length} of {staff.length} active staff for {currentSeason}
+            {inactiveHidden > 0 ? ` · ${inactiveHidden} inactive hidden` : ""}
+            {staff.length > 50 &&
+            currentSeason === "2027" &&
+            inactiveHidden === 0 ? (
+              <span className="block text-amber-700 dark:text-amber-400 mt-1">
+                High count for {currentSeason}? Run a Staff sync from Admin → Data Import so Nest
+                matches CampMinder hired staff (rollover copies may still be marked active).
+              </span>
+            ) : null}
           </div>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredStaff.map((staffMember) => (
