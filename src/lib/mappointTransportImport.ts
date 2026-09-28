@@ -1,9 +1,60 @@
 import { parseCSV } from "@/lib/csv";
 import mappointRoutesCsv2026 from "../../data/north_shore_mappoint_routes_2026.csv?raw";
+import mappointAddressesCsv2026 from "../../data/north_shore_mappoint_addresses_2026.csv?raw";
 import bundledGeocodes2026 from "../../data/north_shore_mappoint_geocodes_2026.json";
 
 export function getBundledMappointRoutesCsv2026(): string {
   return mappointRoutesCsv2026;
+}
+
+export function getBundledMappointAddressesCsv2026(): string {
+  return mappointAddressesCsv2026;
+}
+
+export type MappointAddressRow = {
+  name: string;
+  street: string;
+  city: string;
+  zip: string;
+  address: string;
+};
+
+const ADDRESS_LIKE = /\d/;
+
+function buildAddressFromParts(street: string, city: string, zip: string): string {
+  const s = street.trim();
+  const c = city.trim();
+  const z = zip.trim();
+  if (!s || !c) return "";
+  return z ? `${s}, ${c}, NY ${z}` : `${s}, ${c}, NY`;
+}
+
+/** Skip rows where the name column is actually a street address. */
+function isValidCamperAddressRow(name: string, address: string): boolean {
+  if (!name || name.length < 3) return false;
+  if (!ADDRESS_LIKE.test(address)) return false;
+  if (/^\d/.test(name) && /\b(rd|road|ave|avenue|ln|lane|st|street|dr|drive|ct|court|way|blvd|ny)\b/i.test(name)) {
+    return false;
+  }
+  return true;
+}
+
+/** Parse MapPoint addresses CSV (camper name + home address — more complete than routes alone). */
+export function parseMappointAddressesCsv(csvText: string): MappointAddressRow[] {
+  const rows = parseCSV(csvText) as Record<string, string>[];
+  const out: MappointAddressRow[] = [];
+
+  for (const row of rows) {
+    const name = (row.name || "").trim();
+    const street = (row.street || "").trim();
+    const city = (row.city || "").trim();
+    const zip = (row.zip || "").trim();
+    const address = (row.address || "").trim() || buildAddressFromParts(street, city, zip);
+    if (!isValidCamperAddressRow(name, address)) continue;
+    out.push({ name, street, city, zip, address });
+  }
+
+  return out;
 }
 
 export type BundledGeocode = { lat: number; lng: number; provider?: string };
@@ -77,8 +128,6 @@ export type ParsedMappointRoute = {
   direction: string;
   stops: ParsedMappointStop[];
 };
-
-const ADDRESS_LIKE = /\d/;
 
 function rowAddress(row: MappointRouteRow): string {
   const trimmed = (row.address || "").trim();

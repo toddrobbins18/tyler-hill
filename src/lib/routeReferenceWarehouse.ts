@@ -94,6 +94,45 @@ export function normCamperNameKey(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+/**
+ * Split MapPoint household rows into individual roster names.
+ * Handles "Aaron & Layla Weissler", "Aayhan, Kayhan & Orhan Kazmi", "Adam, Jake & Kaia Detore", etc.
+ */
+export function expandMappointCamperNames(raw: string): string[] {
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  if (!trimmed.includes("&") && !trimmed.includes(",")) return [trimmed];
+
+  const segments = trimmed
+    .split(/\s*,\s*|\s*&\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (segments.length <= 1) return [trimmed];
+
+  let sharedLastName = "";
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const tokens = segments[i].split(/\s+/);
+    if (tokens.length >= 2) {
+      sharedLastName = tokens.slice(1).join(" ");
+      break;
+    }
+  }
+
+  const out: string[] = [];
+  for (const segment of segments) {
+    const tokens = segment.split(/\s+/);
+    if (tokens.length >= 2) {
+      out.push(segment);
+    } else if (sharedLastName) {
+      out.push(`${segment} ${sharedLastName}`);
+    } else {
+      out.push(segment);
+    }
+  }
+
+  return [...new Set(out.map((name) => name.trim()))].filter(Boolean);
+}
+
 function rowAddress(row: MappointRouteRow): string {
   const trimmed = (row.address || "").trim();
   if (trimmed) return trimmed;
@@ -274,8 +313,10 @@ export function buildCamperPriorMap(
 ): Map<string, CamperRoutingPrior> {
   const map = new Map<string, CamperRoutingPrior>();
   for (const prior of priors) {
-    const key = `${prior.camperNameKey}|${prior.direction}`;
-    if (!map.has(key)) map.set(key, prior);
+    for (const name of expandMappointCamperNames(prior.camperName)) {
+      const key = `${normCamperNameKey(name)}|${prior.direction}`;
+      if (!map.has(key)) map.set(key, prior);
+    }
   }
   return map;
 }
@@ -287,13 +328,16 @@ export function buildAddressHintsFromPriors(
   for (const prior of priors) {
     if (prior.direction !== "AM") continue;
     if (!prior.address || prior.lat == null || prior.lng == null) continue;
-    if (map.has(prior.camperNameKey)) continue;
-    map.set(prior.camperNameKey, {
-      address: prior.address,
-      lat: prior.lat,
-      lng: prior.lng,
-      busNumber: prior.busNumber,
-    });
+    for (const name of expandMappointCamperNames(prior.camperName)) {
+      const key = normCamperNameKey(name);
+      if (!key || map.has(key)) continue;
+      map.set(key, {
+        address: prior.address,
+        lat: prior.lat,
+        lng: prior.lng,
+        busNumber: prior.busNumber,
+      });
+    }
   }
   return map;
 }

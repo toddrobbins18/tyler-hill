@@ -1,15 +1,19 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolvePersonAge } from "@/lib/birthdayCalendar";
 import {
+  getBundledMappointAddressesCsv2026,
   getBundledMappointRoutesCsv2026,
+  parseMappointAddressesCsv,
   parseMappointRoutesCsv,
   resolveBundledGeocodeResult,
   type ParsedMappointRoute,
 } from "@/lib/mappointTransportImport";
 import {
   buildAddressHintsFromPriors,
+  expandMappointCamperNames,
   loadCamperRoutingPriors,
   loadRouteReferenceImport,
+  normCamperNameKey,
 } from "@/lib/routeReferenceWarehouse";
 
 export type TransportEnrolledCamper = {
@@ -104,10 +108,8 @@ export async function normalizeTransportBoardForSeason(
   board = stripEmptyRouteShell(board);
 
   const enrolled = await loadEnrolledCampersForTransport(supabase, companyId, season);
-  const hints =
-    season !== "2026"
-      ? await loadHistoricalAddressHints(supabase, companyId, "2026")
-      : undefined;
+  // MapPoint 2026 priors (warehouse or bundled CSV) — Nest children table has no home address yet.
+  const hints = await loadHistoricalAddressHints(supabase, companyId, "2026");
   const unplottedCampers = buildUnplottedFromEnrollment({
     enrolled,
     coreStops: board.coreStops,
@@ -164,25 +166,39 @@ export function stableUnplottedId(seed: string, fallback: number): number {
   return n > 0 ? n : fallback;
 }
 
+const TRANSPORT_ROSTER_PAGE_SIZE = 1000;
+
 export async function loadEnrolledCampersForTransport(
   supabase: SupabaseClient,
   companyId: string,
   season: string,
 ): Promise<TransportEnrolledCamper[]> {
-  const { data, error } = await supabase
-    .from("children")
-    .select("id, name, age, date_of_birth, session, grade, group_name")
-    .eq("company_id", companyId)
-    .eq("season", season)
-    .neq("status", "inactive")
-    .order("name");
+  const rows: Record<string, unknown>[] = [];
+  let from = 0;
 
-  if (error) {
-    console.error("[Transport] Load enrolled campers failed:", error.message);
-    return [];
+  for (;;) {
+    const to = from + TRANSPORT_ROSTER_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from("children")
+      .select("id, name, age, date_of_birth, session, grade, group_name")
+      .eq("company_id", companyId)
+      .eq("season", season)
+      .neq("status", "inactive")
+      .order("name")
+      .range(from, to);
+
+    if (error) {
+      console.error("[Transport] Load enrolled campers failed:", error.message);
+      return [];
+    }
+
+    const batch = data ?? [];
+    rows.push(...batch);
+    if (batch.length < TRANSPORT_ROSTER_PAGE_SIZE) break;
+    from += TRANSPORT_ROSTER_PAGE_SIZE;
   }
 
-  return (data ?? []).map((row) => ({
+  return rows.map((row) => ({
     id: row.id as string,
     name: (row.name as string)?.trim() ?? "",
     age: resolvePersonAge(row.date_of_birth, row.age),
@@ -205,44 +221,68 @@ export function camperNamesOnBoard(coreStops: Record<number, TransportRouteStop[
   return names;
 }
 
+type AddressHint = { address: string; lat: number; lng: number };
+
+function registerMappointAddressHint(
+  hints: Map<string, AddressHint>,
+  rawName: string,
+  address: string,
+) {
+  const trimmedAddress = address.trim();
+  if (!trimmedAddress) return;
+  const geo = resolveBundledGeocodeResult(trimmedAddress);
+  for (const expanded of expandMappointCamperNames(rawName)) {
+    const key = normCamperNameKey(expanded);
+    if (!key || hints.has(key)) continue;
+    hints.set(key, {
+      address: trimmedAddress,
+      lat: geo?.lat ?? 0,
+      lng: geo?.lng ?? 0,
+    });
+  }
+}
+
 /** Load camper→address hints from warehouse (falls back to bundled 2026 CSV). */
 export async function loadHistoricalAddressHints(
   supabase: SupabaseClient,
   companyId: string,
   referenceSeason = "2026",
-): Promise<Map<string, { address: string; lat: number; lng: number }>> {
+): Promise<Map<string, AddressHint>> {
+  const bundled = buildMappoint2026AddressHints();
   const importRecord = await loadRouteReferenceImport(supabase, companyId, referenceSeason);
-  if (!importRecord) return buildMappoint2026AddressHints();
+  if (!importRecord) return bundled;
 
   const priors = await loadCamperRoutingPriors(supabase, companyId, {
     referenceSeason,
     direction: "AM",
   });
-  if (!priors.length) return buildMappoint2026AddressHints();
+  if (!priors.length) return bundled;
 
-  const withBus = buildAddressHintsFromPriors(priors);
-  const hints = new Map<string, { address: string; lat: number; lng: number }>();
-  for (const [key, value] of withBus) {
+  const hints = new Map<string, AddressHint>();
+  for (const [key, value] of buildAddressHintsFromPriors(priors)) {
     hints.set(key, { address: value.address, lat: value.lat, lng: value.lng });
+  }
+  for (const [key, value] of bundled) {
+    if (!hints.has(key)) hints.set(key, value);
   }
   return hints;
 }
 
-/** Build address hints from 2026 MapPoint CSV (historical learning — bundled fallback). */
-export function buildMappoint2026AddressHints(): Map<string, { address: string; lat: number; lng: number }> {
-  const routes = parseMappointRoutesCsv(getBundledMappointRoutesCsv2026(), { direction: "AM" });
-  const hints = new Map<string, { address: string; lat: number; lng: number }>();
+/** Build address hints from 2026 MapPoint routes + addresses CSV (historical learning). */
+export function buildMappoint2026AddressHints(): Map<string, AddressHint> {
+  const hints = new Map<string, AddressHint>();
 
+  const routes = parseMappointRoutesCsv(getBundledMappointRoutesCsv2026(), { direction: "AM" });
   for (const route of routes) {
     for (const stop of route.stops) {
-      const geo = resolveBundledGeocodeResult(stop.address);
-      if (!geo) continue;
       for (const camperName of stop.camperNames) {
-        const key = normName(camperName);
-        if (!key || hints.has(key)) continue;
-        hints.set(key, { address: stop.address, lat: geo.lat, lng: geo.lng });
+        registerMappointAddressHint(hints, camperName, stop.address);
       }
     }
+  }
+
+  for (const row of parseMappointAddressesCsv(getBundledMappointAddressesCsv2026())) {
+    registerMappointAddressHint(hints, row.name, row.address);
   }
 
   return hints;
@@ -265,16 +305,19 @@ export function buildUnplottedFromEnrollment(options: {
 
     const resolvedAge = child.age ?? null;
     const kept = existingByName.get(key);
+    const hint = addressHints?.get(key);
     if (kept) {
       out.push({
         ...kept,
+        address: kept.address?.trim() || hint?.address || "",
+        lat: kept.lat || hint?.lat || 0,
+        lng: kept.lng || hint?.lng || 0,
         age: resolvedAge ?? kept.age,
         session: child.session ?? child.grade ?? kept.session,
       });
       return;
     }
 
-    const hint = addressHints?.get(key);
     out.push({
       id: stableUnplottedId(child.id, index + 1),
       name: child.name,

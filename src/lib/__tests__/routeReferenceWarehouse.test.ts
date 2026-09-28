@@ -4,6 +4,7 @@ import {
   buildCamperPriorMap,
   buildReferenceRouteStops,
   buildRouteReferenceFromMappointCsv,
+  expandMappointCamperNames,
   normCamperNameKey,
   summarizeReferenceRoutes,
   validateWarehouseAgainstCsv,
@@ -24,6 +25,37 @@ describe("routeReferenceWarehouse", () => {
 
   it("normalizes camper name keys", () => {
     expect(normCamperNameKey("  Jack & Lucas Fornatale ")).toBe("jack & lucas fornatale");
+  });
+
+  it("expands MapPoint sibling names for roster matching", () => {
+    expect(expandMappointCamperNames("Aaron & Layla Weissler")).toEqual([
+      "Aaron Weissler",
+      "Layla Weissler",
+    ]);
+    expect(expandMappointCamperNames("Jack & Lucas Fornatale")).toEqual([
+      "Jack Fornatale",
+      "Lucas Fornatale",
+    ]);
+    expect(expandMappointCamperNames("Aayhan, Kayhan & Orhan Kazmi")).toEqual([
+      "Aayhan Kazmi",
+      "Kayhan Kazmi",
+      "Orhan Kazmi",
+    ]);
+    expect(expandMappointCamperNames("Adam, Jake & Kaia Detore")).toEqual([
+      "Adam Detore",
+      "Jake Detore",
+      "Kaia Detore",
+    ]);
+    expect(expandMappointCamperNames("Alessandro, Francesco & Leonardo Gallina")).toEqual([
+      "Alessandro Gallina",
+      "Francesco Gallina",
+      "Leonardo Gallina",
+    ]);
+    expect(expandMappointCamperNames("Alexa & Anthony Ferraro")).toEqual([
+      "Alexa Ferraro",
+      "Anthony Ferraro",
+    ]);
+    expect(expandMappointCamperNames("Jane Doe")).toEqual(["Jane Doe"]);
   });
 
   it("summarizes routes by bus and direction", () => {
