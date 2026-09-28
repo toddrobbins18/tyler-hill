@@ -14,7 +14,6 @@ import {
   approveDismissalSwim,
   DISMISSAL_REALTIME_TABLES,
   fetchDismissalDashboard,
-  lookupFamilyIdForCamper,
   PICKUP_CHANGE_LABELS,
   type DismissalDashboardData,
 } from "@/lib/dismissalDashboard";
@@ -23,6 +22,7 @@ import {
   type TransportException,
 } from "@/lib/transportDailyOverrides";
 import { submitNurseSentHomeTransportException } from "@/lib/nurseTransportException";
+import { useTransportFamilySiblings } from "@/hooks/useTransportFamilySiblings";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -330,6 +330,78 @@ export default function TransportAdminPortal() {
   );
 }
 
+function TransportLogFamilyField({
+  familyId,
+  familyName,
+  siblings,
+  camperId,
+  applyToSiblings,
+  onApplyToSiblingsChange,
+  loading,
+  requireFamily,
+}: {
+  familyId: string | null;
+  familyName: string | null;
+  siblings: Camper[];
+  camperId: string;
+  applyToSiblings: boolean;
+  onApplyToSiblingsChange: (checked: boolean) => void;
+  loading: boolean;
+  requireFamily?: boolean;
+}) {
+  if (!camperId) return null;
+
+  const others = siblings.filter((s) => s.id !== camperId);
+
+  if (loading) {
+    return <p className="text-xs text-muted-foreground">Loading family…</p>;
+  }
+
+  if (!familyId) {
+    if (requireFamily) {
+      return (
+        <p className="text-xs text-amber-700">
+          No family link — link this camper in Portal Dashboard before logging.
+        </p>
+      );
+    }
+    return (
+      <p className="text-xs text-muted-foreground">
+        No family link — sibling apply unavailable.
+      </p>
+    );
+  }
+
+  return (
+    <div className="rounded-md border bg-muted/30 p-3 space-y-2 text-sm">
+      <div>
+        <span className="text-muted-foreground">Family ID: </span>
+        <code className="text-xs break-all">{familyId}</code>
+        {familyName ? (
+          <p className="text-xs text-muted-foreground mt-0.5">{familyName}</p>
+        ) : null}
+      </div>
+      {others.length > 0 ? (
+        <label className="flex items-start gap-2 cursor-pointer">
+          <Checkbox
+            className="mt-0.5"
+            checked={applyToSiblings}
+            onCheckedChange={(c) => onApplyToSiblingsChange(!!c)}
+          />
+          <span>
+            Apply to all enrolled siblings ({siblings.length} campers)
+            <span className="block text-xs text-muted-foreground mt-0.5">
+              {siblings.map((s) => s.name).join(", ")}
+            </span>
+          </span>
+        </label>
+      ) : (
+        <p className="text-xs text-muted-foreground">No other enrolled siblings in this family.</p>
+      )}
+    </div>
+  );
+}
+
 function PendingCard({
   title,
   subtitle,
@@ -374,30 +446,37 @@ function StaffPickupForm({
   const [changeType, setChangeType] = useState("early_pickup");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const family = useTransportFamilySiblings(companyId, camperId, campers);
 
   useEffect(() => setChangeDate(date), [date]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!camperId) return toast.error("Select a camper");
+    if (!family.familyId) {
+      toast.error("Camper is not linked to a family — link them in Portal Dashboard first");
+      return;
+    }
     setSaving(true);
     try {
-      const familyId = await lookupFamilyIdForCamper(supabase, companyId, camperId);
-      if (!familyId) {
-        toast.error("Camper is not linked to a family — link them in Portal Dashboard first");
-        return;
-      }
-      const { error } = await supabase.from("pickup_changes").insert({
-        company_id: companyId,
-        family_id: familyId,
-        camper_id: camperId,
-        change_date: changeDate,
-        change_type: changeType,
-        notes: notes || null,
-        status: "submitted",
-      });
+      const targets = family.logTargets;
+      const { error } = await supabase.from("pickup_changes").insert(
+        targets.map((t) => ({
+          company_id: companyId,
+          family_id: family.familyId,
+          camper_id: t.id,
+          change_date: changeDate,
+          change_type: changeType,
+          notes: notes || null,
+          status: "submitted",
+        })),
+      );
       if (error) throw error;
-      toast.success("Pickup logged — approve in Pending tab to update routes");
+      toast.success(
+        targets.length > 1
+          ? `Pickup logged for ${targets.length} campers — approve in Pending tab`
+          : "Pickup logged — approve in Pending tab to update routes",
+      );
       setNotes("");
       onSaved();
     } catch (err: unknown) {
@@ -418,6 +497,16 @@ function StaffPickupForm({
       <CardContent>
         <form onSubmit={submit} className="space-y-3">
           <SearchableChildSelect children={campers} value={camperId} onValueChange={setCamperId} placeholder="Camper" />
+          <TransportLogFamilyField
+            familyId={family.familyId}
+            familyName={family.familyName}
+            siblings={family.siblings}
+            camperId={camperId}
+            applyToSiblings={family.applyToSiblings}
+            onApplyToSiblingsChange={family.setApplyToSiblings}
+            loading={family.loading}
+            requireFamily
+          />
           <Input type="date" value={changeDate} onChange={(e) => setChangeDate(e.target.value)} required />
           <Select value={changeType} onValueChange={setChangeType}>
             <SelectTrigger><SelectValue /></SelectTrigger>
@@ -451,30 +540,37 @@ function StaffAbsenceForm({
   const [absenceType, setAbsenceType] = useState("absent");
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
+  const family = useTransportFamilySiblings(companyId, camperId, campers);
 
   useEffect(() => setAbsenceDate(date), [date]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!camperId) return toast.error("Select a camper");
+    if (!family.familyId) {
+      toast.error("Camper is not linked to a family");
+      return;
+    }
     setSaving(true);
     try {
-      const familyId = await lookupFamilyIdForCamper(supabase, companyId, camperId);
-      if (!familyId) {
-        toast.error("Camper is not linked to a family");
-        return;
-      }
-      const { error } = await supabase.from("absences").insert({
-        company_id: companyId,
-        family_id: familyId,
-        camper_id: camperId,
-        absence_date: absenceDate,
-        absence_type: absenceType,
-        reason: reason || null,
-        status: "submitted",
-      });
+      const targets = family.logTargets;
+      const { error } = await supabase.from("absences").insert(
+        targets.map((t) => ({
+          company_id: companyId,
+          family_id: family.familyId,
+          camper_id: t.id,
+          absence_date: absenceDate,
+          absence_type: absenceType,
+          reason: reason || null,
+          status: "submitted",
+        })),
+      );
       if (error) throw error;
-      toast.success("Absence logged — approve to update routes");
+      toast.success(
+        targets.length > 1
+          ? `Absence logged for ${targets.length} campers — approve to update routes`
+          : "Absence logged — approve to update routes",
+      );
       setReason("");
       onSaved();
     } catch (err: unknown) {
@@ -494,6 +590,16 @@ function StaffAbsenceForm({
       <CardContent>
         <form onSubmit={submit} className="space-y-3">
           <SearchableChildSelect children={campers} value={camperId} onValueChange={setCamperId} placeholder="Camper" />
+          <TransportLogFamilyField
+            familyId={family.familyId}
+            familyName={family.familyName}
+            siblings={family.siblings}
+            camperId={camperId}
+            applyToSiblings={family.applyToSiblings}
+            onApplyToSiblingsChange={family.setApplyToSiblings}
+            loading={family.loading}
+            requireFamily
+          />
           <Input type="date" value={absenceDate} onChange={(e) => setAbsenceDate(e.target.value)} required />
           <Select value={absenceType} onValueChange={setAbsenceType}>
             <SelectTrigger><SelectValue /></SelectTrigger>
@@ -528,6 +634,7 @@ function StaffSwimForm({
   const [staffConfirmed, setStaffConfirmed] = useState(true);
   const [instructor, setInstructor] = useState("");
   const [saving, setSaving] = useState(false);
+  const family = useTransportFamilySiblings(companyId, camperId, campers);
 
   useEffect(() => setLessonDate(date), [date]);
 
@@ -537,21 +644,25 @@ function StaffSwimForm({
     setSaving(true);
     try {
       const scheduled_at = campDateTimeToIso(lessonDate, time);
-      const { error } = await supabase.from("swim_lessons").insert({
-        company_id: companyId,
-        camper_id: camperId,
-        scheduled_at,
-        duration_minutes: 30,
-        instructor: instructor || null,
-        parent_confirmed: staffConfirmed,
-        parent_confirmed_at: staffConfirmed ? new Date().toISOString() : null,
-        transport_status: staffConfirmed ? "submitted" : null,
-      });
+      const targets = family.logTargets;
+      const { error } = await supabase.from("swim_lessons").insert(
+        targets.map((t) => ({
+          company_id: companyId,
+          camper_id: t.id,
+          scheduled_at,
+          duration_minutes: 30,
+          instructor: instructor || null,
+          parent_confirmed: staffConfirmed,
+          parent_confirmed_at: staffConfirmed ? new Date().toISOString() : null,
+          transport_status: staffConfirmed ? "submitted" : null,
+        })),
+      );
       if (error) throw error;
+      const countNote = targets.length > 1 ? ` for ${targets.length} campers` : "";
       toast.success(
         staffConfirmed
-          ? "Swim lesson logged — approve to remove camper from bus"
-          : "Swim lesson scheduled — parent must confirm, then staff approves",
+          ? `Swim lesson logged${countNote} — approve to remove from PM bus`
+          : `Swim lesson scheduled${countNote} — parent must confirm, then staff approves`,
       );
       onSaved();
     } catch (err: unknown) {
@@ -574,6 +685,15 @@ function StaffSwimForm({
       <CardContent>
         <form onSubmit={submit} className="space-y-3">
           <SearchableChildSelect children={campers} value={camperId} onValueChange={setCamperId} placeholder="Camper" />
+          <TransportLogFamilyField
+            familyId={family.familyId}
+            familyName={family.familyName}
+            siblings={family.siblings}
+            camperId={camperId}
+            applyToSiblings={family.applyToSiblings}
+            onApplyToSiblingsChange={family.setApplyToSiblings}
+            loading={family.loading}
+          />
           <div className="grid grid-cols-2 gap-2">
             <Input type="date" value={lessonDate} onChange={(e) => setLessonDate(e.target.value)} required />
             <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} required />
@@ -605,25 +725,30 @@ function StaffNurseForm({
   const [recordDate, setRecordDate] = useState(date);
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
+  const family = useTransportFamilySiblings(companyId, camperId, campers);
 
   useEffect(() => setRecordDate(date), [date]);
 
-  const camperName = campers.find((c) => c.id === camperId)?.name ?? "";
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!camperId || !camperName) return toast.error("Select a camper");
+    if (!camperId) return toast.error("Select a camper");
     setSaving(true);
     try {
-      const child = campers.find((c) => c.id === camperId);
-      await submitNurseSentHomeTransportException(supabase, {
-        companyId,
-        date: recordDate,
-        camperName,
-        groupName: child?.group_name ?? null,
-        reason: reason || null,
-      });
-      toast.success("Sent home logged — approve to remove camper from bus");
+      const targets = family.logTargets;
+      for (const target of targets) {
+        await submitNurseSentHomeTransportException(supabase, {
+          companyId,
+          date: recordDate,
+          camperName: target.name,
+          groupName: target.group_name,
+          reason: reason || null,
+        });
+      }
+      toast.success(
+        targets.length > 1
+          ? `Sent home logged for ${targets.length} campers — approve to remove from PM bus`
+          : "Sent home logged — approve to remove camper from PM bus",
+      );
       setReason("");
       onSaved();
     } catch (err: unknown) {
@@ -646,6 +771,15 @@ function StaffNurseForm({
       <CardContent>
         <form onSubmit={submit} className="space-y-3">
           <SearchableChildSelect children={campers} value={camperId} onValueChange={setCamperId} placeholder="Camper" />
+          <TransportLogFamilyField
+            familyId={family.familyId}
+            familyName={family.familyName}
+            siblings={family.siblings}
+            camperId={camperId}
+            applyToSiblings={family.applyToSiblings}
+            onApplyToSiblingsChange={family.setApplyToSiblings}
+            loading={family.loading}
+          />
           <Input type="date" value={recordDate} onChange={(e) => setRecordDate(e.target.value)} required />
           <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (optional)" />
           <Button type="submit" size="sm" disabled={saving}>{saving ? "Saving…" : "Log sent home"}</Button>
