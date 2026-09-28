@@ -155,3 +155,55 @@ export async function syncSunshineFromRoster(
     totalRoster: roster.length,
   };
 }
+
+/** Copy guardian_email from Nest roster onto sunshine_campers.parent_email (same season). */
+export async function refreshSunshineParentEmailsFromRoster(
+  companyId: string,
+  season: string,
+): Promise<{ updated: number; withEmail: number }> {
+  const { data: sunshineRows, error: sunshineError } = await supabase
+    .from("sunshine_campers")
+    .select("id, child_id")
+    .eq("company_id", companyId)
+    .eq("season", season);
+
+  if (sunshineError) throw sunshineError;
+  if (!sunshineRows?.length) return { updated: 0, withEmail: 0 };
+
+  const childIds = [
+    ...new Set(sunshineRows.map((r) => r.child_id).filter(Boolean)),
+  ] as string[];
+
+  const { data: children, error: childrenError } = await supabase
+    .from("children")
+    .select("id, guardian_email")
+    .eq("company_id", companyId)
+    .eq("season", season)
+    .in("id", childIds);
+
+  if (childrenError) throw childrenError;
+
+  const emailByChildId = new Map(
+    (children ?? []).map((c) => [c.id, c.guardian_email?.trim() || null]),
+  );
+
+  let withEmail = 0;
+  const BATCH = 50;
+  for (let i = 0; i < sunshineRows.length; i += BATCH) {
+    const batch = sunshineRows.slice(i, i + BATCH);
+    await Promise.all(
+      batch.map(async (row) => {
+        if (!row.child_id) return;
+        const parentEmail = emailByChildId.get(row.child_id) ?? null;
+        if (parentEmail) withEmail++;
+        const { error } = await supabase
+          .from("sunshine_campers")
+          .update({ parent_email: parentEmail })
+          .eq("id", row.id);
+        if (error) throw error;
+      }),
+    );
+  }
+
+  return { updated: sunshineRows.length, withEmail };
+}

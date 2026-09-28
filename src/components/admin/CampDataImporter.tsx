@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Upload, FileJson, AlertCircle, CheckCircle2, RefreshCw, Clock, Building2, XCircle } from "lucide-react";
+import { Upload, FileJson, AlertCircle, CheckCircle2, RefreshCw, Clock, Building2, XCircle, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { DEFAULT_SEASON } from "@/lib/seasonConstants";
 import { useSeasonContext } from "@/contexts/SeasonContext";
+import { isNorthShoreDayCamp } from "@/lib/camps";
 
 interface ImportResults {
   campersImported: number;
@@ -31,6 +32,7 @@ interface CampMinderSyncResult {
 interface CompanyWithCampMinder {
   id: string;
   name: string;
+  slug: string;
   campminder_sync_enabled: boolean | null;
   campminder_last_sync_at: string | null;
 }
@@ -42,6 +44,7 @@ export default function CampDataImporter() {
   // CampMinder sync state
   const [companies, setCompanies] = useState<CompanyWithCampMinder[]>([]);
   const [syncingCompanyId, setSyncingCompanyId] = useState<string | null>(null);
+  const [backfillingSlug, setBackfillingSlug] = useState<string | null>(null);
   
   const [syncResults, setSyncResults] = useState<Record<string, CampMinderSyncResult>>({});
   const [loadingCompanies, setLoadingCompanies] = useState(true);
@@ -66,7 +69,7 @@ export default function CampDataImporter() {
     try {
       let query = supabase
         .from('companies')
-        .select('id, name, campminder_sync_enabled, campminder_last_sync_at')
+        .select('id, name, slug, campminder_sync_enabled, campminder_last_sync_at')
         .eq('is_active', true)
         .order('name');
 
@@ -83,6 +86,51 @@ export default function CampDataImporter() {
       toast.error('Failed to load companies');
     } finally {
       setLoadingCompanies(false);
+    }
+  };
+
+  const handleGuardianEmailBackfill = async (companySlug: string, companyName: string) => {
+    setBackfillingSlug(companySlug);
+    const seasons = ["2027", "2026"];
+    let hadAuthFailure = false;
+    let totalUpdated = 0;
+
+    try {
+      for (const season of seasons) {
+        let remaining = 1;
+        let runs = 0;
+
+        while (remaining > 0 && runs < 40) {
+          runs++;
+          const { data, error } = await supabase.functions.invoke("populate-guardian-emails", {
+            body: { company: companySlug, season, batch_size: 25 },
+          });
+
+          if (error) throw error;
+
+          const row = data?.results?.[0] ?? {};
+          remaining = row.remaining ?? remaining;
+          totalUpdated += row.updated ?? 0;
+
+          if (row.reason?.includes("Auth failed")) {
+            hadAuthFailure = true;
+            toast.error(`${season}: CampMinder auth failed — wait 30s and click Parent emails again.`);
+            break;
+          }
+          if (row.status === "complete" || remaining === 0) break;
+          await new Promise((r) => setTimeout(r, 5000));
+        }
+      }
+
+      if (hadAuthFailure) {
+        toast.message(`${totalUpdated} parent emails saved. Click Parent emails again to continue.`, { duration: 6000 });
+      } else {
+        toast.success(`Parent email backfill done (${totalUpdated} updated).`);
+      }
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Backfill failed");
+    } finally {
+      setBackfillingSlug(null);
     }
   };
 
@@ -276,7 +324,7 @@ export default function CampDataImporter() {
             CampMinder Sync
           </CardTitle>
           <CardDescription>
-            Sync campers, staff, divisions, and sessions from CampMinder API for the 2026 season.
+            Sync campers, staff, divisions, and sessions from CampMinder for season {currentSeason || DEFAULT_SEASON}.
             Automatic sync runs twice daily Eastern: campers at <strong>6 AM / 6 PM</strong>, staff at <strong>7 AM / 7 PM</strong>, Owl Pay financials at <strong>8 AM / 8 PM</strong>.
           </CardDescription>
         </CardHeader>
@@ -370,6 +418,27 @@ export default function CampDataImporter() {
                           </>
                         )}
                       </Button>
+                      {isNorthShoreDayCamp(company.slug) && (
+                        <Button
+                          onClick={() => handleGuardianEmailBackfill(company.slug, company.name)}
+                          disabled={!company.campminder_sync_enabled || backfillingSlug !== null || syncingCompanyId !== null}
+                          size="sm"
+                          variant="secondary"
+                          title="Fetch parent emails from CampMinder (2027 + 2026)"
+                        >
+                          {backfillingSlug === company.slug ? (
+                            <>
+                              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                              Backfilling…
+                            </>
+                          ) : (
+                            <>
+                              <Mail className="h-4 w-4 mr-2" />
+                              Parent emails
+                            </>
+                          )}
+                        </Button>
+                      )}
                     </div>
                   </div>
 

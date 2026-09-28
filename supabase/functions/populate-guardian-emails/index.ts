@@ -30,24 +30,135 @@ async function rateLimitedFetch(url: string, options: RequestInit): Promise<Resp
   return fetch(url, options);
 }
 
-async function getJwtToken(subscriptionKey: string, apiKey: string): Promise<{ token: string; clientIds: string[] }> {
-  const authResponse = await rateLimitedFetch(CM_AUTH_URL, {
-    method: 'GET',
-    headers: {
-      'Authorization': apiKey,
-      'Ocp-Apim-Subscription-Key': subscriptionKey,
-    },
-  });
+async function countCampersNeedingEmail(
+  supabase: ReturnType<typeof createClient>,
+  companyId: string,
+  season: string,
+): Promise<number> {
+  const { count } = await supabase
+    .from('children')
+    .select('id', { count: 'exact', head: true })
+    .eq('company_id', companyId)
+    .eq('season', season)
+    .eq('status', 'active')
+    .or('guardian_email.is.null,guardian_email.eq.')
+    .not('person_id', 'is', null);
+  return count ?? 0;
+}
 
-  const responseText = await authResponse.text();
-  const authData = JSON.parse(responseText);
+async function getJwtToken(
+  subscriptionKey: string,
+  apiKey: string,
+  retries = 4,
+): Promise<{ token: string; clientIds: string[] }> {
+  let lastError = 'Unknown auth error';
 
-  if (!authResponse.ok || !authData.Token) {
-    throw new Error(`Authentication failed: ${authData.Message || JSON.stringify(authData)}`);
+  for (let attempt = 0; attempt < retries; attempt++) {
+    if (attempt > 0) {
+      const waitMs = 4000 * attempt;
+      console.log(`[Guardian Emails] Auth retry ${attempt + 1}/${retries} after ${waitMs}ms`);
+      await delay(waitMs);
+    }
+
+    const authResponse = await rateLimitedFetch(CM_AUTH_URL, {
+      method: 'GET',
+      headers: {
+        'Authorization': apiKey,
+        'Ocp-Apim-Subscription-Key': subscriptionKey,
+      },
+    });
+
+    const responseText = await authResponse.text();
+    let authData: { Token?: string; ClientIDs?: string; Message?: string } = {};
+    try {
+      authData = JSON.parse(responseText);
+    } catch {
+      lastError = `Invalid auth response (${authResponse.status})`;
+      continue;
+    }
+
+    if (authResponse.ok && authData.Token) {
+      const clientIds = authData.ClientIDs
+        ? String(authData.ClientIDs).split(',').map((id: string) => id.trim())
+        : [];
+      return { token: authData.Token, clientIds };
+    }
+
+    lastError = authData.Message || `HTTP ${authResponse.status}`;
+    console.error(`[Guardian Emails] Auth attempt ${attempt + 1} failed:`, lastError);
   }
 
-  const clientIds = authData.ClientIDs ? String(authData.ClientIDs).split(',').map((id: string) => id.trim()) : [];
-  return { token: authData.Token, clientIds };
+  throw new Error(`Authentication failed: ${lastError}`);
+}
+
+function extractRelativeContact(relative: any): {
+  email: string | null;
+  name: string | null;
+  phone: string | null;
+} {
+  const email =
+    relative?.Login ||
+    relative?.LoginEmail ||
+    relative?.Email ||
+    relative?.EmailAddress ||
+    relative?.PrimaryEmail ||
+    relative?.ParentEmail ||
+    relative?.P1Login ||
+    relative?.P1Email ||
+    null;
+
+  let name: string | null = null;
+  if (relative?.Name && typeof relative.Name === 'object') {
+    name = `${relative.Name.First || relative.Name.first || ''} ${relative.Name.Last || relative.Name.last || ''}`.trim() || null;
+  } else if (typeof relative?.Name === 'string') {
+    name = relative.Name.trim() || null;
+  } else {
+    name =
+      relative?.FullName ||
+      `${relative?.FirstName || relative?.First || ''} ${relative?.LastName || relative?.Last || ''}`.trim() ||
+      null;
+  }
+
+  const phone =
+    relative?.Phone ||
+    relative?.PhoneNumber ||
+    relative?.MobilePhone ||
+    relative?.CellPhone ||
+    relative?.PrimaryPhone ||
+    null;
+
+  return {
+    email: typeof email === 'string' && email.trim() ? email.trim() : null,
+    name: typeof name === 'string' && name.trim() ? name.trim() : null,
+    phone: typeof phone === 'string' && phone.trim() ? phone.trim() : null,
+  };
+}
+
+function extractPersonContact(person: any): {
+  email: string | null;
+  name: string | null;
+  phone: string | null;
+} {
+  let email: string | null = null;
+  if (person?.ContactDetails?.Emails?.length > 0) {
+    const loginEmail = person.ContactDetails.Emails.find((e: any) => e.IsLogin || e.IsPrimary);
+    email = loginEmail?.Address || person.ContactDetails.Emails[0]?.Address || null;
+  }
+
+  let name: string | null = null;
+  if (person?.Name) {
+    name = `${person.Name.First || ''} ${person.Name.Last || ''}`.trim() || null;
+  }
+
+  let phone: string | null = null;
+  if (person?.ContactDetails?.PhoneNumbers?.length > 0) {
+    const mobilePhone = person.ContactDetails.PhoneNumbers.find((p: any) =>
+      p.Type === 'Mobile' || p.Type === 'Cell' || p.TypeID === 0 || p.TypeID === 2
+    );
+    phone = mobilePhone?.Number || person.ContactDetails.PhoneNumbers[0]?.Number || null;
+  }
+
+  return { email, name, phone };
 }
 
 async function fetchPersonById(personId: string, token: string, subscriptionKey: string, clientId: string): Promise<any> {
@@ -91,7 +202,7 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const season = body.season || '2026';
-    const batchSize = body.batch_size || 50; // Process 50 parents per run
+    const batchSize = Math.min(body.batch_size || 25, 50);
     const companySlug = body.company; // Optional: target specific company
 
     console.log(`[Guardian Emails] Starting for season ${season}, batch size ${batchSize}`);
@@ -143,19 +254,28 @@ serve(async (req) => {
         clientIds = auth.clientIds;
       } catch (authError) {
         console.error(`[Guardian Emails] Auth failed for ${company.name}:`, authError);
-        results.push({ company: company.name, status: 'error', reason: 'Auth failed' });
+        const remaining = await countCampersNeedingEmail(supabase, company.id, season);
+        results.push({
+          company: company.name,
+          status: 'error',
+          reason: 'Auth failed — wait 30s and click Parent emails again',
+          updated: 0,
+          failed: 0,
+          remaining,
+        });
         continue;
       }
 
       const clientId = clientIds[0];
 
-      // Find campers missing guardian_email but having a person_id
+      // Campers missing guardian email (null or blank) with a CampMinder person_id
       const { data: campersNeedingEmail, error: campersError } = await supabase
         .from('children')
-        .select('id, person_id, name')
+        .select('id, person_id, name, guardian_name, guardian_phone')
         .eq('company_id', company.id)
         .eq('season', season)
-        .is('guardian_email', null)
+        .eq('status', 'active')
+        .or('guardian_email.is.null,guardian_email.eq.')
         .not('person_id', 'is', null)
         .limit(batchSize);
 
@@ -193,42 +313,29 @@ serve(async (req) => {
         }
 
         const parentId = String(guardian.ID);
+        const fromRelative = extractRelativeContact(guardian);
+        let guardianEmail = fromRelative.email;
+        let guardianName = fromRelative.name;
+        let guardianPhone = fromRelative.phone;
 
-        // Fetch parent person data
-        const parentPerson = await fetchPersonById(parentId, token, decryptedSubKey, clientId);
-        
-        if (!parentPerson) {
-          failedCount++;
-          continue;
-        }
-
-        // Extract email from ContactDetails
-        let guardianEmail: string | null = null;
-        if (parentPerson.ContactDetails?.Emails?.length > 0) {
-          const loginEmail = parentPerson.ContactDetails.Emails.find((e: any) => e.IsLogin);
-          guardianEmail = loginEmail?.Address || parentPerson.ContactDetails.Emails[0]?.Address;
-        }
-
-        // Extract name if missing
-        let guardianName: string | null = null;
-        if (parentPerson.Name) {
-          guardianName = `${parentPerson.Name.First || ''} ${parentPerson.Name.Last || ''}`.trim() || null;
-        }
-
-        // Extract phone if missing
-        let guardianPhone: string | null = null;
-        if (parentPerson.ContactDetails?.PhoneNumbers?.length > 0) {
-          const mobilePhone = parentPerson.ContactDetails.PhoneNumbers.find((p: any) => 
-            p.Type === 'Mobile' || p.Type === 'Cell' || p.TypeID === 0 || p.TypeID === 2
-          );
-          guardianPhone = mobilePhone?.Number || parentPerson.ContactDetails.PhoneNumbers[0]?.Number;
+        // Fetch full parent person when relative stub lacks email (common for day camp)
+        if (!guardianEmail || !guardianName || !guardianPhone) {
+          const parentPerson = await fetchPersonById(parentId, token, decryptedSubKey, clientId);
+          if (!parentPerson) {
+            failedCount++;
+            continue;
+          }
+          const fromParent = extractPersonContact(parentPerson);
+          guardianEmail = guardianEmail || fromParent.email;
+          guardianName = guardianName || fromParent.name;
+          guardianPhone = guardianPhone || fromParent.phone;
         }
 
         // Update the camper record
         const updateData: Record<string, any> = {};
         if (guardianEmail) updateData.guardian_email = guardianEmail;
-        if (guardianName) updateData.guardian_name = guardianName;
-        if (guardianPhone) updateData.guardian_phone = guardianPhone;
+        if (guardianName && !camper.guardian_name) updateData.guardian_name = guardianName;
+        if (guardianPhone && !camper.guardian_phone) updateData.guardian_phone = guardianPhone;
 
         if (Object.keys(updateData).length > 0) {
           const { error: updateError } = await supabase
@@ -257,7 +364,7 @@ serve(async (req) => {
         .select('id', { count: 'exact', head: true })
         .eq('company_id', company.id)
         .eq('season', season)
-        .is('guardian_email', null)
+        .or('guardian_email.is.null,guardian_email.eq.')
         .not('person_id', 'is', null);
 
       results.push({ 

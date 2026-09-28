@@ -52,7 +52,7 @@ export function applyParentPortalTheme(themeColor: string, root?: HTMLElement | 
   target.style.setProperty("--pp-brand-soft", `${h} ${softS}% 94%`);
   target.style.setProperty("--pp-brand-muted", `${h} ${mutedS}% 88%`);
   target.style.setProperty("--pp-brand-subtle", `${h} ${Math.round(softS * 0.7)}% 96%`);
-  target.style.setProperty("--pp-bg", `${h} 28% 97%`);
+  target.style.setProperty("--pp-bg", `${h} 32% 98%`);
   target.style.setProperty("--pp-bg-elevated", "0 0% 100%");
   target.style.setProperty("--pp-text", `${h} 40% 18%`);
   target.style.setProperty("--pp-text-muted", `${h} 14% 42%`);

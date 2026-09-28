@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronRight } from "lucide-react";
+import { CheckCircle2, ChevronRight, Clock3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -61,76 +61,84 @@ export function CamperCard({
   return (
     <article
       className={cn(
-        "group flex flex-col rounded-2xl border border-[hsl(var(--pp-border))] bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md",
+        "pp-card group flex flex-col overflow-hidden p-0 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg",
         className,
       )}
     >
-      <div className="flex items-start gap-4">
-        {camper.photo_url ? (
-          <img
-            src={camper.photo_url}
-            alt=""
-            className="h-16 w-16 shrink-0 rounded-2xl object-cover"
-          />
-        ) : (
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[hsl(var(--pp-brand-soft))] to-[hsl(var(--pp-brand-muted))] text-lg font-semibold text-[hsl(var(--pp-brand-dark))]">
-            {camperInitials(camper.name)}
-          </div>
-        )}
+      <div className="p-5 pb-4">
+        <div className="flex items-start gap-4">
+          {camper.photo_url ? (
+            <img
+              src={camper.photo_url}
+              alt=""
+              className="h-[4.25rem] w-[4.25rem] shrink-0 rounded-[1.125rem] object-cover ring-2 ring-[hsl(var(--pp-brand-soft))] ring-offset-2"
+            />
+          ) : (
+            <div className="flex h-[4.25rem] w-[4.25rem] shrink-0 items-center justify-center rounded-[1.125rem] bg-gradient-to-br from-[hsl(var(--pp-brand))] to-[hsl(var(--pp-brand-dark))] text-lg font-bold text-white shadow-md">
+              {camperInitials(camper.name)}
+            </div>
+          )}
 
-        <div className="min-w-0 flex-1">
-          <h3 className="truncate text-lg font-semibold tracking-tight">{camper.name}</h3>
-          {group ? (
-            <p className="mt-0.5 text-sm pp-text-muted">{group}</p>
-          ) : null}
-          <p
-            className={cn(
-              "mt-2 inline-flex items-center gap-1.5 text-sm",
-              absence ? "text-[hsl(32_70%_38%)]" : "text-[hsl(158_40%_32%)]",
-            )}
-          >
-            {!absence && camper.status !== "inactive" ? (
-              <CheckCircle2 className="h-4 w-4 shrink-0" />
-            ) : null}
-            {statusLine}
-          </p>
+          <div className="min-w-0 flex-1">
+            <h3 className="truncate text-lg font-bold tracking-tight">{camper.name}</h3>
+            {group ? <p className="mt-0.5 text-sm pp-text-muted">{group}</p> : null}
+            <div
+              className={cn(
+                "mt-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
+                absence
+                  ? "bg-[hsl(38_90%_94%)] text-[hsl(32_70%_38%)]"
+                  : camper.status === "inactive"
+                    ? "bg-[hsl(var(--pp-brand-subtle))] pp-text-muted"
+                    : "bg-[hsl(158_35%_92%)] text-[hsl(158_40%_32%)]",
+              )}
+            >
+              {!absence && camper.status !== "inactive" ? (
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+              ) : absence ? (
+                <Clock3 className="h-3.5 w-3.5 shrink-0" />
+              ) : null}
+              {statusLine}
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="mt-4 space-y-2 rounded-xl bg-[hsl(var(--pp-brand-subtle))] p-3 text-sm">
-        {pickup ? (
-          <div className="flex justify-between gap-2">
-            <span className="pp-text-muted">Pickup change</span>
-            <span className="text-right font-medium">
-              {pickup.pickup_time || "Time TBD"}
-              {pickup.pickup_person_name ? ` · ${pickup.pickup_person_name}` : ""}
-            </span>
-          </div>
-        ) : null}
-        {swim ? (
-          <div className="flex justify-between gap-2">
-            <span className="pp-text-muted">Swim lesson</span>
-            <span className="font-medium">
-              {new Date(swim.scheduled_at).toLocaleTimeString(undefined, {
-                hour: "numeric",
-                minute: "2-digit",
-              })}
-            </span>
-          </div>
-        ) : null}
-        {!pickup && !swim ? (
-          <p className="pp-text-muted">No special schedule updates for today.</p>
-        ) : null}
+      <div className="border-t border-[hsl(var(--pp-border)/0.7)] bg-gradient-to-b from-[hsl(var(--pp-brand-subtle)/0.6)] to-transparent px-5 py-4">
+        <div className="space-y-2.5 text-sm">
+          {pickup ? (
+            <div className="flex justify-between gap-3">
+              <span className="pp-text-muted">Pickup change</span>
+              <span className="text-right font-semibold">
+                {pickup.pickup_time || "Time TBD"}
+                {pickup.pickup_person_name ? ` · ${pickup.pickup_person_name}` : ""}
+              </span>
+            </div>
+          ) : null}
+          {swim ? (
+            <div className="flex justify-between gap-3">
+              <span className="pp-text-muted">Swim lesson</span>
+              <span className="font-semibold">
+                {new Date(swim.scheduled_at).toLocaleTimeString(undefined, {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+              </span>
+            </div>
+          ) : null}
+          {!pickup && !swim ? (
+            <p className="pp-text-muted">No special schedule updates for today.</p>
+          ) : null}
+        </div>
       </div>
 
       {onView ? (
         <Button
           variant="ghost"
-          className="mt-4 w-full justify-between rounded-xl hover:bg-[hsl(var(--pp-brand-soft))]"
+          className="h-12 w-full justify-between rounded-none border-t border-[hsl(var(--pp-border)/0.5)] px-5 font-semibold hover:bg-[hsl(var(--pp-brand-subtle))]"
           onClick={onView}
         >
           View camper
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
         </Button>
       ) : null}
     </article>

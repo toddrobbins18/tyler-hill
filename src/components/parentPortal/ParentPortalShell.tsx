@@ -108,33 +108,13 @@ export function ParentPortalShell({
           </Button>
         </div>
 
-        <nav className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 pb-3 lg:hidden md:px-6">
-          {desktopNav.map((item) => {
-            const Icon = NAV_ICONS[item.id];
-            const active = activeView === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onNavigate(item.id)}
-                className={cn(
-                  "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all",
-                  active ? "pp-nav-active" : "pp-nav-idle bg-[hsl(var(--pp-bg-elevated))] shadow-sm",
-                )}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                {item.label}
-              </button>
-            );
-          })}
-        </nav>
       </header>
 
-      <main className="relative z-10 mx-auto max-w-6xl px-4 pb-28 pt-6 md:px-6 md:pb-10 md:pt-8">
+      <main className="relative z-10 mx-auto max-w-6xl px-4 pb-32 pt-5 md:px-6 md:pb-10 md:pt-8">
         {children}
       </main>
 
-      <nav className="pp-header-bar fixed inset-x-0 bottom-0 z-30 md:hidden">
+      <nav className="pp-tab-bar fixed inset-x-0 bottom-0 z-30 md:hidden">
         {moreOpen ? (
           <div className="border-b border-[hsl(var(--pp-border))] px-3 py-2">
             <div className="grid grid-cols-2 gap-2">
@@ -159,7 +139,7 @@ export function ParentPortalShell({
             </div>
           </div>
         ) : null}
-        <div className="mx-auto grid max-w-lg grid-cols-5 px-2 py-2">
+        <div className="mx-auto grid max-w-lg grid-cols-5 px-1 py-2.5 pb-1">
           {mobilePrimary.map((viewId) => {
             const item = PARENT_PORTAL_NAV.find((n) => n.id === viewId)!;
             const Icon = NAV_ICONS[viewId];
@@ -173,17 +153,18 @@ export function ParentPortalShell({
                   onNavigate(viewId);
                 }}
                 className={cn(
-                  "flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-medium transition-colors",
+                  "flex flex-col items-center gap-1.5 rounded-2xl px-1 py-1.5 text-[10px] font-semibold transition-all duration-200",
                   active ? "text-[hsl(var(--pp-brand))]" : "pp-text-subtle",
                 )}
               >
                 <span
                   className={cn(
-                    "flex h-9 w-9 items-center justify-center rounded-2xl transition-all",
-                    active && "pp-nav-active",
+                    "flex h-10 w-10 items-center justify-center rounded-2xl transition-all duration-200",
+                    active && "pp-nav-active scale-105",
+                    !active && "bg-[hsl(var(--pp-brand-subtle))]",
                   )}
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className="h-[1.125rem] w-[1.125rem]" />
                 </span>
                 {item.mobileLabel}
               </button>
@@ -193,7 +174,7 @@ export function ParentPortalShell({
             type="button"
             onClick={() => setMoreOpen((v) => !v)}
             className={cn(
-              "flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-medium transition-colors",
+              "flex flex-col items-center gap-1.5 rounded-2xl px-1 py-1.5 text-[10px] font-semibold transition-all duration-200",
               moreOpen || mobileMoreItems.includes(activeView)
                 ? "text-[hsl(var(--pp-brand))]"
                 : "pp-text-subtle",
@@ -201,11 +182,12 @@ export function ParentPortalShell({
           >
             <span
               className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-2xl transition-all",
-                (moreOpen || mobileMoreItems.includes(activeView)) && "pp-nav-active",
+                "flex h-10 w-10 items-center justify-center rounded-2xl transition-all duration-200",
+                (moreOpen || mobileMoreItems.includes(activeView)) && "pp-nav-active scale-105",
+                !(moreOpen || mobileMoreItems.includes(activeView)) && "bg-[hsl(var(--pp-brand-subtle))]",
               )}
             >
-              <MoreHorizontal className="h-4 w-4" />
+              <MoreHorizontal className="h-[1.125rem] w-[1.125rem]" />
             </span>
             More
           </button>

@@ -35,6 +35,7 @@ import {
   type CamperContactDisplay,
 } from "@/lib/camperContactInfo";
 import { resolveChildForCampView } from "@/lib/profileCampResolution";
+import { ParentTemplateEmailPanel } from "@/components/parentEmail/ParentTemplateEmailPanel";
 
 export default function ChildProfile() {
   const { id } = useParams();
@@ -571,6 +572,13 @@ export default function ChildProfile() {
                 ))}
                 {contactInfo && !hasCamperContactInfo(contactInfo) && (
                   <p className="text-sm text-muted-foreground">No contact information available</p>
+                )}
+                {child?.id && (
+                  <ParentTemplateEmailPanel
+                    childId={child.id}
+                    camperName={child.name ?? "Camper"}
+                    parentEmail={contactInfo?.guardianEmail ?? child.guardian_email}
+                  />
                 )}
               </CardContent>
             </Card>

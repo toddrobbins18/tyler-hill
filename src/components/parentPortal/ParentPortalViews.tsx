@@ -56,7 +56,7 @@ export function ParentHomeView({
   const todayIso = todayIsoDate();
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-7 md:space-y-9">
       <WelcomeHeader contactName={contactName} campName={campName} />
 
       <TodayTimeline
@@ -70,10 +70,8 @@ export function ParentHomeView({
       <section>
         <div className="mb-4 flex items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] pp-text-subtle">
-              Your family
-            </p>
-            <h2 className="mt-1 text-xl font-semibold tracking-tight">Campers</h2>
+            <p className="pp-label">Your family</p>
+            <h2 className="mt-1.5 text-xl font-bold tracking-tight md:text-2xl">Campers</h2>
           </div>
           {campers.length > 0 ? (
             <Button variant="ghost" className="rounded-xl" onClick={() => onNavigate("campers")}>
@@ -107,10 +105,8 @@ export function ParentHomeView({
 
       <section>
         <div className="mb-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] pp-text-subtle">
-            Things you may want to do
-          </p>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight">Quick actions</h2>
+          <p className="pp-label">Things you may want to do</p>
+          <h2 className="mt-1.5 text-xl font-bold tracking-tight md:text-2xl">Quick actions</h2>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <QuickActionCard

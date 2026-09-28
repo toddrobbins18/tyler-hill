@@ -195,7 +195,22 @@ export default function ParentAuth() {
           </ul>
         </section>
 
-        <section className="pp-card mx-auto w-full max-w-md rounded-3xl bg-white/95 p-6 shadow-xl backdrop-blur-sm md:p-8">
+        <section className="lg:hidden">
+          <div className="pp-hero mb-6 rounded-[1.75rem] px-6 py-7">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-white/90">
+              <Sparkles className="h-3.5 w-3.5" />
+              Family portal
+            </div>
+            <h1 className="mt-4 text-2xl font-bold leading-tight tracking-tight">
+              Your family&apos;s home at {companyName}
+            </h1>
+            <p className="mt-3 text-sm leading-relaxed text-white/85">
+              Pickups, absences, authorized adults, and swim lessons — all in one place.
+            </p>
+          </div>
+        </section>
+
+        <section className="pp-glass mx-auto w-full max-w-md rounded-[1.75rem] p-6 shadow-xl md:p-8">
           <div className="mb-6 flex items-center gap-3">
             <div className="pp-brand-bg flex h-12 w-12 items-center justify-center rounded-2xl">
               <Shield className="h-6 w-6" />
