@@ -111,7 +111,7 @@ export async function processStaffTimeClockScan(
   },
 ): Promise<StaffTimeClockPunchResult> {
   if (options.company && !staffTimeClockEnabledForCompany(options.company)) {
-    return { ok: false, message: "HootTrack is only available for day camps" };
+    return { ok: false, message: "Owl Time is only available for day camps" };
   }
 
   const workDate = options.workDate ?? staffTimeClockWorkDate();

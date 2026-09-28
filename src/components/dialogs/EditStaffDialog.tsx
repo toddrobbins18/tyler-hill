@@ -496,7 +496,7 @@ export default function EditStaffDialog({ staffId, open, onOpenChange, onSuccess
           </div>
           {staffTimeClockEnabledForCompany(currentCompany) && qrToken && staff?.name && (
             <div>
-              <Label className="mb-2 block">HootTrack QR Badge</Label>
+              <Label className="mb-2 block">Owl Time QR Badge</Label>
               <StaffQrBadge staffName={staff.name} qrToken={qrToken} />
             </div>
           )}

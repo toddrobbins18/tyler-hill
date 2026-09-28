@@ -37,7 +37,7 @@ export function StaffQrBadge({ staffName, qrToken }: Props) {
       <body style="font-family:sans-serif;text-align:center;padding:24px">
         <h2>${staffName}</h2>
         <img src="${dataUrl}" width="220" height="220" />
-        <p style="font-size:12px;color:#666">Scan at HootTrack</p>
+        <p style="font-size:12px;color:#666">Scan at Owl Time</p>
       </body></html>
     `);
     w.document.close();

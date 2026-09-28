@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
-import { Clock, LogIn, LogOut, QrCode, Radio, RefreshCw } from "lucide-react";
+import { Clock, LogIn, LogOut, QrCode, Radio, RefreshCw, ScanLine, Settings, BarChart3 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -9,8 +9,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { staffTimeClockEnabledForCompany } from "@/lib/camps";
+import { OwlTimeReportsPanel } from "@/components/owlTime/OwlTimeReports";
+import { OwlTimeSeasonSettingsPanel } from "@/components/owlTime/OwlTimeSeasonSettings";
 import {
   loadStaffTimeClockForDate,
   processStaffTimeClockScan,
@@ -31,6 +34,7 @@ export default function StaffTimeClock() {
   const [scanning, setScanning] = useState(false);
   const [rows, setRows] = useState<ClockRow[]>([]);
   const [lastPunch, setLastPunch] = useState<{ name: string; action: "in" | "out"; at: string } | null>(null);
+  const [settingsVersion, setSettingsVersion] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const workDate = staffTimeClockWorkDate();
@@ -99,24 +103,42 @@ export default function StaffTimeClock() {
   if (!staffTimeClockEnabledForCompany(currentCompany)) {
     return (
       <div className="max-w-5xl mx-auto p-6">
-        <h1 className="text-2xl font-bold">HootTrack</h1>
-        <p className="text-muted-foreground mt-2">HootTrack is only available for day camps.</p>
+        <h1 className="text-2xl font-bold">Owl Time</h1>
+        <p className="text-muted-foreground mt-2">Owl Time is only available for day camps.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-6xl mx-auto">
+      <div>
+        <h1 className="text-3xl font-bold flex items-center gap-2">
+          <Clock className="h-8 w-8" />
+          Owl Time
+        </h1>
+        <p className="text-muted-foreground mt-1">
+          Staff sign-in for day camp · season {season}
+        </p>
+      </div>
+
+      <Tabs defaultValue="kiosk">
+        <TabsList className="flex-wrap h-auto">
+          <TabsTrigger value="kiosk" className="gap-1">
+            <ScanLine className="h-4 w-4" /> Kiosk
+          </TabsTrigger>
+          <TabsTrigger value="reports" className="gap-1">
+            <BarChart3 className="h-4 w-4" /> Reports
+          </TabsTrigger>
+          <TabsTrigger value="settings" className="gap-1">
+            <Settings className="h-4 w-4" /> Season Settings
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="kiosk" className="space-y-6 mt-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <Clock className="h-8 w-8" />
-            HootTrack
-          </h1>
-          <p className="text-muted-foreground">
-            Scan QR badge or wristband · {format(new Date(`${workDate}T12:00:00`), "EEEE, MMMM d, yyyy")} · auto sign-out 4:15 PM
-          </p>
-        </div>
+        <p className="text-muted-foreground">
+          Scan QR badge or wristband · {format(new Date(`${workDate}T12:00:00`), "EEEE, MMMM d, yyyy")} · auto sign-out 4:15 PM
+        </p>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => void refresh()}>
             <RefreshCw className="h-4 w-4 mr-2" /> Refresh
@@ -228,6 +250,28 @@ export default function StaffTimeClock() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="reports" className="mt-6">
+          {currentCompany?.id && season ? (
+            <OwlTimeReportsPanel
+              companyId={currentCompany.id}
+              season={season}
+              settingsVersion={settingsVersion}
+            />
+          ) : null}
+        </TabsContent>
+
+        <TabsContent value="settings" className="mt-6">
+          {currentCompany?.id && season ? (
+            <OwlTimeSeasonSettingsPanel
+              companyId={currentCompany.id}
+              season={season}
+              onSaved={() => setSettingsVersion((v) => v + 1)}
+            />
+          ) : null}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

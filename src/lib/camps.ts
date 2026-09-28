@@ -68,7 +68,7 @@ export function appointmentsEnabledForCompany(company: CampLike): boolean {
   return APPOINTMENTS_ENABLED_OVERNIGHT_SLUGS.includes(slug as (typeof APPOINTMENTS_ENABLED_OVERNIGHT_SLUGS)[number]);
 }
 
-/** Staff Time Clock + QR/wristband badges — day camps only (North Shore, etc.). */
+/** Owl Time (staff sign-in/out) + QR/wristband badges — day camps only (North Shore, etc.). */
 export function staffTimeClockEnabledForCompany(company: CampLike): boolean {
   return isDayCampCompany(company);
 }
