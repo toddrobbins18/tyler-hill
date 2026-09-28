@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isAirtableSwimRecordsCsv,
   levelFromSkills,
   normalizeSkillStatus,
   parseSwimProgramCsv,
@@ -40,5 +41,55 @@ describe("swimProgram", () => {
     expect(rows[0].bracelet?.currentBracelet).toBe("Orange");
     expect(rows[0].levels?.goldfish).toEqual(["A", "W", "—", "—"]);
     expect(rows[0].levels?.goldfishLevel).toBe("Incomplete");
+  });
+
+  it("parses North Shore Swim Records 2026 export headers", () => {
+    const headers = [
+      "Child's Name",
+      "Group",
+      "PersonID",
+      "Goldfish 1A1",
+      "Goldfish 1A2",
+      "Goldfish 1A3",
+      "Goldfish 1A4",
+      "Goldfish Level",
+      "Minnow 1B1",
+      "Red Cross Level 1",
+    ];
+    expect(isAirtableSwimRecordsCsv(headers)).toBe(true);
+
+    const rosterChild: RosterChild = {
+      ...child,
+      person_id: "14679875",
+      season: "2026",
+    };
+    const csv = [
+      headers.join(","),
+      "Freddy Sendach,Syracuse,14679875,Achieved,Achieved,Achieved,Achieved,Complete,Achieved,Complete",
+    ].join("\n");
+    const { rows, unmatched } = parseSwimProgramCsv(csv, [rosterChild], "2026");
+    expect(unmatched).toHaveLength(0);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].season).toBe("2026");
+    expect(rows[0].levels?.group).toBe("Syracuse");
+    expect(rows[0].levels?.goldfish).toEqual(["A", "A", "A", "A"]);
+    expect(rows[0].levels?.goldfishLevel).toBe("Complete");
+    expect(rows[0].levels?.minnow?.[0]).toBe("A");
+    expect(rows[0].levels?.redCross).toBe("Complete");
+  });
+
+  it("matches PersonID across seasons when importing historical data", () => {
+    const csv = [
+      "Child's Name,PersonID,Goldfish 1A1",
+      "Jane Doe,cm-1,Achieved",
+    ].join("\n");
+    const { rows } = parseSwimProgramCsv(
+      csv,
+      [{ ...child, season: "2027", person_id: "cm-1" }],
+      "2026",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].season).toBe("2026");
+    expect(rows[0].child.id).toBe("child-1");
   });
 });

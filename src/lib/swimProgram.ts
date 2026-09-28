@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { compareByLastName } from "@/lib/nameSortUtils";
+import { filterActiveRoster } from "@/lib/rosterStatus";
 
 export type BraceletColor = "Red" | "Orange" | "Yellow" | "Green" | "Blue";
 /** A = Achieved, W = Working towards (sheet notation) */
@@ -75,6 +76,7 @@ const emptySkills6 = (): SkillStatus[] => ["—", "—", "—", "—", "—", "�
 export function normalizeSkillStatus(raw: unknown): SkillStatus {
   const s = String(raw ?? "").trim();
   if (!s || s === "—" || s === "-") return "—";
+  if (/^https?:\/\//i.test(s) || /airtableusercontent|\.jpe?g|\.png/i.test(s)) return "—";
   if (s === "A" || s.toUpperCase() === "A") return "A";
   if (s === "W" || s.toUpperCase() === "W") return "W";
   if (/^achieved$/i.test(s)) return "A";
@@ -84,6 +86,7 @@ export function normalizeSkillStatus(raw: unknown): SkillStatus {
 
 export function normalizeLevelStatus(raw: unknown): LevelStatus {
   const s = String(raw ?? "").trim();
+  if (!s || /^https?:\/\//i.test(s) || /airtableusercontent|\.jpe?g|\.png/i.test(s)) return "—";
   if (s === "Complete" || /^complete$/i.test(s)) return "Complete";
   if (s === "Incomplete" || /^incomplete$/i.test(s)) return "Incomplete";
   return "—";
@@ -162,8 +165,10 @@ function parseSkillArray(raw: unknown, length: number): SkillStatus[] {
 function braceletFromJson(child: RosterChild, raw: Record<string, unknown>): BraceletRecord {
   const base = braceletFromChild(child);
   const color = String(raw.currentBracelet ?? "").trim();
+  const importedGroup = String(raw.group ?? "").trim();
   return {
     ...base,
+    group: importedGroup || base.group,
     currentBracelet: BRACELETS.includes(color as BraceletColor) ? (color as BraceletColor) : "",
     proctor1: String(raw.proctor1 ?? ""),
     date1: String(raw.date1 ?? ""),
@@ -182,11 +187,12 @@ function levelFromJson(child: RosterChild, raw: Record<string, unknown>, updated
   const goldfish = parseSkillArray(raw.goldfish, 4);
   const minnow = parseSkillArray(raw.minnow, 6);
   const tadpole = parseSkillArray(raw.tadpole, 4);
+  const importedGroup = String(raw.group ?? "").trim();
   return {
     id: child.id,
     personId: child.person_id,
     name: child.name,
-    group: rosterGroup(child),
+    group: importedGroup || rosterGroup(child),
     goldfish,
     goldfishLevel: normalizeLevelStatus(raw.goldfishLevel) !== "—"
       ? normalizeLevelStatus(raw.goldfishLevel)
@@ -210,6 +216,7 @@ function levelFromJson(child: RosterChild, raw: Record<string, unknown>, updated
 
 export function braceletToJson(record: BraceletRecord): Record<string, unknown> {
   return {
+    group: record.group !== "—" ? record.group : "",
     currentBracelet: record.currentBracelet,
     proctor1: record.proctor1,
     date1: record.date1,
@@ -226,6 +233,7 @@ export function braceletToJson(record: BraceletRecord): Record<string, unknown> 
 
 export function levelToJson(record: LevelRecord): Record<string, unknown> {
   return {
+    group: record.group !== "—" ? record.group : "",
     goldfish: record.goldfish,
     goldfishLevel: record.goldfishLevel,
     minnow: record.minnow,
@@ -252,6 +260,12 @@ export function formatSwimTimestamp(iso: string): string {
   });
 }
 
+function resolveDisplayGroup(roster: string, saved?: string): string {
+  if (roster && roster !== "—") return roster;
+  if (saved?.trim()) return saved.trim();
+  return roster || "—";
+}
+
 export function mergeBracelets(
   saved: Map<string, BraceletRecord>,
   children: RosterChild[],
@@ -261,7 +275,7 @@ export function mergeBracelets(
     const rosterFields = {
       name: child.name,
       personId: child.person_id,
-      group: rosterGroup(child),
+      group: resolveDisplayGroup(rosterGroup(child), prev?.group),
       divisionLeader: rosterDivisionLeader(child),
     };
     return prev ? { ...prev, ...rosterFields } : braceletFromChild(child);
@@ -271,32 +285,42 @@ export function mergeBracelets(
 export function mergeLevels(saved: Map<string, LevelRecord>, children: RosterChild[]): LevelRecord[] {
   return children.map((child) => {
     const prev = saved.get(child.id);
-    const rosterFields = { name: child.name, personId: child.person_id, group: rosterGroup(child) };
+    const rosterFields = {
+      name: child.name,
+      personId: child.person_id,
+      group: resolveDisplayGroup(rosterGroup(child), prev?.group),
+    };
     return prev ? { ...prev, ...rosterFields } : levelFromChild(child);
   });
 }
 
-/** All campers for season (CampMinder-synced children — includes inactive). */
+export type SwimRosterLoadResult = {
+  children: RosterChild[];
+  /** Inactive roster rows excluded from the swim UI (cancelled / historical). */
+  inactiveHidden: number;
+};
+
+/** Active campers for season (matches CampMinder enrolled roster). */
 export async function fetchSwimRosterChildren(
   supabase: SupabaseClient,
   companyId: string,
   season: string,
-): Promise<RosterChild[]> {
-  const rows: RosterChild[] = [];
+): Promise<SwimRosterLoadResult> {
+  type RowWithLeader = RosterChild & { leader_id?: string | null; status?: string | null };
+  const rows: RowWithLeader[] = [];
   let from = 0;
 
   for (;;) {
     const to = from + CAMPERS_PAGE_SIZE - 1;
     const { data, error } = await supabase
       .from("children")
-      .select("id, name, person_id, group_name, season, leader_id")
+      .select("id, name, person_id, group_name, season, leader_id, status")
       .eq("company_id", companyId)
       .eq("season", season)
       .order("name")
       .range(from, to);
 
     if (error) throw error;
-    type RowWithLeader = RosterChild & { leader_id?: string | null };
     const batch: RowWithLeader[] = (data ?? []).map((row) => ({
       id: row.id,
       name: row.name,
@@ -304,6 +328,7 @@ export async function fetchSwimRosterChildren(
       group_name: row.group_name,
       season: row.season,
       leader_id: row.leader_id,
+      status: row.status,
       leader: null,
     }));
     rows.push(...batch);
@@ -311,26 +336,29 @@ export async function fetchSwimRosterChildren(
     from += CAMPERS_PAGE_SIZE;
   }
 
+  const children = filterActiveRoster(rows);
+  const inactiveHidden = rows.length - children.length;
+
   const leaderIds = [
     ...new Set(
-      rows
-        .map((r) => (r as RosterChild & { leader_id?: string | null }).leader_id)
+      children
+        .map((r) => (r as RowWithLeader).leader_id)
         .filter((id): id is string => Boolean(id)),
     ),
   ];
   if (leaderIds.length) {
     const { data: leaders } = await supabase.from("staff").select("id, name").in("id", leaderIds);
     const leaderById = new Map((leaders ?? []).map((s) => [s.id, s.name]));
-    for (const row of rows) {
-      const lid = (row as RosterChild & { leader_id?: string | null }).leader_id;
+    for (const row of children) {
+      const lid = (row as RowWithLeader).leader_id;
       if (lid && leaderById.has(lid)) {
         row.leader = { name: leaderById.get(lid)! };
       }
     }
   }
 
-  rows.sort(compareByLastName);
-  return rows;
+  children.sort(compareByLastName);
+  return { children, inactiveHidden };
 }
 
 type SwimDbRow = {
@@ -397,7 +425,7 @@ export async function loadSwimProgramData(
   companyId: string,
   season: string,
 ): Promise<{ bracelets: Map<string, BraceletRecord>; levels: Map<string, LevelRecord> }> {
-  const children = await fetchSwimRosterChildren(supabase, companyId, season);
+  const { children } = await fetchSwimRosterChildren(supabase, companyId, season);
   const childById = new Map(children.map((c) => [c.id, c]));
   return loadSwimSavedRecords(supabase, companyId, season, childById);
 }
@@ -680,9 +708,16 @@ function normHeader(h: string): string {
   return h
     .trim()
     .toLowerCase()
-    .replace(/[.]/g, "")
+    .replace(/[''`.]/g, "")
     .replace(/\s+/g, "_")
     .replace(/-/g, "_");
+}
+
+export function isAirtableSwimRecordsCsv(headers: string[]): boolean {
+  const normalized = headers.map(normHeader);
+  const hasChild = normalized.some((h) => h.includes("child") && h.includes("name"));
+  const hasGoldfish = normalized.some((h) => h.startsWith("goldfish_1a"));
+  return hasChild && hasGoldfish;
 }
 
 function resolveSkillHeader(h: string): { group: "goldfish" | "minnow" | "tadpole"; index: number } | null {
@@ -715,46 +750,81 @@ const SKILL_HEADER_MAP: Record<string, { group: "goldfish" | "minnow" | "tadpole
   tadpole_1c4: { group: "tadpole", index: 3 },
 };
 
-function buildSwimChildIndex(children: RosterChild[]) {
+const LEVEL_HEADER_MAP: Partial<Record<string, keyof LevelRecord>> = {
+  goldfish_level: "goldfishLevel",
+  minnow_level: "minnowLevel",
+  tadpole_level: "tadpoleLevel",
+  red_cross_level_1: "redCross",
+  red_cross_level_2: "redCross2",
+  red_cross_level_3: "redCross3",
+  red_class_level_3: "redCross3",
+  frog_level: "frog",
+};
+
+function buildSwimChildIndex(children: RosterChild[], defaultSeason: string) {
   const byId = new Map<string, RosterChild>();
   const bySeasonName = new Map<string, RosterChild>();
   const bySeasonPerson = new Map<string, RosterChild>();
+  const byPersonId = new Map<string, RosterChild>();
+
   for (const c of children) {
     const season = String(c.season ?? "");
     byId.set(c.id, c);
     bySeasonName.set(`${season}|${c.name.trim().toLowerCase()}`, c);
     bySeasonPerson.set(`${season}|${c.person_id}`, c);
+
+    const existing = byPersonId.get(c.person_id);
+    if (!existing || (season === defaultSeason && String(existing.season) !== defaultSeason)) {
+      byPersonId.set(c.person_id, c);
+    }
   }
-  return { byId, bySeasonName, bySeasonPerson };
+  return { byId, bySeasonName, bySeasonPerson, byPersonId };
+}
+
+function findNameColumnIndex(headers: string[]): number {
+  return headers.findIndex(
+    (h) =>
+      h === "name" ||
+      h === "child_name" ||
+      h === "childs_name" ||
+      h === "camper" ||
+      (h.includes("child") && h.includes("name")),
+  );
+}
+
+function findPersonColumnIndex(headers: string[]): number {
+  return headers.findIndex(
+    (h) => h === "person_id" || h === "campminder_id" || h === "personid",
+  );
 }
 
 function resolveChildForImportRow(
   cols: string[],
   headers: string[],
   index: ReturnType<typeof buildSwimChildIndex>,
-  defaultSeason: string,
+  importSeason: string,
 ): RosterChild | null {
-  const nameIdx = headers.findIndex((h) => h === "name" || h === "child_name" || h === "camper");
+  const nameIdx = findNameColumnIndex(headers);
   const childIdIdx = headers.findIndex((h) => h === "child_id" || h === "id");
-  const personIdx = headers.findIndex((h) => h === "person_id" || h === "campminder_id");
-  const seasonIdx = headers.findIndex((h) => h === "season" || h === "year");
+  const personIdx = findPersonColumnIndex(headers);
 
-  const season = (seasonIdx >= 0 ? cols[seasonIdx]?.trim() : "") || defaultSeason;
   const childId = childIdIdx >= 0 ? cols[childIdIdx]?.trim() : "";
   const personId = personIdx >= 0 ? cols[personIdx]?.trim() : "";
   const name = nameIdx >= 0 ? cols[nameIdx]?.trim() : "";
 
   if (childId && index.byId.has(childId)) {
     const c = index.byId.get(childId)!;
-    if (!season || String(c.season) === season) return c;
+    if (!importSeason || String(c.season) === importSeason) return c;
   }
   if (personId) {
-    const hit = index.bySeasonPerson.get(`${season}|${personId}`);
-    if (hit) return hit;
+    const seasonHit = index.bySeasonPerson.get(`${importSeason}|${personId}`);
+    if (seasonHit) return seasonHit;
+    const anySeason = index.byPersonId.get(personId);
+    if (anySeason) return anySeason;
   }
   if (name) {
-    const hit = index.bySeasonName.get(`${season}|${name.toLowerCase()}`);
-    if (hit) return hit;
+    const seasonHit = index.bySeasonName.get(`${importSeason}|${name.toLowerCase()}`);
+    if (seasonHit) return seasonHit;
   }
   return null;
 }
@@ -778,56 +848,84 @@ export function parseSwimProgramCsv(
   const rawHeaders = parseCsvLine(lines[0]);
   const headers = rawHeaders.map(normHeader);
   const braceletIdx = headers.findIndex((h) => h === "current_bracelet" || h === "bracelet");
-  const nameIdx = headers.findIndex((h) => h === "name" || h === "child_name" || h === "camper");
+  const nameIdx = findNameColumnIndex(headers);
   const seasonIdx = headers.findIndex((h) => h === "season" || h === "year");
+  const groupIdx = headers.findIndex((h) => h === "group");
 
-  const index = buildSwimChildIndex(children);
+  const index = buildSwimChildIndex(children, defaultSeason);
   const rows: SwimCsvImportRow[] = [];
   const unmatched: string[] = [];
 
   for (let li = 1; li < lines.length; li++) {
     const cols = parseCsvLine(lines[li]);
-    const child = resolveChildForImportRow(cols, headers, index, defaultSeason);
-    const season = (seasonIdx >= 0 ? cols[seasonIdx]?.trim() : "") || defaultSeason;
+    const importSeason = (seasonIdx >= 0 ? cols[seasonIdx]?.trim() : "") || defaultSeason;
+    const child = resolveChildForImportRow(cols, headers, index, importSeason);
     const name = nameIdx >= 0 ? cols[nameIdx]?.trim() : "";
+    const csvGroup = groupIdx >= 0 ? cols[groupIdx]?.trim() : "";
 
     if (!child) {
-      if (name) unmatched.push(season ? `${name} (${season})` : name);
+      if (name) unmatched.push(importSeason ? `${name} (${importSeason})` : name);
       continue;
     }
 
-    const importRow: SwimCsvImportRow = { child, season: String(child.season ?? season) };
+    const importRow: SwimCsvImportRow = { child, season: importSeason };
 
     if (braceletIdx >= 0) {
       const color = cols[braceletIdx]?.trim();
       if (color && BRACELETS.includes(color as BraceletColor)) {
-        importRow.bracelet = { currentBracelet: color as BraceletColor };
+        importRow.bracelet = {
+          currentBracelet: color as BraceletColor,
+          ...(csvGroup ? { group: csvGroup } : {}),
+        };
       }
     }
 
     const goldfish = emptySkills4();
     const minnow = emptySkills6();
     const tadpole = emptySkills4();
+    const levelFields: Partial<LevelRecord> = {};
     let hasSkill = false;
+    let hasLevelField = false;
 
     headers.forEach((h, idx) => {
-      const map = resolveSkillHeader(h);
-      if (!map) return;
-      const val = normalizeSkillStatus(cols[idx]);
-      if (val !== "—") hasSkill = true;
-      if (map.group === "goldfish") goldfish[map.index] = val;
-      if (map.group === "minnow") minnow[map.index] = val;
-      if (map.group === "tadpole") tadpole[map.index] = val;
+      const skillMap = resolveSkillHeader(h);
+      if (skillMap) {
+        const val = normalizeSkillStatus(cols[idx]);
+        if (val !== "—") hasSkill = true;
+        if (skillMap.group === "goldfish") goldfish[skillMap.index] = val;
+        if (skillMap.group === "minnow") minnow[skillMap.index] = val;
+        if (skillMap.group === "tadpole") tadpole[skillMap.index] = val;
+        return;
+      }
+
+      const levelKey = LEVEL_HEADER_MAP[h];
+      if (!levelKey) return;
+      const val = normalizeLevelStatus(cols[idx]);
+      if (val === "—") return;
+      (levelFields as Record<string, LevelStatus>)[levelKey] = val;
+      hasLevelField = true;
     });
 
-    if (hasSkill) {
+    if (hasSkill || hasLevelField) {
       importRow.levels = {
         goldfish,
-        goldfishLevel: levelFromSkills(goldfish),
+        goldfishLevel:
+          levelFields.goldfishLevel ??
+          (hasSkill ? levelFromSkills(goldfish) : "—"),
         minnow,
-        minnowLevel: levelFromSkills(minnow),
+        minnowLevel:
+          levelFields.minnowLevel ??
+          (hasSkill ? levelFromSkills(minnow) : "—"),
         tadpole,
-        tadpoleLevel: levelFromSkills(tadpole),
+        tadpoleLevel:
+          levelFields.tadpoleLevel ??
+          (hasSkill ? levelFromSkills(tadpole) : "—"),
+        redCross: levelFields.redCross ?? "—",
+        redCross2: levelFields.redCross2 ?? "—",
+        redCross3: levelFields.redCross3 ?? "—",
+        redCross4: levelFields.redCross4 ?? "—",
+        frog: levelFields.frog ?? "—",
+        ...(csvGroup ? { group: csvGroup } : {}),
       };
     }
 
@@ -837,26 +935,132 @@ export function parseSwimProgramCsv(
   return { rows, unmatched };
 }
 
+export type SwimImportProgress = {
+  phase: "parsing" | "matching" | "saving";
+  current: number;
+  total: number;
+  message: string;
+};
+
+const SWIM_IMPORT_BATCH_SIZE = 50;
+
+type MergedImportRow = {
+  child: RosterChild;
+  season: string;
+  bracelet?: Partial<BraceletRecord>;
+  levels?: Partial<LevelRecord>;
+};
+
+function mergeImportRows(parsed: SwimCsvImportRow[]): MergedImportRow[] {
+  const byKey = new Map<string, MergedImportRow>();
+  for (const row of parsed) {
+    const key = `${row.season}|${row.child.id}`;
+    const prev = byKey.get(key) ?? { child: row.child, season: row.season };
+    if (row.bracelet) prev.bracelet = { ...prev.bracelet, ...row.bracelet };
+    if (row.levels) prev.levels = { ...prev.levels, ...row.levels };
+    byKey.set(key, prev);
+  }
+  return [...byKey.values()];
+}
+
+async function loadExistingSwimRowsForSeason(
+  supabase: SupabaseClient,
+  companyId: string,
+  season: string,
+): Promise<Map<string, { bracelet: Record<string, unknown>; levels: Record<string, unknown>; source: string }>> {
+  const map = new Map<
+    string,
+    { bracelet: Record<string, unknown>; levels: Record<string, unknown>; source: string }
+  >();
+  const { data, error } = await supabase
+    .from("swim_program_records")
+    .select("child_id, bracelet, levels, source")
+    .eq("company_id", companyId)
+    .eq("season", season);
+  if (error) {
+    if (isSwimTableMissingError(error)) return map;
+    throw error;
+  }
+  for (const row of data ?? []) {
+    map.set(String(row.child_id), {
+      bracelet: (row.bracelet as Record<string, unknown>) ?? {},
+      levels: (row.levels as Record<string, unknown>) ?? {},
+      source: String(row.source ?? "manual"),
+    });
+  }
+  return map;
+}
+
 /** Import parsed CSV rows into swim_program_records (supports prior seasons). */
 export async function importSwimProgramRows(
   supabase: SupabaseClient,
   companyId: string,
   parsed: SwimCsvImportRow[],
+  onProgress?: (progress: SwimImportProgress) => void,
 ): Promise<{ bracelets: number; levels: number }> {
+  const merged = mergeImportRows(parsed);
   let bracelets = 0;
   let levels = 0;
+  if (!merged.length) return { bracelets, levels };
 
-  for (const row of parsed) {
-    const base = braceletFromChild(row.child);
-    if (row.bracelet) {
-      const merged = { ...base, ...row.bracelet };
-      await saveSwimBracelet(supabase, companyId, row.season, merged, "airtable");
-      bracelets++;
+  const bySeason = new Map<string, MergedImportRow[]>();
+  for (const row of merged) {
+    const list = bySeason.get(row.season) ?? [];
+    list.push(row);
+    bySeason.set(row.season, list);
+  }
+
+  let saved = 0;
+  const total = merged.length;
+
+  for (const [season, rows] of bySeason) {
+    onProgress?.({
+      phase: "saving",
+      current: saved,
+      total,
+      message: `Loading existing ${season} records…`,
+    });
+    const existingByChild = await loadExistingSwimRowsForSeason(supabase, companyId, season);
+    const payloads: Record<string, unknown>[] = [];
+
+    for (const row of rows) {
+      const existing = existingByChild.get(row.child.id);
+      const hasBracelet = Boolean(row.bracelet);
+      const hasLevels = Boolean(row.levels);
+      if (hasBracelet) bracelets++;
+      if (hasLevels) levels++;
+
+      const braceletRecord = hasBracelet
+        ? { ...braceletFromChild(row.child), ...row.bracelet }
+        : null;
+      const levelRecord = hasLevels
+        ? { ...levelFromChild(row.child), ...row.levels, lastModified: "Imported" }
+        : null;
+
+      payloads.push({
+        company_id: companyId,
+        child_id: row.child.id,
+        season,
+        person_id: row.child.person_id,
+        bracelet: braceletRecord ? braceletToJson(braceletRecord) : (existing?.bracelet ?? {}),
+        levels: levelRecord ? levelToJson(levelRecord) : (existing?.levels ?? {}),
+        source: existing?.source ?? "airtable",
+      });
     }
-    if (row.levels) {
-      const merged = { ...levelFromChild(row.child), ...row.levels, lastModified: "Imported" };
-      await saveSwimLevel(supabase, companyId, row.season, merged, "airtable");
-      levels++;
+
+    for (let i = 0; i < payloads.length; i += SWIM_IMPORT_BATCH_SIZE) {
+      const batch = payloads.slice(i, i + SWIM_IMPORT_BATCH_SIZE);
+      const { error } = await supabase
+        .from("swim_program_records")
+        .upsert(batch, { onConflict: "company_id,child_id,season" });
+      if (error) throw error;
+      saved = Math.min(saved + batch.length, total);
+      onProgress?.({
+        phase: "saving",
+        current: saved,
+        total,
+        message: `Saving ${saved} of ${total} campers…`,
+      });
     }
   }
 
@@ -868,17 +1072,29 @@ export async function importSwimProgramCsv(
   companyId: string,
   csvText: string,
   defaultSeason: string,
-): Promise<{ bracelets: number; levels: number; unmatched: string[] }> {
+  onProgress?: (progress: SwimImportProgress) => void,
+): Promise<{ bracelets: number; levels: number; unmatched: string[]; csvRows: number; matched: number }> {
+  onProgress?.({
+    phase: "parsing",
+    current: 0,
+    total: 1,
+    message: "Reading CSV…",
+  });
   const children = await fetchAllSwimRosterChildren(supabase, companyId);
+  onProgress?.({
+    phase: "matching",
+    current: 0,
+    total: 1,
+    message: `Matching campers to roster (${children.length} on file)…`,
+  });
   const { rows, unmatched } = parseSwimProgramCsv(csvText, children, defaultSeason);
-  const counts = await importSwimProgramRows(supabase, companyId, rows);
-  return { ...counts, unmatched };
+  const counts = await importSwimProgramRows(supabase, companyId, rows, onProgress);
+  return { ...counts, unmatched, csvRows: rows.length, matched: rows.length };
 }
 
 export function swimProgramCsvTemplate(): string {
   return [
-    "season,name,person_id,current_bracelet,goldfish_1A1,goldfish_1A2,goldfish_1A3,goldfish_1A4,minnow_1B1,minnow_1B2,minnow_1B3,minnow_1B4,minnow_1B5,minnow_1B6,tadpole_1C1,tadpole_1C2,tadpole_1C3,tadpole_1C4",
-    "2026,Jane Doe,,Orange,A,A,W,—,A,W,—,—,—,—,—,—,—,—",
-    "2027,Jane Doe,,Green,W,—,—,—,—,—,—,—,—,—,—,—,—,—",
+    "Child's Name,Group,PersonID,Email,Goldfish 1A1,Goldfish 1A2,Goldfish 1A3,Goldfish 1A4,Goldfish Level,Minnow 1B1,Minnow 1B2,Minnow 1B3,Minnow 1B4,Minnow 1B5,Minnow 1B6,Minnow Level,Tadpole 1C1,Tadpole 1C2,Tadpole 1C3,Tadpole 1C4,Tadpole Level,Red Cross Level 1,Frog Level",
+    "Jane Doe,Syracuse,12345678,parent@example.com,Achieved,Achieved,Working Towards,—,Incomplete,A,—,—,—,—,—,—,—,—,—,—,—,—,—,—",
   ].join("\n");
 }

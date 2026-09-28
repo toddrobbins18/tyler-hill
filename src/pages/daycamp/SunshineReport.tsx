@@ -145,7 +145,11 @@ export default function SunshineReport() {
     }
   }, [currentCompany, currentSeason]);
 
-  async function refreshAll(options?: { syncRoster?: boolean; skipAutoSync?: boolean }) {
+  async function refreshAll(options?: {
+    syncRoster?: boolean;
+    skipAutoSync?: boolean;
+    showSyncToast?: boolean;
+  }) {
     if (!currentCompany) return;
 
     if (isNorthShoreDayCamp(currentCompany.slug)) {
@@ -166,16 +170,19 @@ export default function SunshineReport() {
         const result = await syncSunshineFromRoster(currentCompany.id, currentSeason, {
           northShoreSunshineOnly: isNorthShoreDayCamp(currentCompany.slug),
         });
-        if (result.campers === 0) {
-          toast.message(
-            result.skippedNoGroup > 0
-              ? `No groups found — ${result.skippedNoGroup} campers missing FULLSUMMERGROUP. Run CampMinder sync.`
-              : "No campers on roster for this season.",
-          );
-        } else {
-          toast.success(
-            `Loaded ${result.campers} campers across ${result.groups} groups.`,
-          );
+        if (options?.showSyncToast !== false) {
+          if (result.campers === 0) {
+            toast.message(
+              result.skippedNoGroup > 0
+                ? `Season ${currentSeason}: 0 nursery campers loaded. ${result.skippedNoGroup} of ${result.totalRoster} roster campers have no FULLSUMMERGROUP (need Ducklings, Bunnies, Pandas, Giraffes, or Koalas in CampMinder). Use Import File for Airtable CSV, or ask Todd to assign groups.`
+                : `Season ${currentSeason}: no campers on roster.`,
+              { duration: 12000 },
+            );
+          } else {
+            toast.success(
+              `Season ${currentSeason}: loaded ${result.campers} nursery campers across ${result.groups} groups (${result.skippedNoGroup} older-kid roster rows skipped).`,
+            );
+          }
         }
       } catch (e: unknown) {
         const message =
@@ -251,7 +258,7 @@ export default function SunshineReport() {
             .some((group) => group.id === camper.group_id),
       ).length === 0
     ) {
-      await refreshAll({ syncRoster: true, skipAutoSync: true });
+      await refreshAll({ syncRoster: true, skipAutoSync: true, showSyncToast: false });
     }
   }
 
@@ -746,7 +753,7 @@ export default function SunshineReport() {
             variant="outline"
             size="sm"
             disabled={syncingRoster}
-            onClick={() => void refreshAll({ syncRoster: true })}
+            onClick={() => void refreshAll({ syncRoster: true, showSyncToast: true })}
             className="gap-1.5"
           >
             <RefreshCw className={cn("h-3.5 w-3.5", syncingRoster && "animate-spin")} />

@@ -15,6 +15,7 @@ import {
   type LevelStatus,
   type SkillStatus,
   type SwimHistoryReportRow,
+  type SwimImportProgress,
   levelFromSkills,
   fetchSwimHistoryReport,
   fetchSwimRosterChildren,
@@ -33,7 +34,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import { SortableHeader } from "@/components/SortableHeader";
 import { useSortable } from "@/hooks/use-sortable";
@@ -41,10 +53,89 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
-import { Waves, Mail, Search, CheckCircle2, AlertCircle, Trophy, CalendarIcon, Upload, Download } from "lucide-react";
+import {
+  Waves,
+  Mail,
+  Search,
+  CheckCircle2,
+  AlertCircle,
+  Trophy,
+  CalendarIcon,
+  Upload,
+  Download,
+  Loader2,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const SAVE_DEBOUNCE_MS = 700;
+const SWIM_TABLE_PAGE_SIZES = [25, 50, 100] as const;
+const DEFAULT_SWIM_PAGE_SIZE = 50;
+
+type LevelDataFilter = "all" | "has-data" | "empty" | "imported";
+type BraceletAssignmentFilter = "all" | "assigned" | "unassigned";
+
+type PaginatedSlice<T> = {
+  rows: T[];
+  total: number;
+  totalPages: number;
+  page: number;
+  rangeStart: number;
+  rangeEnd: number;
+};
+
+function matchesSwimSearch(name: string, group: string, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return name.toLowerCase().includes(q) || group.toLowerCase().includes(q);
+}
+
+function paginateRows<T>(rows: T[], page: number, pageSize: number): PaginatedSlice<T> {
+  const total = rows.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const start = (safePage - 1) * pageSize;
+  const end = Math.min(start + pageSize, total);
+  return {
+    rows: rows.slice(start, end),
+    total,
+    totalPages,
+    page: safePage,
+    rangeStart: total ? start + 1 : 0,
+    rangeEnd: end,
+  };
+}
+
+function buildPageNumbers(current: number, total: number): (number | "ellipsis")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages: (number | "ellipsis")[] = [1];
+  if (current > 3) pages.push("ellipsis");
+  for (let p = Math.max(2, current - 1); p <= Math.min(total - 1, current + 1); p++) pages.push(p);
+  if (current < total - 2) pages.push("ellipsis");
+  pages.push(total);
+  return pages;
+}
+
+type SwimImportResult = {
+  fileName: string;
+  season: string;
+  finishedAt: string;
+  levels: number;
+  bracelets: number;
+  matched: number;
+  unmatched: string[];
+};
+
+function levelRecordHasData(record: LevelRecord): boolean {
+  return (
+    record.goldfish.some((s) => s !== "—") ||
+    record.minnow.some((s) => s !== "—") ||
+    record.tadpole.some((s) => s !== "—") ||
+    [record.goldfishLevel, record.minnowLevel, record.tadpoleLevel, record.redCross, record.redCross2, record.redCross3, record.redCross4, record.frog].some(
+      (s) => s !== "—",
+    )
+  );
+}
 
 const BRACELET_STYLES: Record<BraceletColor, string> = {
   Red: "bg-red-500/20 text-red-300 border-red-500/40",
@@ -248,6 +339,109 @@ function BraceletPill({ color }: { color: BraceletColor | "" }) {
   );
 }
 
+function SwimFilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+  className,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex flex-col gap-1", className)}>
+      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-8 min-w-[130px] rounded-md border border-border/60 bg-background px-2 text-xs"
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function SwimTableFooter({
+  slice,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+  emptyMessage,
+}: {
+  slice: PaginatedSlice<unknown>;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
+  emptyMessage?: string;
+}) {
+  if (slice.total === 0) {
+    return (
+      <div className="border-t px-4 py-3 text-sm text-muted-foreground">
+        {emptyMessage ?? "No rows match the current filters."}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+        <span>
+          Showing {slice.rangeStart}–{slice.rangeEnd} of {slice.total}
+        </span>
+        <SwimFilterSelect
+          label="Per page"
+          value={String(pageSize)}
+          onChange={(v) => onPageSizeChange(Number(v))}
+          options={SWIM_TABLE_PAGE_SIZES.map((n) => ({ value: String(n), label: String(n) }))}
+          className="min-w-0"
+        />
+      </div>
+      {slice.totalPages > 1 ? (
+        <Pagination className="mx-0 w-auto justify-end">
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                onClick={() => onPageChange(Math.max(1, slice.page - 1))}
+                className={slice.page === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+              />
+            </PaginationItem>
+            {buildPageNumbers(slice.page, slice.totalPages).map((page, idx) => (
+              <PaginationItem key={`${page}-${idx}`}>
+                {page === "ellipsis" ? (
+                  <PaginationEllipsis />
+                ) : (
+                  <PaginationLink
+                    onClick={() => onPageChange(page)}
+                    isActive={slice.page === page}
+                    className="cursor-pointer"
+                  >
+                    {page}
+                  </PaginationLink>
+                )}
+              </PaginationItem>
+            ))}
+            <PaginationItem>
+              <PaginationNext
+                onClick={() => onPageChange(Math.min(slice.totalPages, slice.page + 1))}
+                className={slice.page === slice.totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      ) : null}
+    </div>
+  );
+}
+
 function ProctorChip({ value }: { value: string }) {
   if (!value) return <span className="text-muted-foreground text-xs">—</span>;
   return (
@@ -290,10 +484,25 @@ export default function SwimProgram() {
   const [saving, setSaving] = useState(false);
   const [historyReport, setHistoryReport] = useState<SwimHistoryReportRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [inactiveHidden, setInactiveHidden] = useState(0);
   const [braceletData, setBraceletData] = useState<BraceletRecord[]>([]);
   const [levelData, setLevelData] = useState<LevelRecord[]>([]);
   const [selectedBraceletId, setSelectedBraceletId] = useState<string | null>(null);
   const [selectedLevelId, setSelectedLevelId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("bracelets");
+  const [tablePageSize, setTablePageSize] = useState(DEFAULT_SWIM_PAGE_SIZE);
+  const [braceletPage, setBraceletPage] = useState(1);
+  const [levelPage, setLevelPage] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [braceletGroupFilter, setBraceletGroupFilter] = useState("all");
+  const [braceletColorFilter, setBraceletColorFilter] = useState("all");
+  const [braceletAssignmentFilter, setBraceletAssignmentFilter] = useState<BraceletAssignmentFilter>("all");
+  const [levelGroupFilter, setLevelGroupFilter] = useState("all");
+  const [levelDataFilter, setLevelDataFilter] = useState<LevelDataFilter>("all");
+  const [historySeasonFilter, setHistorySeasonFilter] = useState("all");
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<SwimImportProgress | null>(null);
+  const [lastImport, setLastImport] = useState<SwimImportResult | null>(null);
   const braceletSaveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const levelSaveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -302,16 +511,34 @@ export default function SwimProgram() {
     setViewSeason(currentSeason);
   }, [currentSeason]);
 
+  useEffect(() => {
+    setBraceletPage(1);
+  }, [search, braceletGroupFilter, braceletColorFilter, braceletAssignmentFilter, viewSeason, tablePageSize]);
+
+  useEffect(() => {
+    setLevelPage(1);
+  }, [search, levelGroupFilter, levelDataFilter, viewSeason, tablePageSize]);
+
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [search, historySeasonFilter, tablePageSize]);
+
   const reload = useCallback(async () => {
     if (!currentCompany?.id) {
       setBraceletData([]);
       setLevelData([]);
+      setInactiveHidden(0);
       setLoading(false);
       return;
     }
     setLoading(true);
     try {
-      const children = await fetchSwimRosterChildren(supabase, currentCompany.id, viewSeason);
+      const { children, inactiveHidden: hiddenInactive } = await fetchSwimRosterChildren(
+        supabase,
+        currentCompany.id,
+        viewSeason,
+      );
+      setInactiveHidden(hiddenInactive);
       const childById = new Map(children.map((c) => [c.id, c]));
       const { bracelets, levels } = await loadSwimSavedRecords(
         supabase,
@@ -430,33 +657,126 @@ export default function SwimProgram() {
   };
 
   const handleCsvImport = async (file: File) => {
-    if (!currentCompany?.id) return;
+    if (!currentCompany?.id || importing) return;
+    setImporting(true);
+    setImportProgress({ phase: "parsing", current: 0, total: 1, message: "Starting import…" });
     try {
       const text = await file.text();
-      const result = await importSwimProgramCsv(supabase, currentCompany.id, text, viewSeason);
+      const result = await importSwimProgramCsv(
+        supabase,
+        currentCompany.id,
+        text,
+        viewSeason,
+        setImportProgress,
+      );
       await reload();
       await loadHistory();
+
+      const summary: SwimImportResult = {
+        fileName: file.name,
+        season: viewSeason,
+        finishedAt: new Date().toLocaleString(),
+        levels: result.levels,
+        bracelets: result.bracelets,
+        matched: result.matched,
+        unmatched: result.unmatched,
+      };
+      setLastImport(summary);
+
+      if (result.levels > 0 && result.bracelets === 0) {
+        setActiveTab("levels");
+      } else if (result.bracelets > 0) {
+        setActiveTab("bracelets");
+      }
+
+      const unmatchedHint =
+        result.unmatched.length > 0
+          ? ` · ${result.unmatched.length} unmatched${result.unmatched.length <= 3 ? `: ${result.unmatched.join(", ")}` : ` (e.g. ${result.unmatched.slice(0, 3).join(", ")}…)`}`
+          : "";
       toast({
         title: "Import complete",
-        description: `${result.bracelets} bracelet + ${result.levels} level rows${result.unmatched.length ? ` (${result.unmatched.length} unmatched)` : ""}`,
+        description: `Saved to season ${viewSeason}: ${result.levels} level rows, ${result.bracelets} bracelet rows${unmatchedHint}`,
+        duration: 10000,
       });
     } catch (err) {
       console.error(err);
-      toast({ title: "Import failed", variant: "destructive" });
+      toast({
+        title: "Import failed",
+        description: err instanceof Error ? err.message : "Could not save swim records",
+        variant: "destructive",
+      });
+    } finally {
+      setImporting(false);
+      setImportProgress(null);
     }
   };
 
   const selectedBracelet = braceletData.find((b) => b.id === selectedBraceletId) || null;
   const selectedLevel = levelData.find((l) => l.id === selectedLevelId) || null;
 
+  const swimGroupOptions = useMemo(() => {
+    const groups = new Set<string>();
+    for (const row of [...braceletData, ...levelData]) {
+      if (row.group && row.group !== "—") groups.add(row.group);
+    }
+    return [...groups].sort((a, b) => a.localeCompare(b));
+  }, [braceletData, levelData]);
+
   const filteredBracelets = useMemo(
-    () => braceletData.filter((b) => b.name.toLowerCase().includes(search.toLowerCase()) || b.group.toLowerCase().includes(search.toLowerCase())),
-    [search, braceletData],
+    () =>
+      braceletData.filter((b) => {
+        if (!matchesSwimSearch(b.name, b.group, search)) return false;
+        if (braceletGroupFilter !== "all" && b.group !== braceletGroupFilter) return false;
+        if (braceletColorFilter !== "all" && b.currentBracelet !== braceletColorFilter) return false;
+        if (braceletAssignmentFilter === "assigned" && !b.currentBracelet) return false;
+        if (braceletAssignmentFilter === "unassigned" && b.currentBracelet) return false;
+        return true;
+      }),
+    [search, braceletData, braceletGroupFilter, braceletColorFilter, braceletAssignmentFilter],
   );
+
   const filteredLevels = useMemo(
-    () => levelData.filter((b) => b.name.toLowerCase().includes(search.toLowerCase()) || b.group.toLowerCase().includes(search.toLowerCase())),
-    [search, levelData],
+    () =>
+      levelData.filter((r) => {
+        if (!matchesSwimSearch(r.name, r.group, search)) return false;
+        if (levelGroupFilter !== "all" && r.group !== levelGroupFilter) return false;
+        if (levelDataFilter === "has-data" && !levelRecordHasData(r)) return false;
+        if (levelDataFilter === "empty" && levelRecordHasData(r)) return false;
+        if (levelDataFilter === "imported" && r.lastModified !== "Imported") return false;
+        return true;
+      }),
+    [search, levelData, levelGroupFilter, levelDataFilter],
   );
+
+  const historyTableRows = useMemo(
+    () =>
+      historyReport.flatMap((row) =>
+        row.seasons.map((s) => ({
+          key: `${row.personId}-${s.season}`,
+          name: row.name,
+          season: s.season,
+          bracelet: s.bracelet?.currentBracelet || "—",
+          goldfish: s.levels?.goldfish ?? [],
+          minnow: s.levels?.minnow ?? [],
+          tadpole: s.levels?.tadpole ?? [],
+        })),
+      ),
+    [historyReport],
+  );
+
+  const historySeasonOptions = useMemo(
+    () => [...new Set(historyTableRows.map((r) => r.season))].sort((a, b) => b.localeCompare(a)),
+    [historyTableRows],
+  );
+
+  const filteredHistoryRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return historyTableRows.filter((r) => {
+      if (q && !r.name.toLowerCase().includes(q) && !r.season.includes(q)) return false;
+      if (historySeasonFilter !== "all" && r.season !== historySeasonFilter) return false;
+      return true;
+    });
+  }, [historyTableRows, search, historySeasonFilter]);
 
   const { sorted: sortedBracelets, sort: braceletSort, handleSort: requestBraceletSort } = useSortable(filteredBracelets, {
     key: "name",
@@ -466,6 +786,31 @@ export default function SwimProgram() {
     key: "name",
     direction: "asc",
   });
+
+  const paginatedBracelets = useMemo(
+    () => paginateRows(sortedBracelets, braceletPage, tablePageSize),
+    [sortedBracelets, braceletPage, tablePageSize],
+  );
+  const paginatedLevels = useMemo(
+    () => paginateRows(sortedLevels, levelPage, tablePageSize),
+    [sortedLevels, levelPage, tablePageSize],
+  );
+  const paginatedHistory = useMemo(
+    () => paginateRows(filteredHistoryRows, historyPage, tablePageSize),
+    [filteredHistoryRows, historyPage, tablePageSize],
+  );
+
+  useEffect(() => {
+    if (braceletPage > paginatedBracelets.totalPages) setBraceletPage(paginatedBracelets.totalPages);
+  }, [braceletPage, paginatedBracelets.totalPages]);
+
+  useEffect(() => {
+    if (levelPage > paginatedLevels.totalPages) setLevelPage(paginatedLevels.totalPages);
+  }, [levelPage, paginatedLevels.totalPages]);
+
+  useEffect(() => {
+    if (historyPage > paginatedHistory.totalPages) setHistoryPage(paginatedHistory.totalPages);
+  }, [historyPage, paginatedHistory.totalPages]);
 
   const braceletCounts = BRACELETS.reduce<Record<string, number>>((acc, c) => {
     acc[c] = braceletData.filter((b) => b.currentBracelet === c).length;
@@ -479,6 +824,11 @@ export default function SwimProgram() {
       ).length,
     0,
   );
+  const campersWithLevelData = levelData.filter(levelRecordHasData).length;
+  const importPercent =
+    importProgress && importProgress.total > 0
+      ? Math.round((importProgress.current / importProgress.total) * 100)
+      : 0;
 
   return (
     <div className="space-y-6 p-6">
@@ -490,8 +840,14 @@ export default function SwimProgram() {
           <div>
             <h1 className="text-2xl font-bold">Swim Program</h1>
             <p className="text-sm text-muted-foreground">
-              {loading ? "Loading…" : `${braceletData.length} campers`} · season {viewSeason}
+              {loading
+                ? "Loading…"
+                : `${braceletData.length} active camper${braceletData.length === 1 ? "" : "s"}`}
+              {!loading && inactiveHidden > 0 ? ` · ${inactiveHidden} inactive hidden` : ""}
+              {!loading ? ` · season ${viewSeason}` : ""}
+              {!loading && campersWithLevelData > 0 ? ` · ${campersWithLevelData} with level data` : ""}
               {saving ? " · saving…" : ""}
+              {importing ? " · importing…" : ""}
             </p>
           </div>
         </div>
@@ -507,8 +863,18 @@ export default function SwimProgram() {
               e.target.value = "";
             }}
           />
-          <Button variant="outline" size="sm" onClick={() => csvInputRef.current?.click()}>
-            <Upload className="h-4 w-4 mr-1" /> Import CSV
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={importing}
+            onClick={() => csvInputRef.current?.click()}
+          >
+            {importing ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <Upload className="h-4 w-4 mr-1" />
+            )}
+            {importing ? "Importing…" : "Import CSV"}
           </Button>
           <Select value={viewSeason} onValueChange={setViewSeason}>
             <SelectTrigger className="w-[120px] h-9">
@@ -544,6 +910,51 @@ export default function SwimProgram() {
         </div>
       </motion.div>
 
+      {importing && importProgress ? (
+        <Alert className="border-primary/40 bg-primary/5">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <AlertTitle>Importing swim data</AlertTitle>
+          <AlertDescription className="space-y-2">
+            <p>{importProgress.message}</p>
+            {importProgress.phase === "saving" && importProgress.total > 0 ? (
+              <Progress value={importPercent} className="h-2" />
+            ) : null}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {lastImport && !importing ? (
+        <Alert className="border-emerald-500/40 bg-emerald-500/5 pr-10 relative">
+          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+          <AlertTitle>Last import — season {lastImport.season}</AlertTitle>
+          <AlertDescription className="space-y-1">
+            <p>
+              <span className="font-medium">{lastImport.fileName}</span> at {lastImport.finishedAt}
+            </p>
+            <p>
+              {lastImport.matched} campers matched · {lastImport.levels} level rows · {lastImport.bracelets}{" "}
+              bracelet rows
+              {lastImport.unmatched.length > 0 ? ` · ${lastImport.unmatched.length} unmatched` : ""}
+            </p>
+            {lastImport.levels > 0 && lastImport.bracelets === 0 ? (
+              <p className="text-muted-foreground">
+                This file has swim <strong>levels</strong> only — open the <strong>Swim Level Report</strong> tab to
+                review. Bracelet colors need a separate CSV.
+              </p>
+            ) : null}
+          </AlertDescription>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute right-2 top-2 h-7 w-7"
+            onClick={() => setLastImport(null)}
+            aria-label="Dismiss import summary"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </Alert>
+      ) : null}
+
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         {BRACELETS.map((color) => (
           <Card key={color} className="border-border/50">
@@ -565,9 +976,18 @@ export default function SwimProgram() {
             <p className="text-[11px] text-muted-foreground mt-1">levels complete</p>
           </CardContent>
         </Card>
+        <Card className="border-border/50 md:col-span-2">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <CheckCircle2 className="h-4 w-4 text-sky-400" />
+              <span className="text-2xl font-bold">{campersWithLevelData}</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">campers with imported / entered levels</p>
+          </CardContent>
+        </Card>
       </div>
 
-      <Tabs defaultValue="bracelets" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList>
           <TabsTrigger value="bracelets">Swim Bracelets</TabsTrigger>
           <TabsTrigger value="levels">Swim Level Report</TabsTrigger>
@@ -576,8 +996,38 @@ export default function SwimProgram() {
 
         <TabsContent value="bracelets" className="mt-4">
           <Card>
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-3 space-y-3">
               <CardTitle className="text-base">Current bracelet status & test history</CardTitle>
+              <div className="flex flex-wrap items-end gap-3">
+                <SwimFilterSelect
+                  label="Group"
+                  value={braceletGroupFilter}
+                  onChange={setBraceletGroupFilter}
+                  options={[
+                    { value: "all", label: "All groups" },
+                    ...swimGroupOptions.map((g) => ({ value: g, label: g })),
+                  ]}
+                />
+                <SwimFilterSelect
+                  label="Bracelet color"
+                  value={braceletColorFilter}
+                  onChange={setBraceletColorFilter}
+                  options={[
+                    { value: "all", label: "All colors" },
+                    ...BRACELETS.map((c) => ({ value: c, label: c })),
+                  ]}
+                />
+                <SwimFilterSelect
+                  label="Assignment"
+                  value={braceletAssignmentFilter}
+                  onChange={(v) => setBraceletAssignmentFilter(v as BraceletAssignmentFilter)}
+                  options={[
+                    { value: "all", label: "All campers" },
+                    { value: "assigned", label: "Has bracelet" },
+                    { value: "unassigned", label: "No bracelet yet" },
+                  ]}
+                />
+              </div>
             </CardHeader>
             <CardContent className="p-0 overflow-x-auto">
               <Table>
@@ -598,7 +1048,7 @@ export default function SwimProgram() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedBracelets.map((b) => (
+                  {paginatedBracelets.rows.map((b) => (
                     <TableRow key={b.id} className="cursor-pointer" onDoubleClick={() => setSelectedBraceletId(b.id)}>
                       <TableCell className="font-medium" onClick={() => setSelectedBraceletId(b.id)}>
                         {b.name}
@@ -665,17 +1115,46 @@ export default function SwimProgram() {
                   ))}
                 </TableBody>
               </Table>
+              <SwimTableFooter
+                slice={paginatedBracelets}
+                pageSize={tablePageSize}
+                onPageChange={setBraceletPage}
+                onPageSizeChange={setTablePageSize}
+                emptyMessage="No campers match the current search or filters."
+              />
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="levels" className="mt-4">
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center justify-between">
+            <CardHeader className="pb-3 space-y-3">
+              <CardTitle className="text-base flex flex-wrap items-center justify-between gap-2">
                 <span>Skill checklist — A = Achieved, W = Working towards</span>
                 <span className="text-xs font-normal text-muted-foreground">Tap A / W / — on each skill</span>
               </CardTitle>
+              <div className="flex flex-wrap items-end gap-3">
+                <SwimFilterSelect
+                  label="Group"
+                  value={levelGroupFilter}
+                  onChange={setLevelGroupFilter}
+                  options={[
+                    { value: "all", label: "All groups" },
+                    ...swimGroupOptions.map((g) => ({ value: g, label: g })),
+                  ]}
+                />
+                <SwimFilterSelect
+                  label="Level data"
+                  value={levelDataFilter}
+                  onChange={(v) => setLevelDataFilter(v as LevelDataFilter)}
+                  options={[
+                    { value: "all", label: "All campers" },
+                    { value: "has-data", label: "Has level data" },
+                    { value: "empty", label: "No level data yet" },
+                    { value: "imported", label: "Imported from Airtable" },
+                  ]}
+                />
+              </div>
             </CardHeader>
             <CardContent className="p-0 overflow-x-auto">
               <Table>
@@ -704,7 +1183,7 @@ export default function SwimProgram() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedLevels.map((r) => (
+                  {paginatedLevels.rows.map((r) => (
                     <TableRow key={r.id} className="cursor-pointer" onDoubleClick={() => setSelectedLevelId(r.id)}>
                       <TableCell className="font-medium whitespace-nowrap" onClick={() => setSelectedLevelId(r.id)}>
                         {r.name}
@@ -756,14 +1235,34 @@ export default function SwimProgram() {
                   ))}
                 </TableBody>
               </Table>
+              <SwimTableFooter
+                slice={paginatedLevels}
+                pageSize={tablePageSize}
+                onPageChange={setLevelPage}
+                onPageSizeChange={setTablePageSize}
+                emptyMessage="No campers match the current search or filters."
+              />
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="history" className="mt-4">
           <Card>
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-3 space-y-3">
               <CardTitle className="text-base">Prior seasons — all campers with saved swim data</CardTitle>
+              {historySeasonOptions.length > 0 ? (
+                <div className="flex flex-wrap items-end gap-3">
+                  <SwimFilterSelect
+                    label="Season"
+                    value={historySeasonFilter}
+                    onChange={setHistorySeasonFilter}
+                    options={[
+                      { value: "all", label: "All seasons" },
+                      ...historySeasonOptions.map((s) => ({ value: s, label: s })),
+                    ]}
+                  />
+                </div>
+              ) : null}
             </CardHeader>
             <CardContent className="p-0 overflow-x-auto">
               {historyLoading ? (
@@ -773,50 +1272,57 @@ export default function SwimProgram() {
                   No prior swim data yet. Import Airtable CSV or enter data on Bracelets / Level Report tabs.
                 </p>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableCell className="font-semibold">Camper</TableCell>
-                      <TableCell className="font-semibold">Season</TableCell>
-                      <TableCell className="font-semibold">Bracelet</TableCell>
-                      <TableCell className="font-semibold">Goldfish</TableCell>
-                      <TableCell className="font-semibold">Minnow</TableCell>
-                      <TableCell className="font-semibold">Tadpole</TableCell>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {historyReport.flatMap((row) =>
-                      row.seasons.map((s) => (
-                        <TableRow key={`${row.personId}-${s.season}`}>
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableCell className="font-semibold">Camper</TableCell>
+                        <TableCell className="font-semibold">Season</TableCell>
+                        <TableCell className="font-semibold">Bracelet</TableCell>
+                        <TableCell className="font-semibold">Goldfish</TableCell>
+                        <TableCell className="font-semibold">Minnow</TableCell>
+                        <TableCell className="font-semibold">Tadpole</TableCell>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedHistory.rows.map((row) => (
+                        <TableRow key={row.key}>
                           <TableCell className="font-medium whitespace-nowrap">{row.name}</TableCell>
-                          <TableCell>{s.season}</TableCell>
-                          <TableCell>{s.bracelet?.currentBracelet || "—"}</TableCell>
+                          <TableCell>{row.season}</TableCell>
+                          <TableCell>{row.bracelet}</TableCell>
                           <TableCell>
                             <div className="flex gap-0.5">
-                              {(s.levels?.goldfish ?? []).map((sk, i) => (
+                              {row.goldfish.map((sk, i) => (
                                 <SkillCell key={i} status={sk} />
                               ))}
                             </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-0.5">
-                              {(s.levels?.minnow ?? []).map((sk, i) => (
+                              {row.minnow.map((sk, i) => (
                                 <SkillCell key={i} status={sk} />
                               ))}
                             </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-0.5">
-                              {(s.levels?.tadpole ?? []).map((sk, i) => (
+                              {row.tadpole.map((sk, i) => (
                                 <SkillCell key={i} status={sk} />
                               ))}
                             </div>
                           </TableCell>
                         </TableRow>
-                      )),
-                    )}
-                  </TableBody>
-                </Table>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <SwimTableFooter
+                    slice={paginatedHistory}
+                    pageSize={tablePageSize}
+                    onPageChange={setHistoryPage}
+                    onPageSizeChange={setTablePageSize}
+                    emptyMessage="No history rows match the current search or filters."
+                  />
+                </>
               )}
             </CardContent>
           </Card>
