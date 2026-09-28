@@ -6,6 +6,7 @@ import { useSeasonContext } from "@/contexts/SeasonContext";
 import { FrontOfficeBackLink } from "@/components/daycamp/FrontOfficeBackLink";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { FileText, Share2 } from "lucide-react";
@@ -34,7 +35,11 @@ export default function TransportChangeSheets() {
   const [rows, setRows] = useState<TransportChangeSheetRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const allSelected = selectedRouteIds.length === 0 || selectedRouteIds.length === routeMeta.length;
+  const routeIdsKey = useMemo(() => routeMeta.map((r) => r.id).join(","), [routeMeta]);
+
+  useEffect(() => {
+    setSelectedRouteIds(routeMeta.map((r) => r.id));
+  }, [routeIdsKey, routeMeta]);
 
   const loadBoard = useCallback(async () => {
     if (!currentCompany?.id) return;
@@ -73,6 +78,10 @@ export default function TransportChangeSheets() {
     if (!currentCompany?.id) return;
     setLoading(true);
     try {
+      if (!selectedRouteIds.length) {
+        setRows([]);
+        return;
+      }
       const [exceptions, manual] = await Promise.all([
         fetchTransportExceptions(supabase, currentCompany.id, sheetDate),
         loadManualOverrides(supabase, currentCompany.id, currentSeason, sheetDate),
@@ -84,13 +93,13 @@ export default function TransportChangeSheets() {
         manual,
         routeMeta,
         coreStops,
-        selectedRouteIds: allSelected ? [] : selectedRouteIds,
+        selectedRouteIds,
       });
       setRows(built.filter((r) => !r.camper.startsWith("(No transport")));
     } finally {
       setLoading(false);
     }
-  }, [allSelected, coreStops, currentCompany?.id, currentSeason, routeMeta, runPeriod, selectedRouteIds, sheetDate]);
+  }, [coreStops, currentCompany?.id, currentSeason, routeMeta, runPeriod, selectedRouteIds, sheetDate]);
 
   useEffect(() => {
     void loadBoard();
@@ -102,21 +111,36 @@ export default function TransportChangeSheets() {
   }, [coreStops, currentCompany?.id, loadSheet, routeMeta.length]);
 
   const routeLabel = useMemo(() => {
-    if (allSelected) return "All routes";
+    if (!selectedRouteIds.length) return "No buses selected";
+    if (selectedRouteIds.length === routeMeta.length) return "All buses";
     if (selectedRouteIds.length === 1) {
       const r = routeMeta.find((x) => x.id === selectedRouteIds[0]);
-      return r ? `${r.bus} · ${r.name}` : "1 route";
+      return r ? `${r.bus} · ${r.name}` : "1 bus";
     }
-    return `${selectedRouteIds.length} routes`;
-  }, [allSelected, routeMeta, selectedRouteIds]);
+    return `${selectedRouteIds.length} buses`;
+  }, [routeMeta, selectedRouteIds]);
+
+  const toggleRoute = (routeId: number) => {
+    setSelectedRouteIds((prev) =>
+      prev.includes(routeId) ? prev.filter((id) => id !== routeId) : [...prev, routeId],
+    );
+  };
 
   const downloadCsv = () => {
+    if (!rows.length) return;
     const csv = changeSheetRowsToCsv(rows);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `transport-change-sheet-${sheetDate}-${runPeriod}.csv`;
+    const busSuffix =
+      selectedRouteIds.length === routeMeta.length
+        ? "all"
+        : routeMeta
+            .filter((r) => selectedRouteIds.includes(r.id))
+            .map((r) => r.bus.replace(/\s+/g, "-"))
+            .join("-");
+    a.download = `transport-change-sheet-${sheetDate}-${runPeriod}-${busSuffix}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -144,7 +168,7 @@ export default function TransportChangeSheets() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Filters</CardTitle>
-          <CardDescription>Pick a date, run, and one or more routes.</CardDescription>
+          <CardDescription>Pick a date, run, and bus numbers to download.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
           <Input type="date" value={sheetDate} onChange={(e) => setSheetDate(e.target.value)} className="w-auto" />
@@ -160,36 +184,32 @@ export default function TransportChangeSheets() {
               </Button>
             ))}
           </div>
-          <Button size="sm" variant="ghost" onClick={() => setSelectedRouteIds([])}>
-            All routes
+          <Button size="sm" variant="outline" onClick={() => setSelectedRouteIds(routeMeta.map((r) => r.id))}>
+            Select all
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setSelectedRouteIds([])}>
-            Clear selection
+            Clear
           </Button>
-          <Button size="sm" onClick={downloadCsv} disabled={!rows.length}>
+          <Button size="sm" onClick={downloadCsv} disabled={!rows.length || !selectedRouteIds.length}>
             <Share2 className="mr-2 h-4 w-4" />
             Download CSV
           </Button>
         </CardContent>
       </Card>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-x-4 gap-y-2">
         {routeMeta.map((r) => {
-          const active = allSelected || selectedRouteIds.includes(r.id);
+          const checked = selectedRouteIds.includes(r.id);
           return (
-            <Button
+            <label
               key={r.id}
-              size="sm"
-              variant={active ? "default" : "outline"}
-              style={active ? { borderLeftColor: r.color, borderLeftWidth: 4 } : undefined}
-              onClick={() =>
-                setSelectedRouteIds((prev) =>
-                  prev.includes(r.id) ? prev.filter((id) => id !== r.id) : [...prev, r.id],
-                )
-              }
+              className="flex items-center gap-2 cursor-pointer text-sm"
+              style={{ borderLeftColor: r.color, borderLeftWidth: 3, paddingLeft: 8 }}
             >
-              {r.bus}
-            </Button>
+              <Checkbox checked={checked} onCheckedChange={() => toggleRoute(r.id)} />
+              <span className="font-medium">{r.bus}</span>
+              <span className="text-xs text-muted-foreground truncate max-w-[140px]">{r.name}</span>
+            </label>
           );
         })}
       </div>

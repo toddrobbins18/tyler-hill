@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -56,6 +57,7 @@ export default function BusAttendance() {
   const [busCheckins, setBusCheckins] = useState<BusCheckinMap>({});
   const [checkinsLoading, setCheckinsLoading] = useState(true);
   const [reportPreview, setReportPreview] = useState<TransportReportPreview | null>(null);
+  const [selectedRouteIds, setSelectedRouteIds] = useState<number[]>([]);
   const skipAttendancePersistRef = useRef(true);
   const skipCheckinsPersistRef = useRef(true);
 
@@ -65,6 +67,22 @@ export default function BusAttendance() {
   );
 
   const routeIdsWithRoster = useMemo(() => routes.map((r) => r.id), [routes]);
+  const routeIdsKey = routeIdsWithRoster.join(",");
+
+  useEffect(() => {
+    setSelectedRouteIds(routeIdsWithRoster);
+  }, [routeIdsKey, routeIdsWithRoster]);
+
+  const selectedRoutes = useMemo(
+    () => routes.filter((r) => selectedRouteIds.includes(r.id)),
+    [routes, selectedRouteIds],
+  );
+
+  const toggleBubbleSheetRoute = (routeId: number) => {
+    setSelectedRouteIds((prev) =>
+      prev.includes(routeId) ? prev.filter((id) => id !== routeId) : [...prev, routeId],
+    );
+  };
 
   const allBusesSubmitted = useMemo(
     () => allRoutesBusSubmitted(routeIdsWithRoster, busSubmissions),
@@ -282,8 +300,8 @@ export default function BusAttendance() {
   };
 
   const handleBubbleSheet = useCallback(() => {
-    if (!board) return;
-    const sheetRoutes = routes.map((r) => ({
+    if (!board || !selectedRoutes.length) return;
+    const sheetRoutes = selectedRoutes.map((r) => ({
       bus: r.bus,
       routeName: r.name,
       campers: campersOnRoute(r.id, getEffectiveCoreStops(board, r.id, timeOfDay)).map((c) => ({
@@ -302,15 +320,19 @@ export default function BusAttendance() {
       toast({ title: "No campers to print", variant: "destructive" });
       return;
     }
+    const busLabel =
+      selectedRoutes.length === routes.length
+        ? "all buses"
+        : selectedRoutes.map((r) => r.bus).join(", ");
     setReportPreview({
       open: true,
       title: "Bus Attendance Bubble Sheet",
-      description: `${runDate} · ${timeOfDay.toUpperCase()} run`,
+      description: `${runDate} · ${timeOfDay.toUpperCase()} · ${busLabel}`,
       kind: "pdf",
       blob: built.blob,
       filename: built.filename,
     });
-  }, [board, routes, currentCompany?.name, runDate, timeOfDay, toast]);
+  }, [board, routes.length, selectedRoutes, currentCompany?.name, runDate, timeOfDay, toast]);
 
   const submittedCount = routes.filter((r) => isRouteBusSubmitted(r.id, busSubmissions)).length;
 
@@ -326,10 +348,63 @@ export default function BusAttendance() {
             Take attendance by bus — no route editing. Submit each bus when done.
           </p>
         </div>
-        <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={handleBubbleSheet} disabled={!routes.length}>
-          <Printer className="h-3.5 w-3.5" /> Bubble sheet
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={handleBubbleSheet}
+          disabled={!selectedRoutes.length}
+        >
+          <Printer className="h-3.5 w-3.5" /> Print bubble sheet
         </Button>
       </div>
+
+      {routes.length > 0 ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Bubble sheet buses</CardTitle>
+            <CardDescription>Select which bus numbers to include in the PDF.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setSelectedRouteIds(routeIdsWithRoster)}
+              >
+                Select all
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedRouteIds([])}>
+                Clear
+              </Button>
+              <span className="text-xs text-muted-foreground self-center">
+                {selectedRouteIds.length} of {routes.length} selected
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
+              {routes.map((r) => {
+                const checked = selectedRouteIds.includes(r.id);
+                return (
+                  <label
+                    key={r.id}
+                    className="flex items-center gap-2 cursor-pointer text-sm"
+                    style={{ borderLeftColor: r.color, borderLeftWidth: 3, paddingLeft: 8 }}
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => toggleBubbleSheetRoute(r.id)}
+                    />
+                    <span className="font-medium">{r.bus}</span>
+                    <span className="text-xs text-muted-foreground truncate max-w-[140px]">{r.name}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
         <Label htmlFor="bus-attendance-date" className="text-xs text-muted-foreground whitespace-nowrap">Run date</Label>
