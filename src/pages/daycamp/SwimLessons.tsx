@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/table";
 import { Waves, Plus, Trash2, CheckCircle2, Clock, Bus, Repeat } from "lucide-react";
 import { approveDismissalSwim } from "@/lib/dismissalDashboard";
-import { swimLessonBusRun } from "@/lib/campTime";
 import { toast } from "sonner";
 import { campDateTimeToIso, formatCampDate, formatCampTime } from "@/lib/campTime";
 import { campDateStringInSeason } from "@/lib/campSeasonDate";
@@ -164,7 +163,7 @@ export default function SwimLessons() {
                       ) : l.transport_status === "acknowledged" ? (
                         <Badge className="gap-1 bg-emerald-600">
                           <Bus className="h-3 w-3" />
-                          No {swimLessonBusRun(l.scheduled_at).toUpperCase()} bus
+                          No PM bus
                         </Badge>
                       ) : (
                         <Button size="sm" variant="outline" onClick={() => void approveTransport(l.id)}>

@@ -90,6 +90,9 @@ export const todayDateString = () => new Date().toISOString().slice(0, 10);
 
 const normName = (name: string) => name.trim().toLowerCase();
 
+/** Nurse send-home & swim lessons: camper is already at camp — PM bus exception only. */
+export const CAMP_DAY_PM_BUS_EXCEPTION: TransportRunPeriod = "pm";
+
 export { campDateFromTimestamp, swimLessonBusRun };
 
 export function parseManualOverrides(raw: unknown): TransportManualOverrides {
@@ -279,6 +282,7 @@ export async function fetchTransportExceptions(
       camperName: name,
       label: "Nurse — sent home (acknowledged)",
       detail: (row as { reason?: string }).reason ?? undefined,
+      appliesTo: CAMP_DAY_PM_BUS_EXCEPTION,
     });
   }
 
@@ -288,7 +292,6 @@ export async function fetchTransportExceptions(
     if (!name || !scheduledAt) continue;
     if (campDateFromTimestamp(scheduledAt) !== overrideDate) continue;
 
-    const run = swimLessonBusRun(scheduledAt);
     const location = (row as { location?: string | null }).location;
     const instructor = (row as { instructor?: string | null }).instructor;
     const duration = (row as { duration_minutes?: number }).duration_minutes ?? 30;
@@ -299,11 +302,11 @@ export async function fetchTransportExceptions(
     add({
       source: "swim_lesson",
       camperName: name,
-      label: `Swim lesson — no ${run.toUpperCase()} bus (acknowledged)`,
+      label: "Swim lesson — no PM bus (acknowledged)",
       detail: coach
         ? `${timeLabel} · ${place} · ${duration} min · ${coach}`
         : `${timeLabel} · ${place} · ${duration} min`,
-      appliesTo: run,
+      appliesTo: CAMP_DAY_PM_BUS_EXCEPTION,
     });
   }
 
@@ -427,6 +430,7 @@ export async function fetchTransportExceptionsForReport(
       detail: (row as { reason?: string }).reason ?? undefined,
       workflowStatus: transportStatus,
       appliedToRoutes: acknowledged,
+      appliesTo: CAMP_DAY_PM_BUS_EXCEPTION,
     });
   }
 
@@ -439,7 +443,6 @@ export async function fetchTransportExceptionsForReport(
     const parentConfirmed = (row as { parent_confirmed?: boolean }).parent_confirmed === true;
     const transportStatus = String((row as { transport_status?: string | null }).transport_status ?? "submitted");
     const staffApproved = transportStatus === "acknowledged";
-    const run = swimLessonBusRun(scheduledAt);
     const location = (row as { location?: string | null }).location;
     const instructor = (row as { instructor?: string | null }).instructor;
     const duration = (row as { duration_minutes?: number }).duration_minutes ?? 30;
@@ -451,14 +454,14 @@ export async function fetchTransportExceptionsForReport(
       source: "swim_lesson",
       camperName: name,
       label: !parentConfirmed
-        ? `Swim lesson — pending parent confirm (no ${run.toUpperCase()} bus when confirmed)`
+        ? "Swim lesson — pending parent confirm (no PM bus when confirmed)"
         : staffApproved
-          ? `Swim lesson — no ${run.toUpperCase()} bus (acknowledged)`
-          : `Swim lesson — parent confirmed, pending staff approval`,
+          ? "Swim lesson — no PM bus (acknowledged)"
+          : "Swim lesson — parent confirmed, pending staff approval",
       detail: coach
         ? `${timeLabel} · ${place} · ${duration} min · ${coach}`
         : `${timeLabel} · ${place} · ${duration} min`,
-      appliesTo: run,
+      appliesTo: CAMP_DAY_PM_BUS_EXCEPTION,
       workflowStatus: !parentConfirmed
         ? "awaiting parent confirm"
         : staffApproved

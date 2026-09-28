@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { useCampOperationalDate } from "@/hooks/useCampOperationalDate";
-import { campDateTimeToIso, swimLessonBusRun } from "@/lib/campTime";
+import { campDateTimeToIso } from "@/lib/campTime";
 import {
   ABSENCE_TYPE_LABELS,
   approveDismissalAbsence,
@@ -531,15 +531,6 @@ function StaffSwimForm({
 
   useEffect(() => setLessonDate(date), [date]);
 
-  const busRun = useMemo(() => {
-    if (!lessonDate || !time) return null;
-    try {
-      return swimLessonBusRun(campDateTimeToIso(lessonDate, time));
-    } catch {
-      return null;
-    }
-  }, [lessonDate, time]);
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!camperId) return toast.error("Select a camper");
@@ -577,7 +568,7 @@ function StaffSwimForm({
           <Waves className="h-4 w-4" /> Log swim lesson (bus exception)
         </CardTitle>
         <CardDescription>
-          Camper skips {busRun ? `${busRun.toUpperCase()} bus` : "AM or PM bus"} when approved.
+          Camper is already at camp in the AM — removes from PM bus only when approved.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -648,7 +639,9 @@ function StaffNurseForm({
         <CardTitle className="text-base flex items-center gap-2">
           <HeartPulse className="h-4 w-4" /> Nurse sent home (bus exception)
         </CardTitle>
-        <CardDescription>Removes camper from AM &amp; PM bus when approved.</CardDescription>
+        <CardDescription>
+          Camper is already at camp in the AM — removes from PM bus only when approved.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={submit} className="space-y-3">
