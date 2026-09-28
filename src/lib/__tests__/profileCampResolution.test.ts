@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { resolveStaffForCampView } from "../profileCampResolution";
+import { resolveChildForCampView, resolveStaffForCampView } from "../profileCampResolution";
 
 function createQueryChain(result: { data: unknown; error: unknown }) {
   const chain = {
@@ -106,5 +106,36 @@ describe("resolveStaffForCampView", () => {
 
     const result = await resolveStaffForCampView(supabase, "north-id", "tyler-hill", "2027");
     expect(result).toEqual({ kind: "not_found", name: "Todd Robbins" });
+  });
+});
+
+describe("resolveChildForCampView", () => {
+  it("returns not_found when the camper is not on the selected season roster", async () => {
+    let call = 0;
+    const supabase = {
+      from: vi.fn(() => ({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        maybeSingle: vi.fn(async () => {
+          call += 1;
+          if (call === 1) {
+            return {
+              data: {
+                id: "child-2027",
+                company_id: "north-shore",
+                season: "2027",
+                person_id: "p1",
+                name: "Alex Camper",
+              },
+              error: null,
+            };
+          }
+          return { data: null, error: null };
+        }),
+      })),
+    } as any;
+
+    const result = await resolveChildForCampView(supabase, "child-2027", "north-shore", "2026");
+    expect(result).toEqual({ kind: "not_found", name: "Alex Camper" });
   });
 });

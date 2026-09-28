@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import EditChildDialog from "@/components/dialogs/EditChildDialog";
@@ -58,26 +58,50 @@ export default function ChildProfile() {
   const [savingAllergies, setSavingAllergies] = useState(false);
   const [conflicts, setConflicts] = useState<any[]>([]);
   const [contactInfo, setContactInfo] = useState<CamperContactDisplay | null>(null);
+  const loadGenerationRef = useRef(0);
+  const openSeasonRef = useRef(currentSeason);
 
   useEffect(() => {
-    if (id && currentCompany?.id && !permissionsLoading) {
-      setLoading(true);
-      setAccessDenied(false);
-      setChild(null);
-      fetchChildData();
+    if (openSeasonRef.current !== currentSeason) {
+      navigate("/roster", { replace: true });
     }
-  }, [id, currentCompany?.id, currentSeason, permissionsLoading]);
+  }, [currentSeason, navigate]);
 
-  const fetchChildData = async () => {
+  const resetProfileState = useCallback(() => {
+    setAccessDenied(false);
+    setChild(null);
+    setAwards([]);
+    setIncidents([]);
+    setSportsRoster([]);
+    setTripAttendance([]);
+    setSportsAcademy([]);
+    setAppointments([]);
+    setConflicts([]);
+    setContactInfo(null);
+    setAllergyText("");
+  }, []);
+
+  const fetchChildData = useCallback(async () => {
     if (!id || !currentCompany?.id) return;
+
+    const generation = ++loadGenerationRef.current;
+    const loadSeason = openSeasonRef.current;
+    const loadCompanyId = currentCompany.id;
+    const loadId = id;
+    const isStale = () => generation !== loadGenerationRef.current;
+
+    setLoading(true);
+    resetProfileState();
 
     try {
       const resolution = await resolveChildForCampView(
         supabase,
-        id,
-        currentCompany.id,
-        currentSeason,
+        loadId,
+        loadCompanyId,
+        loadSeason,
       );
+
+      if (isStale()) return;
 
       if (resolution.kind === "redirect") {
         navigate(`/child/${resolution.recordId}`, { replace: true });
@@ -87,8 +111,8 @@ export default function ChildProfile() {
       if (resolution.kind === "not_found") {
         sonnerToast.error(
           resolution.name
-            ? `${resolution.name} is not on the ${currentCompany.name} roster for ${currentSeason}.`
-            : `This camper is not on the ${currentCompany.name} roster for ${currentSeason}.`,
+            ? `${resolution.name} is not on the ${currentCompany.name} roster for ${loadSeason}.`
+            : `This camper is not on the ${currentCompany.name} roster for ${loadSeason}.`,
         );
         navigate("/roster", { replace: true });
         return;
@@ -96,7 +120,6 @@ export default function ChildProfile() {
 
       const childId = resolution.recordId;
 
-      // Fetch child details with bunk info
       const { data: childData, error: childError } = await supabase
         .from("children")
         .select(`
@@ -106,27 +129,41 @@ export default function ChildProfile() {
           division:division_id(id, name)
         `)
         .eq("id", childId)
+        .eq("company_id", loadCompanyId)
+        .eq("season", loadSeason)
         .single();
 
-      if (childError) throw childError;
+      if (isStale()) return;
+
+      if (childError || !childData) {
+        sonnerToast.error(
+          `This camper is not on the ${currentCompany.name} roster for ${loadSeason}.`,
+        );
+        navigate("/roster", { replace: true });
+        return;
+      }
       
-      // Check if user has access to this child's division
       const divisionFilter = getDivisionFilter();
       if (divisionFilter !== null && childData?.division_id) {
         if (!divisionFilter.includes(childData.division_id)) {
-          setAccessDenied(true);
-          setLoading(false);
+          if (!isStale()) {
+            setAccessDenied(true);
+            setLoading(false);
+          }
           return;
         }
       }
-      
-      setChild(childData);
-      setAllergyText(childData?.allergies || "");
 
       if (childId) {
         const { family, authorizedPickups } = await fetchCamperFamilyContact(supabase, childId);
+        if (isStale()) return;
+        setChild(childData);
+        setAllergyText(childData?.allergies || "");
         setContactInfo(mergeCamperContact(childData, family, authorizedPickups));
       } else {
+        if (isStale()) return;
+        setChild(childData);
+        setAllergyText(childData?.allergies || "");
         setContactInfo(null);
       }
 
@@ -165,6 +202,8 @@ export default function ChildProfile() {
 
         awardsData = currentAwards || [];
       }
+
+      if (isStale()) return;
 
       setAwards(awardsData);
 
@@ -268,12 +307,31 @@ export default function ChildProfile() {
 
       setAppointments(appointmentsData || []);
     } catch (error) {
-      console.error("Error fetching child data:", error);
-      toast({ title: "Error loading child profile", variant: "destructive" });
+      if (generation === loadGenerationRef.current) {
+        console.error("Error fetching child data:", error);
+        toast({ title: "Error loading child profile", variant: "destructive" });
+      }
     } finally {
-      setLoading(false);
+      if (generation === loadGenerationRef.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, [
+    id,
+    currentCompany?.id,
+    currentCompany?.name,
+    getDivisionFilter,
+    navigate,
+    resetProfileState,
+    toast,
+  ]);
+
+  useEffect(() => {
+    if (id && currentCompany?.id && !permissionsLoading) {
+      openSeasonRef.current = currentSeason;
+      void fetchChildData();
+    }
+  }, [id, currentCompany?.id, permissionsLoading, fetchChildData]);
 
   const handleSaveAllergies = async () => {
     if (!id) return;
