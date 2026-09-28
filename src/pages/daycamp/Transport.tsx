@@ -85,6 +85,7 @@ import {
   buildAMStops,
   buildPMStops,
   displayStopToCoreIndex,
+  getRouteStopLabel,
 } from "@/lib/transportStopTimes";
 
 const TRANSPORT_TABS = ["map", "unplotted", "daycamp"] as const;
@@ -2342,47 +2343,49 @@ export default function Transport() {
     });
   };
 
+  const assignedCamperCount = Object.values(coreStops).reduce(
+    (sum, stops) => sum + stops.reduce((s, st) => s + (st.passengers || 0), 0),
+    0,
+  );
+  const totalCamperCount = assignedCamperCount + unplottedCampers.length;
+
   return (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="page-header">Transport</h1>
-          <p className="page-subheader">Bus routes, maps, coordination, and travel reports</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {(() => {
-            const assigned = Object.values(coreStops).reduce(
-              (sum, stops) => sum + stops.reduce((s, st) => s + (st.passengers || 0), 0),
-              0
-            );
-            const total = assigned + unplottedCampers.length;
-            return (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-muted/30">
-                <Users className="h-4 w-4 text-primary" />
-                <div className="flex flex-col leading-tight">
-                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Total Campers</span>
-                  <span className="text-sm font-semibold">
-                    {total}
-                    <span className="ml-1 text-[10px] font-normal text-muted-foreground">
-                      ({assigned} routed · {unplottedCampers.length} unplotted)
-                    </span>
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 min-w-0">
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="page-header">Transport</h1>
+            <p className="page-subheader">Bus routes, maps, coordination, and travel reports</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-muted/30">
+              <Users className="h-4 w-4 text-primary" />
+              <div className="flex flex-col leading-tight">
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Total Campers</span>
+                <span className="text-sm font-semibold">
+                  {totalCamperCount}
+                  <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                    ({assignedCamperCount} routed · {unplottedCampers.length} unplotted)
                   </span>
-                </div>
+                </span>
               </div>
-            );
-          })()}
-          {referenceStatus && (
-            <Badge
-              variant={referenceStatus.loaded ? "secondary" : "outline"}
-              className="gap-1 px-2 py-1 text-[10px] font-normal whitespace-nowrap"
-              title={`${referenceStatus.priorCount} camper routing priors from ${referenceStatus.source === "warehouse" ? "warehouse" : "bundled MapPoint"}`}
-            >
-              <Database className="h-3 w-3" />
-              {referenceStatus.loaded
-                ? `${referenceStatus.referenceSeason} priors · ${referenceStatus.priorCount} (${referenceStatus.source})`
-                : "No reference dataset"}
-            </Badge>
-          )}
+            </div>
+            {referenceStatus && (
+              <Badge
+                variant={referenceStatus.loaded ? "secondary" : "outline"}
+                className="gap-1 px-2 py-1 text-[10px] font-normal whitespace-nowrap"
+                title={`${referenceStatus.priorCount} camper routing priors from ${referenceStatus.source === "warehouse" ? "warehouse" : "bundled MapPoint"}`}
+              >
+                <Database className="h-3 w-3" />
+                {referenceStatus.loaded
+                  ? `${referenceStatus.referenceSeason} priors · ${referenceStatus.priorCount} (${referenceStatus.source})`
+                  : "No reference dataset"}
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-muted/20 p-3">
           <Button
             variant="outline"
             className="gap-2"
@@ -2485,7 +2488,7 @@ export default function Transport() {
         </div>
       </div>
 
-      <Tabs value={activeTransportTab} onValueChange={setActiveTransportTab}>
+      <Tabs value={activeTransportTab} onValueChange={setActiveTransportTab} className="min-w-0">
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="map" className="text-xs gap-1"><MapIcon className="h-3.5 w-3.5" /> Route Map</TabsTrigger>
           <TabsTrigger value="unplotted" className="text-xs gap-1"><UserRound className="h-3.5 w-3.5" /> Unplotted Campers{unplottedCampers.length > 0 && <Badge variant="secondary" className="ml-1 text-[9px] px-1.5">{unplottedCampers.length}</Badge>}</TabsTrigger>
@@ -2731,10 +2734,12 @@ export default function Transport() {
                                 } ${isDragging ? "opacity-40" : ""}`}
                               >
                                 <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                  <div
-                                    className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-0.5"
+                                  <span
+                                    className="flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full px-0.5 text-[9px] font-bold leading-none text-white mt-0.5"
                                     style={{ backgroundColor: isCamp ? "#16a34a" : r.color }}
-                                  />
+                                  >
+                                    {getRouteStopLabel(r.stops, i)}
+                                  </span>
                                   <span className={`truncate ${isCamp ? "text-foreground font-medium" : "text-muted-foreground"}`}>
                                     {isCamp ? stop.name : (stop.camperNames && stop.camperNames.length > 0 ? stop.camperNames.join(", ") : stop.name)}
                                   </span>
@@ -3311,11 +3316,13 @@ export default function Transport() {
                       const isHousehold = riders.length > 1;
                       return (
                         <div key={i} className="flex items-start gap-3 p-2.5 rounded-lg bg-muted/30 border border-border/50">
-                          <div className="flex flex-col items-center gap-1 pt-1">
-                            <div
-                              className="w-3 h-3 rounded-full border-2 border-background"
+                          <div className="flex flex-col items-center gap-1 pt-0.5">
+                            <span
+                              className="flex h-5 min-w-5 items-center justify-center rounded-full text-[10px] font-bold text-white"
                               style={{ backgroundColor: isCamp ? "#16a34a" : selectedRoute.color }}
-                            />
+                            >
+                              {getRouteStopLabel(selectedRoute.stops, i)}
+                            </span>
                             {i < selectedRoute.stops.length - 1 && <div className="w-0.5 h-4 bg-border" />}
                           </div>
                           <div className="flex-1 min-w-0">

@@ -112,3 +112,20 @@ export const coreStopsFromAM = (stops: TransportRouteStop[]): TransportRouteStop
 
 export const coreStopsFromPM = (stops: TransportRouteStop[]): TransportRouteStop[] =>
   stops.filter((s) => s.address !== CAMP_LOCATION.address);
+
+const isCampAddress = (address: string, campAddress: string = CAMP_LOCATION.address) =>
+  address === campAddress;
+
+/** Stop label for route lists and map: 1, 2, 3… or C for camp. */
+export function getRouteStopLabel(
+  stops: Pick<TransportRouteStop, "address">[],
+  index: number,
+  campAddress: string = CAMP_LOCATION.address,
+): string {
+  if (isCampAddress(stops[index].address, campAddress)) return "C";
+  let num = 0;
+  for (let j = 0; j <= index; j++) {
+    if (!isCampAddress(stops[j].address, campAddress)) num++;
+  }
+  return String(num);
+}
