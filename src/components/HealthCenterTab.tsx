@@ -10,11 +10,13 @@ import { format } from "date-fns";
 interface HealthCenterTabProps {
   entityId: string;
   entityType: "child" | "staff";
+  /** Day camp camper profile — visit log only, no meds or admission workflow UI. */
+  visitsOnly?: boolean;
 }
 
 type AdmissionNote = { id: string; note: string; created_at: string };
 
-export function HealthCenterTab({ entityId, entityType }: HealthCenterTabProps) {
+export function HealthCenterTab({ entityId, entityType, visitsOnly = false }: HealthCenterTabProps) {
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
   const [admissions, setAdmissions] = useState<any[]>([]);
@@ -168,6 +170,58 @@ export function HealthCenterTab({ entityId, entityType }: HealthCenterTabProps) 
 
   const currentAdmission = admissions.find(a => !a.checked_out_at);
   const pastAdmissions = admissions.filter(a => a.checked_out_at);
+
+  if (visitsOnly) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Hospital className="h-5 w-5" />
+            Health Center Visits
+          </CardTitle>
+          <CardDescription>
+            {admissions.length} visit{admissions.length !== 1 ? "s" : ""} recorded this season
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {admissions.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">No Health Center visits recorded</p>
+          ) : (
+            <div className="space-y-3 max-h-[600px] overflow-y-auto">
+              {admissions.map((admission) => {
+                const inVisit = !admission.checked_out_at;
+                return (
+                  <div key={admission.id} className="p-3 border rounded-lg space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">
+                          {format(new Date(admission.admitted_at), "MMM d, yyyy · h:mm a")}
+                        </span>
+                      </div>
+                      <Badge variant={inVisit ? "default" : "outline"} className="text-xs">
+                        {inVisit
+                          ? "In visit"
+                          : getAdmissionDuration(admission.admitted_at, admission.checked_out_at)}
+                      </Badge>
+                    </div>
+                    {admission.checked_out_at && (
+                      <p className="text-xs text-muted-foreground">
+                        Out {format(new Date(admission.checked_out_at), "h:mm a")}
+                      </p>
+                    )}
+                    {admission.reason && (
+                      <p className="text-sm text-muted-foreground">{admission.reason}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
 
   const renderAdmissionNotes = (admissionId: string, initialNotes?: string | null) => (
     <div className="space-y-2">

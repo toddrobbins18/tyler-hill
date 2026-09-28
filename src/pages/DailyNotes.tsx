@@ -14,6 +14,7 @@ import {
   getDailyNewsCampLabel,
   getDailyNewsPrintHeadline,
   getDailyNewsSubtitle,
+  isDayCampCompany,
 } from '@/lib/camps';
 
 interface BirthdayRow {
@@ -48,6 +49,10 @@ export default function DailyNotes() {
   const [scheduleEvents, setScheduleEvents] = useState<ScheduleEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const { getDivisionFilter, loading: permissionsLoading, userDivisions } = usePermissions();
+  const isDayCamp = isDayCampCompany(currentCompany);
+  const dailyNewsMealTypes = isDayCamp
+    ? (['lunch'] as const)
+    : (['breakfast', 'lunch', 'snack', 'dinner'] as const);
 
   useEffect(() => {
     // Wait for permissions to load before fetching
@@ -382,7 +387,7 @@ export default function DailyNotes() {
             {/* Menu */}
             <div className="menu-section">
               <div className="section-title">Today's Menu</div>
-              {['breakfast', 'lunch', 'snack', 'dinner'].map(mealType => {
+              {dailyNewsMealTypes.map(mealType => {
                 const meal = menuItems.find(m => m.meal_type.toLowerCase() === mealType);
                 return (
                   <div key={mealType} className="meal-item">

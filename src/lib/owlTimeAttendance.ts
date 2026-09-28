@@ -48,6 +48,17 @@ export type SignInOutHistoryRow = {
   isEarlyDeparture: boolean;
 };
 
+export type OwlTimeReportDateMode = "season" | "range" | "day";
+
+export type DailyRollCallRow = {
+  staffId: string;
+  staffName: string;
+  date: string;
+  signedInAt: string | null;
+  status: DayAttendanceStatus;
+  minutesLate: number;
+};
+
 export function defaultOwlTimeSeasonRange(season: string): { start: string; end: string } {
   const year = /^\d{4}$/.test(String(season).trim())
     ? String(season).trim()
@@ -395,4 +406,184 @@ export function indexPunchesByDateForStaff(
     }
   }
   return map;
+}
+
+export function filterDaysInRange(
+  days: string[],
+  fromDate: string | null,
+  toDate: string | null,
+): string[] {
+  return days.filter((day) => {
+    if (fromDate && day < fromDate) return false;
+    if (toDate && day > toDate) return false;
+    return true;
+  });
+}
+
+export function resolveReportDays(
+  allScheduledDays: string[],
+  mode: OwlTimeReportDateMode,
+  rangeFrom: string,
+  rangeTo: string,
+  singleDay: string,
+): string[] {
+  if (mode === "season") return allScheduledDays;
+  if (mode === "day") {
+    return allScheduledDays.includes(singleDay) ? [singleDay] : [];
+  }
+  return filterDaysInRange(allScheduledDays, rangeFrom || null, rangeTo || null);
+}
+
+export function buildDailyRollCall(
+  staff: { id: string; name: string }[],
+  date: string,
+  punchesByStaffDate: Map<string, StaffTimeClockRow>,
+  expectedSignInTime: string,
+): DailyRollCallRow[] {
+  return staff.map((person) => {
+    const punch = punchesByStaffDate.get(`${person.id}:${date}`);
+    const signedInAt = punch?.signed_in_at ?? null;
+    const { status, minutesLate: dayLate } = evaluateSignIn(signedInAt, expectedSignInTime);
+    return {
+      staffId: person.id,
+      staffName: person.name,
+      date,
+      signedInAt,
+      status,
+      minutesLate: dayLate,
+    };
+  });
+}
+
+export function formatOwlTimeCampClock(iso: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: CAMP_TIMEZONE,
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+
+export function owlTimeStatusLabel(status: DayAttendanceStatus): string {
+  if (status === "on_time") return "On Time";
+  if (status === "late") return "Late";
+  return "Missing";
+}
+
+function escapeCsvCell(value: string | number): string {
+  const text = String(value ?? "");
+  if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  return text;
+}
+
+export function owlTimeRowsToCsv(headers: string[], rows: (string | number)[][]): string {
+  const lines = [
+    headers.map(escapeCsvCell).join(","),
+    ...rows.map((row) => row.map(escapeCsvCell).join(",")),
+  ];
+  return lines.join("\n");
+}
+
+export function downloadOwlTimeCsv(filename: string, headers: string[], rows: (string | number)[][]): void {
+  const csv = owlTimeRowsToCsv(headers, rows);
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+export function exportSummaryCsv(
+  rows: AttendanceSummaryRow[],
+  season: string,
+  dateLabel: string,
+): void {
+  downloadOwlTimeCsv(`owl-time-summary-${season}-${dateLabel}.csv`, [
+    "Staff Name",
+    "Scheduled Days",
+    "Days Signed In",
+    "Days Missing",
+    "Days Late",
+    "Days On Time",
+    "Attendance %",
+    "Total Minutes Late",
+  ], rows.map((row) => [
+    row.staffName,
+    row.scheduledDays,
+    row.daysSignedIn,
+    row.daysMissing,
+    row.daysLate,
+    row.daysOnTime,
+    row.attendancePct,
+    row.totalMinutesLate,
+  ]));
+}
+
+export function exportDailyRollCallCsv(
+  rows: DailyRollCallRow[],
+  season: string,
+  date: string,
+): void {
+  downloadOwlTimeCsv(`owl-time-daily-${season}-${date}.csv`, [
+    "Date",
+    "Staff Name",
+    "Sign-In",
+    "Status",
+    "Minutes Late",
+  ], rows.map((row) => [
+    row.date,
+    row.staffName,
+    row.signedInAt ? formatOwlTimeCampClock(row.signedInAt) : "",
+    owlTimeStatusLabel(row.status),
+    row.minutesLate,
+  ]));
+}
+
+export function exportDetailCsv(
+  rows: AttendanceDetailRow[],
+  staffName: string,
+  season: string,
+  dateLabel: string,
+): void {
+  downloadOwlTimeCsv(`owl-time-detail-${season}-${dateLabel}.csv`, [
+    "Staff Name",
+    "Date",
+    "Sign-In",
+    "Status",
+    "Minutes Late",
+  ], rows.map((row) => [
+    staffName,
+    row.date,
+    row.signedInAt ? formatOwlTimeCampClock(row.signedInAt) : "",
+    owlTimeStatusLabel(row.status),
+    row.minutesLate,
+  ]));
+}
+
+export function exportHistoryCsv(
+  rows: SignInOutHistoryRow[],
+  staffName: string,
+  season: string,
+  dateLabel: string,
+): void {
+  downloadOwlTimeCsv(`owl-time-history-${season}-${dateLabel}.csv`, [
+    "Staff Name",
+    "Date",
+    "Sign-In",
+    "Sign-Out",
+    "Total Hours",
+    "Late",
+    "Minutes Late",
+    "Early Departure",
+  ], rows.map((row) => [
+    staffName,
+    row.date,
+    row.signedInAt ? formatOwlTimeCampClock(row.signedInAt) : "",
+    row.signedOutAt ? formatOwlTimeCampClock(row.signedOutAt) : "",
+    row.totalHours ?? "",
+    row.isLate ? "Yes" : "No",
+    row.minutesLate,
+    row.isEarlyDeparture ? "Yes" : "No",
+  ]));
 }

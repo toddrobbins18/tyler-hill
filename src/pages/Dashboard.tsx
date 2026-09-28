@@ -618,20 +618,24 @@ export default function Dashboard() {
             trend={`Season ${currentSeason}`}
             variant="default"
           />
-          <StatCard
-            title="Today's Transportation"
-            value={stats.activeRoutes}
-            icon={Truck}
-            trend="All on schedule"
-            variant="success"
-          />
-          <StatCard
-            title="Today's Notes"
-            value={stats.todayNotes}
-            icon={FileText}
-            trend="3 pending review"
-            variant="info"
-          />
+          {!isDayCamp && (
+            <StatCard
+              title="Today's Transportation"
+              value={stats.activeRoutes}
+              icon={Truck}
+              trend="All on schedule"
+              variant="success"
+            />
+          )}
+          {!isDayCamp && (
+            <StatCard
+              title="Today's Notes"
+              value={stats.todayNotes}
+              icon={FileText}
+              trend="3 pending review"
+              variant="info"
+            />
+          )}
           {!isDayCamp && (
           <StatCard
             title="Achievements"
