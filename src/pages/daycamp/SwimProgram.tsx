@@ -673,9 +673,11 @@ export default function SwimProgram() {
       await reload();
       await loadHistory();
 
+      const importedSeasons =
+        result.seasons.length > 0 ? result.seasons.join(", ") : viewSeason;
       const summary: SwimImportResult = {
         fileName: file.name,
-        season: viewSeason,
+        season: importedSeasons,
         finishedAt: new Date().toLocaleString(),
         levels: result.levels,
         bracelets: result.bracelets,
@@ -688,6 +690,8 @@ export default function SwimProgram() {
         setActiveTab("levels");
       } else if (result.bracelets > 0) {
         setActiveTab("bracelets");
+      } else if (result.matched > 0) {
+        setActiveTab("history");
       }
 
       const unmatchedHint =
@@ -696,8 +700,8 @@ export default function SwimProgram() {
           : "";
       toast({
         title: "Import complete",
-        description: `Saved to season ${viewSeason}: ${result.levels} level rows, ${result.bracelets} bracelet rows${unmatchedHint}`,
-        duration: 10000,
+        description: `Saved for season${result.seasons.length === 1 ? "" : "s"} ${importedSeasons}: ${result.levels} level rows, ${result.bracelets} bracelet rows${unmatchedHint}. Check Prior Seasons Report.`,
+        duration: 12000,
       });
     } catch (err) {
       console.error(err);
@@ -910,6 +914,22 @@ export default function SwimProgram() {
           </div>
         </div>
       </motion.div>
+
+      <Alert className="border-sky-500/30 bg-sky-500/5">
+        <AlertTitle className="text-sm">Load prior swim bracelets &amp; levels</AlertTitle>
+        <AlertDescription className="text-xs space-y-1.5">
+          <p>
+            Use <strong>Import CSV</strong> to feed data from Airtable or a spreadsheet. Include a{" "}
+            <strong>Season</strong> column (e.g. 2026, 2027), <strong>PersonID</strong> (CampMinder ID), and{" "}
+            <strong>current_bracelet</strong> (Red, Orange, Yellow, Green, or Blue).
+          </p>
+          <p>
+            Campers must exist on the roster for that season (or match by PersonID). After import, open{" "}
+            <strong>Prior Seasons Report</strong> to review all years. Download <strong>Template</strong> for the
+            expected column layout.
+          </p>
+        </AlertDescription>
+      </Alert>
 
       {importing && importProgress ? (
         <Alert className="border-primary/40 bg-primary/5">

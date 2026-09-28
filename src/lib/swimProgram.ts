@@ -464,25 +464,37 @@ export async function fetchSwimHistoryReport(
     throw swimErr;
   }
 
-  const swimByChild = new Map((swimRows ?? []).map((r) => [r.child_id as string, r]));
+  const childById = new Map((childRows ?? []).map((c) => [c.id as string, c]));
+  const childByPersonSeason = new Map(
+    (childRows ?? []).map((c) => [`${String(c.person_id ?? c.id)}|${String(c.season ?? "")}`, c]),
+  );
   const byPerson = new Map<string, SwimHistoryReportRow>();
 
-  for (const child of childRows ?? []) {
-    const personId = String(child.person_id ?? child.id);
+  for (const swim of swimRows ?? []) {
+    const swimSeason = String(swim.season ?? "");
+    const personId = String(swim.person_id ?? "");
+    let child =
+      childByPersonSeason.get(`${personId}|${swimSeason}`) ??
+      childById.get(swim.child_id as string) ??
+      (childRows ?? []).find((c) => c.id === swim.child_id && String(c.season) === swimSeason) ??
+      null;
+
+    if (!child) continue;
+
+    const resolvedPersonId = String(swim.person_id ?? child.person_id ?? child.id);
     const rosterChild: RosterChild = {
       id: child.id,
       name: child.name,
-      person_id: personId,
+      person_id: resolvedPersonId,
       group_name: child.group_name,
       leader: null,
     };
-    const swim = swimByChild.get(child.id);
     const bracelet =
-      swim?.bracelet && typeof swim.bracelet === "object"
+      swim.bracelet && typeof swim.bracelet === "object"
         ? braceletFromJson(rosterChild, swim.bracelet as Record<string, unknown>)
         : null;
     const levels =
-      swim?.levels && typeof swim.levels === "object"
+      swim.levels && typeof swim.levels === "object"
         ? levelFromJson(rosterChild, swim.levels as Record<string, unknown>, swim.updated_at ?? undefined)
         : null;
 
@@ -494,17 +506,23 @@ export async function fetchSwimHistoryReport(
 
     if (!hasData) continue;
 
-    let row = byPerson.get(personId);
+    let row = byPerson.get(resolvedPersonId);
     if (!row) {
-      row = { personId, name: child.name, seasons: [] };
-      byPerson.set(personId, row);
+      row = { personId: resolvedPersonId, name: child.name, seasons: [] };
+      byPerson.set(resolvedPersonId, row);
     }
+    if (row.seasons.some((s) => s.season === swimSeason)) continue;
+
     row.seasons.push({
-      season: String(child.season ?? swim?.season ?? "—"),
+      season: swimSeason,
       childId: child.id,
       bracelet,
       levels,
     });
+  }
+
+  for (const row of byPerson.values()) {
+    row.seasons.sort((a, b) => b.season.localeCompare(a.season));
   }
 
   return [...byPerson.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -654,10 +672,18 @@ export async function fetchSwimHistoryByPerson(
 
   if (swimErr) throw swimErr;
 
-  const swimByChild = new Map((swimRows ?? []).map((r) => [r.child_id as string, r]));
+  const swimByChildSeason = new Map(
+    (swimRows ?? []).map((r) => [`${r.child_id as string}|${String(r.season ?? "")}`, r]),
+  );
 
-  return childRows.map((child) => {
-    const swim = swimByChild.get(child.id);
+  const history: SwimSeasonHistory[] = [];
+  for (const child of childRows) {
+    const childSeason = String(child.season ?? "");
+    const swim =
+      swimByChildSeason.get(`${child.id}|${childSeason}`) ??
+      (swimRows ?? []).find(
+        (r) => String(r.season) === childSeason && String(r.person_id ?? "") === personId,
+      );
     const rosterChild: RosterChild = {
       id: child.id,
       name: child.name,
@@ -673,14 +699,58 @@ export async function fetchSwimHistoryByPerson(
       swim?.levels && typeof swim.levels === "object"
         ? levelFromJson(rosterChild, swim.levels as Record<string, unknown>, swim.updated_at ?? undefined)
         : null;
-    return {
-      season: String(child.season ?? swim?.season ?? "—"),
+    const hasData =
+      Boolean(bracelet?.currentBracelet) ||
+      (levels?.goldfish.some((s) => s !== "—") ?? false) ||
+      (levels?.minnow.some((s) => s !== "—") ?? false) ||
+      (levels?.tadpole.some((s) => s !== "—") ?? false);
+    if (!hasData) continue;
+
+    history.push({
+      season: String(swim?.season ?? childSeason ?? "—"),
       childId: child.id,
       childName: child.name,
       bracelet,
       levels,
+    });
+  }
+
+  for (const swim of swimRows ?? []) {
+    const swimSeason = String(swim.season ?? "");
+    if (history.some((h) => h.season === swimSeason && h.childId === swim.child_id)) continue;
+    const child = childRows.find((c) => c.id === swim.child_id);
+    if (!child) continue;
+    const rosterChild: RosterChild = {
+      id: child.id,
+      name: child.name,
+      person_id: personId,
+      group_name: null,
+      leader: null,
     };
-  });
+    const bracelet =
+      swim.bracelet && typeof swim.bracelet === "object"
+        ? braceletFromJson(rosterChild, swim.bracelet as Record<string, unknown>)
+        : null;
+    const levels =
+      swim.levels && typeof swim.levels === "object"
+        ? levelFromJson(rosterChild, swim.levels as Record<string, unknown>, swim.updated_at ?? undefined)
+        : null;
+    const hasData =
+      Boolean(bracelet?.currentBracelet) ||
+      (levels?.goldfish.some((s) => s !== "—") ?? false) ||
+      (levels?.minnow.some((s) => s !== "—") ?? false) ||
+      (levels?.tadpole.some((s) => s !== "—") ?? false);
+    if (!hasData) continue;
+    history.push({
+      season: swimSeason,
+      childId: child.id,
+      childName: child.name,
+      bracelet,
+      levels,
+    });
+  }
+
+  return history.sort((a, b) => b.season.localeCompare(a.season));
 }
 
 function parseCsvLine(line: string): string[] {
@@ -1073,7 +1143,14 @@ export async function importSwimProgramCsv(
   csvText: string,
   defaultSeason: string,
   onProgress?: (progress: SwimImportProgress) => void,
-): Promise<{ bracelets: number; levels: number; unmatched: string[]; csvRows: number; matched: number }> {
+): Promise<{
+  bracelets: number;
+  levels: number;
+  unmatched: string[];
+  csvRows: number;
+  matched: number;
+  seasons: string[];
+}> {
   onProgress?.({
     phase: "parsing",
     current: 0,
@@ -1089,12 +1166,14 @@ export async function importSwimProgramCsv(
   });
   const { rows, unmatched } = parseSwimProgramCsv(csvText, children, defaultSeason);
   const counts = await importSwimProgramRows(supabase, companyId, rows, onProgress);
-  return { ...counts, unmatched, csvRows: rows.length, matched: rows.length };
+  const seasons = [...new Set(rows.map((r) => r.season))].sort((a, b) => b.localeCompare(a));
+  return { ...counts, unmatched, csvRows: rows.length, matched: rows.length, seasons };
 }
 
 export function swimProgramCsvTemplate(): string {
   return [
-    "Child's Name,Group,PersonID,Email,Goldfish 1A1,Goldfish 1A2,Goldfish 1A3,Goldfish 1A4,Goldfish Level,Minnow 1B1,Minnow 1B2,Minnow 1B3,Minnow 1B4,Minnow 1B5,Minnow 1B6,Minnow Level,Tadpole 1C1,Tadpole 1C2,Tadpole 1C3,Tadpole 1C4,Tadpole Level,Red Cross Level 1,Frog Level",
-    "Jane Doe,Syracuse,12345678,parent@example.com,Achieved,Achieved,Working Towards,—,Incomplete,A,—,—,—,—,—,—,—,—,—,—,—,—,—,—",
+    "Season,Child's Name,Group,PersonID,current_bracelet,Goldfish 1A1,Goldfish 1A2,Goldfish 1A3,Goldfish 1A4,Goldfish Level,Minnow 1B1,Minnow 1B2,Minnow 1B3,Minnow 1B4,Minnow 1B5,Minnow 1B6,Minnow Level,Tadpole 1C1,Tadpole 1C2,Tadpole 1C3,Tadpole 1C4,Tadpole Level,Red Cross Level 1,Frog Level",
+    "2026,Jane Doe,Syracuse,12345678,Orange,Achieved,Achieved,Working Towards,—,Incomplete,A,—,—,—,—,—,—,—,—,—,—,—,—,—,—",
+    "2027,Jane Doe,Syracuse,12345678,Green,A,A,A,A,Complete,A,A,A,A,A,A,Complete,—,—,—,—,—,—,—",
   ].join("\n");
 }

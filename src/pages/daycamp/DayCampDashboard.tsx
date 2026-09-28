@@ -30,7 +30,7 @@ const quickActions = [
     title: "Swim Bracelets",
     description: "Approve and send swim bracelet reports",
     icon: Waves,
-    url: "/day-camp/swim-bracelets",
+    url: "/day-camp/swim",
     buttonLabel: "Open Swim Bracelets",
     className: "bg-cyan-600 hover:bg-cyan-700 text-white border-0",
   },
