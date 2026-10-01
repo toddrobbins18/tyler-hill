@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildSwimFormationGroups,
   highestCompletedSwimLevel,
+  splitBalancedByInstructors,
   type SwimFormationCamper,
 } from "@/lib/swimGroupFormation";
 import { levelFromChild, type RosterChild } from "@/lib/swimProgram";
@@ -34,16 +35,44 @@ describe("swimGroupFormation", () => {
     expect(highestCompletedSwimLevel(levelFromChild(child))).toBe("No level complete yet");
   });
 
-  it("splits by max campers per group", () => {
+  it("splitBalancedByInstructors balances group sizes", () => {
+    expect(splitBalancedByInstructors(["a", "b", "c", "d", "e"], 3)).toEqual([
+      ["a", "b"],
+      ["c", "d"],
+      ["e"],
+    ]);
+  });
+
+  it("splits by instructor count instead of max campers", () => {
     const campers = [
       camper({ id: "1", name: "A" }),
       camper({ id: "2", name: "B" }),
       camper({ id: "3", name: "C" }),
+      camper({ id: "4", name: "D" }),
+      camper({ id: "5", name: "E" }),
     ];
-    const groups = buildSwimFormationGroups(campers, { criteria: [], maxCampersPerGroup: 2 });
+    const groups = buildSwimFormationGroups(campers, { criteria: [], instructorCount: 2 });
     expect(groups).toHaveLength(2);
-    expect(groups[0].campers).toHaveLength(2);
-    expect(groups[1].campers).toHaveLength(1);
+    expect(groups[0].campers).toHaveLength(3);
+    expect(groups[1].campers).toHaveLength(2);
+  });
+
+  it("never mixes division leaders in the same group", () => {
+    const campers = [
+      camper({ id: "1", name: "A", divisionLeader: "Leader One" }),
+      camper({ id: "2", name: "B", divisionLeader: "Leader One" }),
+      camper({ id: "3", name: "C", divisionLeader: "Leader Two" }),
+      camper({ id: "4", name: "D", divisionLeader: "Leader Two" }),
+    ];
+    const groups = buildSwimFormationGroups(campers, {
+      criteria: ["swimLevel"],
+      instructorCount: 1,
+    });
+    expect(groups).toHaveLength(2);
+    for (const group of groups) {
+      const leaders = new Set(group.campers.map((c) => c.divisionLeader));
+      expect(leaders.size).toBe(1);
+    }
   });
 
   it("groups by division and swim level when selected", () => {
@@ -53,8 +82,8 @@ describe("swimGroupFormation", () => {
       camper({ id: "3", name: "C", division: "Senior", highestCompletedLevel: "Minnow" }),
     ];
     const groups = buildSwimFormationGroups(campers, {
-      criteria: ["division", "swimLevel"],
-      maxCampersPerGroup: 8,
+      criteria: ["division", "swimLevel", "divisionLeader"],
+      instructorCount: 3,
     });
     expect(groups).toHaveLength(2);
     expect(groups[0].label).toContain("Junior");

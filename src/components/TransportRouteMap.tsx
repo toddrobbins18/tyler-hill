@@ -70,20 +70,31 @@ const normAddr = (a: string) => a.toLowerCase().replace(/[.,#]/g, " ").replace(/
 const isCampStop = (stop: RouteStop, campAddress?: string) =>
   !!campAddress && normAddr(stop.address) === normAddr(campAddress);
 
-/** Numbered circle for route stops; null = camp marker ("C"). */
-const createStopIcon = (color: string, stopNumber: number | null, opacity = 1) => {
+/** Numbered circle for route stops; null = camp marker ("C"). Empty stops use a ring style. */
+const createStopIcon = (
+  color: string,
+  stopNumber: number | null,
+  opacity = 1,
+  empty = false,
+) => {
   const label = stopNumber != null ? String(stopNumber) : "C";
   const size = stopNumber != null && stopNumber >= 10 ? 24 : 22;
   const fontSize = stopNumber != null && stopNumber >= 10 ? 9 : 10;
   const half = size / 2;
+  const fill = empty ? "white" : color;
+  const textColor = empty ? color : "white";
+  const border = empty ? `2px dashed ${color}` : "2px solid white";
   return L.divIcon({
-    html: `<div style="background:${color};width:${size}px;height:${size}px;border-radius:9999px;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.35);opacity:${opacity};display:flex;align-items:center;justify-content:center;color:white;font-size:${fontSize}px;font-weight:700;line-height:1;font-family:system-ui,sans-serif;">${label}</div>`,
+    html: `<div style="background:${fill};width:${size}px;height:${size}px;border-radius:9999px;border:${border};box-shadow:0 2px 6px rgba(0,0,0,0.35);opacity:${opacity};display:flex;align-items:center;justify-content:center;color:${textColor};font-size:${fontSize}px;font-weight:700;line-height:1;font-family:system-ui,sans-serif;">${label}</div>`,
     className: "",
     iconSize: [size, size],
     iconAnchor: [half, half],
     popupAnchor: [0, -half - 2],
   });
 };
+
+const isEmptyRouteStop = (stop: RouteStop) =>
+  (stop.passengers ?? 0) === 0 && (!stop.camperNames || stop.camperNames.length === 0);
 
 const createCamperIcon = () =>
   L.divIcon({
@@ -99,6 +110,7 @@ const createCamperIcon = () =>
 interface StopMarkerRef {
   marker: L.Marker;
   stopNumber: number | null;
+  empty: boolean;
 }
 
 interface RouteLayerRefs {
@@ -199,6 +211,18 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
     layerGroup.clearLayers();
     routeLayersRef.current.clear();
 
+    const routeStopAddressKeys = new Set(
+      routes.flatMap((route) => route.stops.map((stop) => normAddr(stop.address))).filter(Boolean),
+    );
+    const unplottedByAddress = new Map<string, UnplottedCamper[]>();
+    unplottedCampers.forEach((camper) => {
+      const key = normAddr(camper.address);
+      if (!key) return;
+      const list = unplottedByAddress.get(key) ?? [];
+      list.push(camper);
+      unplottedByAddress.set(key, list);
+    });
+
     routes.forEach((route) => {
       const layerRefs: RouteLayerRefs = { markers: [], color: route.color };
 
@@ -232,13 +256,29 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
             </div>` : "";
         const removeBtn = onRemoveStop
           ? `<button onclick="window.__transportMapRemoveStop(${route.id},${stopIndex})" style="display:block;width:100%;margin-top:6px;padding:5px 8px;border:1px solid #fca5a5;border-radius:6px;background:#fef2f2;font-size:11px;cursor:pointer;color:#dc2626;font-weight:500;" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fef2f2'">✕ Unpin from route</button>` : "";
+        const emptyStop = isEmptyRouteStop(stop);
+        const pendingAtStop = unplottedByAddress.get(normAddr(stop.address)) ?? [];
         const names = stop.camperNames && stop.camperNames.length > 0 ? stop.camperNames : [stop.name];
-        const title = names.length > 1 ? `${names.length} kids at this stop` : names[0];
-        const namesList = names.length > 1
+        const title = emptyStop
+          ? (pendingAtStop.length > 0
+            ? `Open stop · ${pendingAtStop.length} unassigned`
+            : "Open stop · no campers")
+          : names.length > 1
+            ? `${names.length} kids at this stop`
+            : names[0];
+        const namesList = !emptyStop && names.length > 1
           ? `<ul style="margin:4px 0 6px 16px;padding:0;list-style:disc;">${names.map(n => `<li style="margin:1px 0;">${n}</li>`).join("")}</ul>`
           : "";
+        const pendingList = pendingAtStop.length > 0
+          ? `<div style="margin:6px 0 0;padding:6px 8px;border-radius:6px;background:#f5f3ff;border:1px solid #ddd6fe;">
+              <p style="margin:0 0 4px;font-size:10px;font-weight:700;color:${UNPLOTTED_COLOR};text-transform:uppercase;">Unassigned at this stop</p>
+              ${pendingAtStop.map((c) => `<p style="margin:0;font-size:12px;font-weight:600;">${c.name}</p>`).join("")}
+            </div>`
+          : "";
         const stopLabel = stopNumber != null ? `Stop #${stopNumber}` : "Camp";
-        const marker = L.marker([stop.lat, stop.lng], { icon: createStopIcon(route.color, stopNumber) })
+        const marker = L.marker([stop.lat, stop.lng], {
+          icon: createStopIcon(route.color, stopNumber, 1, emptyStop),
+        })
           .bindPopup(`
             <div style="min-width:220px;max-width:260px;font-size:12px;color:#1f2937;line-height:1.4;">
               <p style="margin:0 0 4px;font-size:10px;font-weight:700;color:${route.color};text-transform:uppercase;letter-spacing:0.5px;">${stopLabel}</p>
@@ -246,7 +286,8 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
               ${namesList}
               <p style="margin:2px 0;">📍 ${stop.address}</p>
               <p style="margin:2px 0;">🕐 ${stop.pickupTime}</p>
-              <p style="margin:2px 0;">👥 ${names.length} ${names.length === 1 ? "kid" : "kids"}</p>
+              <p style="margin:2px 0;">👥 ${emptyStop ? 0 : names.length} ${emptyStop ? "kids (open stop)" : names.length === 1 ? "kid" : "kids"}</p>
+              ${pendingList}
               <p style="margin:6px 0 0;font-weight:600;color:${route.color};">🚌 ${route.name} (${route.bus})</p>
               ${moveOptions}${removeBtn}
             </div>
@@ -256,13 +297,15 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
             setSelectedRouteId(route.id);
           })
           .addTo(layerGroup);
-        layerRefs.markers.push({ marker, stopNumber });
+        layerRefs.markers.push({ marker, stopNumber, empty: emptyStop });
       });
 
       routeLayersRef.current.set(route.id, layerRefs);
     });
 
     unplottedCampers.forEach((camper) => {
+      if (routeStopAddressKeys.has(normAddr(camper.address))) return;
+
       const assignDropdown = availableRoutes.length > 0
         ? `<div style="margin-top:8px;border-top:1px solid #e5e7eb;padding-top:8px;">
             <label style="font-size:11px;font-weight:600;display:block;margin:0 0 4px;color:#6b7280;">Assign to route:</label>
@@ -332,8 +375,8 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
           opacity: isFaded ? 0.25 : 0.85,
         });
       }
-      layerRefs.markers.forEach(({ marker, stopNumber }) => {
-        marker.setIcon(createStopIcon(lineColor, stopNumber, isFaded ? 0.4 : 1));
+      layerRefs.markers.forEach(({ marker, stopNumber, empty }) => {
+        marker.setIcon(createStopIcon(lineColor, stopNumber, isFaded ? 0.4 : 1, empty));
       });
     });
   }, [selectedRouteId]);

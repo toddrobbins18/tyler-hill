@@ -10,7 +10,7 @@ import {
   type RosterChild,
 } from "@/lib/swimProgram";
 
-export type SwimFormationCriterion = "division" | "group" | "swimLevel";
+export type SwimFormationCriterion = "division" | "group" | "swimLevel" | "divisionLeader";
 
 export const SWIM_FORMATION_CRITERIA: {
   id: SwimFormationCriterion;
@@ -21,6 +21,11 @@ export const SWIM_FORMATION_CRITERIA: {
     id: "division",
     label: "Division",
     description: "Keep campers in the same camp division together",
+  },
+  {
+    id: "divisionLeader",
+    label: "Division leader",
+    description: "Never mix children from different division leaders in the same swim group",
   },
   {
     id: "group",
@@ -46,7 +51,8 @@ export type SwimFormationCamper = {
 
 export type SwimFormationSettings = {
   criteria: SwimFormationCriterion[];
-  maxCampersPerGroup: number;
+  /** Number of instructors — splits each cohort into balanced groups (~equal campers each). */
+  instructorCount: number;
 };
 
 export type SwimFormationGroup = {
@@ -77,13 +83,41 @@ export function highestCompletedSwimLevel(level: LevelRecord | null | undefined)
   return highest;
 }
 
-function chunkArray<T>(items: T[], size: number): T[][] {
-  const max = Math.max(1, Math.floor(size));
+/** Split campers into N balanced groups for N instructors (sizes differ by at most 1). */
+export function splitBalancedByInstructors<T>(items: T[], instructorCount: number): T[][] {
+  if (items.length === 0) return [];
+  const requested = Math.max(1, Math.min(20, Math.floor(instructorCount) || 1));
+  const groupCount = Math.min(requested, items.length);
+  const base = Math.floor(items.length / groupCount);
+  const remainder = items.length % groupCount;
   const chunks: T[][] = [];
-  for (let i = 0; i < items.length; i += max) {
-    chunks.push(items.slice(i, i + max));
+  let idx = 0;
+  for (let g = 0; g < groupCount; g++) {
+    const size = base + (g < remainder ? 1 : 0);
+    if (size > 0) {
+      chunks.push(items.slice(idx, idx + size));
+      idx += size;
+    }
   }
   return chunks;
+}
+
+function divisionLeaderKey(leader: string): string {
+  const trimmed = leader.trim();
+  return trimmed || "No division leader";
+}
+
+function partitionByDivisionLeader(
+  campers: SwimFormationCamper[],
+): Map<string, SwimFormationCamper[]> {
+  const map = new Map<string, SwimFormationCamper[]>();
+  for (const camper of campers) {
+    const key = divisionLeaderKey(camper.divisionLeader);
+    const list = map.get(key) ?? [];
+    list.push(camper);
+    map.set(key, list);
+  }
+  return map;
 }
 
 function bucketKey(camper: SwimFormationCamper, criteria: SwimFormationCriterion[]): string {
@@ -92,6 +126,7 @@ function bucketKey(camper: SwimFormationCamper, criteria: SwimFormationCriterion
     .map((c) => {
       if (c === "division") return `div:${camper.division}`;
       if (c === "group") return `grp:${camper.group}`;
+      if (c === "divisionLeader") return `ldr:${divisionLeaderKey(camper.divisionLeader)}`;
       return `lvl:${camper.highestCompletedLevel}`;
     })
     .join("|");
@@ -107,6 +142,7 @@ function labelPartsForCamper(
 ): string[] {
   const parts: string[] = [];
   if (criteria.includes("division")) parts.push(camper.division);
+  if (criteria.includes("divisionLeader")) parts.push(divisionLeaderKey(camper.divisionLeader));
   if (criteria.includes("group")) parts.push(camper.group);
   if (criteria.includes("swimLevel")) parts.push(camper.highestCompletedLevel);
   return parts.length ? parts : ["All campers"];
@@ -117,7 +153,7 @@ export function buildSwimFormationGroups(
   campers: SwimFormationCamper[],
   settings: SwimFormationSettings,
 ): SwimFormationGroup[] {
-  const maxSize = Math.max(1, Math.min(99, Math.floor(settings.maxCampersPerGroup) || 8));
+  const instructorCount = Math.max(1, Math.min(20, Math.floor(settings.instructorCount) || 1));
   const criteria = settings.criteria;
   const sorted = [...campers].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
@@ -144,17 +180,28 @@ export function buildSwimFormationGroups(
   );
 
   for (const [, bucket] of bucketList) {
-    const chunks = chunkArray(bucket.campers, maxSize);
-    chunks.forEach((chunk, chunkIndex) => {
-      groupIndex += 1;
-      const suffix = chunks.length > 1 ? ` (${chunkIndex + 1} of ${chunks.length})` : "";
-      groups.push({
-        id: `group-${groupIndex}`,
-        label: `${bucketLabel(bucket.labelParts)}${suffix}`,
-        keyParts: bucket.labelParts,
-        campers: chunk,
+    const leaderPartitions = partitionByDivisionLeader(bucket.campers);
+    const leaderEntries = [...leaderPartitions.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+
+    for (const [leaderName, leaderCampers] of leaderEntries) {
+      const chunks = splitBalancedByInstructors(leaderCampers, instructorCount);
+      const leaderInCriteria = criteria.includes("divisionLeader");
+      const labelParts = leaderInCriteria ? bucket.labelParts : [...bucket.labelParts, leaderName];
+
+      chunks.forEach((chunk, chunkIndex) => {
+        groupIndex += 1;
+        const suffix =
+          chunks.length > 1
+            ? ` (${chunkIndex + 1} of ${chunks.length} · ~${chunk.length} per instructor)`
+            : "";
+        groups.push({
+          id: `group-${groupIndex}`,
+          label: `${bucketLabel(labelParts)}${suffix}`,
+          keyParts: labelParts,
+          campers: chunk,
+        });
       });
-    });
+    }
   }
 
   return groups;

@@ -27,8 +27,12 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [building, setBuilding] = useState(false);
-  const [criteria, setCriteria] = useState<SwimFormationCriterion[]>(["division", "swimLevel"]);
-  const [maxPerGroup, setMaxPerGroup] = useState(8);
+  const [criteria, setCriteria] = useState<SwimFormationCriterion[]>([
+    "division",
+    "divisionLeader",
+    "swimLevel",
+  ]);
+  const [instructorCount, setInstructorCount] = useState(3);
   const [groups, setGroups] = useState<SwimFormationGroup[]>([]);
   const [rosterCount, setRosterCount] = useState(0);
 
@@ -69,7 +73,7 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
       setRosterCount(campers.length);
       const built = buildSwimFormationGroups(campers, {
         criteria,
-        maxCampersPerGroup: maxPerGroup,
+        instructorCount,
       });
       setGroups(built);
       toast({
@@ -111,8 +115,9 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
             Swim group formation
           </CardTitle>
           <CardDescription>
-            Pick how groups should be formed, set a max size, then build groups for season {season}.{" "}
-            {rosterCount} active campers on roster.
+            Choose who mixes together, set how many instructors you have, and build balanced swim groups for
+            season {season}. {rosterCount} active campers on roster. Division leaders are never combined in
+            the same group.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -138,18 +143,19 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
             </div>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="max-campers">Max campers per group</Label>
+                <Label htmlFor="instructor-count">Number of instructors</Label>
                 <Input
-                  id="max-campers"
+                  id="instructor-count"
                   type="number"
                   min={1}
-                  max={99}
-                  value={maxPerGroup}
-                  onChange={(e) => setMaxPerGroup(Number(e.target.value) || 8)}
+                  max={20}
+                  value={instructorCount}
+                  onChange={(e) => setInstructorCount(Number(e.target.value) || 1)}
                   className="max-w-[120px]"
                 />
                 <p className="text-xs text-muted-foreground">
-                  When a bucket has more campers than this, it splits into Group 1, Group 2, etc.
+                  Splits each cohort into this many balanced groups so each instructor gets roughly the same
+                  number of campers.
                 </p>
               </div>
               <Button onClick={handleBuild} disabled={building || rosterCount === 0} className="gap-2">
@@ -159,7 +165,7 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
               {criteria.length === 0 ? (
                 <Alert>
                   <AlertDescription>
-                    No criteria selected — all campers will be mixed and split only by max group size.
+                    No criteria selected — campers split only by division leader and instructor count.
                   </AlertDescription>
                 </Alert>
               ) : null}

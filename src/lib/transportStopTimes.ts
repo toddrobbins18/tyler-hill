@@ -19,9 +19,11 @@ export const haversineMiles = (lat1: number, lng1: number, lat2: number, lng2: n
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
-const drivingMinutes = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+/** Estimated driving minutes between two points (fractional — round only at display). */
+const drivingLegMinutes = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
   const miles = haversineMiles(lat1, lng1, lat2, lng2) * 1.4;
-  return Math.round((miles / 25) * 60);
+  if (miles <= 0.001) return 0;
+  return (miles / 25) * 60;
 };
 
 /** Parse route departure (e.g. "7:00 AM") to minutes since midnight. */
@@ -79,13 +81,15 @@ const assignDrivingTimes = (
       };
     }
     const prev = stops[i - 1];
-    const legMin = Math.max(drivingMinutes(prev.lat, prev.lng, stop.lat, stop.lng), 2);
-    cumulativeMin += legMin;
+    cumulativeMin += drivingLegMinutes(prev.lat, prev.lng, stop.lat, stop.lng);
+    const displayMinutes = useClock
+      ? Math.round(startMinutes + cumulativeMin)
+      : Math.round(cumulativeMin);
     return {
       ...stop,
       pickupTime: useClock
-        ? formatMinutesAsPickupTime(startMinutes + cumulativeMin)
-        : `+${cumulativeMin} min`,
+        ? formatMinutesAsPickupTime(displayMinutes)
+        : `+${displayMinutes} min`,
     };
   });
 };

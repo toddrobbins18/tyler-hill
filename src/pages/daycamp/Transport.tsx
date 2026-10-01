@@ -2700,6 +2700,15 @@ export default function Transport() {
                         >
                           {r.stops.map((stop, i) => {
                             const isCamp = stop.address === CAMP_LOCATION.address;
+                            const isEmptyStop =
+                              !isCamp &&
+                              (stop.passengers ?? 0) === 0 &&
+                              (!stop.camperNames || stop.camperNames.length === 0);
+                            const pendingAtStop = isEmptyStop
+                              ? unplottedCampers.filter(
+                                  (c) => normalizeAddress(c.address) === normalizeAddress(stop.address),
+                                )
+                              : [];
                             const isDragging = reorderDrag?.routeId === r.id && reorderDrag.displayIndex === i;
                             return (
                               <div
@@ -2740,8 +2749,16 @@ export default function Transport() {
                                   >
                                     {getRouteStopLabel(r.stops, i)}
                                   </span>
-                                  <span className={`truncate ${isCamp ? "text-foreground font-medium" : "text-muted-foreground"}`}>
-                                    {isCamp ? stop.name : (stop.camperNames && stop.camperNames.length > 0 ? stop.camperNames.join(", ") : stop.name)}
+                                  <span className={`truncate ${isCamp ? "text-foreground font-medium" : isEmptyStop ? "text-amber-700 dark:text-amber-400 italic" : "text-muted-foreground"}`}>
+                                    {isCamp
+                                      ? stop.name
+                                      : isEmptyStop
+                                        ? pendingAtStop.length > 0
+                                          ? `Open stop · ${pendingAtStop.map((c) => c.name).join(", ")} unassigned`
+                                          : `Open stop · ${stop.name || stop.address.split(",")[0]?.trim() || "No campers"}`
+                                        : stop.camperNames && stop.camperNames.length > 0
+                                          ? stop.camperNames.join(", ")
+                                          : stop.name}
                                   </span>
                                 </div>
                                 {stop.pickupTime ? (
