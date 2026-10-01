@@ -40,6 +40,7 @@ import {
   isRouteBusSubmitted,
   loadBusAttendance,
 } from "@/lib/transportBusAttendance";
+import { campersOnRouteForWeek } from "@/lib/transportBusRunContext";
 import {
   loadGroupRoster,
   type GroupRosterCamper,
@@ -318,7 +319,7 @@ const persistBoardCache = (companyId: string, season: string, payload: BoardPayl
 
 const dayCampReports = [
   { name: "Transport Exceptions", desc: "Absences, swim, office changes, and manual route edits for this date" },
-  { name: "Attendance", desc: "Print bubble sheet for the bus (optional paper backup)" },
+  { name: "Attendance", desc: "Weekly bubble sheet — AM & PM Mon–Fri (paper backup)" },
   { name: "Digital Attendance Log", desc: "Export Present/Absent saved in Bus Attendance for this date & run" },
   { name: "Bus Report", desc: "Day camp bus assignments" },
   { name: "Bus Route Summary", desc: "Route overview with stops" },
@@ -2307,11 +2308,24 @@ export default function Transport() {
     }
 
     if (reportName === "Attendance") {
-      const sheetRoutes = routes
+      if (enrollmentWeekForReport == null) {
+        toast({
+          title: "Enrollment week required",
+          description: "Set enrollment week calendar dates before printing attendance sheets.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const sheetRoutes = displayRoutes
         .map((r) => ({
           bus: r.bus,
           routeName: r.name,
-          campers: campersOnRoute(r.id, getEffectiveCore(r.id)).map((c) => ({
+          campers: campersOnRouteForWeek(
+            r.id,
+            getEffectiveCore(r.id),
+            enrollmentWeekForReport,
+            camperEnrollmentLookup,
+          ).map((c) => ({
             name: c.name,
             detail: c.stopName,
           })),
@@ -2340,7 +2354,7 @@ export default function Transport() {
       } else {
         openReportPreview({
           title: "Day Camp Attendance Bubble Sheet",
-          description: `${overrideDate} · ${timeOfDay.toUpperCase()} run · bus + group`,
+          description: `Week ${enrollmentWeekForReport} · bus (weekly AM/PM) + group`,
           kind: "pdf",
           blob: built.blob,
           filename: built.filename,
@@ -3167,8 +3181,11 @@ export default function Transport() {
               <div className="space-y-1">
                 <p className="text-sm font-medium">Digital bus attendance (required)</p>
                 <p className="text-xs text-muted-foreground">
-                  Mark Present / Absent on each bus — saves automatically to the system (AM &amp; PM).
-                  Print bubble sheet below is optional paper backup only.
+                  Mark Present / Absent on each bus — saves live (AM &amp; PM). Bus arrived / depart is on{" "}
+                  <Link to="/day-camp/bus-check-ins" className="text-primary underline-offset-2 hover:underline">
+                    Bus Check-ins
+                  </Link>
+                  . Weekly bubble sheet below is optional paper backup.
                 </p>
                 {busAttendanceSummary && busAttendanceSummary.totalBuses > 0 ? (
                   <p className="text-[11px] text-foreground/80">

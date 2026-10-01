@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,16 +7,16 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Bus, ClipboardList, Clock, Moon, Printer, Sun } from "lucide-react";
+import { ClipboardList, Moon, Printer, Sun } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
-import { useSeason } from "@/contexts/SeasonContext";
 import { useCampOperationalDate } from "@/hooks/useCampOperationalDate";
+import { useFilteredBusRoutes } from "@/hooks/useFilteredBusRoutes";
 import {
   allRoutesBusSubmitted,
   busSubmissionKey,
-  campersOnRoute,
   isRouteBusSubmitted,
   loadBusAttendance,
   saveBusAttendance,
@@ -23,48 +24,42 @@ import {
   type BusAttendanceStatus,
   type BusSubmissionsMap,
 } from "@/lib/transportBusAttendance";
-import {
-  busCheckinKey,
-  formatCheckinTime,
-  loadBusCheckins,
-  saveBusCheckins,
-  type BusCheckinMap,
-} from "@/lib/transportBusCheckins";
+import { campersOnRouteForWeek, weekContextForNumber } from "@/lib/transportBusRunContext";
+import { formatEnrollmentWeekLabel } from "@/lib/enrollmentWeekCalendar";
 import { buildBusBubbleSheetsPdf } from "@/lib/transportBubbleSheetPdf";
-import { buildRunRoutes, getEffectiveCoreStops, loadTransportRunBoard, type TransportRunBoard } from "@/lib/transportRunBoard";
+import { getEffectiveCoreStops } from "@/lib/transportRunBoard";
 import { TransportReportPreviewDialog, type TransportReportPreview } from "@/components/TransportReportPreviewDialog";
 import { FrontOfficeBackLink } from "@/components/daycamp/FrontOfficeBackLink";
 
 export default function BusAttendance() {
   const { toast } = useToast();
   const { currentCompany } = useCompany();
-  const { currentSeason } = useSeason();
-  const companyId = currentCompany?.id;
-
   const { operationalDateString } = useCampOperationalDate();
   const [runDate, setRunDate] = useState(operationalDateString);
-
-  useEffect(() => {
-    setRunDate(operationalDateString);
-  }, [operationalDateString]);
   const [timeOfDay, setTimeOfDay] = useState<"am" | "pm">("am");
-  const [board, setBoard] = useState<TransportRunBoard | null>(null);
-  const [boardLoading, setBoardLoading] = useState(true);
   const [busAttendance, setBusAttendance] = useState<BusAttendanceMap>({});
   const [busSubmissions, setBusSubmissions] = useState<BusSubmissionsMap>({});
   const [attendanceSubmittedAt, setAttendanceSubmittedAt] = useState<string | null>(null);
   const [attendanceLoading, setAttendanceLoading] = useState(true);
-  const [busCheckins, setBusCheckins] = useState<BusCheckinMap>({});
-  const [checkinsLoading, setCheckinsLoading] = useState(true);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const [reportPreview, setReportPreview] = useState<TransportReportPreview | null>(null);
   const [selectedRouteIds, setSelectedRouteIds] = useState<number[]>([]);
+  const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
   const skipAttendancePersistRef = useRef(true);
-  const skipCheckinsPersistRef = useRef(true);
 
-  const routes = useMemo(
-    () => (board ? buildRunRoutes(board, timeOfDay) : []),
-    [board, timeOfDay],
-  );
+  useEffect(() => {
+    setRunDate(operationalDateString);
+  }, [operationalDateString]);
+
+  const {
+    companyId,
+    currentSeason,
+    board,
+    boardLoading,
+    routes,
+    enrollmentCtx,
+    busScopeLabel,
+  } = useFilteredBusRoutes(runDate, timeOfDay);
 
   const routeIdsWithRoster = useMemo(() => routes.map((r) => r.id), [routes]);
   const routeIdsKey = routeIdsWithRoster.join(",");
@@ -72,6 +67,17 @@ export default function BusAttendance() {
   useEffect(() => {
     setSelectedRouteIds(routeIdsWithRoster);
   }, [routeIdsKey, routeIdsWithRoster]);
+
+  useEffect(() => {
+    if (!enrollmentCtx?.defaultWeek) return;
+    setSelectedWeek(enrollmentCtx.defaultWeek);
+  }, [enrollmentCtx?.defaultWeek, runDate]);
+
+  const activeWeek = selectedWeek ?? enrollmentCtx?.defaultWeek ?? null;
+  const activeWeekContext = useMemo(() => {
+    if (!enrollmentCtx || activeWeek == null) return null;
+    return weekContextForNumber(enrollmentCtx.calendar, activeWeek);
+  }, [enrollmentCtx, activeWeek]);
 
   const selectedRoutes = useMemo(
     () => routes.filter((r) => selectedRouteIds.includes(r.id)),
@@ -89,22 +95,19 @@ export default function BusAttendance() {
     [routeIdsWithRoster, busSubmissions],
   );
 
-  useEffect(() => {
-    if (!companyId) return;
-    let cancelled = false;
-    setBoardLoading(true);
-    void (async () => {
-      try {
-        const loaded = await loadTransportRunBoard(supabase, companyId, currentSeason, runDate);
-        if (!cancelled) setBoard(loaded);
-      } catch (err) {
-        console.error("[BusAttendance] Load board error:", err);
-      } finally {
-        if (!cancelled) setBoardLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [companyId, currentSeason, runDate]);
+  const campersForRoute = useCallback(
+    (routeId: number) => {
+      if (!board || !enrollmentCtx) return [];
+      const core = getEffectiveCoreStops(board, routeId, timeOfDay);
+      return campersOnRouteForWeek(
+        routeId,
+        core,
+        activeWeek,
+        enrollmentCtx.enrollmentLookup,
+      );
+    },
+    [board, enrollmentCtx, timeOfDay, activeWeek],
+  );
 
   useEffect(() => {
     if (!companyId) return;
@@ -131,32 +134,12 @@ export default function BusAttendance() {
   }, [companyId, currentSeason, runDate, timeOfDay]);
 
   useEffect(() => {
-    if (!companyId) return;
-    let cancelled = false;
-    skipCheckinsPersistRef.current = true;
-    setCheckinsLoading(true);
-    void (async () => {
-      try {
-        const loaded = await loadBusCheckins(supabase, companyId, currentSeason, runDate, timeOfDay);
-        if (!cancelled) setBusCheckins(loaded);
-      } catch (err) {
-        console.error("[BusAttendance] Load check-ins error:", err);
-      } finally {
-        if (!cancelled) {
-          skipCheckinsPersistRef.current = false;
-          setCheckinsLoading(false);
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [companyId, currentSeason, runDate, timeOfDay]);
-
-  useEffect(() => {
     if (!companyId || skipAttendancePersistRef.current || attendanceLoading) return;
+    setSaveState("saving");
     const handle = setTimeout(() => {
       void (async () => {
         const { data: userRes } = await supabase.auth.getUser();
-        await saveBusAttendance(
+        const ok = await saveBusAttendance(
           supabase,
           companyId,
           currentSeason,
@@ -169,21 +152,17 @@ export default function BusAttendance() {
             userId: userRes.user?.id,
           },
         );
+        setSaveState(ok ? "saved" : "idle");
       })();
-    }, 600);
+    }, 300);
     return () => clearTimeout(handle);
   }, [busAttendance, busSubmissions, allBusesSubmitted, companyId, currentSeason, runDate, timeOfDay, attendanceLoading]);
 
   useEffect(() => {
-    if (!companyId || skipCheckinsPersistRef.current || checkinsLoading) return;
-    const handle = setTimeout(() => {
-      void (async () => {
-        const { data: userRes } = await supabase.auth.getUser();
-        await saveBusCheckins(supabase, companyId, currentSeason, runDate, timeOfDay, busCheckins, userRes.user?.id);
-      })();
-    }, 600);
-    return () => clearTimeout(handle);
-  }, [busCheckins, companyId, currentSeason, runDate, timeOfDay, checkinsLoading]);
+    if (saveState !== "saved") return;
+    const t = setTimeout(() => setSaveState("idle"), 2000);
+    return () => clearTimeout(t);
+  }, [saveState]);
 
   const setCamperAttendance = (routeId: number, key: string, status: BusAttendanceStatus) => {
     setBusAttendance((prev) => ({ ...prev, [key]: status }));
@@ -211,8 +190,7 @@ export default function BusAttendance() {
 
   const handleSubmitBus = async (routeId: number, busLabel: string) => {
     if (!companyId || !board) return;
-    const core = getEffectiveCoreStops(board, routeId, timeOfDay);
-    const campers = campersOnRoute(routeId, core);
+    const campers = campersForRoute(routeId);
     if (!campers.length) return;
 
     const { data: userRes } = await supabase.auth.getUser();
@@ -261,50 +239,24 @@ export default function BusAttendance() {
     });
   };
 
-  const markBusArrived = async (routeId: number) => {
-    const key = busCheckinKey(routeId);
-    const now = new Date().toISOString();
-    const { data: userRes } = await supabase.auth.getUser();
-    setBusCheckins((prev) => ({
-      ...prev,
-      [key]: { ...prev[key], arrivedAt: now, arrivedBy: userRes.user?.id ?? null },
-    }));
-    toast({ title: "Bus marked arrived", description: formatCheckinTime(now) });
-  };
-
-  const markBusReadyToDepart = async (routeId: number, busLabel: string) => {
-    if (!isRouteBusSubmitted(routeId, busSubmissions)) {
-      toast({
-        title: "Submit this bus first",
-        description: `Mark attendance for ${busLabel}, then submit before departing.`,
-        variant: "destructive",
-      });
-      return;
-    }
-    const key = busCheckinKey(routeId);
-    if (!busCheckins[key]?.arrivedAt) {
-      toast({
-        title: "Mark bus arrived first",
-        description: `${busLabel} must be checked in before ready to depart.`,
-        variant: "destructive",
-      });
-      return;
-    }
-    const now = new Date().toISOString();
-    const { data: userRes } = await supabase.auth.getUser();
-    setBusCheckins((prev) => ({
-      ...prev,
-      [key]: { ...prev[key], departedAt: now, departedBy: userRes.user?.id ?? null },
-    }));
-    toast({ title: "Bus ready to depart", description: `${busLabel} · ${formatCheckinTime(now)}` });
-  };
-
   const handleBubbleSheet = useCallback(() => {
-    if (!board || !selectedRoutes.length) return;
+    if (!board || !selectedRoutes.length) {
+      toast({ title: "No buses selected", variant: "destructive" });
+      return;
+    }
+    if (activeWeek == null || !activeWeekContext) {
+      toast({
+        title: "Enrollment week calendar required",
+        description: "Set week start/end dates under Group Bubble Sheets, then pick a week above.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const sheetRoutes = selectedRoutes.map((r) => ({
       bus: r.bus,
       routeName: r.name,
-      campers: campersOnRoute(r.id, getEffectiveCoreStops(board, r.id, timeOfDay)).map((c) => ({
+      campers: campersForRoute(r.id).map((c) => ({
         name: c.name,
         detail: c.stopName,
       })),
@@ -312,8 +264,9 @@ export default function BusAttendance() {
 
     const built = buildBusBubbleSheetsPdf({
       companyName: currentCompany?.name ?? "Day Camp",
-      date: runDate,
-      runPeriod: timeOfDay,
+      enrollmentWeek: activeWeek,
+      weekDateRange: activeWeekContext.weekDateRange ?? undefined,
+      weekDays: activeWeekContext.weekDays,
       routes: sheetRoutes,
     });
     if (!built) {
@@ -326,15 +279,20 @@ export default function BusAttendance() {
         : selectedRoutes.map((r) => r.bus).join(", ");
     setReportPreview({
       open: true,
-      title: "Bus Attendance Bubble Sheet",
-      description: `${runDate} · ${timeOfDay.toUpperCase()} · ${busLabel}`,
+      title: "Bus Attendance Bubble Sheet (Weekly AM & PM)",
+      description: `${activeWeekContext.weekLabel} · ${busLabel}`,
       kind: "pdf",
       blob: built.blob,
       filename: built.filename,
     });
-  }, [board, routes.length, selectedRoutes, currentCompany?.name, runDate, timeOfDay, toast]);
+  }, [board, selectedRoutes, activeWeek, activeWeekContext, campersForRoute, routes.length, toast, currentCompany?.name]);
 
   const submittedCount = routes.filter((r) => isRouteBusSubmitted(r.id, busSubmissions)).length;
+  const weekNote = activeWeekContext?.weekLabel ?? null;
+  const runDateOutsideWeek =
+    enrollmentCtx?.enrollmentWeek == null &&
+    activeWeek != null &&
+    enrollmentCtx?.configuredWeeks.length;
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
@@ -345,8 +303,13 @@ export default function BusAttendance() {
             <ClipboardList className="h-6 w-6" /> Bus Attendance
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Mark Present / Absent per camper — saves automatically to the system. Submit each bus when done.
-            Bubble sheet print is optional paper backup.
+            Mark Present / Absent per camper — each sibling on their own row. Saves live when you tap P or A.
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Bus arrived / depart:{" "}
+            <Link to="/day-camp/bus-check-ins" className="text-primary underline-offset-2 hover:underline">
+              Bus Check-ins
+            </Link>
           </p>
         </div>
         <Button
@@ -357,7 +320,7 @@ export default function BusAttendance() {
           onClick={handleBubbleSheet}
           disabled={!selectedRoutes.length}
         >
-          <Printer className="h-3.5 w-3.5" /> Print bubble sheet
+          <Printer className="h-3.5 w-3.5" /> Print weekly bubble sheet
         </Button>
       </div>
 
@@ -365,16 +328,11 @@ export default function BusAttendance() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Bubble sheet buses</CardTitle>
-            <CardDescription>Select which bus numbers to include in the PDF.</CardDescription>
+            <CardDescription>Weekly PDF with AM and PM bubbles Mon–Fri (enrolled campers this week only).</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setSelectedRouteIds(routeIdsWithRoster)}
-              >
+              <Button type="button" size="sm" variant="outline" onClick={() => setSelectedRouteIds(routeIdsWithRoster)}>
                 Select all
               </Button>
               <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedRouteIds([])}>
@@ -385,23 +343,20 @@ export default function BusAttendance() {
               </span>
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-2">
-              {routes.map((r) => {
-                const checked = selectedRouteIds.includes(r.id);
-                return (
-                  <label
-                    key={r.id}
-                    className="flex items-center gap-2 cursor-pointer text-sm"
-                    style={{ borderLeftColor: r.color, borderLeftWidth: 3, paddingLeft: 8 }}
-                  >
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={() => toggleBubbleSheetRoute(r.id)}
-                    />
-                    <span className="font-medium">{r.bus}</span>
-                    <span className="text-xs text-muted-foreground truncate max-w-[140px]">{r.name}</span>
-                  </label>
-                );
-              })}
+              {routes.map((r) => (
+                <label
+                  key={r.id}
+                  className="flex items-center gap-2 cursor-pointer text-sm"
+                  style={{ borderLeftColor: r.color, borderLeftWidth: 3, paddingLeft: 8 }}
+                >
+                  <Checkbox
+                    checked={selectedRouteIds.includes(r.id)}
+                    onCheckedChange={() => toggleBubbleSheetRoute(r.id)}
+                  />
+                  <span className="font-medium">{r.bus}</span>
+                  <span className="text-xs text-muted-foreground truncate max-w-[140px]">{r.name}</span>
+                </label>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -442,7 +397,46 @@ export default function BusAttendance() {
         {(boardLoading || attendanceLoading) && (
           <span className="text-[10px] text-muted-foreground">Loading…</span>
         )}
-        <Badge variant="outline" className="text-[10px] ml-auto">
+        {saveState === "saving" && (
+          <Badge variant="outline" className="text-[10px] ml-auto">Saving…</Badge>
+        )}
+        {saveState === "saved" && (
+          <Badge variant="secondary" className="text-[10px] ml-auto">Saved</Badge>
+        )}
+        {busScopeLabel && (
+          <Badge variant="outline" className="text-[10px]">{busScopeLabel} only</Badge>
+        )}
+        {enrollmentCtx && enrollmentCtx.configuredWeeks.length > 0 ? (
+          <>
+            <Label htmlFor="bus-attendance-week" className="text-xs text-muted-foreground whitespace-nowrap">
+              Enrollment week
+            </Label>
+            <Select
+              value={activeWeek != null ? String(activeWeek) : undefined}
+              onValueChange={(v) => setSelectedWeek(Number(v))}
+            >
+              <SelectTrigger id="bus-attendance-week" className="h-8 w-[200px] text-xs">
+                <SelectValue placeholder="Select week" />
+              </SelectTrigger>
+              <SelectContent>
+                {enrollmentCtx.configuredWeeks.map((row) => (
+                  <SelectItem key={row.weekNumber} value={String(row.weekNumber)} className="text-xs">
+                    {formatEnrollmentWeekLabel(row.weekNumber, enrollmentCtx.calendar)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        ) : null}
+        {weekNote && (
+          <Badge variant="outline" className="text-[10px]">Roster: {weekNote}</Badge>
+        )}
+        {runDateOutsideWeek ? (
+          <Badge variant="secondary" className="text-[10px]">
+            Run date outside week — using selected week for roster &amp; print
+          </Badge>
+        ) : null}
+        <Badge variant="outline" className="text-[10px]">
           {submittedCount} / {routes.length} buses submitted
         </Badge>
         {allBusesSubmitted && attendanceSubmittedAt && (
@@ -464,59 +458,10 @@ export default function BusAttendance() {
         </div>
       )}
 
-      <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h3 className="text-sm font-semibold flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5" /> Bus check-in / check-out
-            </h3>
-            <p className="text-[11px] text-muted-foreground">Per bus — submit attendance before ready to depart.</p>
-          </div>
-        </div>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {routes.map((r) => {
-            const rec = busCheckins[busCheckinKey(r.id)];
-            const submitted = isRouteBusSubmitted(r.id, busSubmissions);
-            return (
-              <div key={`checkin-${r.id}`} className="rounded-md border border-border bg-background px-2.5 py-2 text-xs space-y-1.5">
-                <div className="flex items-center gap-1.5 font-medium">
-                  <Bus className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  {r.bus}
-                  {submitted && <Badge variant="secondary" className="text-[9px] ml-auto">Submitted</Badge>}
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {rec?.arrivedAt ? (
-                    <Badge variant="secondary" className="text-[10px]">Arrived {formatCheckinTime(rec.arrivedAt)}</Badge>
-                  ) : (
-                    <Button type="button" size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => void markBusArrived(r.id)} disabled={checkinsLoading}>
-                      Mark arrived
-                    </Button>
-                  )}
-                  {rec?.departedAt ? (
-                    <Badge variant="secondary" className="text-[10px]">Departed {formatCheckinTime(rec.departedAt)}</Badge>
-                  ) : (
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-7 text-[10px]"
-                      onClick={() => void markBusReadyToDepart(r.id, r.bus)}
-                      disabled={checkinsLoading || !rec?.arrivedAt || !submitted}
-                    >
-                      Ready to depart
-                    </Button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
       <div className="grid gap-4">
         {routes.map((r) => {
           if (!board) return null;
-          const core = getEffectiveCoreStops(board, r.id, timeOfDay);
-          const campers = campersOnRoute(r.id, core);
+          const campers = campersForRoute(r.id);
           const submitted = isRouteBusSubmitted(r.id, busSubmissions);
           let present = 0;
           let absent = 0;
@@ -534,36 +479,31 @@ export default function BusAttendance() {
                       <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r.color }} />
                       {r.bus}
                     </CardTitle>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{r.name} · {campers.length} campers</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{r.name} · {campers.length} campers this week</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline" className="text-[10px]">{present} P</Badge>
                     <Badge variant="outline" className="text-[10px]">{absent} A</Badge>
-                    {submitted ? (
-                      <Badge variant="secondary" className="text-[10px]">Submitted</Badge>
-                    ) : (
-                      <>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-8 text-xs"
-                          onClick={() => markBusPresent(r.id, campers.map((c) => c.key))}
-                          disabled={!campers.length}
-                        >
-                          Mark all present
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="h-8 text-xs"
-                          onClick={() => void handleSubmitBus(r.id, r.bus)}
-                          disabled={!campers.length || attendanceLoading}
-                        >
-                          Submit {r.bus}
-                        </Button>
-                      </>
-                    )}
+                    {submitted && <Badge variant="secondary" className="text-[10px]">Submitted</Badge>}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs"
+                      onClick={() => markBusPresent(r.id, campers.map((c) => c.key))}
+                      disabled={!campers.length}
+                    >
+                      Mark all present
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => void handleSubmitBus(r.id, r.bus)}
+                      disabled={!campers.length || attendanceLoading}
+                    >
+                      Submit {r.bus}
+                    </Button>
                   </div>
                 </div>
               </CardHeader>
@@ -584,7 +524,6 @@ export default function BusAttendance() {
                             variant={status === "present" ? "default" : "outline"}
                             className="h-7 px-2 text-[10px]"
                             onClick={() => setCamperAttendance(r.id, c.key, "present")}
-                            disabled={submitted}
                           >
                             P
                           </Button>
@@ -594,7 +533,6 @@ export default function BusAttendance() {
                             variant={status === "absent" ? "destructive" : "outline"}
                             className="h-7 px-2 text-[10px]"
                             onClick={() => setCamperAttendance(r.id, c.key, "absent")}
-                            disabled={submitted}
                           >
                             A
                           </Button>

@@ -19,6 +19,9 @@ export type WeekDayColumn = {
 const DAILY_SHEET_INSTRUCTION =
   "Mark one bubble per camper: Present (P) or Absent (A). Use when digital attendance is unavailable.";
 
+const WEEKLY_BUS_INSTRUCTION =
+  "Mark Present (P) for each AM and PM run this week. One row per camper — siblings each get their own row.";
+
 const WEEKLY_GROUP_INSTRUCTION =
   "Mark Present (P) in the bubble for each weekday the camper attends. Five bubbles per row — one per day.";
 
@@ -456,7 +459,11 @@ function renderBubbleDocument(
   instruction?: string,
 ) {
   const dailyLayout = createLayout(doc);
-  const weeklyLayout = createWeeklyLayout(doc);
+  const maxWeeklyDays = Math.max(
+    5,
+    ...parts.filter((p) => p.layout === "weekly").map((p) => p.weekDays.length),
+  );
+  const weeklyLayout = createWeeklyLayout(doc, maxWeeklyDays);
   const activeParts = parts.filter((part) => part.sections.some((s) => s.campers.length));
   if (!activeParts.length) return;
 
@@ -508,7 +515,7 @@ function renderBubbleDocument(
         y += SECTION_GAP;
       }
     } else {
-      const weekDays = part.weekDays.slice(0, 5);
+      const weekDays = part.weekDays.slice(0, maxWeeklyDays);
       for (const section of part.sections) {
         if (!section.campers.length) continue;
         if (y + WEEKLY_HEADER_HEIGHT + ROW_HEIGHT + 14 > weeklyLayout.usableBottom) {
@@ -583,8 +590,9 @@ function triggerBlobDownload(blob: Blob, filename: string) {
 
 export function buildBusBubbleSheetsPdf(options: {
   companyName: string;
-  date: string;
-  runPeriod: "am" | "pm";
+  enrollmentWeek: number;
+  weekDateRange?: string;
+  weekDays: WeekDayColumn[];
   routes: {
     bus: string;
     routeName: string;
@@ -595,32 +603,42 @@ export function buildBusBubbleSheetsPdf(options: {
     .filter((r) => r.campers.length > 0)
     .map((r) => ({
       title: `${r.bus} · ${r.routeName}`,
-      subtitle: `${r.campers.length} campers scheduled`,
+      subtitle: `${r.campers.length} campers enrolled this week`,
       campers: r.campers,
     }));
 
   if (!sections.length) return null;
 
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
-  renderBubbleSections(
+  const amPmDays: WeekDayColumn[] = [];
+  for (const day of options.weekDays.slice(0, 5)) {
+    amPmDays.push({ label: day.label, sublabel: day.sublabel ? `${day.sublabel} AM` : "AM" });
+    amPmDays.push({ label: day.label, sublabel: day.sublabel ? `${day.sublabel} PM` : "PM" });
+  }
+
+  const metaLines = [`Enrollment Week: ${options.enrollmentWeek}`];
+  if (options.weekDateRange) metaLines.push(`Dates: ${options.weekDateRange}`);
+
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
+  renderBubbleDocument(
     doc,
     options.companyName,
-    "Bus Attendance Bubble Sheet",
-    [`Date: ${options.date}`, `Run: ${options.runPeriod.toUpperCase()}`],
-    sections,
+    "Bus Attendance Bubble Sheet (Weekly AM & PM)",
+    metaLines,
+    [{ layout: "weekly", sections, weekDays: amPmDays }],
+    WEEKLY_BUS_INSTRUCTION,
   );
 
-  const safeDate = options.date.replace(/[^0-9-]/g, "");
   return {
     blob: doc.output("blob"),
-    filename: `bus-bubble-sheets-${safeDate}-${options.runPeriod}.pdf`,
+    filename: `bus-bubble-sheets-week-${options.enrollmentWeek}.pdf`,
   };
 }
 
 export function downloadBusBubbleSheetsPdf(options: {
   companyName: string;
-  date: string;
-  runPeriod: "am" | "pm";
+  enrollmentWeek: number;
+  weekDateRange?: string;
+  weekDays: WeekDayColumn[];
   routes: {
     bus: string;
     routeName: string;
@@ -704,11 +722,20 @@ export function buildCombinedAttendanceBubbleSheetPdf(options: {
     campers: BubbleSheetCamper[];
   }[];
 }): TransportReportPdf | null {
+  const busAmPmDays: WeekDayColumn[] = [];
+  const baseWeekDays = options.weekDays?.length
+    ? options.weekDays.slice(0, 5)
+    : [{ label: "Mon" }, { label: "Tue" }, { label: "Wed" }, { label: "Thu" }, { label: "Fri" }];
+  for (const day of baseWeekDays) {
+    busAmPmDays.push({ label: day.label, sublabel: day.sublabel ? `${day.sublabel} AM` : "AM" });
+    busAmPmDays.push({ label: day.label, sublabel: day.sublabel ? `${day.sublabel} PM` : "PM" });
+  }
+
   const busSections: BubbleSheetSection[] = options.busRoutes
     .filter((r) => r.campers.length > 0)
     .map((r) => ({
       title: `${r.bus} · ${r.routeName}`,
-      subtitle: `${r.campers.length} campers scheduled`,
+      subtitle: `${r.campers.length} campers enrolled this week`,
       campers: r.campers,
     }));
 
@@ -722,15 +749,17 @@ export function buildCombinedAttendanceBubbleSheetPdf(options: {
 
   if (!busSections.length && !groupSections.length) return null;
 
-  const metaLines = [`Date: ${options.date}`, `Run: ${options.runPeriod.toUpperCase()}`];
+  const metaLines: string[] = [];
   if (options.enrollmentWeek != null) {
     metaLines.push(`Enrollment Week: ${options.enrollmentWeek}`);
     if (options.weekDateRange) metaLines.push(`Week dates: ${options.weekDateRange}`);
+  } else {
+    metaLines.push(`Date: ${options.date}`, `Run: ${options.runPeriod.toUpperCase()}`);
   }
 
   const parts: BubbleSheetPart[] = [];
   if (busSections.length) {
-    parts.push({ layout: "daily", sections: busSections, detailColumnLabel: "Stop / Group" });
+    parts.push({ layout: "weekly", sections: busSections, weekDays: busAmPmDays });
   }
   if (groupSections.length) {
     parts.push({

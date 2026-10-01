@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { stopRiderNames } from "@/lib/transportWeekView";
 
 export type BusAttendanceStatus = "present" | "absent";
 
@@ -185,15 +186,15 @@ export async function saveBusAttendance(
   return true;
 }
 
-/** Campers scheduled on a route for attendance (from effective core stops). */
+/** Campers scheduled on a route for attendance — each sibling is a separate row. */
 export function campersOnRoute(
   routeId: number,
-  coreStops: { name: string; camperNames?: string[] }[],
+  coreStops: { name: string; camperNames?: string[]; passengers?: number }[],
 ): { key: string; name: string; stopName: string }[] {
   const out: { key: string; name: string; stopName: string }[] = [];
   const seen = new Set<string>();
   for (const stop of coreStops) {
-    const names = stop.camperNames?.length ? stop.camperNames : [stop.name];
+    const names = stopRiderNames(stop);
     for (const name of names) {
       const key = attendanceRecordKey(routeId, name);
       if (seen.has(key)) continue;

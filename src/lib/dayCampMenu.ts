@@ -39,6 +39,7 @@ export type DayCampMenuItem = {
 export const FRONT_OFFICE_TRANSPORT_MENU_IDS = new Set([
   "transport-admin",
   "bus-attendance",
+  "bus-check-ins",
   "change-sheets",
   "pending-transport-changes",
   "group-bubble-sheets",
@@ -82,6 +83,7 @@ export function getDayCampPocItems(): DayCampMenuItem[] {
     { title: "Sunshine Report", url: "/day-camp/sunshine-report", icon: Sun, menuId: "sunshine-report" },
     { title: "Transportation", url: "/day-camp/transport", icon: Truck, menuId: "transportation" },
     { title: "Bus Attendance", url: "/day-camp/bus-attendance", icon: ClipboardList, menuId: "bus-attendance" },
+    { title: "Bus Check-ins", url: "/day-camp/bus-check-ins", icon: Clock, menuId: "bus-check-ins" },
     { title: "Group Bubble Sheets", url: "/day-camp/group-bubble-sheets", icon: Users, menuId: "group-bubble-sheets" },
     { title: "Change Sheets", url: "/day-camp/change-sheets", icon: FileText, menuId: "change-sheets" },
     { title: "Pending Changes", url: "/day-camp/pending-transport-changes", icon: Clock, menuId: "pending-transport-changes" },

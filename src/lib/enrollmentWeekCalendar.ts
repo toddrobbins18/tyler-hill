@@ -23,9 +23,43 @@ export function enrollmentWeekForDate(
   date: string,
 ): number | null {
   for (const row of calendar) {
-    if (date >= row.startDate && date <= row.endDate) return row.weekNumber;
+    if (row.startDate && row.endDate && date >= row.startDate && date <= row.endDate) {
+      return row.weekNumber;
+    }
   }
   return null;
+}
+
+/** Weeks that have valid start/end dates configured. */
+export function configuredEnrollmentWeekRows(calendar: EnrollmentWeekCalendar): EnrollmentWeekRow[] {
+  return calendar.filter(
+    (row) => row.startDate && row.endDate && row.endDate >= row.startDate,
+  );
+}
+
+/** Match run date to a week, or pick the nearest configured week (for offseason / test dates). */
+export function defaultEnrollmentWeekForDate(
+  calendar: EnrollmentWeekCalendar,
+  runDate: string,
+): number | null {
+  const fromDate = enrollmentWeekForDate(calendar, runDate);
+  if (fromDate != null) return fromDate;
+
+  const rows = configuredEnrollmentWeekRows(calendar);
+  if (!rows.length) return null;
+
+  const target = parseISO(runDate).getTime();
+  let best = rows[0]!;
+  let bestDist = Infinity;
+  for (const row of rows) {
+    const mid = (parseISO(row.startDate).getTime() + parseISO(row.endDate).getTime()) / 2;
+    const dist = Math.abs(mid - target);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = row;
+    }
+  }
+  return best.weekNumber;
 }
 
 export function getEnrollmentWeekRow(
