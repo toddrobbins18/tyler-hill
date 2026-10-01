@@ -24,6 +24,7 @@ import { StatusBadge } from "./StatusBadge";
 import { PickupChangeDialog } from "./PickupChangeDialog";
 import { AbsenceDialog } from "./AbsenceDialog";
 import { AuthorizedPickupDialog } from "./AuthorizedPickupDialog";
+import { SwimLessonRequestDialog } from "@/components/swim/SwimLessonRequestDialog";
 import type { ParentPortalView } from "@/lib/parentPortalConstants";
 
 type SharedViewProps = {
@@ -466,25 +467,34 @@ export function ParentSwimView({
   swimLessons,
   onSaved,
   camperName,
-}: Pick<SharedViewProps, "swimLessons" | "onSaved" | "camperName">) {
+  companyId,
+  campers,
+}: Pick<SharedViewProps, "swimLessons" | "onSaved" | "camperName" | "companyId" | "campers">) {
+  const visible = swimLessons.filter((l) => l.status !== "cancelled");
+
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Swim lessons</h1>
-        <p className="mt-2 max-w-2xl text-sm pp-text-muted">
-          Lessons are scheduled by the camp. Confirm attendance once you receive your reminder.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Swim lessons</h1>
+          <p className="mt-2 max-w-2xl text-sm pp-text-muted">
+            Request a lesson or confirm attendance once camp approves your schedule.
+          </p>
+        </div>
+        {companyId ? (
+          <SwimLessonRequestDialog companyId={companyId} campers={campers} onSaved={onSaved} />
+        ) : null}
       </header>
 
-      {swimLessons.length === 0 ? (
+      {visible.length === 0 ? (
         <EmptyState
           icon={Waves}
-          title="No swim lessons scheduled"
-          description="When the camp adds your family to the swim program, scheduled lessons will appear here for confirmation."
+          title="No swim lessons yet"
+          description="Submit a request above, or wait for camp to schedule a lesson for your family."
         />
       ) : (
         <div className="space-y-3">
-          {swimLessons.map((lesson) => {
+          {visible.map((lesson) => {
             const confirm = async () => {
               const { error } = await supabase
                 .from("swim_lessons")
@@ -493,7 +503,8 @@ export function ParentSwimView({
                   parent_confirmed_at: new Date().toISOString(),
                   transport_status: "submitted",
                 })
-                .eq("id", lesson.id);
+                .eq("id", lesson.id)
+                .eq("status", "scheduled");
               if (error) toast.error(error.message);
               else {
                 toast.success("Attendance confirmed");
@@ -515,6 +526,18 @@ export function ParentSwimView({
                 onSaved();
               }
             };
+            const cancelRequest = async () => {
+              const { error } = await supabase
+                .from("swim_lessons")
+                .update({ status: "cancelled" })
+                .eq("id", lesson.id)
+                .eq("status", "pending");
+              if (error) toast.error(error.message);
+              else {
+                toast.success("Request cancelled");
+                onSaved();
+              }
+            };
 
             return (
               <article
@@ -531,14 +554,35 @@ export function ParentSwimView({
                       {lesson.duration_minutes} min
                       {lesson.instructor ? ` · Instructor ${lesson.instructor}` : ""}
                       {lesson.location ? ` · ${lesson.location}` : ""}
-                      {" · "}
-                      <span className="font-medium">${(lesson.cost_cents / 100).toFixed(2)}</span>
+                      {lesson.cost_cents > 0 ? (
+                        <>
+                          {" · "}
+                          <span className="font-medium">${(lesson.cost_cents / 100).toFixed(2)}</span>
+                        </>
+                      ) : null}
                     </p>
                     {lesson.notes ? (
                       <p className="mt-2 text-sm pp-text-muted">{lesson.notes}</p>
                     ) : null}
+                    {lesson.status === "rejected" && lesson.rejection_reason ? (
+                      <p className="mt-2 text-sm text-red-600">Declined: {lesson.rejection_reason}</p>
+                    ) : null}
                   </div>
-                  {lesson.parent_confirmed ? (
+                  {lesson.status === "pending" ? (
+                    <div className="flex flex-col items-end gap-2">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">
+                        <Clock className="h-3.5 w-3.5" />
+                        Awaiting camp approval
+                      </span>
+                      <Button size="sm" variant="ghost" className="rounded-xl" onClick={cancelRequest}>
+                        Cancel request
+                      </Button>
+                    </div>
+                  ) : lesson.status === "rejected" ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-800">
+                      Declined
+                    </span>
+                  ) : lesson.parent_confirmed ? (
                     <div className="flex items-center gap-2">
                       <span className="inline-flex items-center gap-1 rounded-full bg-[hsl(158_45%_92%)] px-3 py-1 text-xs font-medium text-[hsl(158_40%_28%)]">
                         <CheckCircle2 className="h-3.5 w-3.5" />

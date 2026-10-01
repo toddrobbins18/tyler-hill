@@ -13,8 +13,14 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Waves, Plus, Trash2, CheckCircle2, Clock, Bus, Repeat } from "lucide-react";
+import { Waves, Plus, Trash2, CheckCircle2, Clock, Bus, Repeat, Phone, XCircle } from "lucide-react";
 import { approveDismissalSwim } from "@/lib/dismissalDashboard";
+import {
+  approveSwimLessonRequest,
+  rejectSwimLessonRequest,
+  SWIM_LESSON_STATUS_LABELS,
+  swimLessonStatusBadgeVariant,
+} from "@/lib/swimLessonApproval";
 import { toast } from "sonner";
 import { campDateTimeToIso, formatCampDate, formatCampTime } from "@/lib/campTime";
 import { campDateStringInSeason } from "@/lib/campSeasonDate";
@@ -48,6 +54,7 @@ type Lesson = {
   parent_confirmed_at: string | null;
   transport_status: string | null;
   reminder_sent_at: string | null;
+  rejection_reason: string | null;
   notes: string | null;
 };
 
@@ -95,6 +102,36 @@ export default function SwimLessons() {
     }
   };
 
+  const approveRequest = async (id: string) => {
+    const { data: userRes } = await supabase.auth.getUser();
+    const { error } = await approveSwimLessonRequest(supabase, id, userRes.user?.id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Lesson approved — parent can confirm in portal");
+      load();
+    }
+  };
+
+  const rejectRequest = async (id: string) => {
+    const reason = window.prompt("Reason for rejection (optional):") ?? "";
+    const { data: userRes } = await supabase.auth.getUser();
+    const { error } = await rejectSwimLessonRequest(supabase, id, reason, userRes.user?.id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Lesson request rejected");
+      load();
+    }
+  };
+
+  const pendingLessons = useMemo(
+    () => lessons.filter((l) => l.status === "pending"),
+    [lessons],
+  );
+  const activeLessons = useMemo(
+    () => lessons.filter((l) => l.status !== "pending" && l.status !== "rejected" && l.status !== "cancelled"),
+    [lessons],
+  );
+
   return (
     <div className="space-y-6 p-4 md:p-6">
       <div className="flex items-center justify-between">
@@ -105,23 +142,81 @@ export default function SwimLessons() {
           <div>
             <h1 className="text-2xl font-bold">Swim Lessons</h1>
             <p className="text-sm text-muted-foreground">
-              Schedule private swim lessons for eligible camp families
+              Approve phone or parent requests, then schedule lessons for families
             </p>
           </div>
         </div>
-        <LessonDialog campers={campers} onSaved={load} />
+        <div className="flex flex-wrap gap-2">
+          <PhoneRequestDialog campers={campers} onSaved={load} />
+          <LessonDialog campers={campers} onSaved={load} />
+        </div>
       </div>
+
+      {pendingLessons.length > 0 ? (
+        <Card className="border-amber-500/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              Pending requests
+              <Badge variant="secondary">{pendingLessons.length}</Badge>
+            </CardTitle>
+            <CardDescription>Phone-ins and parent portal requests — approve or reject.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date / Time</TableHead>
+                  <TableHead>Camper</TableHead>
+                  <TableHead>Notes</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pendingLessons.map((l) => (
+                  <TableRow key={l.id}>
+                    <TableCell>
+                      <div className="font-medium">{formatCampDate(l.scheduled_at)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatCampTime(l.scheduled_at)} · {l.duration_minutes} min
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div>{camperName(l.camper_id)}</div>
+                      <div className="text-xs text-muted-foreground">{familyEmail(l.camper_id)}</div>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground max-w-[240px]">
+                      {l.notes ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-2">
+                        <Button size="sm" onClick={() => void approveRequest(l.id)}>
+                          <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                          Approve
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => void rejectRequest(l.id)}>
+                          <XCircle className="h-3.5 w-3.5 mr-1" />
+                          Reject
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">All scheduled lessons</CardTitle>
-          <CardDescription>Parents see these in their Parent Portal and confirm attendance.</CardDescription>
+          <CardTitle className="text-base">Approved lessons</CardTitle>
+          <CardDescription>Parents confirm attendance in the Parent Portal after approval.</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
-          ) : lessons.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No lessons scheduled yet.</p>
+          ) : activeLessons.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No approved lessons yet.</p>
           ) : (
             <Table>
               <TableHeader>
@@ -131,6 +226,7 @@ export default function SwimLessons() {
                   <TableHead>Parent Email</TableHead>
                   <TableHead>Instructor</TableHead>
                   <TableHead>Cost</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Parent</TableHead>
                   <TableHead>Bus</TableHead>
                   <TableHead>Reminder</TableHead>
@@ -138,7 +234,7 @@ export default function SwimLessons() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {lessons.map(l => (
+                {activeLessons.map(l => (
                   <TableRow key={l.id}>
                     <TableCell>
                       <div className="font-medium">{formatCampDate(l.scheduled_at)}</div>
@@ -150,6 +246,11 @@ export default function SwimLessons() {
                     <TableCell>{familyEmail(l.camper_id)}</TableCell>
                     <TableCell>{l.instructor ?? "—"}</TableCell>
                     <TableCell>${(l.cost_cents / 100).toFixed(2)}</TableCell>
+                    <TableCell>
+                      <Badge variant={swimLessonStatusBadgeVariant(l.status)}>
+                        {SWIM_LESSON_STATUS_LABELS[l.status as keyof typeof SWIM_LESSON_STATUS_LABELS] ?? l.status}
+                      </Badge>
+                    </TableCell>
                     <TableCell>
                       {l.parent_confirmed ? (
                         <Badge className="gap-1"><CheckCircle2 className="h-3 w-3" />Confirmed</Badge>
@@ -193,6 +294,89 @@ export default function SwimLessons() {
 }
 
 type ScheduleMode = "once" | "recurring";
+
+function PhoneRequestDialog({
+  campers,
+  onSaved,
+}: {
+  campers: Camper[];
+  onSaved: () => void;
+}) {
+  const { currentCompany } = useCompany();
+  const [open, setOpen] = useState(false);
+  const [camperId, setCamperId] = useState("");
+  const { currentSeason } = useSeasonContext();
+  const [date, setDate] = useState(() => campDateStringInSeason(currentSeason));
+  const [time, setTime] = useState(DEFAULT_SWIM_LESSON_TIME);
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentCompany?.id || !camperId) return toast.error("Pick a camper");
+    setSaving(true);
+    const { error } = await supabase.from("swim_lessons").insert({
+      company_id: currentCompany.id,
+      camper_id: camperId,
+      scheduled_at: campDateTimeToIso(date, time),
+      duration_minutes: 30,
+      cost_cents: 0,
+      status: "pending",
+      notes: notes.trim() ? `Phone request: ${notes.trim()}` : "Phone request",
+    });
+    setSaving(false);
+    if (error) return toast.error(error.message);
+    toast.success("Phone request logged — approve when ready");
+    setOpen(false);
+    setCamperId("");
+    setNotes("");
+    onSaved();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline">
+          <Phone className="h-4 w-4 mr-2" />
+          Log phone request
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Log phone request</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-3">
+          <div className="space-y-2">
+            <Label>Camper</Label>
+            <SearchableChildSelect
+              children={campers}
+              value={camperId}
+              onValueChange={setCamperId}
+              placeholder="Search campers..."
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Requested date</Label>
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label>Time</Label>
+              <SwimLessonTimeSelect value={time} onChange={setTime} />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Notes</Label>
+            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Who called, special requests…" />
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={saving}>{saving ? "Saving…" : "Log request"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function LessonDialog({
   campers, onSaved,
@@ -298,6 +482,7 @@ function LessonDialog({
         instructor: instructorVal,
         cost_cents: costCents,
         notes: notesVal,
+        status: "scheduled",
       });
       setSaving(false);
       if (error) return toast.error(error.message);

@@ -101,6 +101,7 @@ export type SwimLesson = {
   status: string;
   parent_confirmed: boolean;
   parent_confirmed_at: string | null;
+  rejection_reason: string | null;
   notes: string | null;
 };
 
