@@ -33,6 +33,7 @@ import {
 } from "@/lib/divisionFilterUtils";
 import { compareByLastName } from "@/lib/nameSortUtils";
 import { isDayCampCompany } from "@/lib/camps";
+import { camperAssignmentDisplay, camperAssignmentLabel } from "@/lib/camperGroupDisplay";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -543,6 +544,7 @@ export default function Roster() {
             const effectiveDivision = getCamperEffectiveDivision(child);
             const gradeDisplay = getCamperGradeDisplay(child.grade, effectiveDivision.name);
             const divisionDisplay = divisionDropdownLabel(effectiveDivision.name) || "N/A";
+            const assignmentDisplay = camperAssignmentDisplay(child, isDayCamp);
             return (
             <Card 
               key={child.id} 
@@ -592,10 +594,12 @@ export default function Roster() {
                     {divisionDisplay !== "N/A" && (
                       <p className="text-muted-foreground">Division: {divisionDisplay}</p>
                     )}
-                    {child.bunk && (
-                      <p className="text-muted-foreground">Bunk: {child.bunk.bunk_name || `Bunk ${child.bunk.bunk_number}`}</p>
+                    {assignmentDisplay && (
+                      <p className="text-muted-foreground">
+                        {camperAssignmentLabel(isDayCamp)}: {assignmentDisplay}
+                      </p>
                     )}
-                    {child.group_name && (
+                    {!isDayCamp && child.group_name && (
                       <p className="text-muted-foreground">Team: {child.group_name}</p>
                     )}
                     {child.leader?.name && (

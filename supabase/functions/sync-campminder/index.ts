@@ -492,6 +492,8 @@ function resolveCamperDivisionAndGroup(
   cmBunkId?: number | null,
   cmBunkNameByCmId?: Map<number, string>,
   bunkGroupByPerson?: Map<string, string>,
+  bunkIdByPerson?: Map<string, number>,
+  bunkDivisionByCmId?: Map<number, string>,
 ): { division_id: string | null; group_name: string | null } {
   const cmDivision = cmDivisionId ? cmDivisionIdMap.get(cmDivisionId) ?? null : null;
   if (!isDayCamp) {
@@ -505,14 +507,20 @@ function resolveCamperDivisionAndGroup(
 
   // Bunks API assignments are authoritative for day-camp groups (per CampMinder support).
   let groupName = bunkGroupByPerson?.get(personId) ?? fullSummerGroupByPerson.get(personId) ?? null;
-  if (!groupName && cmBunkId && cmBunkNameByCmId?.has(cmBunkId)) {
-    groupName = cmBunkNameByCmId.get(cmBunkId) ?? null;
+  const assignedBunkCmId =
+    bunkIdByPerson?.get(personId) ?? (cmBunkId != null ? Number(cmBunkId) : null);
+  if (!groupName && assignedBunkCmId != null && cmBunkNameByCmId?.has(assignedBunkCmId)) {
+    groupName = cmBunkNameByCmId.get(assignedBunkCmId) ?? null;
   }
+
+  // Bunk division (Paris → 2nd, Dolphins → Pre-K) beats per-camper Camp Grade when both exist.
+  const bunkDivision =
+    assignedBunkCmId != null ? bunkDivisionByCmId?.get(assignedBunkCmId) ?? null : null;
 
   // Day-camp divisions come from Camp Grade (custom field or CamperDetails.CampGradeID),
   // not CampMinder session DivisionID (often session/program, not grade).
   return {
-    division_id: ageGroupDivision ?? (isDayCamp ? null : cmDivision),
+    division_id: bunkDivision ?? ageGroupDivision ?? null,
     group_name: groupName,
   };
 }
@@ -1429,6 +1437,7 @@ async function performFullSync(
     let telegraphGroupStats: Record<string, unknown> | null = null;
     let bunkGroupStats: Record<string, unknown> | null = null;
     const cmBunkNameByCmId = new Map<number, string>();
+    const bunkDivisionByCmId = new Map<number, string>();
     let bunkGroupByPerson = new Map<string, string>();
     let bunkIdByPerson = new Map<string, number>();
     
@@ -1705,7 +1714,10 @@ async function performFullSync(
         // Map CampMinder division to our division
         const cmDivisionId = cmBunk.DivisionID;
         const ourDivisionId = cmDivisionId ? cmDivisionIdMap.get(cmDivisionId) : null;
-        
+        if (isDayCamp && bunkCmId != null && ourDivisionId) {
+          bunkDivisionByCmId.set(Number(bunkCmId), ourDivisionId);
+        }
+
         if (existingBunk) {
           // Update existing bunk with cm_bunk_id if not already set
           if (!existingBunk.cm_bunk_id || existingBunk.cm_bunk_id !== bunkCmId) {
@@ -2370,6 +2382,8 @@ async function performFullSync(
         attendeeBunkId,
         cmBunkNameByCmId,
         bunkGroupByPerson,
+        bunkIdByPerson,
+        bunkDivisionByCmId,
       );
 
       if (!divisionId && cmDivisionId) {
@@ -2446,6 +2460,8 @@ async function performFullSync(
         fallbackBunkId,
         cmBunkNameByCmId,
         bunkGroupByPerson,
+        bunkIdByPerson,
+        bunkDivisionByCmId,
       );
 
       const { guardianEmail, guardianPhone, guardianName } = resolveGuardianContact(

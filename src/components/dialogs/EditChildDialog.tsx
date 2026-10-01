@@ -16,6 +16,8 @@ import { useSeasonContext } from "@/contexts/SeasonContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { dedupeDivisionsForDropdown, getDivisionDropdownLabel } from "@/lib/divisionFilterUtils";
 import { normalizeRfidInput } from "@/lib/rfidUtils";
+import { isDayCampCompany } from "@/lib/camps";
+import { camperAssignmentLabel } from "@/lib/camperGroupDisplay";
 import { Radio, CheckCircle2 } from "lucide-react";
 
 interface EditChildDialogProps {
@@ -28,6 +30,8 @@ interface EditChildDialogProps {
 export default function EditChildDialog({ childId, open, onOpenChange, onSuccess }: EditChildDialogProps) {
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
+  const isDayCamp = isDayCampCompany(currentCompany);
+  const assignmentLabel = camperAssignmentLabel(isDayCamp);
   const [loading, setLoading] = useState(false);
   const [child, setChild] = useState<any>(null);
   const [staff, setStaff] = useState<any[]>([]);
@@ -122,6 +126,15 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
 
     try {
       const formData = new FormData(e.currentTarget);
+      let groupName = (formData.get("group_name") as string) || null;
+      if (isDayCamp) {
+        const selectedBunk = bunks.find((b) => b.id === bunkId);
+        groupName =
+          bunkId && bunkId !== "none"
+            ? selectedBunk?.bunk_name?.trim() ||
+              (selectedBunk?.bunk_number != null ? `${assignmentLabel} ${selectedBunk.bunk_number}` : null)
+            : null;
+      }
       const data = {
         name: formData.get("name") as string,
         person_id: formData.get("person_id") as string,
@@ -130,7 +143,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
         gender: gender || null,
         category: formData.get("category") as string || null,
         grade: formData.get("grade") as string || null,
-        group_name: formData.get("group_name") as string || null,
+        group_name: groupName,
         season: formData.get("season") as string || null,
         session: session || null,
         division_id: divisionId || null,
@@ -234,16 +247,16 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
               </Select>
             </div>
             <div>
-              <Label>Bunk</Label>
+              <Label>{assignmentLabel}</Label>
               <Select value={bunkId} onValueChange={setBunkId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select bunk" />
+                  <SelectValue placeholder={`Select ${assignmentLabel.toLowerCase()}`} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No Bunk Assigned</SelectItem>
+                  <SelectItem value="none">No {assignmentLabel} Assigned</SelectItem>
                   {bunks.map((bunk) => (
                     <SelectItem key={bunk.id} value={bunk.id}>
-                      {bunk.bunk_name || `Bunk ${bunk.bunk_number}`}
+                      {bunk.bunk_name || `${assignmentLabel} ${bunk.bunk_number}`}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -253,10 +266,12 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
               <Label htmlFor="grade">Grade</Label>
               <Input id="grade" name="grade" defaultValue={child.grade || ""} />
             </div>
-            <div>
-              <Label htmlFor="group_name">Group</Label>
-              <Input id="group_name" name="group_name" defaultValue={child.group_name || ""} />
-            </div>
+            {!isDayCamp && (
+              <div>
+                <Label htmlFor="group_name">Team</Label>
+                <Input id="group_name" name="group_name" defaultValue={child.group_name || ""} />
+              </div>
+            )}
             <div>
               <Label htmlFor="season">Season (Year)</Label>
               <Input id="season" name="season" defaultValue={child.season || ""} placeholder="e.g., 2024" maxLength={4} />

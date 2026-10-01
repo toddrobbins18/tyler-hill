@@ -19,7 +19,6 @@ import {
   levelFromSkills,
   fetchSwimHistoryReport,
   fetchSwimRosterChildren,
-  fetchSwimSeasons,
   importSwimProgramCsv,
   loadSwimSavedRecords,
   mergeBracelets,
@@ -479,8 +478,6 @@ export default function SwimProgram() {
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
   const [search, setSearch] = useState("");
-  const [viewSeason, setViewSeason] = useState(currentSeason);
-  const [seasonOptions, setSeasonOptions] = useState<string[]>([currentSeason]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [historyReport, setHistoryReport] = useState<SwimHistoryReportRow[]>([]);
@@ -509,16 +506,12 @@ export default function SwimProgram() {
   const csvInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setViewSeason(currentSeason);
-  }, [currentSeason]);
-
-  useEffect(() => {
     setBraceletPage(1);
-  }, [search, braceletGroupFilter, braceletColorFilter, braceletAssignmentFilter, viewSeason, tablePageSize]);
+  }, [search, braceletGroupFilter, braceletColorFilter, braceletAssignmentFilter, currentSeason, tablePageSize]);
 
   useEffect(() => {
     setLevelPage(1);
-  }, [search, levelGroupFilter, levelDataFilter, viewSeason, tablePageSize]);
+  }, [search, levelGroupFilter, levelDataFilter, currentSeason, tablePageSize]);
 
   useEffect(() => {
     setHistoryPage(1);
@@ -539,14 +532,14 @@ export default function SwimProgram() {
         const { children, inactiveHidden: hiddenInactive } = await fetchSwimRosterChildren(
           supabase,
           currentCompany.id,
-          viewSeason,
+          currentSeason,
         );
         setInactiveHidden(hiddenInactive);
         const childById = new Map(children.map((c) => [c.id, c]));
         const { bracelets, levels } = await loadSwimSavedRecords(
           supabase,
           currentCompany.id,
-          viewSeason,
+          currentSeason,
           childById,
         );
         setBraceletData(mergeBracelets(bracelets, children));
@@ -560,7 +553,7 @@ export default function SwimProgram() {
         if (showLoading) setLoading(false);
       }
     },
-    [currentCompany?.id, viewSeason, toast],
+    [currentCompany?.id, currentSeason, toast],
   );
 
   const reload = useCallback(() => syncSwimData({ showLoading: true }), [syncSwimData]);
@@ -589,7 +582,7 @@ export default function SwimProgram() {
 
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
-      .channel(`swim-program-records-${currentCompany.id}-${viewSeason}`)
+      .channel(`swim-program-records-${currentCompany.id}-${currentSeason}`)
       .on(
         "postgres_changes",
         {
@@ -600,7 +593,7 @@ export default function SwimProgram() {
         },
         (payload) => {
           const row = (payload.new ?? payload.old) as { season?: string } | null;
-          if (row?.season && row.season !== viewSeason) return;
+          if (row?.season && row.season !== currentSeason) return;
           if (debounceTimer) clearTimeout(debounceTimer);
           debounceTimer = setTimeout(() => {
             void syncSwimData({ showLoading: false });
@@ -613,15 +606,12 @@ export default function SwimProgram() {
       if (debounceTimer) clearTimeout(debounceTimer);
       void supabase.removeChannel(channel);
     };
-  }, [currentCompany?.id, viewSeason, syncSwimData]);
+  }, [currentCompany?.id, currentSeason, syncSwimData]);
 
   useEffect(() => {
     if (!currentCompany?.id) return;
-    fetchSwimSeasons(supabase, currentCompany.id)
-      .then((seasons) => setSeasonOptions(seasons.length ? seasons : [currentSeason]))
-      .catch(console.error);
     void loadHistory();
-  }, [currentCompany?.id, currentSeason, loadHistory]);
+  }, [currentCompany?.id, loadHistory]);
 
   const scheduleBraceletSave = useCallback(
     (record: BraceletRecord) => {
@@ -632,7 +622,7 @@ export default function SwimProgram() {
       braceletSaveTimers.current.set(
         record.id,
         setTimeout(() => {
-          saveSwimBracelet(supabase, currentCompany.id!, viewSeason, record)
+          saveSwimBracelet(supabase, currentCompany.id!, currentSeason, record)
             .catch((err) => {
               console.error(err);
               toast({ title: "Save failed", description: record.name, variant: "destructive" });
@@ -641,7 +631,7 @@ export default function SwimProgram() {
         }, SAVE_DEBOUNCE_MS),
       );
     },
-    [currentCompany?.id, viewSeason, toast],
+    [currentCompany?.id, currentSeason, toast],
   );
 
   const scheduleLevelSave = useCallback(
@@ -653,7 +643,7 @@ export default function SwimProgram() {
       levelSaveTimers.current.set(
         record.id,
         setTimeout(() => {
-          saveSwimLevel(supabase, currentCompany.id!, viewSeason, record)
+          saveSwimLevel(supabase, currentCompany.id!, currentSeason, record)
             .catch((err) => {
               console.error(err);
               toast({ title: "Save failed", description: record.name, variant: "destructive" });
@@ -662,7 +652,7 @@ export default function SwimProgram() {
         }, SAVE_DEBOUNCE_MS),
       );
     },
-    [currentCompany?.id, viewSeason, toast],
+    [currentCompany?.id, currentSeason, toast],
   );
 
   const updateBracelet = (id: string, patch: Partial<BraceletRecord>) => {
@@ -706,14 +696,14 @@ export default function SwimProgram() {
         supabase,
         currentCompany.id,
         text,
-        viewSeason,
+        currentSeason,
         setImportProgress,
       );
       await reload();
       await loadHistory();
 
       const importedSeasons =
-        result.seasons.length > 0 ? result.seasons.join(", ") : viewSeason;
+        result.seasons.length > 0 ? result.seasons.join(", ") : currentSeason;
       const summary: SwimImportResult = {
         fileName: file.name,
         season: importedSeasons,
@@ -888,7 +878,7 @@ export default function SwimProgram() {
                 ? "Loading…"
                 : `${braceletData.length} active camper${braceletData.length === 1 ? "" : "s"}`}
               {!loading && inactiveHidden > 0 ? ` · ${inactiveHidden} inactive hidden` : ""}
-              {!loading ? ` · season ${viewSeason}` : ""}
+              {!loading ? ` · season ${currentSeason}` : ""}
               {!loading && campersWithLevelData > 0 ? ` · ${campersWithLevelData} with level data` : ""}
               {saving ? " · saving…" : ""}
               {importing ? " · importing…" : ""}
@@ -920,18 +910,6 @@ export default function SwimProgram() {
             )}
             {importing ? "Importing…" : "Import CSV"}
           </Button>
-          <Select value={viewSeason} onValueChange={setViewSeason}>
-            <SelectTrigger className="w-[120px] h-9">
-              <SelectValue placeholder="Season" />
-            </SelectTrigger>
-            <SelectContent>
-              {seasonOptions.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           <Button
             variant="outline"
             size="sm"
@@ -1309,7 +1287,7 @@ export default function SwimProgram() {
 
         <TabsContent value="formation" className="mt-4">
           {currentCompany?.id ? (
-            <SwimGroupFormationPanel companyId={currentCompany.id} season={viewSeason} />
+            <SwimGroupFormationPanel companyId={currentCompany.id} season={currentSeason} />
           ) : (
             <Alert>
               <AlertDescription>Select a camp to build swim groups.</AlertDescription>

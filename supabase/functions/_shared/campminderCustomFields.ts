@@ -35,22 +35,27 @@ export const AGE_GROUP_FIELD_NAMES = [
   "age groups",
 ];
 
-/** CampMinder CamperDetails.CampGradeID → display label (also used for division names). */
+/**
+ * CampMinder CamperDetails.CampGradeID → display label (also used for division names).
+ * IDs are 1-based in CampMinder (1 = Pre-K, 2 = Kindergarten, 3 = 1st, …).
+ * ID 0 is kept as Pre-K for legacy rows that may still use zero.
+ */
 export const CM_CAMP_GRADE_LABELS: Record<number, string> = {
   0: "Pre - K",
-  1: "Kindergarten",
-  2: "1st",
-  3: "2nd",
-  4: "3rd",
-  5: "4th",
-  6: "5th",
-  7: "6th",
-  8: "7th",
-  9: "8th",
-  10: "9th",
-  11: "10th",
-  12: "11th",
-  13: "12th",
+  1: "Pre - K",
+  2: "Kindergarten",
+  3: "1st",
+  4: "2nd",
+  5: "3rd",
+  6: "4th",
+  7: "5th",
+  8: "6th",
+  9: "7th",
+  10: "8th",
+  11: "9th",
+  12: "10th",
+  13: "11th",
+  14: "12th",
 };
 
 const DAY_CAMP_GRADE_SORT_KEYS = [

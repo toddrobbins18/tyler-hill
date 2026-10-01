@@ -52,11 +52,18 @@ import {
   camperEnrolledInWeek,
   enrollmentWeekForDate,
   enrollmentWeekDayColumns,
+  formatEnrollmentWeekLabel,
   formatEnrollmentWeekRange,
   getEnrollmentWeekRow,
   loadEnrollmentWeekCalendar,
   type EnrollmentWeekCalendar,
 } from "@/lib/enrollmentWeekCalendar";
+import { DAY_CAMP_ENROLLMENT_WEEKS } from "@/lib/enrolledWeeks";
+import {
+  applyEnrollmentWeekToRoutes,
+  buildCamperEnrollmentLookup,
+  filterUnplottedForWeek,
+} from "@/lib/transportWeekView";
 import { TransportReportPreviewDialog, type TransportReportPreview } from "@/components/TransportReportPreviewDialog";
 import {
   build2026MappointRouteTemplate,
@@ -391,6 +398,8 @@ export default function Transport() {
 
   const [groupRoster, setGroupRoster] = useState<GroupRosterCamper[]>([]);
   const [enrollmentWeekCalendar, setEnrollmentWeekCalendar] = useState<EnrollmentWeekCalendar>([]);
+  const [routeEnrollmentWeek, setRouteEnrollmentWeek] = useState<number | "all">("all");
+  const routeWeekInitRef = useRef(false);
   const groupLoadedKeyRef = useRef<string | null>(null);
 
   // Scope-choice dialog (Today only vs Permanent vs Cancel)
@@ -723,6 +732,19 @@ export default function Transport() {
     })();
     return () => { cancelled = true; };
   }, [companyId, currentSeason]);
+
+  useEffect(() => {
+    routeWeekInitRef.current = false;
+    setRouteEnrollmentWeek("all");
+  }, [companyId, currentSeason]);
+
+  useEffect(() => {
+    if (routeWeekInitRef.current || enrollmentWeekCalendar.length === 0) return;
+    const w = enrollmentWeekForDate(enrollmentWeekCalendar, overrideDate);
+    if (w != null) setRouteEnrollmentWeek(w);
+    routeWeekInitRef.current = true;
+  }, [enrollmentWeekCalendar, overrideDate]);
+
   useEffect(() => {
     if (!persistLoaded || !companyId || skipPersistRef.current || importInProgressRef.current) return;
     const stopCount = countBoardStops(coreStops);
@@ -1219,7 +1241,26 @@ export default function Transport() {
   }, [getEffectiveCore, routeMeta]);
 
   const routes = buildRoutes(timeOfDay);
-  const displayedRoutes = routes.filter(r => visibleRoutes.includes(r.id));
+
+  const camperEnrollmentLookup = useMemo(
+    () => buildCamperEnrollmentLookup(groupRoster),
+    [groupRoster],
+  );
+
+  const activeRouteEnrollmentWeek =
+    routeEnrollmentWeek === "all" ? null : routeEnrollmentWeek;
+
+  const displayRoutes = useMemo(
+    () => applyEnrollmentWeekToRoutes(routes, activeRouteEnrollmentWeek, camperEnrollmentLookup),
+    [routes, activeRouteEnrollmentWeek, camperEnrollmentLookup],
+  );
+
+  const displayedRoutes = displayRoutes.filter((r) => visibleRoutes.includes(r.id));
+
+  const unplottedForWeek = useMemo(
+    () => filterUnplottedForWeek(unplottedCampers, activeRouteEnrollmentWeek, camperEnrollmentLookup),
+    [unplottedCampers, activeRouteEnrollmentWeek, camperEnrollmentLookup],
+  );
 
   const enrollmentWeekForReport = useMemo(
     () => enrollmentWeekForDate(enrollmentWeekCalendar, overrideDate),
@@ -2344,11 +2385,11 @@ export default function Transport() {
     });
   };
 
-  const assignedCamperCount = Object.values(coreStops).reduce(
-    (sum, stops) => sum + stops.reduce((s, st) => s + (st.passengers || 0), 0),
-    0,
+  const assignedCamperCount = useMemo(
+    () => displayRoutes.reduce((sum, r) => sum + r.campers, 0),
+    [displayRoutes],
   );
-  const totalCamperCount = assignedCamperCount + unplottedCampers.length;
+  const totalCamperCount = assignedCamperCount + unplottedForWeek.length;
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 min-w-0">
@@ -2366,7 +2407,8 @@ export default function Transport() {
                 <span className="text-sm font-semibold">
                   {totalCamperCount}
                   <span className="ml-1 text-[10px] font-normal text-muted-foreground">
-                    ({assignedCamperCount} routed · {unplottedCampers.length} unplotted)
+                    ({assignedCamperCount} routed · {unplottedForWeek.length} unplotted
+                    {activeRouteEnrollmentWeek != null ? ` · Week ${activeRouteEnrollmentWeek}` : ""})
                   </span>
                 </span>
               </div>
@@ -2492,7 +2534,7 @@ export default function Transport() {
       <Tabs value={activeTransportTab} onValueChange={setActiveTransportTab} className="min-w-0">
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="map" className="text-xs gap-1"><MapIcon className="h-3.5 w-3.5" /> Route Map</TabsTrigger>
-          <TabsTrigger value="unplotted" className="text-xs gap-1"><UserRound className="h-3.5 w-3.5" /> Unplotted Campers{unplottedCampers.length > 0 && <Badge variant="secondary" className="ml-1 text-[9px] px-1.5">{unplottedCampers.length}</Badge>}</TabsTrigger>
+          <TabsTrigger value="unplotted" className="text-xs gap-1"><UserRound className="h-3.5 w-3.5" /> Unplotted Campers{unplottedForWeek.length > 0 && <Badge variant="secondary" className="ml-1 text-[9px] px-1.5">{unplottedForWeek.length}</Badge>}</TabsTrigger>
           <TabsTrigger value="daycamp" className="text-xs gap-1"><FileText className="h-3.5 w-3.5" /> Reports</TabsTrigger>
         </TabsList>
 
@@ -2553,6 +2595,32 @@ export default function Transport() {
                 ? "Routes end at 85 Crescent Beach Rd, Glen Cove"
                 : "Routes start at 85 Crescent Beach Rd, Glen Cove"}
             </span>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="route-enrollment-week" className="text-xs text-muted-foreground whitespace-nowrap">
+                Enrollment week
+              </Label>
+              <Select
+                value={routeEnrollmentWeek === "all" ? "all" : String(routeEnrollmentWeek)}
+                onValueChange={(v) => setRouteEnrollmentWeek(v === "all" ? "all" : parseInt(v, 10))}
+              >
+                <SelectTrigger id="route-enrollment-week" className="h-8 w-[min(280px,100vw)] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All weeks (full roster)</SelectItem>
+                  {Array.from({ length: DAY_CAMP_ENROLLMENT_WEEKS }, (_, i) => i + 1).map((week) => (
+                    <SelectItem key={week} value={String(week)}>
+                      {formatEnrollmentWeekLabel(week, enrollmentWeekCalendar)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {activeRouteEnrollmentWeek != null && (
+              <Badge variant="secondary" className="text-[10px]">
+                Week {activeRouteEnrollmentWeek} riders only
+              </Badge>
+            )}
             <Button
               size="sm"
               variant="outline"
@@ -2622,11 +2690,11 @@ export default function Transport() {
               )}
               {visibleRoutes.length === 1 && (
                 <p className="shrink-0 text-[10px] text-muted-foreground mb-2 px-0.5">
-                  Showing {routes.find(r => r.id === visibleRoutes[0])?.bus ?? "1 bus"} only — click again to hide.
+                  Showing {displayRoutes.find(r => r.id === visibleRoutes[0])?.bus ?? "1 bus"} only — click again to hide.
                 </p>
               )}
               <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
-              {routes.map(r => {
+              {displayRoutes.map(r => {
                 const isVisible = visibleRoutes.includes(r.id);
                 const isSolo = visibleRoutes.length === 1 && visibleRoutes[0] === r.id;
                 const core = coreStops[r.id] || [];
@@ -2702,7 +2770,7 @@ export default function Transport() {
                           {r.stops.map((stop, i) => {
                             const isCamp = stop.address === CAMP_LOCATION.address;
                             const pendingAtStop = !isCamp
-                              ? unplottedCampers.filter(
+                              ? unplottedForWeek.filter(
                                   (c) => normalizeAddress(c.address) === normalizeAddress(stop.address),
                                 )
                               : [];
@@ -2826,7 +2894,7 @@ export default function Transport() {
                   campAddress={CAMP_LOCATION.address}
                   onMoveStop={handleMoveStop}
                   onRemoveStop={handleRemoveStop}
-                  unplottedCampers={unplottedCampers}
+                  unplottedCampers={unplottedForWeek}
                   onAssignCamper={handleAssignCamperToRoute}
                 />
               </div>
@@ -2848,7 +2916,7 @@ export default function Transport() {
                     campAddress={CAMP_LOCATION.address}
                     onMoveStop={handleMoveStop}
                     onRemoveStop={handleRemoveStop}
-                    unplottedCampers={unplottedCampers}
+                    unplottedCampers={unplottedForWeek}
                     onAssignCamper={handleAssignCamperToRoute}
                   />
                 </div>
@@ -2881,11 +2949,25 @@ export default function Transport() {
               <UserPlus className="h-3.5 w-3.5" /> Add Camper
             </Button>
           </div>
-          {unplottedCampers.length === 0 ? (
-            <Card><CardContent className="p-8 text-center"><p className="text-muted-foreground">All campers have been assigned to routes! 🎉</p></CardContent></Card>
+          {activeRouteEnrollmentWeek != null && (
+            <p className="text-xs text-muted-foreground">
+              Showing unplotted campers enrolled for{" "}
+              {formatEnrollmentWeekLabel(activeRouteEnrollmentWeek, enrollmentWeekCalendar)}.
+              {" "}
+              <button
+                type="button"
+                className="underline hover:text-foreground"
+                onClick={() => setRouteEnrollmentWeek("all")}
+              >
+                Show all weeks
+              </button>
+            </p>
+          )}
+          {unplottedForWeek.length === 0 ? (
+            <Card><CardContent className="p-8 text-center"><p className="text-muted-foreground">{unplottedCampers.length === 0 ? "All campers have been assigned to routes! 🎉" : "No unplotted campers for this enrollment week."}</p></CardContent></Card>
           ) : (
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {unplottedCampers.map((c) => (
+              {unplottedForWeek.map((c) => (
                 <Card key={c.id} className="border-dashed">
                   <CardContent className="p-4">
                     <div className="flex items-start gap-3">

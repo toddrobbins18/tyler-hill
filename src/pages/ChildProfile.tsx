@@ -24,6 +24,7 @@ import { formatSportsAcademySessionDate } from "@/lib/sportsAcademyUtils";
 import PersonThreeDayOutlook from "@/components/PersonThreeDayOutlook";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { isDayCampCompany } from "@/lib/camps";
+import { camperAssignmentDisplay, camperAssignmentLabel } from "@/lib/camperGroupDisplay";
 import { resolveEnrolledWeeks } from "@/lib/enrolledWeeks";
 import { getCamperGradeDisplay, getDivisionDropdownLabel } from "@/lib/divisionFilterUtils";
 import EnrolledWeeksDisplay from "@/components/EnrolledWeeksDisplay";
@@ -405,7 +406,11 @@ export default function ChildProfile() {
             {[
               child.grade,
               child.division?.name || child.category,
-              child.group_name ? `Team ${child.group_name}` : null,
+              camperAssignmentDisplay(child, isDayCampCompany(currentCompany))
+                ? `${camperAssignmentLabel(isDayCampCompany(currentCompany))} ${camperAssignmentDisplay(child, isDayCampCompany(currentCompany))}`
+                : !isDayCampCompany(currentCompany) && child.group_name
+                  ? `Team ${child.group_name}`
+                  : null,
               child.leader?.name ? `Leader: ${child.leader.name}` : null,
             ].filter(Boolean).join(" • ")}
           </p>
@@ -513,10 +518,20 @@ export default function ChildProfile() {
                       </p>
                     </div>
                   )}
-                  {child.group_name && (
+                  {!isDayCampCompany(currentCompany) && child.group_name && (
                     <div>
                       <p className="text-sm text-muted-foreground">Team</p>
                       <p className="font-medium">{child.group_name}</p>
+                    </div>
+                  )}
+                  {camperAssignmentDisplay(child, isDayCampCompany(currentCompany)) && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">
+                        {camperAssignmentLabel(isDayCampCompany(currentCompany))}
+                      </p>
+                      <p className="font-medium">
+                        {camperAssignmentDisplay(child, isDayCampCompany(currentCompany))}
+                      </p>
                     </div>
                   )}
                   {isDayCampCompany(currentCompany) &&
@@ -539,7 +554,7 @@ export default function ChildProfile() {
                       </p>
                     </div>
                   )}
-                  {child.bunk && (
+                  {!isDayCampCompany(currentCompany) && child.bunk && (
                     <div>
                       <p className="text-sm text-muted-foreground">Bunk</p>
                       <p className="font-medium">
