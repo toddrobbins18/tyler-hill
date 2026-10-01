@@ -5,6 +5,7 @@ import {
   mergeActivityDivisions,
 } from "./dailyDashboardFormat.ts";
 import { formatPrintableTime } from "./dailyWolfBulletinEmail.ts";
+import { isEnrolledCamperStatus, isHiredStaffForBirthday } from "./rosterStatus.ts";
 
 const MEAL_ORDER = ["breakfast", "lunch", "snack", "dinner"] as const;
 
@@ -38,13 +39,6 @@ export type TylerHillBulletinData = {
     sport_type?: string | null;
   }>;
 };
-
-function isActiveRosterStatus(status: unknown): boolean {
-  if (status == null) return true;
-  const s = String(status).trim().toLowerCase();
-  if (!s) return true;
-  return s !== "inactive";
-}
 
 function parseBirthdayParts(value: unknown): { month: number; day: number } | null {
   if (value == null) return null;
@@ -119,10 +113,11 @@ export async function fetchTylerHillBulletinData(
     .select("id, name, date_of_birth, status")
     .eq("company_id", companyId)
     .eq("season", season)
+    .eq("status", "active")
     .not("date_of_birth", "is", null);
 
   const birthdayChildren = (childrenRaw || [])
-    .filter((child: { status?: string | null }) => isActiveRosterStatus(child.status))
+    .filter((child: { status?: string | null }) => isEnrolledCamperStatus(child.status))
     .filter((child: { date_of_birth: string }) =>
       isBirthdayToday(child.date_of_birth, todayMonth, todayDay)
     );
@@ -132,10 +127,15 @@ export async function fetchTylerHillBulletinData(
     .select("id, name, date_of_birth, status")
     .eq("company_id", companyId)
     .eq("season", season)
+    .eq("status", "active")
+    .neq("name", "Unknown")
+    .not("name", "is", null)
     .not("date_of_birth", "is", null);
 
   const birthdayStaff = (staffRaw || [])
-    .filter((staff: { status?: string | null }) => isActiveRosterStatus(staff.status))
+    .filter((staff: { status?: string | null; name?: string | null }) =>
+      isHiredStaffForBirthday(staff)
+    )
     .filter((staff: { date_of_birth: string }) =>
       isBirthdayToday(staff.date_of_birth, todayMonth, todayDay)
     );

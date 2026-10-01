@@ -22,7 +22,12 @@ import tylerHillDashboardBg from "@/assets/image001.jpg";
 import timberLakeCampHero from "@/assets/tember-camp.jpeg";
 import { addDays, format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
-import { isActiveRosterStatus, isBirthdayTodayCalendar, parseBirthdayCalendarParts } from "@/lib/birthdayCalendar";
+import {
+  filterEnrolledCampers,
+  filterHiredStaffForBirthday,
+  isBirthdayTodayCalendar,
+  parseBirthdayCalendarParts,
+} from "@/lib/birthdayCalendar";
 import { isTimberLakeCamp, isTimberLakeWestCompany, isTylerHillCamp, isDayCampCompany, shouldShowTigerTimes } from "@/lib/camps";
 import { formatTime12Hour } from "@/lib/utils";
 import { dedupeMenuItemsForDisplay } from "@/lib/csvRosterSync";
@@ -426,6 +431,7 @@ export default function Dashboard() {
       .from('children')
       .select('id, name, date_of_birth, division_id, status')
       .eq('company_id', currentCompany.id)
+      .eq('status', 'active')
       .not('date_of_birth', 'is', null);
 
     if (currentSeason) {
@@ -437,14 +443,15 @@ export default function Dashboard() {
     }
     
     const { data: childrenRaw } = await birthdayQuery;
-    const childrenData = (childrenRaw || []).filter((child: { status?: string | null }) =>
-      isActiveRosterStatus(child.status),
-    );
+    const childrenData = filterEnrolledCampers(childrenRaw);
 
     let staffBirthdayQuery = supabase
       .from('staff')
       .select('id, name, date_of_birth, status')
       .eq('company_id', currentCompany.id)
+      .eq('status', 'active')
+      .neq('name', 'Unknown')
+      .not('name', 'is', null)
       .not('date_of_birth', 'is', null);
 
     if (currentSeason) {
@@ -452,9 +459,7 @@ export default function Dashboard() {
     }
 
     const { data: staffBirthdayRaw } = await staffBirthdayQuery;
-    const staffBirthdayData = (staffBirthdayRaw || []).filter((staff: { status?: string | null }) =>
-      isActiveRosterStatus(staff.status),
-    );
+    const staffBirthdayData = filterHiredStaffForBirthday(staffBirthdayRaw);
 
     const todayMonth = todayDate.getMonth() + 1;
     const todayDay = todayDate.getDate();

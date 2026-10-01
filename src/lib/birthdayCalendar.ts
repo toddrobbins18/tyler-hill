@@ -62,7 +62,13 @@ export function resolvePersonAge(
   return Number.isFinite(n) ? n : null;
 }
 
-export { isActiveRosterStatus } from './rosterStatus';
+export {
+  isActiveRosterStatus,
+  isEnrolledCamperStatus,
+  isHiredStaffForBirthday,
+  filterEnrolledCampers,
+  filterHiredStaffForBirthday,
+} from './rosterStatus';
 
 /** Normalize CampMinder / form values to Postgres `date` (YYYY-MM-DD). */
 export function toBirthdayIsoDate(value: unknown): string | null {

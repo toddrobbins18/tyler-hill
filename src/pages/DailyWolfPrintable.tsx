@@ -11,7 +11,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { format, isToday } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/hooks/usePermissions';
-import { isActiveRosterStatus, isBirthdayTodayCalendar } from '@/lib/birthdayCalendar';
+import {
+  filterEnrolledCampers,
+  filterHiredStaffForBirthday,
+  isBirthdayTodayCalendar,
+} from '@/lib/birthdayCalendar';
 import {
   divisionNamesLabel,
   formatPrintableTime,
@@ -124,6 +128,7 @@ export default function DailyWolfPrintable() {
         .select('id, name, date_of_birth, division_id, status')
         .eq('company_id', currentCompany.id)
         .eq('season', currentSeason)
+        .eq('status', 'active')
         .not('date_of_birth', 'is', null);
       
       // Apply division filter if user has limited access
@@ -134,9 +139,9 @@ export default function DailyWolfPrintable() {
       const { data: childrenRaw } = await childrenQuery;
 
       const todaysBirthdays =
-        (childrenRaw || [])
-          .filter((child) => isActiveRosterStatus(child.status))
-          .filter((child) => isBirthdayTodayCalendar(child.date_of_birth, month, day)) || [];
+        filterEnrolledCampers(childrenRaw).filter((child) =>
+          isBirthdayTodayCalendar(child.date_of_birth, month, day),
+        );
       setBirthdayChildren(todaysBirthdays);
 
       const { data: staffRaw } = await supabase
@@ -144,12 +149,14 @@ export default function DailyWolfPrintable() {
         .select('id, name, date_of_birth, status')
         .eq('company_id', currentCompany.id)
         .eq('season', currentSeason)
+        .eq('status', 'active')
+        .neq('name', 'Unknown')
+        .not('name', 'is', null)
         .not('date_of_birth', 'is', null);
 
-      const staffToday =
-        (staffRaw || [])
-          .filter((staff) => isActiveRosterStatus(staff.status))
-          .filter((staff) => isBirthdayTodayCalendar(staff.date_of_birth, month, day)) || [];
+      const staffToday = filterHiredStaffForBirthday(staffRaw).filter((staff) =>
+        isBirthdayTodayCalendar(staff.date_of_birth, month, day),
+      );
       setBirthdayStaff(staffToday);
 
       // Menu: match Menu page — include rows for this season or season=null (legacy inserts omit season)
