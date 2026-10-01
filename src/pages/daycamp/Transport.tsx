@@ -86,6 +86,7 @@ import {
   buildPMStops,
   displayStopToCoreIndex,
   getRouteStopLabel,
+  routeStopListLines,
 } from "@/lib/transportStopTimes";
 
 const TRANSPORT_TABS = ["map", "unplotted", "daycamp"] as const;
@@ -2700,15 +2701,15 @@ export default function Transport() {
                         >
                           {r.stops.map((stop, i) => {
                             const isCamp = stop.address === CAMP_LOCATION.address;
-                            const isEmptyStop =
-                              !isCamp &&
-                              (stop.passengers ?? 0) === 0 &&
-                              (!stop.camperNames || stop.camperNames.length === 0);
-                            const pendingAtStop = isEmptyStop
+                            const pendingAtStop = !isCamp
                               ? unplottedCampers.filter(
                                   (c) => normalizeAddress(c.address) === normalizeAddress(stop.address),
                                 )
                               : [];
+                            const stopLines = routeStopListLines(stop, {
+                              isCamp,
+                              pendingNames: pendingAtStop.map((c) => c.name),
+                            });
                             const isDragging = reorderDrag?.routeId === r.id && reorderDrag.displayIndex === i;
                             return (
                               <div
@@ -2742,24 +2743,37 @@ export default function Transport() {
                                   !isCamp ? "cursor-grab active:cursor-grabbing hover:bg-muted/40" : ""
                                 } ${isDragging ? "opacity-40" : ""}`}
                               >
-                                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                <div className="flex items-start gap-1.5 min-w-0 flex-1">
                                   <span
                                     className="flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full px-0.5 text-[9px] font-bold leading-none text-white mt-0.5"
                                     style={{ backgroundColor: isCamp ? "#16a34a" : r.color }}
                                   >
                                     {getRouteStopLabel(r.stops, i)}
                                   </span>
-                                  <span className={`truncate ${isCamp ? "text-foreground font-medium" : isEmptyStop ? "text-amber-700 dark:text-amber-400 italic" : "text-muted-foreground"}`}>
-                                    {isCamp
-                                      ? stop.name
-                                      : isEmptyStop
-                                        ? pendingAtStop.length > 0
-                                          ? `Open stop · ${pendingAtStop.map((c) => c.name).join(", ")} unassigned`
-                                          : `Open stop · ${stop.name || stop.address.split(",")[0]?.trim() || "No campers"}`
-                                        : stop.camperNames && stop.camperNames.length > 0
-                                          ? stop.camperNames.join(", ")
-                                          : stop.name}
-                                  </span>
+                                  <div className="min-w-0 flex-1 leading-snug">
+                                    <p
+                                      className={`truncate ${
+                                        isCamp
+                                          ? "font-medium text-foreground"
+                                          : stopLines.isOpenStop && stopLines.camperNames.length === 0
+                                            ? "text-muted-foreground"
+                                            : "font-medium text-foreground"
+                                      }`}
+                                    >
+                                      {stopLines.title}
+                                    </p>
+                                    {stopLines.subtitle ? (
+                                      <p
+                                        className={`truncate ${
+                                          stopLines.isOpenStop
+                                            ? "text-amber-700 dark:text-amber-400 italic"
+                                            : "text-muted-foreground"
+                                        }`}
+                                      >
+                                        {stopLines.subtitle}
+                                      </p>
+                                    ) : null}
+                                  </div>
                                 </div>
                                 {stop.pickupTime ? (
                                   <span className="text-muted-foreground shrink-0 whitespace-nowrap">{stop.pickupTime}</span>
@@ -3329,7 +3343,8 @@ export default function Transport() {
                   <div className="space-y-2">
                     {selectedRoute.stops.map((stop, i) => {
                       const isCamp = stop.address === CAMP_LOCATION.address;
-                      const riders = stop.camperNames && stop.camperNames.length > 0 ? stop.camperNames : (isCamp ? [] : [stop.name]);
+                      const stopLines = routeStopListLines(stop, { isCamp });
+                      const riders = stopLines.camperNames;
                       const isHousehold = riders.length > 1;
                       return (
                         <div key={i} className="flex items-start gap-3 p-2.5 rounded-lg bg-muted/30 border border-border/50">
@@ -3344,7 +3359,7 @@ export default function Transport() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <p className="text-sm font-medium">{isCamp ? stop.name : riders[0]}</p>
+                              <p className="text-sm font-medium">{stopLines.title}</p>
                               {isHousehold && (
                                 <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
                                   <Users className="h-2.5 w-2.5 mr-0.5" />
@@ -3352,17 +3367,12 @@ export default function Transport() {
                                 </Badge>
                               )}
                             </div>
-                            {isHousehold && (
-                              <ul className="mt-1 ml-2 space-y-0.5">
-                                {riders.slice(1).map((sib, idx) => (
-                                  <li key={idx} className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                                    <span className="w-1 h-1 rounded-full bg-muted-foreground/60" />
-                                    {sib} <span className="text-muted-foreground/60">· sibling</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                            <p className="text-[10px] text-muted-foreground mt-1">{stop.address}</p>
+                            {!isCamp && stopLines.camperNames.length > 0 ? (
+                              <p className="text-[10px] text-muted-foreground mt-1">{stop.address}</p>
+                            ) : null}
+                            {!isCamp && stopLines.isOpenStop && stopLines.subtitle ? (
+                              <p className="text-[10px] text-amber-700 dark:text-amber-400 italic mt-1">{stopLines.subtitle}</p>
+                            ) : null}
                           </div>
                           <div className="text-right shrink-0">
                             <p className="text-xs font-medium">{stop.pickupTime}</p>

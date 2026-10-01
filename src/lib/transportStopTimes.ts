@@ -120,6 +120,58 @@ export const coreStopsFromPM = (stops: TransportRouteStop[]): TransportRouteStop
 const isCampAddress = (address: string, campAddress: string = CAMP_LOCATION.address) =>
   address === campAddress;
 
+/** First line of a mailing address (street) for compact route lists. */
+export function shortStopStreet(address: string): string {
+  const first = address.split(",")[0]?.trim();
+  return first || address.trim() || "—";
+}
+
+export type RouteStopListLines = {
+  title: string;
+  subtitle: string | null;
+  isOpenStop: boolean;
+  camperNames: string[];
+};
+
+/** Two-line route stop label: camper name(s) + street address. */
+export function routeStopListLines(
+  stop: { name: string; address: string; passengers?: number; camperNames?: string[] },
+  options: { isCamp: boolean; pendingNames?: string[] },
+): RouteStopListLines {
+  if (options.isCamp) {
+    return { title: stop.name, subtitle: null, isOpenStop: false, camperNames: [] };
+  }
+
+  const street = shortStopStreet(stop.address);
+  const names = (stop.camperNames ?? []).filter(Boolean);
+  const pending = (options.pendingNames ?? []).filter(Boolean);
+
+  if (pending.length > 0) {
+    return {
+      title: pending.join(", "),
+      subtitle: `${street} · not on route yet`,
+      isOpenStop: true,
+      camperNames: pending,
+    };
+  }
+
+  if (names.length > 0) {
+    return {
+      title: names.join(", "),
+      subtitle: street,
+      isOpenStop: false,
+      camperNames: names,
+    };
+  }
+
+  return {
+    title: street,
+    subtitle: "Open stop · no campers assigned",
+    isOpenStop: true,
+    camperNames: [],
+  };
+}
+
 /** Stop label for route lists and map: 1, 2, 3… or C for camp. */
 export function getRouteStopLabel(
   stops: Pick<TransportRouteStop, "address">[],

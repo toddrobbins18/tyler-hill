@@ -524,38 +524,46 @@ export default function SwimProgram() {
     setHistoryPage(1);
   }, [search, historySeasonFilter, tablePageSize]);
 
-  const reload = useCallback(async () => {
-    if (!currentCompany?.id) {
-      setBraceletData([]);
-      setLevelData([]);
-      setInactiveHidden(0);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const { children, inactiveHidden: hiddenInactive } = await fetchSwimRosterChildren(
-        supabase,
-        currentCompany.id,
-        viewSeason,
-      );
-      setInactiveHidden(hiddenInactive);
-      const childById = new Map(children.map((c) => [c.id, c]));
-      const { bracelets, levels } = await loadSwimSavedRecords(
-        supabase,
-        currentCompany.id,
-        viewSeason,
-        childById,
-      );
-      setBraceletData(mergeBracelets(bracelets, children));
-      setLevelData(mergeLevels(levels, children));
-    } catch (err) {
-      console.error("[SwimProgram] load error:", err);
-      toast({ title: "Failed to load swim program", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
-  }, [currentCompany?.id, viewSeason, toast]);
+  const syncSwimData = useCallback(
+    async (options?: { showLoading?: boolean }) => {
+      const showLoading = options?.showLoading ?? false;
+      if (!currentCompany?.id) {
+        setBraceletData([]);
+        setLevelData([]);
+        setInactiveHidden(0);
+        setLoading(false);
+        return;
+      }
+      if (showLoading) setLoading(true);
+      try {
+        const { children, inactiveHidden: hiddenInactive } = await fetchSwimRosterChildren(
+          supabase,
+          currentCompany.id,
+          viewSeason,
+        );
+        setInactiveHidden(hiddenInactive);
+        const childById = new Map(children.map((c) => [c.id, c]));
+        const { bracelets, levels } = await loadSwimSavedRecords(
+          supabase,
+          currentCompany.id,
+          viewSeason,
+          childById,
+        );
+        setBraceletData(mergeBracelets(bracelets, children));
+        setLevelData(mergeLevels(levels, children));
+      } catch (err) {
+        console.error("[SwimProgram] load error:", err);
+        if (showLoading) {
+          toast({ title: "Failed to load swim program", variant: "destructive" });
+        }
+      } finally {
+        if (showLoading) setLoading(false);
+      }
+    },
+    [currentCompany?.id, viewSeason, toast],
+  );
+
+  const reload = useCallback(() => syncSwimData({ showLoading: true }), [syncSwimData]);
 
   const loadHistory = useCallback(async () => {
     if (!currentCompany?.id) {
@@ -575,6 +583,37 @@ export default function SwimProgram() {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => {
+    if (!currentCompany?.id) return;
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const channel = supabase
+      .channel(`swim-program-records-${currentCompany.id}-${viewSeason}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "swim_program_records",
+          filter: `company_id=eq.${currentCompany.id}`,
+        },
+        (payload) => {
+          const row = (payload.new ?? payload.old) as { season?: string } | null;
+          if (row?.season && row.season !== viewSeason) return;
+          if (debounceTimer) clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => {
+            void syncSwimData({ showLoading: false });
+          }, 350);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      void supabase.removeChannel(channel);
+    };
+  }, [currentCompany?.id, viewSeason, syncSwimData]);
 
   useEffect(() => {
     if (!currentCompany?.id) return;
