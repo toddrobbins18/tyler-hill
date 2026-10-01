@@ -207,3 +207,66 @@ export function campersOnRoute(
 export function compareBusLabels(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 }
+
+export type DigitalBusAttendanceRoute = {
+  id: number;
+  name: string;
+  bus: string;
+  stops: {
+    address: string;
+    name: string;
+    pickupTime?: string;
+    camperNames?: string[];
+  }[];
+};
+
+/** CSV rows from saved digital bus attendance (transport_bus_attendance). */
+export function buildDigitalBusAttendanceCsvRows(
+  routes: DigitalBusAttendanceRoute[],
+  campAddress: string,
+  attendance: BusAttendanceMap,
+  busSubmissions: BusSubmissionsMap,
+  options: { date: string; runPeriod: "am" | "pm" },
+): (string | number)[][] {
+  const rows: (string | number)[][] = [
+    [
+      "Date",
+      "Run",
+      "Bus",
+      "Route",
+      "Bus Submitted",
+      "Camper Name",
+      "Pickup Stop",
+      "Pickup Time",
+      "Status",
+    ],
+  ];
+
+  for (const route of routes) {
+    const busSubmitted = isRouteBusSubmitted(route.id, busSubmissions) ? "Yes" : "No";
+    for (const stop of route.stops) {
+      if (stop.address === campAddress) continue;
+      const names = stop.camperNames?.length ? stop.camperNames : [stop.name];
+      for (const name of names) {
+        const label = attendanceStatusLabel(attendanceRecordKey(route.id, name), attendance);
+        rows.push([
+          options.date,
+          options.runPeriod.toUpperCase(),
+          route.bus,
+          route.name,
+          busSubmitted,
+          name,
+          stop.name,
+          stop.pickupTime ?? "",
+          label,
+        ]);
+      }
+    }
+  }
+
+  if (rows.length === 1) {
+    rows.push(["(No scheduled riders for this date/run)", "", "", "", "", "", "", "", ""]);
+  }
+
+  return rows;
+}

@@ -345,7 +345,8 @@ export default function BusAttendance() {
             <ClipboardList className="h-6 w-6" /> Bus Attendance
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Take attendance by bus — no route editing. Submit each bus when done.
+            Mark Present / Absent per camper — saves automatically to the system. Submit each bus when done.
+            Bubble sheet print is optional paper backup.
           </p>
         </div>
         <Button

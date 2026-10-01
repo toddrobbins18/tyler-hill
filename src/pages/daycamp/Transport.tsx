@@ -35,11 +35,10 @@ import {
   type TransportException,
 } from "@/lib/transportDailyOverrides";
 import {
-  attendanceRecordKey,
-  attendanceStatusLabel,
+  buildDigitalBusAttendanceCsvRows,
   campersOnRoute,
+  isRouteBusSubmitted,
   loadBusAttendance,
-  type BusAttendanceMap,
 } from "@/lib/transportBusAttendance";
 import {
   loadGroupRoster,
@@ -64,6 +63,11 @@ import {
   buildCamperEnrollmentLookup,
   filterUnplottedForWeek,
 } from "@/lib/transportWeekView";
+import {
+  buildCarSeatCountByBusCsvRows,
+  loadCamperCarSeatLookup,
+  summarizeCarSeatsByBus,
+} from "@/lib/transportCarSeatReport";
 import { TransportReportPreviewDialog, type TransportReportPreview } from "@/components/TransportReportPreviewDialog";
 import {
   build2026MappointRouteTemplate,
@@ -85,7 +89,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   CAMP_LOCATION,
   haversineMiles,
@@ -314,9 +318,11 @@ const persistBoardCache = (companyId: string, season: string, payload: BoardPayl
 
 const dayCampReports = [
   { name: "Transport Exceptions", desc: "Absences, swim, office changes, and manual route edits for this date" },
-  { name: "Attendance", desc: "Bubble sheet PDF backup (bus + group)" },
+  { name: "Attendance", desc: "Print bubble sheet for the bus (optional paper backup)" },
+  { name: "Digital Attendance Log", desc: "Export Present/Absent saved in Bus Attendance for this date & run" },
   { name: "Bus Report", desc: "Day camp bus assignments" },
   { name: "Bus Route Summary", desc: "Route overview with stops" },
+  { name: "Car Seat Count by Bus", desc: "Nursery & Pre-K riders per bus (car seats required)" },
   { name: "Car Report", desc: "Car pickup/dropoff log" },
   { name: "Daily Passenger Update", desc: "Real-time passenger counts" },
   { name: "Extended Care", desc: "Before/after care transport" },
@@ -1283,6 +1289,51 @@ export default function Transport() {
     }
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [groupRosterForReport]);
+
+  const [busAttendanceSummary, setBusAttendanceSummary] = useState<{
+    submittedBuses: number;
+    totalBuses: number;
+    markedCampers: number;
+    scheduledCampers: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!companyId) {
+      setBusAttendanceSummary(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const loaded = await loadBusAttendance(
+        supabase,
+        companyId,
+        currentSeason,
+        overrideDate,
+        timeOfDay,
+      );
+      if (cancelled) return;
+      const busesWithRiders = displayRoutes.filter(
+        (r) => campersOnRoute(r.id, getEffectiveCore(r.id)).length > 0,
+      );
+      let markedCampers = 0;
+      let scheduledCampers = 0;
+      for (const r of busesWithRiders) {
+        for (const c of campersOnRoute(r.id, getEffectiveCore(r.id))) {
+          scheduledCampers++;
+          if (loaded.records[c.key]) markedCampers++;
+        }
+      }
+      setBusAttendanceSummary({
+        submittedBuses: busesWithRiders.filter((r) =>
+          isRouteBusSubmitted(r.id, loaded.busSubmissions),
+        ).length,
+        totalBuses: busesWithRiders.length,
+        markedCampers,
+        scheduledCampers,
+      });
+    })();
+    return () => { cancelled = true; };
+  }, [companyId, currentSeason, overrideDate, timeOfDay, displayRoutes, getEffectiveCore]);
 
   const openReportPreview = (preview: Omit<TransportReportPreview, "open">) => {
     setReportPreview({ ...preview, open: true });
@@ -2298,34 +2349,82 @@ export default function Transport() {
       return;
     }
 
+    if (reportName === "Car Seat Count by Bus") {
+      if (!companyId) {
+        toast({ title: "Company not loaded", variant: "destructive" });
+        return;
+      }
+      const lookup = await loadCamperCarSeatLookup(supabase, companyId, currentSeason);
+      const coreForRoute = (routeId: number) => {
+        const route = displayRoutes.find((r) => r.id === routeId);
+        if (!route) return [];
+        return route.stops
+          .filter((s) => s.address !== CAMP_LOCATION.address)
+          .map((s) => ({ name: s.name, camperNames: s.camperNames }));
+      };
+      const summaries = summarizeCarSeatsByBus(
+        displayRoutes.map((r) => ({ id: r.id, bus: r.bus, name: r.name })),
+        coreForRoute,
+        lookup,
+        { includeEmptyBuses: true },
+      );
+      const rows = buildCarSeatCountByBusCsvRows(summaries, {
+        date: overrideDate,
+        runPeriod: timeOfDay,
+      });
+      const totalCarSeats = summaries.reduce((sum, s) => sum + s.carSeatsRequired, 0);
+      const weekNote =
+        activeRouteEnrollmentWeek != null ? ` · Week ${activeRouteEnrollmentWeek} riders` : "";
+      openReportPreview({
+        title: "Car Seat Count by Bus",
+        description: `${overrideDate} · ${timeOfDay.toUpperCase()} · ${totalCarSeats} car seat${totalCarSeats === 1 ? "" : "s"} (Nursery + Pre-K)${weekNote}`,
+        kind: "csv",
+        blob: csvRowsToBlob(rows),
+        filename: `daycamp-car-seats-by-bus-${overrideDate}-${timeOfDay}.csv`,
+        rows,
+      });
+      return;
+    }
+
+    if (reportName === "Digital Attendance Log") {
+      if (!companyId) {
+        toast({ title: "Company not loaded", variant: "destructive" });
+        return;
+      }
+      const loaded = await loadBusAttendance(
+        supabase,
+        companyId,
+        currentSeason,
+        overrideDate,
+        timeOfDay,
+      );
+      const rows = buildDigitalBusAttendanceCsvRows(
+        displayRoutes,
+        CAMP_LOCATION.address,
+        loaded.records,
+        loaded.busSubmissions,
+        { date: overrideDate, runPeriod: timeOfDay },
+      );
+      const marked = rows.slice(1).filter((r) => r[8] === "Present" || r[8] === "Absent").length;
+      openReportPreview({
+        title: "Digital Attendance Log",
+        description: `${overrideDate} · ${timeOfDay.toUpperCase()} · ${marked} marked in system · ${loaded.submittedAt ? "all buses submitted" : "in progress"}`,
+        kind: "csv",
+        blob: csvRowsToBlob(rows),
+        filename: `daycamp-digital-attendance-${overrideDate}-${timeOfDay}.csv`,
+        rows,
+      });
+      return;
+    }
+
     const today = new Date().toISOString().slice(0, 10);
     const safeName = reportName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
     const filename = `daycamp-${safeName}-${today}.csv`;
-
-    let reportBusAttendance: BusAttendanceMap = {};
-    if (reportName === "Attendance" && companyId) {
-      const loaded = await loadBusAttendance(supabase, companyId, currentSeason, overrideDate, timeOfDay);
-      reportBusAttendance = loaded.records;
-    }
 
     // Build rows specific to each report type
     let rows: (string | number)[][] = [];
 
     switch (reportName) {
-      case "Attendance": {
-        rows.push(["Date", "Run", "Camper Name", "Route", "Bus", "Pickup Stop", "Pickup Time", "Status"]);
-        routes.forEach(r => {
-          r.stops.forEach(s => {
-            if (s.address === CAMP_LOCATION.address) return;
-            (s.camperNames || [s.name]).forEach(name => {
-              const label = attendanceStatusLabel(attendanceRecordKey(r.id, name), reportBusAttendance);
-              const status = label === "Unmarked" ? "Scheduled" : label;
-              rows.push([overrideDate, timeOfDay.toUpperCase(), name, r.name, r.bus, s.address, s.pickupTime, status]);
-            });
-          });
-        });
-        break;
-      }
       case "Bus Report": {
         rows.push(["Bus", "Route", "Direction", "Departure", "Total Stops", "Total Campers", "Status"]);
         routes.forEach(r => {
@@ -3063,6 +3162,29 @@ export default function Transport() {
               Same date as Map / Attendance · manual edits are per season ({currentSeason})
             </span>
           </div>
+          <Card className="mb-4 border-primary/20 bg-primary/5">
+            <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Digital bus attendance (required)</p>
+                <p className="text-xs text-muted-foreground">
+                  Mark Present / Absent on each bus — saves automatically to the system (AM &amp; PM).
+                  Print bubble sheet below is optional paper backup only.
+                </p>
+                {busAttendanceSummary && busAttendanceSummary.totalBuses > 0 ? (
+                  <p className="text-[11px] text-foreground/80">
+                    {overrideDate} · {timeOfDay.toUpperCase()}:{" "}
+                    {busAttendanceSummary.markedCampers}/{busAttendanceSummary.scheduledCampers} campers marked ·{" "}
+                    {busAttendanceSummary.submittedBuses}/{busAttendanceSummary.totalBuses} buses submitted
+                  </p>
+                ) : busAttendanceSummary ? (
+                  <p className="text-[11px] text-muted-foreground">No riders scheduled for this date/run.</p>
+                ) : null}
+              </div>
+              <Button size="sm" className="shrink-0" asChild>
+                <Link to="/day-camp/bus-attendance">Take Bus Attendance</Link>
+              </Button>
+            </CardContent>
+          </Card>
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {dayCampReports.map((r) => (
               <Card key={r.name} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleGenerateReport(r.name)}>
