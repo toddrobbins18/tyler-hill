@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { formatBirthdayDisplay } from "@/lib/birthdayCalendar";
-import { ArrowLeft, Award, Trophy, Star, Calendar, AlertTriangle, FileText, Pencil, Users, MapPin, Shield, Stethoscope, Clock, Hospital, Waves } from "lucide-react";
+import { ArrowLeft, Trophy, Calendar, AlertTriangle, FileText, Pencil, Users, MapPin, Shield, Stethoscope, Clock, Hospital, Waves, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +23,9 @@ import ProfileQuickSearch from "@/components/ProfileQuickSearch";
 import { formatSportsAcademySessionDate } from "@/lib/sportsAcademyUtils";
 import PersonThreeDayOutlook from "@/components/PersonThreeDayOutlook";
 import { useSeasonContext } from "@/contexts/SeasonContext";
-import { isDayCampCompany } from "@/lib/camps";
+import { appointmentsEnabledForCompany, isDayCampCompany } from "@/lib/camps";
+import { getTutoringTherapyServiceColor } from "@/lib/tutoringTherapyServiceTypes";
+import { format } from "date-fns";
 import { camperAssignmentDisplay, camperAssignmentLabel } from "@/lib/camperGroupDisplay";
 import { resolveEnrolledWeeks } from "@/lib/enrolledWeeks";
 import { getCamperGradeDisplay, getDivisionDropdownLabel } from "@/lib/divisionFilterUtils";
@@ -54,6 +56,9 @@ export default function ChildProfile() {
   const [tripAttendance, setTripAttendance] = useState<any[]>([]);
   const [sportsAcademy, setSportsAcademy] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
+  const [tutoringTherapy, setTutoringTherapy] = useState<any[]>([]);
+  const dayCampProfile = isDayCampCompany(currentCompany);
+  const showAppointmentsTab = appointmentsEnabledForCompany(currentCompany);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [allergyText, setAllergyText] = useState("");
   const [savingAllergies, setSavingAllergies] = useState(false);
@@ -77,6 +82,7 @@ export default function ChildProfile() {
     setTripAttendance([]);
     setSportsAcademy([]);
     setAppointments([]);
+    setTutoringTherapy([]);
     setConflicts([]);
     setContactInfo(null);
     setAllergyText("");
@@ -168,45 +174,45 @@ export default function ChildProfile() {
         setContactInfo(null);
       }
 
-      // Fetch awards for this child - including historical awards from previous seasons
-      let awardsData: any[] = [];
-      
-      if (childData?.person_id) {
-        // Get all child records with the same person_id (across all seasons)
-        const { data: allChildRecords } = await supabase
-          .from("children")
-          .select("id")
-          .eq("person_id", childData.person_id)
-          .eq("company_id", currentCompany?.id || '');
+      if (!isDayCampCompany(currentCompany)) {
+        // Fetch awards for this child - including historical awards from previous seasons
+        let awardsData: any[] = [];
 
-        if (allChildRecords && allChildRecords.length > 0) {
-          const childIds = allChildRecords.map(c => c.id);
-          
-          // Fetch awards for all child records (historical)
-          const { data: historicalAwards } = await supabase
+        if (childData?.person_id) {
+          const { data: allChildRecords } = await supabase
+            .from("children")
+            .select("id")
+            .eq("person_id", childData.person_id)
+            .eq("company_id", currentCompany?.id || '');
+
+          if (allChildRecords && allChildRecords.length > 0) {
+            const childIds = allChildRecords.map(c => c.id);
+            const { data: historicalAwards } = await supabase
+              .from("awards")
+              .select("*")
+              .in("child_id", childIds)
+              .eq("company_id", currentCompany?.id || '')
+              .order("date", { ascending: false });
+
+            awardsData = historicalAwards || [];
+          }
+        } else {
+          const { data: currentAwards } = await supabase
             .from("awards")
             .select("*")
-            .in("child_id", childIds)
+            .eq("child_id", childId)
             .eq("company_id", currentCompany?.id || '')
             .order("date", { ascending: false });
 
-          awardsData = historicalAwards || [];
+          awardsData = currentAwards || [];
         }
+
+        if (isStale()) return;
+
+        setAwards(awardsData);
       } else {
-        // Fallback: just fetch awards for current child_id
-        const { data: currentAwards } = await supabase
-          .from("awards")
-          .select("*")
-          .eq("child_id", childId)
-          .eq("company_id", currentCompany?.id || '')
-          .order("date", { ascending: false });
-
-        awardsData = currentAwards || [];
+        setAwards([]);
       }
-
-      if (isStale()) return;
-
-      setAwards(awardsData);
 
       // Fetch incident reports for this child through incident_children junction table
       const { data: incidentLinks } = await supabase
@@ -277,15 +283,18 @@ export default function ChildProfile() {
 
       setTripAttendance(tripData || []);
 
-      // Fetch sports academy enrollments
-      const { data: academyData } = await supabase
-        .from("sports_academy")
-        .select("*")
-        .eq("child_id", childId)
-        .eq("company_id", currentCompany?.id || '')
-        .order("sport_name", { ascending: true });
+      if (!isDayCampCompany(currentCompany)) {
+        const { data: academyData } = await supabase
+          .from("sports_academy")
+          .select("*")
+          .eq("child_id", childId)
+          .eq("company_id", currentCompany?.id || '')
+          .order("sport_name", { ascending: true });
 
-      setSportsAcademy(academyData || []);
+        setSportsAcademy(academyData || []);
+      } else {
+        setSportsAcademy([]);
+      }
 
       // Fetch unresolved conflicts
       const { data: conflictsData } = await supabase
@@ -298,15 +307,31 @@ export default function ChildProfile() {
 
       setConflicts(conflictsData || []);
 
-      // Fetch appointments for this child (all companies)
-      const { data: appointmentsData } = await supabase
-        .from("appointments")
-        .select("*")
-        .eq("child_id", childId)
-        .eq("company_id", currentCompany?.id || '')
-        .order("appointment_date", { ascending: false });
+      if (isDayCampCompany(currentCompany)) {
+        const { data: tutoringData } = await supabase
+          .from("tutoring_therapy")
+          .select("*")
+          .eq("child_id", childId)
+          .eq("company_id", currentCompany?.id || '')
+          .eq("season", loadSeason)
+          .order("service_type", { ascending: true });
 
-      setAppointments(appointmentsData || []);
+        setTutoringTherapy(tutoringData || []);
+        setAppointments([]);
+      } else if (appointmentsEnabledForCompany(currentCompany)) {
+        const { data: appointmentsData } = await supabase
+          .from("appointments")
+          .select("*")
+          .eq("child_id", childId)
+          .eq("company_id", currentCompany?.id || '')
+          .order("appointment_date", { ascending: false });
+
+        setAppointments(appointmentsData || []);
+        setTutoringTherapy([]);
+      } else {
+        setAppointments([]);
+        setTutoringTherapy([]);
+      }
     } catch (error) {
       if (generation === loadGenerationRef.current) {
         console.error("Error fetching child data:", error);
@@ -438,11 +463,20 @@ export default function ChildProfile() {
             <Hospital className="h-4 w-4 mr-1" />
             Health Center
           </TabsTrigger>
-          <TabsTrigger value="achievements">Achievements</TabsTrigger>
+          {!dayCampProfile && (
+            <>
+              <TabsTrigger value="achievements">Achievements</TabsTrigger>
+              <TabsTrigger value="sports-academy">Sports Academy</TabsTrigger>
+            </>
+          )}
           <TabsTrigger value="activities">Activities</TabsTrigger>
-          <TabsTrigger value="sports-academy">Sports Academy</TabsTrigger>
           <TabsTrigger value="incidents">Incident Reports</TabsTrigger>
-          <TabsTrigger value="appointments">Appointments</TabsTrigger>
+          {dayCampProfile && (
+            <TabsTrigger value="tutoring-therapy">Tutoring & Therapy</TabsTrigger>
+          )}
+          {showAppointmentsTab && (
+            <TabsTrigger value="appointments">Appointments</TabsTrigger>
+          )}
           {isDayCampCompany(currentCompany) && child?.person_id && (
             <TabsTrigger value="swim">
               <Waves className="h-4 w-4 mr-1" />
@@ -881,6 +915,7 @@ export default function ChildProfile() {
           </Card>
         </TabsContent>
 
+        {!dayCampProfile && (
         <TabsContent value="achievements" className="space-y-4">
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-muted-foreground">
@@ -921,6 +956,7 @@ export default function ChildProfile() {
             </div>
           )}
         </TabsContent>
+        )}
 
         <TabsContent value="activities" className="space-y-4">
           <div className="space-y-6">
@@ -1046,6 +1082,7 @@ export default function ChildProfile() {
           </div>
         </TabsContent>
 
+        {!dayCampProfile && (
         <TabsContent value="sports-academy" className="space-y-4">
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-muted-foreground">
@@ -1097,6 +1134,7 @@ export default function ChildProfile() {
             </div>
           )}
         </TabsContent>
+        )}
 
         <TabsContent value="incidents" className="space-y-4">
           <div className="flex items-center justify-between mb-4">
@@ -1181,7 +1219,76 @@ export default function ChildProfile() {
           )}
         </TabsContent>
 
-        {currentCompany?.slug === 'tyler-hill-camp' && (
+        {dayCampProfile && (
+          <TabsContent value="tutoring-therapy" className="space-y-4">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm text-muted-foreground">
+                {tutoringTherapy.length} total {tutoringTherapy.length === 1 ? "enrollment" : "enrollments"}
+              </p>
+            </div>
+
+            {tutoringTherapy.length === 0 ? (
+              <Card className="shadow-card">
+                <CardContent className="py-8 text-center text-muted-foreground">
+                  No tutoring or therapy enrollments recorded
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4">
+                {tutoringTherapy.map((enrollment: any) => (
+                  <Card key={enrollment.id} className="shadow-card">
+                    <CardContent className="p-6">
+                      <div className="flex items-start gap-4">
+                        <div className="p-3 rounded-xl bg-primary/10">
+                          <BookOpen className="h-6 w-6 text-primary" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between mb-2 gap-2">
+                            <Badge className={getTutoringTherapyServiceColor(enrollment.service_type)}>
+                              {enrollment.service_type}
+                            </Badge>
+                          </div>
+                          {enrollment.instructor && (
+                            <p className="text-sm text-muted-foreground mb-2">
+                              Instructor: {enrollment.instructor}
+                            </p>
+                          )}
+                          {enrollment.schedule_periods && enrollment.schedule_periods.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mb-2">
+                              {enrollment.schedule_periods.map((period: string, idx: number) => (
+                                <Badge key={idx} variant="secondary">{period}</Badge>
+                              ))}
+                            </div>
+                          )}
+                          {enrollment.weekdays && enrollment.weekdays.length > 0 && (
+                            <p className="text-sm text-muted-foreground mb-2">
+                              {enrollment.weekdays.join(", ")}
+                            </p>
+                          )}
+                          {(enrollment.start_date || enrollment.end_date) && (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                              <Calendar className="h-3 w-3" />
+                              <span>
+                                {enrollment.start_date && format(new Date(enrollment.start_date + "T00:00:00"), "MMM d")}
+                                {enrollment.start_date && enrollment.end_date && " - "}
+                                {enrollment.end_date && format(new Date(enrollment.end_date + "T00:00:00"), "MMM d, yyyy")}
+                              </span>
+                            </div>
+                          )}
+                          {enrollment.notes && (
+                            <p className="text-sm text-muted-foreground mt-2">{enrollment.notes}</p>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        )}
+
+        {showAppointmentsTab && (
           <TabsContent value="appointments" className="space-y-4">
             <div className="flex items-center justify-between mb-4">
               <p className="text-sm text-muted-foreground">
