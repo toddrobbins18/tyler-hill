@@ -4,9 +4,10 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
   buildMapsFromSessionAttendees,
-  campGradeLabelFromId,
   ensureDivisionsForAgeGroupLabels,
+  loadDayCampCamperCustomFields,
   mergeCampGradeLabelsFromPersonMap,
+  resolveCamperGradeLabel,
   resolveDivisionIdFromAgeGroupLabel,
 } from '../_shared/campminderCustomFields.ts';
 import { syncFullSummerGroupsFromTelegraph } from '../_shared/campminderTelegraphReports.ts';
@@ -1931,23 +1932,68 @@ async function performFullSync(
       }
 
       if (isDayCamp && enrolledPersonIdArray.length > 0) {
-        // Skip Entity/Persons custom-field bulk fetch — it times out for North Shore (~1700 campers).
-        // Groups: Bunks API (+ session attendee hints). Divisions: CamperDetails.CampGradeID after person fetch.
-        console.log(
-          '\n--- DAY CAMP: skipping bulk custom-field fetch (Bunks API + Camp Grade on person records) ---',
-        );
-        dayCampCustomFieldStats = {
-          skipped: true,
-          reason: 'Groups from Bunks API; divisions from CamperDetails.CampGradeID',
-          fullSummerGroupCount: fullSummerGroupByPerson.size,
-          fromAttendeesGroups: fromAttendeesGroupCount,
-          fromAttendeesAgeGroups: fromAttendeesAgeGroupCount,
-          bunkNameCount: cmBunkNameByCmId.size,
-          bunkAssignmentGroupCount: bunkGroupByPerson.size,
-        };
+        // Season Camp Grade lives on custom fields (matches Todd's CM reports).
+        // CamperDetails.CampGradeID on /persons is often one year behind for future seasons.
+        console.log('\n--- DAY CAMP: fetching season Camp Grade from custom fields ---');
         await updateSyncJob(supabase, jobId, {
           progress: {
-            step: 'Day camp custom fields skipped (Bunks API + Camp Grade)',
+            step: 'Fetching Camp Grade custom fields',
+            enrolledCampers: enrolledPersonIdArray.length,
+            season,
+          },
+        });
+
+        const customFields = await loadDayCampCamperCustomFields(
+          enrolledPersonIdArray,
+          season,
+          token,
+          subscriptionKey,
+          clientId,
+          acquireRateLimitSlot,
+        );
+
+        let mergedCampGradeCount = 0;
+        for (const [pid, label] of customFields.ageGroupByPerson) {
+          ageGroupByPerson.set(pid, label);
+          mergedCampGradeCount++;
+        }
+        for (const [pid, label] of customFields.fullSummerGroupByPerson) {
+          if (!fullSummerGroupByPerson.has(pid)) {
+            fullSummerGroupByPerson.set(pid, label);
+          }
+        }
+
+        dayCampCustomFieldStats = {
+          skipped: false,
+          campGradeCount: mergedCampGradeCount,
+          fromAttendeesGroups: fromAttendeesGroupCount,
+          fromAttendeesAgeGroups: fromAttendeesAgeGroupCount,
+          fullSummerGroupCount: fullSummerGroupByPerson.size,
+          bunkNameCount: cmBunkNameByCmId.size,
+          bunkAssignmentGroupCount: bunkGroupByPerson.size,
+          matchedFields: customFields.matchedFields,
+          customFieldsDebug: customFields.debug,
+        };
+
+        if (mergedCampGradeCount > 0) {
+          const uniqueCampGrades = [...new Set(ageGroupByPerson.values())];
+          ageGroupDivisionMap = await ensureDivisionsForAgeGroupLabels(
+            supabase,
+            companyId,
+            uniqueCampGrades,
+          );
+          console.log(
+            `[Day Camp] Camp Grade custom fields: ${mergedCampGradeCount} campers; ${ageGroupDivisionMap.size} divisions`,
+          );
+        } else {
+          console.warn(
+            '[Day Camp] No Camp Grade values from custom fields — will fall back to CamperDetails.CampGradeID',
+          );
+        }
+
+        await updateSyncJob(supabase, jobId, {
+          progress: {
+            step: 'Camp Grade custom fields loaded',
             customFields: dayCampCustomFieldStats,
             enrolledCampers: enrolledPersonIdArray.length,
             season,
@@ -2056,12 +2102,12 @@ async function performFullSync(
       console.log(`  Missing camper IDs (person fetch failed): ${missingCamperIds.length}`);
 
       if (isDayCamp && enrolledPersonIdArray.length > 0) {
-        const campGradeMerged = mergeCampGradeLabelsFromPersonMap(
+        const campGradeFallback = mergeCampGradeLabelsFromPersonMap(
           enrolledPersonIdArray,
           personMap,
           ageGroupByPerson,
         );
-        if (campGradeMerged > 0) {
+        if (campGradeFallback > 0) {
           const uniqueCampGrades = [...new Set(ageGroupByPerson.values())];
           ageGroupDivisionMap = await ensureDivisionsForAgeGroupLabels(
             supabase,
@@ -2069,7 +2115,7 @@ async function performFullSync(
             uniqueCampGrades,
           );
           console.log(
-            `[Day Camp] Applied Camp Grade from CamperDetails for ${campGradeMerged} campers; ${ageGroupDivisionMap.size} divisions`,
+            `[Day Camp] Filled Camp Grade fallback from CamperDetails for ${campGradeFallback} campers without custom-field grade`,
           );
         }
       }
@@ -2357,7 +2403,7 @@ async function performFullSync(
       else if (person.GenderID === 1) gender = 'Male';
       
       const attendeeRow = attendeeDataMap.get(String(person.ID));
-      const grade = campGradeLabelFromId(person.CamperDetails?.CampGradeID);
+      const grade = resolveCamperGradeLabel(String(person.ID), person, ageGroupByPerson);
 
       const { guardianEmail, guardianPhone, guardianName } = resolveGuardianContact(
         String(person.ID),
@@ -2483,7 +2529,7 @@ async function performFullSync(
         name,
         gender,
         date_of_birth: normalizeDateOfBirthForDb(person?.DateOfBirth || fallbackData?.DateOfBirth),
-        grade: campGradeLabelFromId(person?.CamperDetails?.CampGradeID),
+        grade: resolveCamperGradeLabel(personIdStr, person, ageGroupByPerson),
         guardian_name: guardianName || null,
         guardian_email: guardianEmail || null,
         guardian_phone: guardianPhone || null,

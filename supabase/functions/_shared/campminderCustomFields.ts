@@ -137,6 +137,23 @@ export function campGradeLabelFromId(
   return CM_CAMP_GRADE_LABELS[campGradeId] ?? null;
 }
 
+/**
+ * Season Camp Grade: custom-field / session-attendee label first.
+ * CamperDetails.CampGradeID on the Persons API is often the prior camp year
+ * even when seasonid is passed — use it only as a fallback.
+ */
+export function resolveCamperGradeLabel(
+  personId: string,
+  person: { CamperDetails?: { CampGradeID?: number | null } } | null | undefined,
+  campGradeByPerson: Map<string, string>,
+): string | null {
+  const fromSeasonSource = campGradeByPerson.get(String(personId));
+  if (fromSeasonSource?.trim()) {
+    return getCanonicalDayCampGradeLabel(fromSeasonSource);
+  }
+  return campGradeLabelFromId(person?.CamperDetails?.CampGradeID);
+}
+
 export type DayCampCustomFieldMaps = {
   fullSummerGroupByPerson: Map<string, string>;
   ageGroupByPerson: Map<string, string>;
@@ -1598,7 +1615,7 @@ export function resolveDivisionIdFromAgeGroupLabel(
   );
 }
 
-/** Apply CampMinder CamperDetails.CampGradeID as division labels (authoritative for North Shore). */
+/** Fill missing division labels from CamperDetails.CampGradeID (fallback only). */
 export function mergeCampGradeLabelsFromPersonMap(
   personIds: string[],
   personMap: Map<string, unknown>,
@@ -1606,12 +1623,14 @@ export function mergeCampGradeLabelsFromPersonMap(
 ): number {
   let merged = 0;
   for (const personId of personIds) {
-    const person = personMap.get(String(personId)) as {
+    const key = String(personId);
+    if (divisionLabelByPerson.has(key)) continue;
+    const person = personMap.get(key) as {
       CamperDetails?: { CampGradeID?: number | null };
     } | undefined;
     const label = campGradeLabelFromId(person?.CamperDetails?.CampGradeID);
     if (!label) continue;
-    divisionLabelByPerson.set(String(personId), label);
+    divisionLabelByPerson.set(key, label);
     merged++;
   }
   return merged;
