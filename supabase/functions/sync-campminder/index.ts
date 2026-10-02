@@ -513,14 +513,13 @@ function resolveCamperDivisionAndGroup(
     groupName = cmBunkNameByCmId.get(assignedBunkCmId) ?? null;
   }
 
-  // Bunk division (Paris → 2nd, Dolphins → Pre-K) beats per-camper Camp Grade when both exist.
   const bunkDivision =
     assignedBunkCmId != null ? bunkDivisionByCmId?.get(assignedBunkCmId) ?? null : null;
 
-  // Day-camp divisions come from Camp Grade (custom field or CamperDetails.CampGradeID),
-  // not CampMinder session DivisionID (often session/program, not grade).
+  // Day-camp divisions come from Camp Grade (CamperDetails.CampGradeID) — authoritative per CampMinder.
+  // Bunk division is a fallback when Camp Grade is missing (group names like Paris still come from bunks).
   return {
-    division_id: bunkDivision ?? ageGroupDivision ?? null,
+    division_id: ageGroupDivision ?? bunkDivision ?? null,
     group_name: groupName,
   };
 }
@@ -596,11 +595,13 @@ async function fetchPersonById(
   personId: string,
   token: string,
   subscriptionKey: string,
-  clientId: string
+  clientId: string,
+  season?: string,
 ): Promise<any | null> {
   await acquireRateLimitSlot();
   try {
-    const url = `${CM_PERSONS_URL}/${personId}?clientid=${clientId}&includecamperdetails=true&includecontactdetails=true&includerelatives=true&includestaffdetails=true&includemedicalinfo=true`;
+    const seasonParam = season ? `&seasonid=${encodeURIComponent(season)}` : '';
+    const url = `${CM_PERSONS_URL}/${personId}?clientid=${clientId}${seasonParam}&includecamperdetails=true&includecontactdetails=true&includerelatives=true&includestaffdetails=true&includemedicalinfo=true`;
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -646,6 +647,7 @@ async function fetchPersonsInParallel(
   options?: {
     label?: string;
     requireName?: boolean;
+    season?: string;
     onProgress?: (done: number, total: number, ok: number, fail: number) => Promise<void>;
   },
 ): Promise<{ fetched: number; failed: number }> {
@@ -666,7 +668,7 @@ async function fetchPersonsInParallel(
       if (i >= personIds.length) break;
 
       const personId = personIds[i];
-      const person = await fetchPersonById(personId, token, subscriptionKey, clientId);
+      const person = await fetchPersonById(personId, token, subscriptionKey, clientId, options?.season);
       const ok = !!person && (!requireName || !!person.Name);
 
       if (ok) {
@@ -701,11 +703,13 @@ async function fetchMissingPersons(
   token: string,
   subscriptionKey: string,
   clientId: string,
-  entityType: string
+  entityType: string,
+  season?: string,
 ): Promise<{ fetched: number; failed: number }> {
   return fetchPersonsInParallel(missingIds, personMap, token, subscriptionKey, clientId, {
     label: entityType,
     requireName: true,
+    season,
     onProgress: async (done, total, ok, fail) => {
       console.log(`[${entityType}] Fetch progress: ${done}/${total} (${ok} success, ${fail} failed)`);
     },
@@ -1988,6 +1992,7 @@ async function performFullSync(
         {
           label: 'Camper Fetch',
           requireName: false,
+          season,
           onProgress: async (done, total, ok, fail) => {
             fetchedCount = ok;
             failedCount = fail;
@@ -2709,6 +2714,7 @@ async function performFullSync(
       await fetchPersonsInParallel(toFetch, personMap, token, subscriptionKey, clientId, {
         label: 'Staff Fetch',
         requireName: true,
+        season,
         onProgress: async (done, total, ok, fail) => {
           if (done % 25 === 0 || done === total) {
             console.log(`[Staff Fetch] Progress: ${done}/${total} (${ok} success, ${fail} failed)`);
