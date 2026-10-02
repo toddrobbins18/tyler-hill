@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Palmtree, Plus, List, Pencil, Trash2, Calendar as CalendarIcon, CalendarRange } from "lucide-react";
+import { Palmtree, Plus, List, Pencil, Trash2, Calendar as CalendarIcon, CalendarRange, Paperclip, FileText, X } from "lucide-react";
 import { CalendarColorSettings } from "@/components/CalendarColorSettings";
 import { CalendarZoomWrapper } from "@/components/CalendarZoomWrapper";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +49,8 @@ export default function ActivitiesFieldTrips() {
   const [calendarView, setCalendarView] = useState<View>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [customColors, setCustomColors] = useState<Record<string, string>>({});
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activitiesDefaultColors: Record<string, string> = {
     "Teen Trip": "#6b7280",
@@ -77,6 +79,8 @@ export default function ActivitiesFieldTrips() {
     home_away: "" as "home" | "away" | "",
     meal_options: [] as string[],
     meal_notes: "",
+    file_url: "",
+    file_name: "",
   });
 
   const isTimberLakeCamp = currentCompany?.id === '1d296ccf-31e1-4176-af57-50a4a4820f82';
@@ -218,6 +222,8 @@ export default function ActivitiesFieldTrips() {
       meal_notes: formData.meal_notes || null,
       season: currentSeason,
       company_id: currentCompany?.id,
+      file_url: formData.file_url || null,
+      file_name: formData.file_name || null,
     };
 
     if (editingEvent) {
@@ -389,10 +395,51 @@ export default function ActivitiesFieldTrips() {
       home_away: "",
       meal_options: [],
       meal_notes: "",
+      file_url: "",
+      file_name: "",
     });
     setEditingEvent(null);
     setShowDialog(false);
     // Note: fetchEvents() is handled by realtime subscription
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentCompany?.id) return;
+
+    setUploadingFile(true);
+    try {
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${currentCompany.id}/field-trips/${Date.now()}.${fileExt}`;
+
+      const { error } = await supabase.storage
+        .from("rainy-day-documents")
+        .upload(fileName, file);
+
+      if (error) throw error;
+
+      const { data: signedUrlData } = await supabase.storage
+        .from("rainy-day-documents")
+        .createSignedUrl(fileName, 60 * 60 * 24 * 365);
+
+      setFormData({
+        ...formData,
+        file_url: signedUrlData?.signedUrl || "",
+        file_name: file.name,
+      });
+
+      toast({ title: "File uploaded successfully" });
+    } catch (error) {
+      console.error("File upload error:", error);
+      toast({ title: "Failed to upload file", variant: "destructive" });
+    } finally {
+      setUploadingFile(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setFormData({ ...formData, file_url: "", file_name: "" });
   };
 
   const handleEdit = async (event: any) => {
@@ -422,6 +469,8 @@ export default function ActivitiesFieldTrips() {
       home_away: event.home_away || "",
       meal_options: event.meal_options || [],
       meal_notes: event.meal_notes || "",
+      file_url: event.file_url || "",
+      file_name: event.file_name || "",
     });
     setShowDialog(true);
   };
@@ -689,6 +738,18 @@ export default function ActivitiesFieldTrips() {
                         <p className="text-sm text-muted-foreground line-clamp-2">
                           {event.description}
                         </p>
+                      )}
+                      {event.file_url && (
+                        <a
+                          href={event.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Paperclip className="h-3.5 w-3.5" />
+                          {event.file_name || "View attachment"}
+                        </a>
                       )}
                     </CardContent>
                   </Card>
@@ -964,6 +1025,38 @@ export default function ActivitiesFieldTrips() {
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 rows={3}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Attachment (optional)</Label>
+              <p className="text-xs text-muted-foreground">Receipt, invoice, or other document</p>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                className="hidden"
+                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.xls,.xlsx"
+              />
+              {formData.file_name ? (
+                <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/50">
+                  <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="flex-1 text-sm truncate">{formData.file_name}</span>
+                  <Button type="button" variant="ghost" size="icon" onClick={handleRemoveFile}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingFile}
+                  className="w-full"
+                >
+                  <Paperclip className="h-4 w-4 mr-2" />
+                  {uploadingFile ? "Uploading..." : "Attach file"}
+                </Button>
+              )}
             </div>
 
             <div className="space-y-3 border-t pt-4">
