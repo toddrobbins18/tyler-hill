@@ -29,6 +29,8 @@ export type Database = {
           emoji: string | null
           end_date: string | null
           event_date: string
+          file_name: string | null
+          file_url: string | null
           home_away: string | null
           id: string
           is_multi_day: boolean | null
@@ -54,6 +56,8 @@ export type Database = {
           emoji?: string | null
           end_date?: string | null
           event_date: string
+          file_name?: string | null
+          file_url?: string | null
           home_away?: string | null
           id?: string
           is_multi_day?: boolean | null
@@ -79,6 +83,8 @@ export type Database = {
           emoji?: string | null
           end_date?: string | null
           event_date?: string
+          file_name?: string | null
+          file_url?: string | null
           home_away?: string | null
           id?: string
           is_multi_day?: boolean | null

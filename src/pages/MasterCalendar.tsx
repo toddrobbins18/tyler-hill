@@ -942,8 +942,10 @@ export default function MasterCalendar() {
                 </div>
               )}
 
-              {/* File Attachment for Special Events */}
-              {selectedEvent.source === 'special_events_activities' && selectedEvent.originalData?.file_url && (
+              {/* File attachment (special events + activities / field trips) */}
+              {(selectedEvent.source === 'special_events_activities' ||
+                selectedEvent.source === 'activities_field_trips') &&
+                selectedEvent.originalData?.file_url && (
                 <div className="border-t pt-4">
                   <a 
                     href={selectedEvent.originalData.file_url} 
