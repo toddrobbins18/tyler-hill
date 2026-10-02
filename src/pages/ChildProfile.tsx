@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { formatBirthdayDisplay } from "@/lib/birthdayCalendar";
-import { ArrowLeft, Trophy, Calendar, AlertTriangle, FileText, Pencil, Users, MapPin, Shield, Stethoscope, Clock, Hospital, Waves, BookOpen } from "lucide-react";
+import { ArrowLeft, Trophy, Calendar, AlertTriangle, FileText, Pencil, Users, MapPin, Shield, Stethoscope, Clock, Hospital, Waves, BookOpen, PhoneCall } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,7 @@ import { resolveEnrolledWeeks } from "@/lib/enrolledWeeks";
 import { getCamperGradeDisplay, getDivisionDropdownLabel } from "@/lib/divisionFilterUtils";
 import EnrolledWeeksDisplay from "@/components/EnrolledWeeksDisplay";
 import CamperSwimHistoryTab from "@/components/CamperSwimHistoryTab";
+import { CamperParentContactLogTab } from "@/components/CamperParentContactLogTab";
 import {
   fetchCamperFamilyContact,
   hasCamperContactInfo,
@@ -472,7 +473,13 @@ export default function ChildProfile() {
           <TabsTrigger value="activities">Activities</TabsTrigger>
           <TabsTrigger value="incidents">Incident Reports</TabsTrigger>
           {dayCampProfile && (
-            <TabsTrigger value="tutoring-therapy">Tutoring & Therapy</TabsTrigger>
+            <>
+              <TabsTrigger value="parent-contact">
+                <PhoneCall className="h-4 w-4 mr-1" />
+                Parent Contact Log
+              </TabsTrigger>
+              <TabsTrigger value="tutoring-therapy">Tutoring & Therapy</TabsTrigger>
+            </>
           )}
           {showAppointmentsTab && (
             <TabsTrigger value="appointments">Appointments</TabsTrigger>
@@ -1378,6 +1385,12 @@ export default function ChildProfile() {
               <CamperReportsTab childId={id || ''} reportType="end_of_summer" />
             </TabsContent>
           </>
+        )}
+
+        {dayCampProfile && (
+          <TabsContent value="parent-contact">
+            <CamperParentContactLogTab childId={id || ""} />
+          </TabsContent>
         )}
 
         {isDayCampCompany(currentCompany) && child?.person_id && (

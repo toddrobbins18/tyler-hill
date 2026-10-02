@@ -610,6 +610,63 @@ export type Database = {
           },
         ]
       }
+      camper_parent_communications: {
+        Row: {
+          child_id: string
+          company_id: string
+          contact_date: string
+          contact_type: string
+          created_at: string
+          id: string
+          logged_by: string | null
+          logged_by_name: string | null
+          notes: string
+          season: string
+          updated_at: string
+        }
+        Insert: {
+          child_id: string
+          company_id: string
+          contact_date?: string
+          contact_type: string
+          created_at?: string
+          id?: string
+          logged_by?: string | null
+          logged_by_name?: string | null
+          notes: string
+          season: string
+          updated_at?: string
+        }
+        Update: {
+          child_id?: string
+          company_id?: string
+          contact_date?: string
+          contact_type?: string
+          created_at?: string
+          id?: string
+          logged_by?: string | null
+          logged_by_name?: string | null
+          notes?: string
+          season?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "camper_parent_communications_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "camper_parent_communications_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campminder_transactions: {
         Row: {
           amount: number
