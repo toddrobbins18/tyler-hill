@@ -1,10 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { buildAMStops, parseDepartureToMinutes } from "@/lib/transportStopTimes";
+import { buildAMStops, isValidRouteCoordinate, parseDepartureToMinutes } from "@/lib/transportStopTimes";
 
 describe("transportStopTimes", () => {
   it("parseDepartureToMinutes handles AM/PM", () => {
     expect(parseDepartureToMinutes("7:00 AM")).toBe(7 * 60);
     expect(parseDepartureToMinutes("TBD")).toBeNull();
+  });
+
+  it("isValidRouteCoordinate rejects null island", () => {
+    expect(isValidRouteCoordinate(0, 0)).toBe(false);
+    expect(isValidRouteCoordinate(40.88, -73.64)).toBe(true);
+  });
+
+  it("buildAMStops ignores invalid coordinates when estimating leg times", () => {
+    const stops = buildAMStops(
+      [{ name: "Bad", address: "", lat: 0, lng: 0, pickupTime: "", passengers: 1 }],
+      null,
+    );
+    const campStop = stops[stops.length - 1];
+    expect(campStop.pickupTime).not.toMatch(/180\d{2}/);
   });
 
   it("buildAMStops does not force uniform +2 minute jumps on short legs", () => {

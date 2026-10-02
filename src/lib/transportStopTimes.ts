@@ -9,6 +9,14 @@ export const CAMP_LOCATION = {
   passengers: 0,
 };
 
+/** Reject null island and other coordinates that break routing / map lines. */
+export function isValidRouteCoordinate(lat: number, lng: number): boolean {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  if (Math.abs(lat) < 0.0001 && Math.abs(lng) < 0.0001) return false;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return false;
+  return true;
+}
+
 export const haversineMiles = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
   const R = 3958.8;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -21,6 +29,7 @@ export const haversineMiles = (lat1: number, lng1: number, lat2: number, lng2: n
 
 /** Estimated driving minutes between two points (fractional — round only at display). */
 const drivingLegMinutes = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+  if (!isValidRouteCoordinate(lat1, lng1) || !isValidRouteCoordinate(lat2, lng2)) return 0;
   const miles = haversineMiles(lat1, lng1, lat2, lng2) * 1.4;
   if (miles <= 0.001) return 0;
   return (miles / 25) * 60;
@@ -144,7 +153,22 @@ export function routeStopListLines(
 
   const street = shortStopStreet(stop.address);
   const names = (stop.camperNames ?? []).filter(Boolean);
-  const pending = (options.pendingNames ?? []).filter(Boolean);
+  const assignedKeys = new Set(names.map((n) => n.trim().toLowerCase()));
+  const pending = (options.pendingNames ?? [])
+    .filter(Boolean)
+    .filter((n) => !assignedKeys.has(n.trim().toLowerCase()));
+
+  if (names.length > 0) {
+    return {
+      title: names.join(", "),
+      subtitle:
+        pending.length > 0
+          ? `${street} · ${pending.length} more unassigned at this address`
+          : street,
+      isOpenStop: false,
+      camperNames: names,
+    };
+  }
 
   if (pending.length > 0) {
     return {
@@ -152,15 +176,6 @@ export function routeStopListLines(
       subtitle: `${street} · not on route yet`,
       isOpenStop: true,
       camperNames: pending,
-    };
-  }
-
-  if (names.length > 0) {
-    return {
-      title: names.join(", "),
-      subtitle: street,
-      isOpenStop: false,
-      camperNames: names,
     };
   }
 

@@ -98,6 +98,7 @@ import {
   buildPMStops,
   displayStopToCoreIndex,
   getRouteStopLabel,
+  isValidRouteCoordinate,
   routeStopListLines,
 } from "@/lib/transportStopTimes";
 
@@ -528,22 +529,35 @@ export default function Transport() {
       color: ROUTE_COLORS[i % ROUTE_COLORS.length],
     }));
 
+  const scrubBrokenPlacements = (payload: BoardPayload): BoardPayload => {
+    const coreStops: BoardPayload["coreStops"] = {};
+    for (const [routeId, stops] of Object.entries(payload.coreStops ?? {})) {
+      coreStops[Number(routeId)] = (stops ?? []).filter((stop) => {
+        if (stop.address === CAMP_LOCATION.address) return true;
+        if (isValidRouteCoordinate(stop.lat, stop.lng)) return true;
+        return !!stop.address?.trim();
+      });
+    }
+    return { ...payload, coreStops };
+  };
+
   const applyBoardPayload = (payload: BoardPayload, source?: "supabase" | "cache") => {
-    const normalizedMeta = normalizeRouteMeta(payload.routeMeta);
-    setCoreStops(payload.coreStops);
+    const scrubbed = scrubBrokenPlacements(payload);
+    const normalizedMeta = normalizeRouteMeta(scrubbed.routeMeta);
+    setCoreStops(scrubbed.coreStops);
     setRouteMeta(normalizedMeta);
     setVisibleRoutes(normalizedMeta.map((r) => r.id));
-    setUnplottedCampers(payload.unplottedCampers);
-    setRoutesConfigured(payload.routesConfigured === true);
-    setRoutesSource(payload.routesSource);
-    lastKnownStopCountRef.current = countBoardStops(payload.coreStops);
+    setUnplottedCampers(scrubbed.unplottedCampers);
+    setRoutesConfigured(scrubbed.routesConfigured === true);
+    setRoutesSource(scrubbed.routesSource);
+    lastKnownStopCountRef.current = countBoardStops(scrubbed.coreStops);
     if (companyId && currentSeason) {
       persistBoardCache(companyId, currentSeason, prepareBoardForPersist(payload, currentSeason));
     }
     const stops = lastKnownStopCountRef.current;
     if (source) {
       console.info(
-        `[Transport] Board loaded (${source}): ${stops} stops, ${normalizedMeta.length} routes, ${payload.unplottedCampers.length} unplotted · season ${currentSeason}`,
+        `[Transport] Board loaded (${source}): ${stops} stops, ${normalizedMeta.length} routes, ${scrubbed.unplottedCampers.length} unplotted · season ${currentSeason}`,
       );
     }
   };
@@ -1371,9 +1385,38 @@ export default function Transport() {
     toast({ title: "Route added", description: `"${newRoute.name}" has been created for both AM and PM runs.` });
   };
 
-  const handleAssignCamperToRoute = useCallback((camperId: number, routeId: number) => {
+  const handleAssignCamperToRoute = useCallback(async (camperId: number, routeId: number) => {
     const camper = unplottedCampers.find(c => c.id === camperId);
     if (!camper) return;
+
+    const address = camper.address?.trim();
+    if (!address) {
+      toast({
+        title: "Address required",
+        description: `${camper.name} has no home address yet. Add one from Unplotted Campers (Add Camper or Import File).`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    let lat = camper.lat;
+    let lng = camper.lng;
+    if (!isValidRouteCoordinate(lat, lng)) {
+      toast({ title: "Geocoding address", description: `Looking up ${camper.name}'s address…` });
+      const geo = await geocodeAddress(address);
+      if (!isGeocodePoint(geo)) {
+        toast({
+          title: "Could not map address",
+          description: geocodeFailureMessage(geo, address),
+          variant: "destructive",
+        });
+        return;
+      }
+      lat = geo.lat;
+      lng = geo.lng;
+      setUnplottedCampers(prev => prev.map(c => (c.id === camperId ? { ...c, lat, lng } : c)));
+    }
+
     const meta = routeMeta.find(r => r.id === routeId);
     const currentLoad = (coreStops[routeId] || []).reduce((sum, s) => sum + s.passengers, 0)
       + (todayOverrides.added[routeId] || []).reduce((sum, s) => sum + s.passengers, 0);
@@ -1386,9 +1429,9 @@ export default function Transport() {
     }
     const newStop: RouteStop = {
       name: camper.name,
-      address: camper.address,
-      lat: camper.lat,
-      lng: camper.lng,
+      address,
+      lat,
+      lng,
       pickupTime: "TBD",
       passengers: 1,
       camperNames: [camper.name],
@@ -1396,7 +1439,11 @@ export default function Transport() {
     // Merge into existing stop at the same address (siblings/shared household)
     const mergeIntoStops = (stops: RouteStop[]): { merged: boolean; next: RouteStop[] } => {
       const norm = (a: string) => normalizeAddress(a);
-      const idx = stops.findIndex(s => norm(s.address) === norm(camper.address));
+      const camperNorm = norm(address);
+      const idx = stops.findIndex(s => {
+        const stopNorm = norm(s.address);
+        return stopNorm && stopNorm === camperNorm;
+      });
       if (idx === -1) return { merged: false, next: [...stops, newStop] };
       const existing = stops[idx];
       const updated: RouteStop = {
@@ -1458,7 +1505,7 @@ export default function Transport() {
         setScopeDialog(prev => ({ ...prev, open: false }));
       },
     });
-  }, [unplottedCampers, routeMeta, coreStops, todayOverrides, toast, markRoutesConfigured]);
+  }, [unplottedCampers, routeMeta, coreStops, todayOverrides, toast, markRoutesConfigured, geocodeAddress]);
 
   const handleAddUnplottedCamper = async () => {
     if (!newUnplotted.name.trim() || !newUnplotted.address.trim()) {
@@ -2882,9 +2929,10 @@ export default function Transport() {
                         >
                           {r.stops.map((stop, i) => {
                             const isCamp = stop.address === CAMP_LOCATION.address;
-                            const pendingAtStop = !isCamp
+                            const stopAddressNorm = normalizeAddress(stop.address);
+                            const pendingAtStop = !isCamp && stopAddressNorm
                               ? unplottedForWeek.filter(
-                                  (c) => normalizeAddress(c.address) === normalizeAddress(stop.address),
+                                  (c) => normalizeAddress(c.address) === stopAddressNorm,
                                 )
                               : [];
                             const stopLines = routeStopListLines(stop, {
@@ -3092,7 +3140,9 @@ export default function Transport() {
                             <X className="h-3 w-3" />
                           </button>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">📍 {c.address}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          📍 {c.address?.trim() || "No address — add before assigning to a route"}
+                        </p>
                         <div className="flex gap-3 mt-1">
                           <span className="text-[10px] text-muted-foreground">Age {c.age}</span>
                           <span className="text-[10px] text-muted-foreground">{c.session}</span>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { isValidRouteCoordinate } from "@/lib/transportStopTimes";
 
 interface RouteStop {
   name: string;
@@ -54,6 +55,7 @@ const FADED_COLOR = "#9ca3af";
 
 const routeCoordinates = (route: MapRoute) =>
   route.stops.reduce<[number, number][]>((coords, stop) => {
+    if (!isValidRouteCoordinate(stop.lat, stop.lng)) return coords;
     const next: [number, number] = [stop.lng, stop.lat];
     const prev = coords[coords.length - 1];
     if (!prev || Math.abs(prev[0] - next[0]) > 0.000001 || Math.abs(prev[1] - next[1]) > 0.000001) {
@@ -137,8 +139,14 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
   }, [routes]);
 
   const allPoints = useMemo(() => {
-    const routePoints = routes.flatMap((r) => r.stops.map((s) => [s.lat, s.lng] as [number, number]));
-    const camperPoints = unplottedCampers.map((c) => [c.lat, c.lng] as [number, number]);
+    const routePoints = routes.flatMap((r) =>
+      r.stops
+        .filter((s) => isValidRouteCoordinate(s.lat, s.lng))
+        .map((s) => [s.lat, s.lng] as [number, number]),
+    );
+    const camperPoints = unplottedCampers
+      .filter((c) => isValidRouteCoordinate(c.lat, c.lng))
+      .map((c) => [c.lat, c.lng] as [number, number]);
     return [...routePoints, ...camperPoints];
   }, [routes, unplottedCampers]);
 
@@ -243,6 +251,7 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
 
       let routeStopNum = 0;
       route.stops.forEach((stop, stopIndex) => {
+        if (!isValidRouteCoordinate(stop.lat, stop.lng)) return;
         const isCamp = isCampStop(stop, campAddress);
         const stopNumber = isCamp ? null : ++routeStopNum;
         const otherRoutes = availableRoutes.filter(r => r.id !== route.id);
@@ -304,6 +313,7 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
     });
 
     unplottedCampers.forEach((camper) => {
+      if (!isValidRouteCoordinate(camper.lat, camper.lng)) return;
       if (routeStopAddressKeys.has(normAddr(camper.address))) return;
 
       const assignDropdown = availableRoutes.length > 0

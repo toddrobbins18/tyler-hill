@@ -17,6 +17,24 @@ describe("routeStopListLines", () => {
     expect(lines.isOpenStop).toBe(false);
   });
 
+  it("shows assigned campers even when others are pending at the same address", () => {
+    const lines = routeStopListLines(
+      {
+        name: "Andi Robbins",
+        address: "123 Main St, Glen Cove, NY",
+        camperNames: ["Andi Robbins"],
+        passengers: 1,
+      },
+      {
+        isCamp: false,
+        pendingNames: ["Alex Kottler", "Alina Haynes", "Andi Robbins"],
+      },
+    );
+    expect(lines.title).toBe("Andi Robbins");
+    expect(lines.subtitle).toContain("2 more unassigned");
+    expect(lines.isOpenStop).toBe(false);
+  });
+
   it("shows open stop hint when no campers assigned", () => {
     const lines = routeStopListLines(
       {
