@@ -34,6 +34,7 @@ import {
 import { compareByLastName } from "@/lib/nameSortUtils";
 import { isDayCampCompany } from "@/lib/camps";
 import { camperAssignmentDisplay, camperAssignmentLabel } from "@/lib/camperGroupDisplay";
+import { formatEnrolledWeeksLabel, resolveEnrolledWeeks } from "@/lib/enrolledWeeks";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -102,7 +103,7 @@ export default function Roster() {
         let query = supabase
           .from("children")
           .select(`
-            id, name, grade, gender, status, session, season, division_id, person_id, group_name,
+            id, name, grade, gender, status, session, enrolled_weeks, season, division_id, person_id, group_name,
             division:division_id(id, name, gender, sort_order),
             leader:leader_id(id, name),
             bunk:bunk_id(id, bunk_number, bunk_name)
@@ -544,6 +545,8 @@ export default function Roster() {
             const effectiveDivision = getCamperEffectiveDivision(child);
             const gradeDisplay = getCamperGradeDisplay(child.grade, effectiveDivision.name);
             const divisionDisplay = divisionDropdownLabel(effectiveDivision.name) || "N/A";
+            const enrolledWeeks = resolveEnrolledWeeks(child.enrolled_weeks, child.session);
+            const enrolledWeeksLabel = formatEnrolledWeeksLabel(enrolledWeeks);
             const assignmentDisplay = camperAssignmentDisplay(child, isDayCamp);
             return (
             <Card 
@@ -591,8 +594,16 @@ export default function Roster() {
                   onClick={() => navigate(`/child/${child.id}`)}
                 >
                   <div className="space-y-1 min-w-0">
-                    {divisionDisplay !== "N/A" && (
-                      <p className="text-muted-foreground">Division: {divisionDisplay}</p>
+                    {isDayCamp ? (
+                      enrolledWeeksLabel ? (
+                        <p className="text-muted-foreground">Weeks enrolled: {enrolledWeeksLabel}</p>
+                      ) : child.session?.trim() ? (
+                        <p className="text-muted-foreground">Weeks enrolled: {child.session.trim()}</p>
+                      ) : null
+                    ) : (
+                      divisionDisplay !== "N/A" && (
+                        <p className="text-muted-foreground">Division: {divisionDisplay}</p>
+                      )
                     )}
                     {assignmentDisplay && (
                       <p className="text-muted-foreground">
