@@ -3271,48 +3271,51 @@ export default function Transport() {
 
       {/* Edit Route Dialog */}
       <Dialog open={!!editRoute} onOpenChange={(open) => { if (!open) setEditRoute(null); }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-md overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: editRoute?.color }} />
+              <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: editRoute?.color }} />
               Edit Route
             </DialogTitle>
             <DialogDescription>Update bus name, route details, status, and color. Applies to both AM & PM runs.</DialogDescription>
           </DialogHeader>
           {editRoute && (
-            <div className="space-y-3 py-2">
-              <div>
+            <div className="space-y-3 py-2 min-w-0 max-w-full">
+              <div className="min-w-0">
                 <Label htmlFor="edit-name">Route Name</Label>
                 <Input
                   id="edit-name"
+                  className="w-full max-w-full"
                   value={editRoute.name}
                   onChange={(e) => setEditRoute({ ...editRoute, name: e.target.value })}
                   placeholder="e.g. North Shore Pickup"
                 />
               </div>
-              <div>
+              <div className="min-w-0">
                 <Label htmlFor="edit-bus">Bus Name</Label>
                 <Input
                   id="edit-bus"
+                  className="w-full max-w-full"
                   value={editRoute.bus}
                   onChange={(e) => setEditRoute({ ...editRoute, bus: e.target.value })}
                   placeholder="e.g. Bus A"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
+              <div className="grid grid-cols-2 gap-3 min-w-0">
+                <div className="min-w-0">
                   <Label htmlFor="edit-departure">Departure Time</Label>
                   <Input
                     id="edit-departure"
+                    className="w-full max-w-full"
                     value={editRoute.departure}
                     onChange={(e) => setEditRoute({ ...editRoute, departure: e.target.value })}
                     placeholder="e.g. 7:00 AM"
                   />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <Label htmlFor="edit-status">Status</Label>
                   <Select value={editRoute.status} onValueChange={(v) => setEditRoute({ ...editRoute, status: v })}>
-                    <SelectTrigger id="edit-status"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="edit-status" className="w-full max-w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Confirmed">Confirmed</SelectItem>
                       <SelectItem value="Pending">Pending</SelectItem>
@@ -3321,10 +3324,11 @@ export default function Transport() {
                   </Select>
                 </div>
               </div>
-              <div>
+              <div className="min-w-0">
                 <Label htmlFor="edit-capacity">Max Capacity (campers)</Label>
                 <Input
                   id="edit-capacity"
+                  className="w-full max-w-full"
                   type="number"
                   min={1}
                   max={200}
@@ -3334,20 +3338,23 @@ export default function Transport() {
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">Maximum total children allowed on this bus.</p>
               </div>
-              <div>
+              <div className="min-w-0">
                 <Label>Route Color</Label>
-                <div className="flex gap-2 mt-2">
-                  {ROUTE_COLORS.map((color) => (
-                    <button
-                      key={color}
-                      onClick={() => setEditRoute({ ...editRoute, color })}
-                      className={`w-8 h-8 rounded-full border-2 transition-all ${
-                        editRoute.color === color ? "border-foreground scale-110" : "border-transparent"
-                      }`}
-                      style={{ backgroundColor: color, boxShadow: `0 0 8px ${color}60` }}
-                      title={color}
-                    />
-                  ))}
+                <div className="mt-2 max-h-36 overflow-y-auto overflow-x-hidden rounded-md border border-border/40 p-2">
+                  <div className="flex flex-wrap gap-2">
+                    {ROUTE_COLORS.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => setEditRoute({ ...editRoute, color })}
+                        className={`h-8 w-8 shrink-0 rounded-full border-2 transition-all ${
+                          editRoute.color === color ? "border-foreground scale-110" : "border-transparent"
+                        }`}
+                        style={{ backgroundColor: color, boxShadow: `0 0 8px ${color}60` }}
+                        title={color}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>

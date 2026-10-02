@@ -710,7 +710,7 @@ export default function SunshineReport() {
   function handleCSVDownloadTemplate() {
     const csv =
       "Child's Name,Group,Sports,Activities,Lunch,BM,Napped?,Send Email\n" +
-      "Jane Doe,Bunnies,\"Swimming,Soccer\",\"Arts + Crafts,Glow party\",\"Pizza,Pasta,Fruit,Jelly Sandwich\",No,Yes,checked\n";
+      "Jane Doe,Giraffes,Swimming,\"Glow party,Starfish huddle,Yoga\",\"Pasta,Pizza,Cucumber,Bagel,Jelly Sand\",No,Yes,checked\n";
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
