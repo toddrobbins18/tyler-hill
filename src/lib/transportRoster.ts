@@ -23,6 +23,7 @@ export type TransportEnrolledCamper = {
   session: string | null;
   grade: string | null;
   groupName: string | null;
+  homeAddress: string | null;
 };
 
 export type TransportUnplottedCamper = {
@@ -108,7 +109,7 @@ export async function normalizeTransportBoardForSeason(
   board = stripEmptyRouteShell(board);
 
   const enrolled = await loadEnrolledCampersForTransport(supabase, companyId, season);
-  // MapPoint 2026 priors (warehouse or bundled CSV) — Nest children table has no home address yet.
+  // MapPoint 2026 priors fill gaps when CampMinder sync has no household address yet.
   const hints = await loadHistoricalAddressHints(supabase, companyId, "2026");
   const unplottedCampers = buildUnplottedFromEnrollment({
     enrolled,
@@ -180,7 +181,7 @@ export async function loadEnrolledCampersForTransport(
     const to = from + TRANSPORT_ROSTER_PAGE_SIZE - 1;
     const { data, error } = await supabase
       .from("children")
-      .select("id, name, age, date_of_birth, session, grade, group_name")
+      .select("id, name, age, date_of_birth, session, grade, group_name, home_address")
       .eq("company_id", companyId)
       .eq("season", season)
       .neq("status", "inactive")
@@ -205,6 +206,7 @@ export async function loadEnrolledCampersForTransport(
     session: row.session as string | null,
     grade: row.grade as string | null,
     groupName: row.group_name as string | null,
+    homeAddress: (row.home_address as string | null)?.trim() || null,
   })).filter((c) => c.name);
 }
 
@@ -306,24 +308,29 @@ export function buildUnplottedFromEnrollment(options: {
     const resolvedAge = child.age ?? null;
     const kept = existingByName.get(key);
     const hint = addressHints?.get(key);
+    const syncedAddress = child.homeAddress?.trim() || "";
     if (kept) {
+      const address = kept.address?.trim() || syncedAddress || hint?.address || "";
+      const bundled = address ? resolveBundledGeocodeResult(address) : null;
       out.push({
         ...kept,
-        address: kept.address?.trim() || hint?.address || "",
-        lat: kept.lat || hint?.lat || 0,
-        lng: kept.lng || hint?.lng || 0,
+        address,
+        lat: kept.lat || bundled?.lat || hint?.lat || 0,
+        lng: kept.lng || bundled?.lng || hint?.lng || 0,
         age: resolvedAge ?? kept.age,
         session: child.session ?? child.grade ?? kept.session,
       });
       return;
     }
 
+    const address = syncedAddress || hint?.address || "";
+    const bundled = address ? resolveBundledGeocodeResult(address) : null;
     out.push({
       id: stableUnplottedId(child.id, index + 1),
       name: child.name,
-      address: hint?.address ?? "",
-      lat: hint?.lat ?? 0,
-      lng: hint?.lng ?? 0,
+      address,
+      lat: bundled?.lat ?? hint?.lat ?? 0,
+      lng: bundled?.lng ?? hint?.lng ?? 0,
       age: resolvedAge ?? 10,
       session: child.session ?? child.grade ?? "",
     });

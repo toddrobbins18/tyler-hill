@@ -728,6 +728,7 @@ export type Database = {
           gender: string | null
           grade: string | null
           group_name: string | null
+          home_address: string | null
           guardian_email: string | null
           guardian_name: string | null
           guardian_name_p2: string | null
@@ -768,6 +769,7 @@ export type Database = {
           gender?: string | null
           grade?: string | null
           group_name?: string | null
+          home_address?: string | null
           guardian_email?: string | null
           guardian_name?: string | null
           guardian_name_p2?: string | null
@@ -808,6 +810,7 @@ export type Database = {
           gender?: string | null
           grade?: string | null
           group_name?: string | null
+          home_address?: string | null
           guardian_email?: string | null
           guardian_name?: string | null
           guardian_name_p2?: string | null

@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { loadHomeAddressesByPerson } from '../_shared/campminderAddresses.ts';
 import {
   buildMapsFromSessionAttendees,
   ensureDivisionsForAgeGroupLabels,
@@ -817,7 +818,7 @@ function valuesEqual(a: any, b: any): boolean {
 
 // Fields to track changes for each table
 const TRACKED_FIELDS: Record<string, string[]> = {
-  children: ['name', 'gender', 'date_of_birth', 'grade', 'guardian_name', 'guardian_email', 'guardian_phone', 'allergies', 'medical_notes', 'division_id', 'session', 'status', 'group_name'],
+  children: ['name', 'gender', 'date_of_birth', 'grade', 'home_address', 'guardian_name', 'guardian_email', 'guardian_phone', 'allergies', 'medical_notes', 'division_id', 'session', 'status', 'group_name'],
   staff: ['name', 'role', 'email', 'phone', 'date_of_birth', 'status', 'budget_code'],
 };
 
@@ -1391,6 +1392,167 @@ async function syncOwlPayBalancesFromCampminder(
   return { financialDeposits, financialReversals, financialSkipped, financialUpdated };
 }
 
+/** Fast path: CampMinder family API → children.home_address only (no full person fetch). */
+async function performAddressOnlySync(
+  supabase: any,
+  jobId: string,
+  companyId: string,
+  token: string,
+  subscriptionKey: string,
+  clientId: string,
+  season: string,
+): Promise<void> {
+  console.log(`\n--- ADDRESS-ONLY SYNC for company ${companyId} season ${season} ---`);
+
+  await updateSyncJob(supabase, jobId, {
+    progress: { step: 'Fetching enrolled campers', syncType: 'addresses', season },
+  });
+
+  const enrolledFetch = await fetchEnrolledSessionAttendees(
+    token,
+    subscriptionKey,
+    clientId,
+    season,
+  );
+  const personIds = [
+    ...new Set(enrolledFetch.attendees.map((a: { PersonID?: unknown }) => String(a.PersonID))),
+  ];
+  console.log(`[Addresses] ${personIds.length} enrolled campers for season ${season}`);
+
+  if (personIds.length === 0) {
+    throw new Error('No enrolled campers returned from CampMinder — address sync aborted');
+  }
+
+  await updateSyncJob(supabase, jobId, {
+    progress: {
+      step: 'Fetching home addresses from CampMinder',
+      syncType: 'addresses',
+      enrolledCampers: personIds.length,
+      season,
+    },
+  });
+
+  const homeAddressByPerson = await loadHomeAddressesByPerson(
+    personIds,
+    new Map(),
+    token,
+    subscriptionKey,
+    clientId,
+    acquireRateLimitSlot,
+  );
+
+  console.log(
+    `[Addresses] Resolved ${homeAddressByPerson.size}/${personIds.length} home addresses from CampMinder`,
+  );
+
+  await updateSyncJob(supabase, jobId, {
+    progress: {
+      step: 'Writing home_address to database',
+      syncType: 'addresses',
+      enrolledCampers: personIds.length,
+      addressesResolved: homeAddressByPerson.size,
+      season,
+    },
+  });
+
+  let updatedCount = 0;
+  let skippedNoAddress = 0;
+  let skippedNoChild = 0;
+  const BATCH_SIZE = 100;
+
+  for (let i = 0; i < personIds.length; i += BATCH_SIZE) {
+    const batch = personIds.slice(i, i + BATCH_SIZE);
+    const { data: children, error: fetchErr } = await supabase
+      .from('children')
+      .select('id, person_id')
+      .eq('company_id', companyId)
+      .eq('season', season)
+      .in('person_id', batch);
+
+    if (fetchErr) {
+      throw new Error(`Failed to load children for address update: ${fetchErr.message}`);
+    }
+
+    const childIdByPerson = new Map<string, string>(
+      (children || []).map((c: { id: string; person_id: string | null }) => [
+        String(c.person_id),
+        c.id,
+      ]),
+    );
+
+    const nowIso = new Date().toISOString();
+    for (const personId of batch) {
+      const address = homeAddressByPerson.get(personId);
+      if (!address) {
+        skippedNoAddress++;
+        continue;
+      }
+
+      const childId = childIdByPerson.get(personId);
+      if (!childId) {
+        skippedNoChild++;
+        continue;
+      }
+
+      const { error: updateErr } = await supabase
+        .from('children')
+        .update({ home_address: address, updated_at: nowIso })
+        .eq('id', childId);
+
+      if (updateErr) {
+        console.error(`[Addresses] Update failed for person ${personId}:`, updateErr.message);
+      } else {
+        updatedCount++;
+      }
+    }
+
+    if ((i + BATCH_SIZE) % 200 === 0 || i + BATCH_SIZE >= personIds.length) {
+      await updateSyncJob(supabase, jobId, {
+        progress: {
+          step: 'Writing home_address to database',
+          syncType: 'addresses',
+          enrolledCampers: personIds.length,
+          addressesResolved: homeAddressByPerson.size,
+          addressesWritten: updatedCount,
+          address_write_index: Math.min(i + BATCH_SIZE, personIds.length),
+          season,
+        },
+      });
+    }
+  }
+
+  const { error: lastSyncErr } = await supabase
+    .from('companies')
+    .update({ campminder_last_sync_at: new Date().toISOString() })
+    .eq('id', companyId);
+  if (lastSyncErr) {
+    console.error('[Companies] Failed to update campminder_last_sync_at:', lastSyncErr);
+  }
+
+  await updateSyncJob(supabase, jobId, {
+    status: 'completed',
+    completed_at: new Date().toISOString(),
+    progress: {
+      step: 'Completed',
+      syncType: 'addresses',
+      enrolledCampers: personIds.length,
+      addressesResolved: homeAddressByPerson.size,
+      addressesWritten: updatedCount,
+      skippedNoAddress,
+      skippedNoChild,
+      season,
+    },
+    total_counts: {
+      addresses_resolved: homeAddressByPerson.size,
+      addresses_written: updatedCount,
+    },
+  });
+
+  console.log(
+    `[Addresses] Done — wrote ${updatedCount}, no CM address: ${skippedNoAddress}, no child row: ${skippedNoChild}`,
+  );
+}
+
 async function performFullSync(
   supabase: any,
   jobId: string,
@@ -1530,6 +1692,22 @@ async function performFullSync(
 
       console.log('\n========================================');
       console.log(`Owl Pay / financials-only sync completed for company ${companyId}`);
+      console.log('========================================\n');
+      return;
+    }
+
+    if (syncType === 'addresses') {
+      await performAddressOnlySync(
+        supabase,
+        jobId,
+        companyId,
+        token,
+        subscriptionKey,
+        clientId,
+        season,
+      );
+      console.log('\n========================================');
+      console.log(`Address-only sync completed for company ${companyId}`);
       console.log('========================================\n');
       return;
     }
@@ -1817,6 +1995,7 @@ async function performFullSync(
     let enrolledAttendees: any[] = [];
     const attendeeDataMap = new Map<string, any>();
     let enrolledPersonIdArray: string[] = [];
+    let homeAddressByPerson = new Map<string, string>();
     let sessions: any[] = [];
     const personMap = new Map<string, any>();
     const camperToParentMap = new Map<string, string>();
@@ -2357,6 +2536,21 @@ async function performFullSync(
     console.log(`  Parents with emails from Relatives: ${parentEmailMap.size}`);
     console.log(`  Parents with phones from Relatives: ${parentPhoneMap.size}`);
     console.log(`  NOTE: To fetch complete parent contact details, run cleanup-campminder separately`);
+
+    if (enrolledPersonIdArray.length > 0) {
+      console.log('\n--- FETCHING HOUSEHOLD ADDRESSES (family + person contact) ---');
+      homeAddressByPerson = await loadHomeAddressesByPerson(
+        enrolledPersonIdArray,
+        personMap,
+        token,
+        subscriptionKey,
+        clientId,
+        acquireRateLimitSlot,
+      );
+      console.log(
+        `[Addresses] Resolved home address for ${homeAddressByPerson.size}/${enrolledPersonIdArray.length} enrolled campers`,
+      );
+    }
     
     } // End of parent info extraction (camper sync - syncType === 'campers' || syncType === 'full')
 
@@ -2462,6 +2656,7 @@ async function performFullSync(
         division_id: divisionId,
         bunk_id: bunkId,
         group_name: groupName ?? extractFullSummerGroup(person),
+        home_address: homeAddressByPerson.get(String(person.ID)) ?? null,
       });
     }
     
@@ -2541,6 +2736,7 @@ async function performFullSync(
         division_id: divisionId,
         bunk_id: bunkId,
         group_name: groupName ?? extractFullSummerGroup(person),
+        home_address: homeAddressByPerson.get(personIdStr) ?? null,
       });
 
       camperDataPersonIds.add(personIdStr);
@@ -3444,7 +3640,7 @@ serve(async (req: Request) => {
     ? body.season_id
     : DEFAULT_SYNC_SEASON;
     
-    // sync_type can be: 'campers', 'staff', 'financials', or 'full' (default).
+    // sync_type can be: 'campers', 'staff', 'financials', 'addresses', or 'full' (default).
     // Cron schedule (Eastern): campers 6/18, staff 7/19, financials 8/20.
     const effectiveSyncType = sync_type || 'full';
     
@@ -3672,7 +3868,7 @@ serve(async (req: Request) => {
         message: 'Sync jobs started in background (companies run one after another)',
         results,
         note:
-          'Companies run sequentially in background. Scheduled sync: 6 AM & 6 PM Eastern (campers), then 7 AM & 7 PM (staff). Manual full sync may timeout on large camps — use Campers Only then Staff Only.',
+          'Companies run sequentially in background. Scheduled sync: 6 AM & 6 PM Eastern (campers), then 7 AM & 7 PM (staff). Manual full sync may timeout on large camps — use Campers Only, Addresses Only, then Staff Only.',
       }),
       { 
         status: 200, 
