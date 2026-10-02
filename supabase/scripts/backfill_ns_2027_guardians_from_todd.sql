@@ -1,0 +1,326 @@
+-- Backfill North Shore 2027 guardian contact from Todd CampMinder export.
+-- Source: north_shore_2027_guardians_todd.csv (220 campers)
+--
+-- HOW TO RUN (Supabase SQL Editor):
+-- 1. Select ALL lines in this file (Cmd+A) — do NOT run a partial selection.
+-- 2. Click Run once. Wait for the final verify row.
+-- 3. Does NOT insert campers or create duplicates — UPDATE only.
+
+BEGIN;
+
+CREATE TEMP TABLE todd_ns_2027_guardians (
+  person_id text PRIMARY KEY,
+  guardian_name text NOT NULL,
+  guardian_phone text,
+  guardian_email text NOT NULL
+) ON COMMIT DROP;
+
+INSERT INTO todd_ns_2027_guardians (person_id, guardian_name, guardian_phone, guardian_email) VALUES
+  ('9714577', 'Leigh Trani', '516-650-6818', 'ltrani@gmail.com'),
+  ('10123947', 'Allison Pedicini', '516-263-2233', 'Allison.pedicini@gmail.com'),
+  ('11106771', 'Reena Camus', '917-886-8892', 'rchan16@aol.com'),
+  ('11144608', 'Jill Fisher', '347-306-1529', 'Jlfisher@factset.com'),
+  ('11160506', 'Tisa DeForest', '646-354-0235', 'tisadeforest@icloud.com'),
+  ('12444438', 'Allison Pedicini', '516-263-2233', 'Allison.pedicini@gmail.com'),
+  ('12719731', 'Alexa Trager', '516-315-9813', 'alexa.trager@gmail.com'),
+  ('13312484', 'Jess Robbins', '9542637466', 'jess.robbins14@gmail.com'),
+  ('13338717', 'Jessica Miller', '516-351-7537', 'Jeslynb@gmail.com'),
+  ('13357068', 'samantha goldstein', '8184165507', 'sjleavitt@gmail.com'),
+  ('13505073', 'Pamela Fine', '516-903-0625', 'pfine702@gmail.com'),
+  ('13719617', 'Michele Klein', '917-667-4207', 'msutemeyer@yahoo.com'),
+  ('13750806', 'Megan Grella', '516-662-9666', 'megangrella@gmail.com'),
+  ('13754307', 'Liz Bendrihem', '917-331-0873', 'lizbendrihem@yahoo.com'),
+  ('13789341', 'Maytal Meltzer', '703-517-2310', 'maytal.selzer@gmail.com'),
+  ('13789804', 'Lina Struck', '5165262999', 'lina.struck@gmail.com'),
+  ('13850040', 'Joanna Samperi', '212-203-2156', 'joanna.orlowsky@gmail.com'),
+  ('13917078', 'Sherry Megalla', '9175393937', 'smegalla@gmail.com'),
+  ('13917168', 'Sherry Megalla', '9175393937', 'smegalla@gmail.com'),
+  ('14302331', 'Shewa Kazmi', '917-337-3119', 'shewakazmi@gmail.com'),
+  ('14594693', 'Ilyse Bianchi', '516-695-3508', 'ilysebianchi@gmail.com'),
+  ('14604653', 'Dahlia Danesh', '516-526-8680', 'dmottahedeh@gmail.com'),
+  ('14964644', 'Meredith Haynes', '516-287-5992', 'meredith@camptlc.com'),
+  ('15032785', 'Orli Peltz', '516-236-5504', 'orlipeltz@gmail.com'),
+  ('15056132', 'Liana Omara', '516-776-0553', 'lianabaldo1@gmail.com'),
+  ('15134493', 'Aubrey Siegel', '516-816-7545', 'achanecka1980@gmail.com'),
+  ('15136114', 'Lindsay Schwartz', '8476481234', 'lindsay.b.powell@gmail.com'),
+  ('15289058', 'Kristen Mancuso', '5163130267', 'kristenmancuso615@gmail.com'),
+  ('15311237', 'Katherine Flores', '646-670-0314', 'burnek2@gmail.com'),
+  ('15313421', 'Stephanie Salierno', '5164354766', 'stephaniesalierno@gmail.com'),
+  ('15313451', 'Stephanie Salierno', '5164354766', 'stephaniesalierno@gmail.com'),
+  ('15349137', 'Jaclyn Malleck', '6463738276', 'jaclynm@prodigy.net'),
+  ('15415423', 'Jennifer Baumgarten', '516-521-3265', 'jsrbaumgarten@gmail.com'),
+  ('15516686', 'Joanna Samperi', '212-203-2156', 'joanna.orlowsky@gmail.com'),
+  ('15603813', 'Tracy Hadden', '516-603-2035', 'tracy.hadden@gmail.com'),
+  ('15790852', 'Betsy Siegel', '5164488200', 'BetsyRsiegel@gmail.com'),
+  ('15886920', 'Danielle Chalson', '585-820-4851', 'dschillinger@gmail.com'),
+  ('15899187', 'Jess Robbins', '9542637466', 'jess.robbins14@gmail.com'),
+  ('15930853', 'Megan Grella', '516-662-9666', 'megangrella@gmail.com'),
+  ('15942859', 'Danielle Chalson', '585-820-4851', 'dschillinger@gmail.com'),
+  ('15964365', 'Jennifer Poon', '617-448-4803', 'jennydpoon@gmail.com'),
+  ('15964380', 'Jennifer Poon', '617-448-4803', 'jennydpoon@gmail.com'),
+  ('15964915', 'Emily Goodman', '5162389545', 'emilygoodman1010@gmail.com'),
+  ('15964943', 'Sandra Sabatino', '9176695238', 'Sandra.e.Sabatino@gmail.com'),
+  ('15965236', 'Amanda Kono', '646-647-6718', 'akono523@gmail.com'),
+  ('15965489', 'Lauren Goldberg', '347-804-1842', 'lkugielska@yahoo.com'),
+  ('15965524', 'Randi Goldman', '516-884-2539', 'randihgoldman@gmail.com'),
+  ('15965688', 'Sharon Gerber', '5168401579', 'gerber.sharon@gmail.com'),
+  ('15968674', 'Dana Levine', '5168085888', 'djr220@gmail.com'),
+  ('15972476', 'Marnie Schwartz', '516-528-6143', 'msomanschwartz@gmail.com'),
+  ('16406047', 'Kate Gold', '336-407-5032', 'katefgold@gmail.com'),
+  ('16412400', 'Jennifer Baumgarten', '516-521-3265', 'jsrbaumgarten@gmail.com'),
+  ('16421701', 'Meredith Haynes', '516-287-5992', 'meredith@camptlc.com'),
+  ('16424020', 'Amy Chalmers', '(516) 532-4032', 'amyfriedman8@gmail.com'),
+  ('16424936', 'Jaclyn Lichtenstein', '5167705143', 'jaclyn525@gmail.com'),
+  ('16459835', 'Hilary Cohan', '516-359-7320', 'hilarycohan@gmail.com'),
+  ('16500167', 'Brooke Tawil', '516-448-1017', 'brooke.f.shapiro@gmail.com'),
+  ('16517148', 'Shewa Kazmi', '917-337-3119', 'shewakazmi@gmail.com'),
+  ('16801626', 'Angela Pei', '9179740432', 'angela.pei@gmail.com'),
+  ('17032919', 'Rachel Detore', '516-660-0912', 'racheltdetore@gmail.com'),
+  ('17032930', 'Rachel Detore', '516-660-0912', 'racheltdetore@gmail.com'),
+  ('17151165', 'Laura Johnson', '5163759084', 'laura.johnson49@gmail.com'),
+  ('17151191', 'Laura Johnson', '5163759084', 'laura.johnson49@gmail.com'),
+  ('17263456', 'Lenore Salman', '917-519-5513', 'lenoresalman@gmail.com'),
+  ('17281625', 'Lindsay Wunsch', '516-965-0305', 'lindsay.wunsch@gmail.com'),
+  ('17639258', 'Ashleigh Wiktor', '5169724927', 'ashleighblank28@gmail.com'),
+  ('17761099', 'Betsy Siegel', '5164488200', 'BetsyRsiegel@gmail.com'),
+  ('17764044', 'Skylar Widom', '516-695-7713', 'skylarwidom@gmail.com'),
+  ('17765848', 'Randi Goldman', '516-884-2539', 'randihgoldman@gmail.com'),
+  ('17775724', 'Lenore Salman', '917-519-5513', 'lenoresalman@gmail.com'),
+  ('17776587', 'Christina Levitt', '516-445-3875', 'cdipuma103@gmail.com'),
+  ('17777460', 'Jessica Zuckerman', '9176738262', 'jessicabzuckerman@gmail.com'),
+  ('17796924', 'Jane Kehrer', '718-813-2957', 'janewholden@gmail.com'),
+  ('17796936', 'Jane Kehrer', '718-813-2957', 'janewholden@gmail.com'),
+  ('17803797', 'Jessica Smolin', '5166408252', 'jessicasmolin@gmail.com'),
+  ('17804554', 'Robyn Sendach', '5163438863', 'robynsendach@gmail.com'),
+  ('17804676', 'Rachel Friedmann', '5167707996', 'rachelgold28@gmail.com'),
+  ('17805509', 'Sharon Gerber', '5168401579', 'gerber.sharon@gmail.com'),
+  ('17814923', 'Heather Gorin', '3057888627', 'gorinfamily30@gmail.com'),
+  ('17816127', 'Jamie Niss', '5166956295', 'jamieniss1@gmail.com'),
+  ('17820391', 'Nicole Hodge', '5169457794', 'nikihodgee@gmail.com'),
+  ('17829055', 'Jessica Van Manen', '516-732-0397', 'jessica.vanmanen@gmail.com'),
+  ('17854163', 'Liz Bendrihem', '917-331-0873', 'lizbendrihem@yahoo.com'),
+  ('17857942', 'Meredith Brooks/Goldman', '516-642-5776', 'merb626@yahoo.com'),
+  ('17864839', 'Florina Gohari', '347-210-3045', 'flgetman@gmail.com'),
+  ('17867434', 'Lindsay Lombardo', '9175797542', 'lindsay.grobman@gmail.com'),
+  ('17914859', 'Jessica Frost', '516-946-2983', 'jlm.jessica@gmail.com'),
+  ('17930159', 'Dana Libov', '9145223356', 'dana.libov@gmail.com'),
+  ('18001163', 'Stacey Seldon', '845-598-0226', 'staceylseldon@gmail.com'),
+  ('18059686', 'Jessica Friedman', '5165514405', 'friedman.jessie@gmail.com'),
+  ('18337223', 'Lana Schlesinger', '5617550948', 'lana688@gmail.com'),
+  ('18337238', 'Lana Schlesinger', '5617550948', 'lana688@gmail.com'),
+  ('18361796', 'Lindsey Baker', '6178233409', 'LinBaker@gmail.com'),
+  ('18439300', 'Cara Partovich', '5164283958', 'carapartovich@gmail.com'),
+  ('18786240', 'Allison O’Malley', '5167298112', 'allie.solo@yahoo.com'),
+  ('18932068', 'Lindsey Singer', '5168179397', 'Lindseymsinger@gmail.com'),
+  ('18951475', 'Marisa Wolpert', '6318043016', 'marisa.e.wolpert@gmail.com'),
+  ('18989436', 'Rachel Goldman', '443-465-5578', 'rgoldma4@gmail.com'),
+  ('19007650', 'Jessica Rosenthal', '516-4581479', 'jessr1011@gmail.com'),
+  ('19026598', 'Amrita Henneman', '9172934719', 'Amritads91@gmail.com'),
+  ('19028566', 'Rachel Nicholson', '516-695-1910', 'rwolfnicholson@gmail.com'),
+  ('19037145', 'Michelle Golub', '516-457-5448', 'Michellecgolub@gmail.com'),
+  ('19040085', 'Lindsay Schwartz', '8476481234', 'lindsay.b.powell@gmail.com'),
+  ('19041893', 'Rachel Detore', '516-660-0912', 'racheltdetore@gmail.com'),
+  ('19051852', 'Shewa Kazmi', '917-337-3119', 'shewakazmi@gmail.com'),
+  ('19096250', 'Ariel Zuckerman', '5169786197', 'arielruttner@gmail.com'),
+  ('19116452', 'Robin Goldenberg', '5163196071', 'robin.goldenberg512@gmail.com'),
+  ('19130276', 'Susan Vuernick', '513-543-0042', 'susan.vuernick@gmail.com'),
+  ('19133691', 'Dahlia Danesh', '516-526-8680', 'dmottahedeh@gmail.com'),
+  ('19134778', 'Maytal Meltzer', '703-517-2310', 'maytal.selzer@gmail.com'),
+  ('19135527', 'Alissa Lovens', '5165516387', 'alissa.lovens@gmail.com'),
+  ('19138706', 'Moriah Sirotkin', '7816368875', 'moriah.sirotkin@gmail.com'),
+  ('19140103', 'Skylar Widom', '516-695-7713', 'skylarwidom@gmail.com'),
+  ('19158903', 'Allyson Stumacher', '516-509-8551', 'AllysonStumacher@gmail.com'),
+  ('19171641', 'May Brennan', '5164929558', 'maymsofi@gmail.com'),
+  ('19172231', 'Chelsey Amer', '5163184428', 'chelsey.amer@gmail.com'),
+  ('19172621', 'Amanda Mald', '9179300174', 'amanda.g.mald@gmail.com'),
+  ('19172697', 'Jaime Hanik', '516-320-5818', 'jaime.lkaye@gmail.com'),
+  ('19172790', 'Alyssa Barzideh', '631-513-6033', 'alyssasbarz@gmail.com'),
+  ('19172809', 'Alyssa Barzideh', '631-513-6033', 'alyssasbarz@gmail.com'),
+  ('19172849', 'Sandra Sabatino', '9176695238', 'Sandra.e.Sabatino@gmail.com'),
+  ('19173202', 'Arielle Grauman', '5169986964', 'agourji@aol.com'),
+  ('19173655', 'Stacey Seldon', '845-598-0226', 'staceylseldon@gmail.com'),
+  ('19173957', 'Sara Wein', '516-776-5816', 'sara.m.wein@gmail.com'),
+  ('19174210', 'Liora Hirschberger', '516-805-3542', 'lbhirschberger@gmail.com'),
+  ('19176565', 'Emily Weinreb', '8476877138', 'emilyweinreb@gmail.com'),
+  ('19216512', 'Brooke Tawil', '516-448-1017', 'brooke.f.shapiro@gmail.com'),
+  ('19253584', 'Ashley-Lynn Rolnik', '516-655-5926', 'ashleylynn.rolnik@gmail.com'),
+  ('19270421', 'Rowena Sardelli', '917 836 2050', 'rowena.sardelli@gmail.com'),
+  ('19356234', 'Emma Kahn', '4132222233', 'ek467863@gmail.com'),
+  ('19608513', 'Holly Razzaghi', '5705943557', 'hrazzaghi65@gmail.com'),
+  ('19653114', 'Amber Mercado', '856-803-9429', 'ambermg1984@gmail.com'),
+  ('19683933', 'Nina Aguero Rios', '917-238 2432', 'ninaroedeler@gmail.com'),
+  ('19740919', 'Adrienne DelMoro', '(516) 312-0733', 'adrienne.gerard@gmail.com'),
+  ('19751744', 'Jacqueline Weissman', '212-920-5967', 'jyweissman@gmail.com'),
+  ('19751745', 'Jacqueline Weissman', '212-920-5967', 'jyweissman@gmail.com'),
+  ('19846824', 'Allison Maslin', '5162970257', 'allisonmaslin@gmail.com'),
+  ('20057806', 'Tara Chiou', '650-714-6052', 'tarawong10@gmail.com'),
+  ('20105713', 'Jaclyn Lichtenstein', '5167705143', 'jaclyn525@gmail.com'),
+  ('20209208', 'Sarah Greene', '9174490446', 'Sargig322@gmail.com'),
+  ('20240357', 'Arielle Goldstein', '516-417-0629', 'ariellegoldsteinn@gmail.com'),
+  ('20326611', 'Erica Langendorff', '516-554-3636', 'erica.raskin@gmail.com'),
+  ('20326612', 'Erica Langendorff', '516-554-3636', 'erica.raskin@gmail.com'),
+  ('20354352', 'Rachel Friedmann', '5167707996', 'rachelgold28@gmail.com'),
+  ('20354553', 'Lori Bernacchio', '516-428-5694', 'loricawohl@gmail.com'),
+  ('20355942', 'Jillian Manoff', '914-393-8010', 'jilliancotugno@gmail.com'),
+  ('20360422', 'Lisa Dean', '516-660-9299', 'lmdean6@gmail.com'),
+  ('20365824', 'Pam Kuzon', '917-664-9939', 'Pamelakuzon@gmail.com'),
+  ('20365942', 'Emily Goodman', '5162389545', 'emilygoodman1010@gmail.com'),
+  ('20378658', 'Frances Sparks Fonacier', '5166423232', 'fonacierr@gmail.com'),
+  ('20379664', 'Emma Kahn', '4132222233', 'ek467863@gmail.com'),
+  ('20402603', 'Adria Savarese', '9179037031', 'adriad321@yahoo.com'),
+  ('20403742', 'Amy Chalmers', '(516) 532-4032', 'amyfriedman8@gmail.com'),
+  ('20405661', 'Jaclyn Malleck', '6463738276', 'jaclynm@prodigy.net'),
+  ('20423495', 'Tzlil Kreitman', '781-454-8377', 'Trkreitman@gmail.com'),
+  ('20439819', 'Alissa Lovens', '5165516387', 'alissa.lovens@gmail.com'),
+  ('20443504', 'Hilary Cohan', '516-359-7320', 'hilarycohan@gmail.com'),
+  ('20445712', 'Jessica Friedman', '5165514405', 'friedman.jessie@gmail.com'),
+  ('20448475', 'Lindsey Singer', '5168179397', 'Lindseymsinger@gmail.com'),
+  ('20448538', 'Rachel Spector', '516-884-9044', 'rbspec@gmail.com'),
+  ('20448695', 'Liana Omara', '516-776-0553', 'lianabaldo1@gmail.com'),
+  ('20448890', 'Alexandria Shepard', '5164489362', 'alexs@vbcpkg.com'),
+  ('20448894', 'Alexandria Shepard', '5164489362', 'alexs@vbcpkg.com'),
+  ('20449505', 'Melissa Barash', '908-415-9652', 'jasonandmelissa2020@gmail.com'),
+  ('20458100', 'Amanda Mandel', '5164483943', 'amanda.mandel18@gmail.com'),
+  ('20466741', 'Athena Caviris', '516-965-5658', 'Athenapapaporfiriou@gmail.com'),
+  ('20496401', 'Ashley Yeshoua', '5165517735', 'ashleybyeshoua@gmail.com'),
+  ('20535727', 'robyn carmel', '5166103456', 'robynelissa@gmail.com'),
+  ('20545195', 'Katherine Flores', '646-670-0314', 'burnek2@gmail.com'),
+  ('20826985', 'Elaine Tran', '781-632-0515', 'etran739@gmail.com'),
+  ('20892272', 'Christina Mastronardi', '5163846909', 'christinamastro4@gmail.com'),
+  ('20914156', 'Gina Thompson', '6464841700', 'ginathompson4@gmail.com'),
+  ('21004934', 'Isaac Anteby', '7184737035', 'isaacanteby@gmail.com'),
+  ('21209660', 'Jessica Arena', '5167321133', 'arena.jessica2016@gmail.com'),
+  ('21220047', 'Cara Greengrass', '2017889249', 'cara.greengrass@gmail.com'),
+  ('21329100', 'Stacey Seldon', '845-598-0226', 'staceylseldon@gmail.com'),
+  ('21329158', 'Andrea McCloy', '631-745-7452', 'ange@twinharbor.com'),
+  ('21363509', 'Eve Weinstein', '5162863650', 'evew412@gmail.com'),
+  ('21363536', 'Eve Weinstein', '5162863650', 'evew412@gmail.com'),
+  ('21374121', 'Denise Mancilla', '5167243114', 'dmancilla86@gmail.com'),
+  ('21386332', 'Diana Collins', '5165803118', 'dcollins325@gmail.com'),
+  ('21388506', 'Lisa Dean', '516-660-9299', 'lmdean6@gmail.com'),
+  ('21441679', 'Shirley Bornstein', '5165108000', 'shirleyabornstein@gmail.com'),
+  ('21608496', 'Galina Suckiel', '7182904491', 'gsuckiel@gmail.com'),
+  ('21618000', 'Catherina DeRose', '631-697-8010', 'rinamderose@gmail.com'),
+  ('21805524', 'Amanda Kittai', '5165517585', 'amandacharytan@gmail.com'),
+  ('21901730', 'Shewa Kazmi', '917-337-3119', 'shewakazmi@gmail.com'),
+  ('21912603', 'Jamie Levine', '860-280-4294', 'jamieshorn@gmail.com'),
+  ('21917378', 'Adrienne DelMoro', '(516) 312-0733', 'adrienne.gerard@gmail.com'),
+  ('21928515', 'Susan Scoparino', '5164594903', 'Susanbiology@gmail.com'),
+  ('21931541', 'Julie Makowski', '5166801694', 'juliemakowski1@gmail.com'),
+  ('21941074', 'Melanie Wiesenfeld', '5166552594', 'melanie.maiman@gmail.com'),
+  ('21941506', 'Andrew Cooper', '9172513452', 'andygcooper@gmail.com'),
+  ('21944768', 'Jennifer Figliolia', '5169939652', 'jlridini@gmail.com'),
+  ('21946851', 'Holly Razzaghi', '5705943557', 'hrazzaghi65@gmail.com'),
+  ('21955027', 'Michael Rubin', '9148744816', 'mrubin31@gmail.com'),
+  ('21955574', 'Ashleigh Wiktor', '5169724927', 'ashleighblank28@gmail.com'),
+  ('21965529', 'Pamela Fisher', '516-426-7015', 'pamfisher6@gmail.com'),
+  ('21970714', 'Josselyn Sheer Kravitz', '201-4521644', 'josselynsheer@gmail.com'),
+  ('21970730', 'Josselyn Sheer Kravitz', '201-4521644', 'josselynsheer@gmail.com'),
+  ('21972836', 'Tess Greenberg', '516-236-7396', 'tess.m.greenberg@gmail.com'),
+  ('21980906', 'Lana Schlesinger', '5617550948', 'lana688@gmail.com'),
+  ('21984077', 'Allison O’Malley', '5167298112', 'allie.solo@yahoo.com'),
+  ('21985770', 'Danielle Menna', '646-533-0333', 'danielle.rodin@gmail.com'),
+  ('21985787', 'Danielle Menna', '646-533-0333', 'danielle.rodin@gmail.com'),
+  ('22007210', 'Melissa Kornhaber', '8453466990', 'melissa.kornhaber@gmail.com'),
+  ('22007700', 'Athena Caviris', '516-965-5658', 'Athenapapaporfiriou@gmail.com'),
+  ('22019455', 'Philomena Hefferon', '6312356100', 'philomena.bubaris@gmail.com'),
+  ('22021620', 'Wendy Tursi', '9087633493', 'wrokose@gmail.com'),
+  ('22023960', 'Christina Keller', '2014001126', 'newkeller1978@gmail.com'),
+  ('22023966', 'Christina Keller', '2014001126', 'newkeller1978@gmail.com'),
+  ('22027162', 'Amanda Kittai', '5165517585', 'amandacharytan@gmail.com'),
+  ('22027440', 'Marika Chikvashvili', '5164760214', 'marikac86@gmail.com'),
+  ('22028066', 'Kristiana Maxwell', '516-320-4243', 'kristianazuccarini@gmail.com'),
+  ('22028347', 'Marnie Schwartz', '516-528-6143', 'msomanschwartz@gmail.com'),
+  ('22028495', 'Lindsay Nemzer', '9176708093', 'lleff1@gmail.com'),
+  ('22028499', 'Lindsay Nemzer', '9176708093', 'lleff1@gmail.com'),
+  ('22029324', 'Laura Gottlieb', '5169461486', 'ljg212@gmail.com'),
+  ('22029683', 'Reisa Rosengard', '917-602-1527', 'rbf0508@gmail.com'),
+  ('22030631', 'Moriah Sirotkin', '7816368875', 'moriah.sirotkin@gmail.com');
+
+-- PREVIEW: rows in Todd export that match NS 2027 active campers
+SELECT COUNT(*) AS todd_rows_matched
+FROM todd_ns_2027_guardians t
+JOIN public.children c ON c.person_id = t.person_id
+JOIN public.companies co ON co.id = c.company_id
+WHERE co.slug = 'north-shore-day-camp'
+  AND c.season = '2027'
+  AND c.status = 'active';
+
+-- PREVIEW: Todd PersonIDs NOT on NS 2027 roster (may be 2026-only or not enrolled)
+SELECT t.person_id, t.guardian_name, t.guardian_email
+FROM todd_ns_2027_guardians t
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM public.children c
+  JOIN public.companies co ON co.id = c.company_id
+  WHERE c.person_id = t.person_id
+    AND c.season = '2027'
+    AND co.slug = 'north-shore-day-camp'
+)
+ORDER BY t.person_id;
+
+-- APPLY: fill guardian fields on matched 2027 campers
+-- Uses CTE + update by child id (avoids Postgres UPDATE/FROM alias errors).
+WITH ns_company AS (
+  SELECT id
+  FROM public.companies
+  WHERE slug = 'north-shore-day-camp'
+  LIMIT 1
+),
+guardian_updates AS (
+  SELECT
+    c.id AS child_id,
+    t.guardian_name,
+    NULLIF(trim(t.guardian_phone), '') AS guardian_phone,
+    NULLIF(trim(t.guardian_email), '') AS guardian_email
+  FROM public.children c
+  INNER JOIN ns_company nc ON nc.id = c.company_id
+  INNER JOIN todd_ns_2027_guardians t ON t.person_id = c.person_id
+  WHERE c.season = '2027'
+    AND c.status = 'active'
+)
+UPDATE public.children
+SET
+  guardian_name = guardian_updates.guardian_name,
+  guardian_phone = guardian_updates.guardian_phone,
+  guardian_email = guardian_updates.guardian_email,
+  updated_at = now()
+FROM guardian_updates
+WHERE public.children.id = guardian_updates.child_id;
+
+-- Refresh Sunshine parent_email for 2027 (linked rows only)
+WITH ns_company AS (
+  SELECT id
+  FROM public.companies
+  WHERE slug = 'north-shore-day-camp'
+  LIMIT 1
+),
+sunshine_email_updates AS (
+  SELECT
+    sc.id AS sunshine_camper_id,
+    NULLIF(trim(c.guardian_email), '') AS parent_email
+  FROM public.sunshine_campers sc
+  INNER JOIN public.children c
+    ON sc.child_id = c.id
+   AND sc.company_id = c.company_id
+  INNER JOIN ns_company nc ON nc.id = c.company_id
+  WHERE sc.season = '2027'
+    AND c.season = '2027'
+)
+UPDATE public.sunshine_campers
+SET parent_email = sunshine_email_updates.parent_email
+FROM sunshine_email_updates
+WHERE public.sunshine_campers.id = sunshine_email_updates.sunshine_camper_id;
+
+-- VERIFY after update
+SELECT
+  COUNT(*) FILTER (WHERE c.status = 'active') AS active_campers,
+  COUNT(*) FILTER (WHERE c.status = 'active' AND NULLIF(trim(c.guardian_email), '') IS NOT NULL) AS with_email,
+  COUNT(*) FILTER (WHERE c.status = 'active' AND NULLIF(trim(c.guardian_phone), '') IS NOT NULL) AS with_phone,
+  COUNT(*) FILTER (WHERE c.status = 'active' AND NULLIF(trim(c.guardian_name), '') IS NOT NULL) AS with_parent_name
+FROM public.children c
+JOIN public.companies co ON co.id = c.company_id
+WHERE co.slug = 'north-shore-day-camp'
+  AND c.season = '2027';
+
+COMMIT;
