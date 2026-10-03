@@ -1,4 +1,5 @@
-import { Bus, Clock, Sparkles, Waves } from "lucide-react";
+import { Bus, Clock, Waves } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   absenceTypeLabel,
   changeTypeLabel,
@@ -22,7 +23,7 @@ type TimelineItem = {
   title: string;
   detail?: string;
   icon: typeof Clock;
-  tone: "neutral" | "warning" | "accent";
+  tone: "amber" | "blue" | "emerald";
 };
 
 export function TodayTimeline({
@@ -43,7 +44,7 @@ export function TodayTimeline({
       title: `${camperName(absence.camper_id)} · ${absenceTypeLabel(absence.absence_type)}`,
       detail: absence.reason ?? undefined,
       icon: Clock,
-      tone: "warning",
+      tone: "amber",
     });
   }
 
@@ -58,7 +59,7 @@ export function TodayTimeline({
         ? `Pickup by ${pickup.pickup_person_name}`
         : pickup.notes ?? undefined,
       icon: Bus,
-      tone: "accent",
+      tone: "blue",
     });
   }
 
@@ -78,61 +79,59 @@ export function TodayTimeline({
         .filter(Boolean)
         .join(" · "),
       icon: Waves,
-      tone: "neutral",
+      tone: "emerald",
     });
   }
 
   items.sort((a, b) => a.timeLabel.localeCompare(b.timeLabel));
 
-  const toneClasses = {
-    warning: "bg-[hsl(38_90%_93%)] text-[hsl(32_70%_38%)] ring-[hsl(38_85%_88%)]",
-    accent: "bg-[hsl(var(--pp-brand-soft))] text-[hsl(var(--pp-brand))] ring-[hsl(var(--pp-brand-muted))]",
-    neutral: "bg-[hsl(158_35%_92%)] text-[hsl(158_40%_32%)] ring-[hsl(158_30%_88%)]",
+  const toneStyles = {
+    amber: "bg-amber-50 text-amber-600 ring-amber-100",
+    blue: "bg-blue-50 text-blue-600 ring-blue-100",
+    emerald: "bg-emerald-50 text-emerald-600 ring-emerald-100",
   };
 
   return (
-    <section className="pp-card overflow-hidden p-0 md:p-0">
-      <div className="border-b border-[hsl(var(--pp-border)/0.6)] bg-gradient-to-r from-[hsl(var(--pp-brand-subtle))] to-transparent px-5 py-5 md:px-6">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-[hsl(var(--pp-brand))]" />
-          <p className="pp-label">Today at camp</p>
-        </div>
-        <h2 className="mt-1.5 text-xl font-bold tracking-tight md:text-2xl">
-          {formatFriendlyDate(todayIso)}
-        </h2>
+    <section className="pp-card overflow-hidden rounded-2xl">
+      <div className="border-b border-slate-100 px-5 py-4 md:px-6 md:py-5">
+        <h2 className="pp-dashboard-section-title">Today&apos;s schedule</h2>
+        <p className="mt-0.5 text-sm text-slate-500">{formatFriendlyDate(todayIso)}</p>
       </div>
 
       <div className="px-5 py-5 md:px-6 md:py-6">
         {items.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-[hsl(var(--pp-border))] bg-[hsl(var(--pp-brand-subtle)/0.5)] px-4 py-6 text-center">
-            <p className="text-sm leading-relaxed pp-text-muted">
-              No schedule changes or lessons on file for today. Your campers follow the regular camp day
-              unless you submit a pickup change or absence.
+          <div className="flex items-start gap-3 rounded-xl bg-slate-50 px-4 py-4">
+            <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+            <p className="text-sm leading-relaxed text-slate-600">
+              All clear for today — your campers follow the regular camp schedule.
             </p>
           </div>
         ) : (
-          <ol className="space-y-5">
-            {items.map((item, index) => {
+          <ol className="space-y-4">
+            {items.map((item) => {
               const Icon = item.icon;
               return (
-                <li key={item.id} className="relative flex gap-4">
-                  {index < items.length - 1 ? (
-                    <span className="absolute left-[1.2rem] top-11 h-[calc(100%+0.5rem)] w-0.5 bg-gradient-to-b from-[hsl(var(--pp-border))] to-transparent" />
-                  ) : null}
+                <li
+                  key={item.id}
+                  className="flex gap-4 rounded-xl border border-slate-100 bg-slate-50/50 p-4"
+                >
                   <div
-                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ring-1 ${toneClasses[item.tone]}`}
+                    className={cn(
+                      "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1",
+                      toneStyles[item.tone],
+                    )}
                   >
                     <Icon className="h-4 w-4" />
                   </div>
-                  <div className="min-w-0 flex-1 pb-0.5">
+                  <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <p className="font-semibold">{item.title}</p>
-                      <span className="rounded-full bg-[hsl(var(--pp-brand-subtle))] px-2.5 py-0.5 text-xs font-semibold pp-text-muted">
+                      <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+                      <span className="rounded-full bg-white px-2.5 py-0.5 text-xs font-medium text-slate-500 ring-1 ring-slate-200">
                         {item.timeLabel}
                       </span>
                     </div>
                     {item.detail ? (
-                      <p className="mt-1.5 text-sm leading-relaxed pp-text-muted">{item.detail}</p>
+                      <p className="mt-1 text-sm leading-relaxed text-slate-600">{item.detail}</p>
                     ) : null}
                   </div>
                 </li>

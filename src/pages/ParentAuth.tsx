@@ -11,6 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useParentCompany } from "@/hooks/useParentCompany";
 import { useParentPortalTheme } from "@/components/parentPortal/useParentPortalTheme";
 import { userIsCampStaff } from "@/lib/parentPortalConstants";
+import { AppStoreDownloadBadge } from "@/components/parentPortal/AppStoreDownloadBadge";
 
 export default function ParentAuth() {
   const navigate = useNavigate();
@@ -193,6 +194,13 @@ export default function ParentAuth() {
               Keep authorized pickup contacts up to date
             </li>
           </ul>
+          <div className="mt-10 border-t border-[hsl(var(--pp-border))] pt-8">
+            <p className="text-sm font-medium text-slate-700">Get The Nest on your iPhone</p>
+            <p className="mt-1 max-w-sm text-sm pp-text-muted">
+              Download the app for quick access to pickups, absences, and camp updates on the go.
+            </p>
+            <AppStoreDownloadBadge className="mt-4 inline-block" />
+          </div>
         </section>
 
         <section className="lg:hidden">
@@ -337,6 +345,12 @@ export default function ParentAuth() {
               </form>
             </TabsContent>
           </Tabs>
+
+          <div className="mt-8 border-t border-[hsl(var(--pp-border))] pt-6 text-center">
+            <p className="text-sm font-medium text-slate-700">Prefer the app?</p>
+            <p className="mt-1 text-xs pp-text-muted">Download The Nest for iPhone</p>
+            <AppStoreDownloadBadge className="mx-auto mt-3 inline-block" />
+          </div>
         </section>
       </div>
     </div>

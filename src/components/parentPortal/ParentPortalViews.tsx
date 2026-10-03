@@ -66,25 +66,21 @@ export function ParentHomeView({
   const todayIso = todayIsoDate();
 
   return (
-    <div className="space-y-7 md:space-y-9">
+    <div className="space-y-8 md:space-y-10">
       <WelcomeHeader contactName={contactName} campName={campName} />
 
-      <TodayTimeline
-        todayIso={todayIso}
-        pickups={pickups}
-        absences={absences}
-        swimLessons={swimLessons}
-        camperName={(id) => campers.find((c) => c.id === id)?.name ?? "—"}
-      />
+      <CampAnnouncement campName={campName} update={campUpdate} />
 
       <section>
-        <div className="mb-4 flex items-end justify-between gap-3">
-          <div>
-            <p className="pp-label">Your family</p>
-            <h2 className="mt-1.5 text-xl font-bold tracking-tight md:text-2xl">Campers</h2>
-          </div>
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <h2 className="pp-dashboard-section-title">My campers</h2>
           {campers.length > 0 ? (
-            <Button variant="ghost" className="rounded-xl" onClick={() => onNavigate("campers")}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 rounded-xl text-sm font-semibold text-[hsl(var(--pp-brand))] hover:bg-[hsl(var(--pp-brand-subtle))] hover:text-[hsl(var(--pp-brand-dark))]"
+              onClick={() => onNavigate("campers")}
+            >
               View all
             </Button>
           ) : null}
@@ -97,10 +93,11 @@ export function ParentHomeView({
             description="Once the camp office connects your campers to your family account, they'll appear here with today's schedule and pickup details."
           />
         ) : (
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-5 md:grid-cols-2">
             {campers.slice(0, 4).map((camper) => (
               <CamperCard
                 key={camper.id}
+                variant="dashboard"
                 camper={camper}
                 todayIso={todayIso}
                 absences={absences}
@@ -114,21 +111,18 @@ export function ParentHomeView({
       </section>
 
       <section>
-        <div className="mb-4">
-          <p className="pp-label">Things you may want to do</p>
-          <h2 className="mt-1.5 text-xl font-bold tracking-tight md:text-2xl">Quick actions</h2>
-        </div>
+        <h2 className="pp-dashboard-section-title mb-5">Quick actions</h2>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <QuickActionCard
             icon={Calendar}
             title="Change pickup"
-            description="Request a different pickup arrangement for today or a future date."
+            description="Request a different pickup time or person for today or a future date."
             accent="blue"
             onClick={() => onNavigate("pickups")}
           />
           <QuickActionCard
             icon={Clock}
-            title="Report an absence"
+            title="Report absence"
             description="Let camp know if your child won't attend or will arrive late."
             accent="amber"
             onClick={() => onNavigate("absences")}
@@ -137,20 +131,26 @@ export function ParentHomeView({
             icon={UserCheck}
             title="Authorized adults"
             description="Manage who is approved to pick up your camper."
-            accent="navy"
+            accent="emerald"
             onClick={() => onNavigate("authorized")}
           />
           <QuickActionCard
             icon={Waves}
             title="Swim lessons"
             description="View scheduled lessons and confirm attendance."
-            accent="green"
+            accent="cyan"
             onClick={() => onNavigate("swim")}
           />
         </div>
       </section>
 
-      <CampAnnouncement campName={campName} update={campUpdate} />
+      <TodayTimeline
+        todayIso={todayIso}
+        pickups={pickups}
+        absences={absences}
+        swimLessons={swimLessons}
+        camperName={(id) => campers.find((c) => c.id === id)?.name ?? "—"}
+      />
     </div>
   );
 }
@@ -166,7 +166,7 @@ export function ParentCampersView({
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">My campers</h1>
+        <h1 className="pp-page-title md:text-[1.625rem]">My campers</h1>
         <p className="mt-2 max-w-2xl text-sm pp-text-muted md:text-base">
           A personal overview of each camper in your family — group, today's status, and schedule updates.
         </p>
@@ -210,7 +210,7 @@ function SubmissionCard({
   footer?: React.ReactNode;
 }) {
   return (
-    <article className="rounded-2xl border border-[hsl(var(--pp-border))] bg-white p-5 shadow-sm transition-all hover:shadow-md">
+    <article className="pp-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="font-semibold tracking-tight">{title}</h3>
@@ -239,7 +239,7 @@ export function ParentPickupsView({
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Pickups</h1>
+          <h1 className="pp-page-title md:text-[1.625rem]">Pickups</h1>
           <p className="mt-2 max-w-2xl text-sm pp-text-muted">
             Request pickup changes and track submitted requests.
           </p>
@@ -254,13 +254,11 @@ export function ParentPickupsView({
       </header>
 
       {todayPickups.length > 0 ? (
-        <section className="rounded-2xl border border-[hsl(var(--pp-brand-muted))] bg-gradient-to-br from-[hsl(var(--pp-brand-subtle))] to-white p-5 md:p-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] pp-text-subtle">
-            Today's pickup
-          </p>
-          <div className="mt-4 space-y-4">
+        <section className="pp-soft-panel rounded-xl p-5 md:p-6">
+          <h2 className="pp-section-title">Today&apos;s pickup</h2>
+          <div className="mt-4 space-y-3">
             {todayPickups.map((p) => (
-              <div key={p.id} className="rounded-xl bg-white/80 p-4">
+              <div key={p.id} className="pp-card p-4">
                 <p className="text-lg font-semibold">{camperName(p.camper_id)}</p>
                 <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
                   <div>
@@ -336,11 +334,9 @@ export function ParentAbsencesView({
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-            Is your camper going to miss a day?
-          </h1>
+          <h1 className="pp-page-title md:text-[1.625rem]">Absences</h1>
           <p className="mt-2 max-w-2xl text-sm pp-text-muted">
-            Report absences, late arrivals, or early departures in just a few taps.
+            Report when your camper will be absent, arrive late, or leave early.
           </p>
         </div>
         <AbsenceDialog
@@ -395,11 +391,9 @@ export function ParentAuthorizedView({
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-            Who can pick up your camper?
-          </h1>
+          <h1 className="pp-page-title md:text-[1.625rem]">Authorized adults</h1>
           <p className="mt-2 max-w-2xl text-sm pp-text-muted">
-            Authorized adults are approved by your family for pickup. Keep this list current for everyone's safety.
+            Manage who is approved to pick up your campers.
           </p>
         </div>
         <AuthorizedPickupDialog
@@ -485,7 +479,7 @@ export function ParentSwimView({
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Swim lessons</h1>
+          <h1 className="pp-page-title md:text-[1.625rem]">Swim lessons</h1>
           <p className="mt-2 max-w-2xl text-sm pp-text-muted">
             Request a lesson or confirm attendance once camp approves your schedule.
           </p>
@@ -551,7 +545,7 @@ export function ParentSwimView({
             return (
               <article
                 key={lesson.id}
-                className="rounded-2xl border border-[hsl(var(--pp-border))] bg-gradient-to-br from-[hsl(var(--pp-brand-subtle))] to-white p-5 shadow-sm"
+                className="pp-card p-5"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>

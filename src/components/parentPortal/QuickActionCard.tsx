@@ -1,34 +1,39 @@
 import { ChevronRight, LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+type QuickActionAccent = "blue" | "amber" | "emerald" | "cyan";
+
 type QuickActionCardProps = {
   icon: LucideIcon;
   title: string;
   description: string;
   onClick: () => void;
-  accent?: "green" | "blue" | "amber" | "navy";
+  accent?: QuickActionAccent;
 };
 
-const accentStyles = {
-  green: {
-    card: "from-[hsl(158_38%_96%)] via-white to-[hsl(158_30%_98%)]",
-    icon: "bg-[hsl(158_40%_90%)] text-[hsl(158_45%_28%)]",
-    ring: "ring-[hsl(158_40%_85%)]",
-  },
+const accentStyles: Record<
+  QuickActionAccent,
+  { bubble: string; icon: string; hoverBorder: string }
+> = {
   blue: {
-    card: "from-[hsl(210_40%_96%)] via-white to-[hsl(var(--pp-brand-subtle))]",
-    icon: "bg-[hsl(var(--pp-brand-soft))] text-[hsl(var(--pp-brand))]",
-    ring: "ring-[hsl(var(--pp-brand-muted))]",
+    bubble: "bg-blue-100 text-blue-700",
+    icon: "text-blue-700",
+    hoverBorder: "hover:border-blue-200",
   },
   amber: {
-    card: "from-[hsl(38_92%_96%)] via-white to-[hsl(38_80%_98%)]",
-    icon: "bg-[hsl(38_90%_90%)] text-[hsl(32_70%_32%)]",
-    ring: "ring-[hsl(38_85%_88%)]",
+    bubble: "bg-amber-100 text-amber-700",
+    icon: "text-amber-700",
+    hoverBorder: "hover:border-amber-200",
   },
-  navy: {
-    card: "from-[hsl(var(--pp-brand-subtle))] via-white to-[hsl(210_35%_98%)]",
-    icon: "bg-[hsl(var(--pp-brand-muted))] text-[hsl(var(--pp-brand-dark))]",
-    ring: "ring-[hsl(var(--pp-brand-soft))]",
+  emerald: {
+    bubble: "bg-emerald-100 text-emerald-700",
+    icon: "text-emerald-700",
+    hoverBorder: "hover:border-emerald-200",
+  },
+  cyan: {
+    bubble: "bg-cyan-100 text-cyan-700",
+    icon: "text-cyan-700",
+    hoverBorder: "hover:border-cyan-200",
   },
 };
 
@@ -37,7 +42,7 @@ export function QuickActionCard({
   title,
   description,
   onClick,
-  accent = "green",
+  accent = "blue",
 }: QuickActionCardProps) {
   const style = accentStyles[accent];
 
@@ -45,28 +50,21 @@ export function QuickActionCard({
     <button
       type="button"
       onClick={onClick}
-      className={cn(
-        "group relative flex w-full flex-col overflow-hidden rounded-[1.25rem] border border-[hsl(var(--pp-border)/0.8)] bg-gradient-to-br p-5 text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg active:scale-[0.98]",
-        style.card,
-      )}
+      className={cn("pp-action-card group min-h-[8.5rem] w-full", style.hoverBorder)}
     >
-      <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-white/60 blur-2xl" />
-      <div className="relative flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3">
         <div
           className={cn(
-            "flex h-12 w-12 items-center justify-center rounded-2xl shadow-sm ring-1",
-            style.icon,
-            style.ring,
+            "flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl transition-transform duration-200 group-hover:scale-105",
+            style.bubble,
           )}
         >
-          <Icon className="h-5 w-5" />
+          <Icon className={cn("h-6 w-6", style.icon)} />
         </div>
-        <ChevronRight className="h-5 w-5 opacity-30 transition-all duration-200 group-hover:translate-x-1 group-hover:opacity-60" />
+        <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-slate-300 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-slate-400" />
       </div>
-      <h3 className="relative mt-4 text-base font-bold tracking-tight text-[hsl(var(--pp-text))]">
-        {title}
-      </h3>
-      <p className="relative mt-1.5 text-sm leading-relaxed pp-text-muted">{description}</p>
+      <h3 className="mt-4 text-base font-bold tracking-tight text-slate-900">{title}</h3>
+      <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{description}</p>
     </button>
   );
 }

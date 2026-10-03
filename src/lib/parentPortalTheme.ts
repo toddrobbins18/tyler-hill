@@ -41,22 +41,23 @@ export function applyParentPortalTheme(themeColor: string, root?: HTMLElement | 
   }
 
   const { h, s, l } = parseHSL(hsl);
-  const brandDarkL = Math.max(24, l - 14);
-  const brandHoverL = Math.max(30, l - 8);
-  const softS = Math.min(55, Math.round(s * 0.5));
-  const mutedS = Math.min(40, Math.round(s * 0.35));
+  const brandDarkL = Math.max(26, l - 12);
+  const brandHoverL = Math.max(32, l - 6);
+  const softS = Math.min(48, Math.round(s * 0.45));
 
   target.style.setProperty("--pp-brand", hsl);
-  target.style.setProperty("--pp-brand-dark", `${h} ${s}% ${brandDarkL}%`);
+  target.style.setProperty("--pp-brand-dark", `${h} ${Math.round(s * 0.95)}% ${brandDarkL}%`);
   target.style.setProperty("--pp-brand-hover", `${h} ${s}% ${brandHoverL}%`);
-  target.style.setProperty("--pp-brand-soft", `${h} ${softS}% 94%`);
-  target.style.setProperty("--pp-brand-muted", `${h} ${mutedS}% 88%`);
-  target.style.setProperty("--pp-brand-subtle", `${h} ${Math.round(softS * 0.7)}% 96%`);
-  target.style.setProperty("--pp-bg", `${h} 32% 98%`);
+  target.style.setProperty("--pp-brand-soft", `${h} ${softS}% 95%`);
+  target.style.setProperty("--pp-brand-muted", `${h} ${Math.round(softS * 0.7)}% 90%`);
+  target.style.setProperty("--pp-brand-subtle", `${h} ${Math.round(softS * 0.5)}% 97%`);
+
+  /* Neutral surfaces — #f8fafc page, #ffffff cards, slate text */
+  target.style.setProperty("--pp-bg", "210 40% 98%");
   target.style.setProperty("--pp-bg-elevated", "0 0% 100%");
-  target.style.setProperty("--pp-text", `${h} 40% 18%`);
-  target.style.setProperty("--pp-text-muted", `${h} 14% 42%`);
-  target.style.setProperty("--pp-text-subtle", `${h} 12% 50%`);
-  target.style.setProperty("--pp-border", `${h} 22% 88%`);
-  target.style.setProperty("--pp-border-strong", `${h} ${mutedS}% 85%`);
+  target.style.setProperty("--pp-text", "222 47% 11%");
+  target.style.setProperty("--pp-text-muted", "215 16% 47%");
+  target.style.setProperty("--pp-text-subtle", "215 14% 57%");
+  target.style.setProperty("--pp-border", "214 32% 91%");
+  target.style.setProperty("--pp-border-strong", "214 25% 84%");
 }

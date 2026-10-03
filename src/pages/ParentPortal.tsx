@@ -36,13 +36,32 @@ function ParentPortalSkeleton({
 }) {
   return (
     <div ref={rootRef} className="parent-portal min-h-screen pp-page-bg">
-      <div className="mx-auto max-w-6xl animate-pulse space-y-6 px-4 py-8 md:px-6">
-        <div className="h-40 rounded-3xl bg-[hsl(var(--pp-brand-muted))]" />
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="h-48 rounded-2xl bg-[hsl(var(--pp-brand-soft))]" />
-          <div className="h-48 rounded-2xl bg-[hsl(var(--pp-brand-soft))]" />
+      <div className="flex min-h-screen animate-pulse">
+        <aside className="pp-sidebar hidden w-[17.5rem] shrink-0 border-r lg:block">
+          <div className="space-y-6 px-5 py-6">
+            <div className="flex gap-3">
+              <div className="h-11 w-11 rounded-xl bg-[hsl(var(--pp-brand-muted))]" />
+              <div className="flex-1 space-y-2 pt-1">
+                <div className="h-4 w-32 rounded bg-[hsl(var(--pp-brand-muted))]" />
+                <div className="h-3 w-24 rounded bg-[hsl(var(--pp-brand-soft))]" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-10 rounded-xl bg-[hsl(var(--pp-brand-soft))]" />
+              ))}
+            </div>
+          </div>
+        </aside>
+        <div className="flex-1 px-4 py-8 md:px-8">
+          <div className="mx-auto max-w-5xl space-y-6">
+            <div className="h-36 rounded-2xl bg-[hsl(var(--pp-brand-muted))]" />
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="h-48 rounded-2xl bg-[hsl(var(--pp-brand-soft))]" />
+              <div className="h-48 rounded-2xl bg-[hsl(var(--pp-brand-soft))]" />
+            </div>
+          </div>
         </div>
-        <div className="h-56 rounded-2xl bg-[hsl(var(--pp-brand-soft))]" />
       </div>
     </div>
   );
