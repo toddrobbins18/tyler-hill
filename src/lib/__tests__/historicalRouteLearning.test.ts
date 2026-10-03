@@ -142,6 +142,42 @@ describe("historicalRouteLearning", () => {
     expect(payload.assignments.length).toBe(0);
   });
 
+  it("places campers with hyphenated or middle names against MapPoint priors", () => {
+    for (const [name, busNumber] of [
+      ["Kiki Griffin - Katsorhis", 34],
+      ["Silas Sparks Fonacier", 12],
+    ] as const) {
+      const result = applyHistoricalAssignments({
+        coreStops: { [busNumber]: [] },
+        routeMeta: [
+          {
+            id: busNumber,
+            name: `Bus ${busNumber}`,
+            bus: `Bus ${busNumber}`,
+            departure: "7:00 AM",
+            status: "Confirmed",
+            color: "#000",
+            capacity: 22,
+          },
+        ],
+        unplottedCampers: [
+          {
+            id: 1,
+            name,
+            address: "26 Teakwood Ln, Roslyn, NY 11576",
+            lat: 40.8,
+            lng: -73.6,
+            age: 8,
+            session: "Full 8 Weeks",
+          },
+        ],
+        priorMap,
+      });
+      expect(result.placed.length, name).toBe(1);
+      expect(result.placed[0].busNumber, name).toBe(busNumber);
+    }
+  });
+
   it("places returning campers using bundled 2026 priors when roster uses first last", () => {
     const result = applyHistoricalAssignments({
       coreStops: { 28: [] },

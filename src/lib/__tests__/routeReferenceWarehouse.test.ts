@@ -7,6 +7,7 @@ import {
   expandMappointCamperNames,
   isLikelyCamperName,
   normCamperNameKey,
+  rosterNameLookupKeys,
   summarizeReferenceRoutes,
   validateWarehouseAgainstCsv,
 } from "@/lib/routeReferenceWarehouse";
@@ -31,6 +32,11 @@ describe("routeReferenceWarehouse", () => {
   it("rejects street addresses masquerading as camper names", () => {
     expect(isLikelyCamperName("2 Cambridge Ave")).toBe(false);
     expect(isLikelyCamperName("Aaron Weissler")).toBe(true);
+  });
+
+  it("builds roster lookup keys for hyphen and middle names", () => {
+    expect(rosterNameLookupKeys("Kiki Griffin - Katsorhis")).toContain("kiki griffin-katsorhis");
+    expect(rosterNameLookupKeys("Silas Sparks Fonacier")).toContain("silas fonacier");
   });
 
   it("expands MapPoint sibling names for roster matching", () => {

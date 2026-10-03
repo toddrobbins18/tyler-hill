@@ -94,6 +94,43 @@ export function normCamperNameKey(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+/** Candidate normalized keys for matching roster names to MapPoint priors. */
+export function rosterNameLookupKeys(name: string): string[] {
+  const trimmed = name.trim();
+  if (!trimmed) return [];
+
+  const keys = new Set<string>();
+  const add = (value: string) => {
+    const key = normCamperNameKey(value);
+    if (key) keys.add(key);
+  };
+
+  add(trimmed);
+
+  const commaMatch = trimmed.match(/^([^,]+),\s*(.+)$/);
+  if (commaMatch) {
+    add(`${commaMatch[2].trim()} ${commaMatch[1].trim()}`);
+  }
+
+  const hyphenNorm = trimmed.replace(/\s*-\s*/g, "-");
+  if (hyphenNorm !== trimmed) add(hyphenNorm);
+
+  const hyphenAsSpace = trimmed.replace(/\s*-\s*/g, " ");
+  if (hyphenAsSpace !== trimmed) add(hyphenAsSpace);
+
+  const tokens = trimmed.split(/\s+/).filter((t) => t !== "-");
+  if (tokens.length >= 3) {
+    add(`${tokens[0]} ${tokens[tokens.length - 1]}`);
+  }
+
+  if (tokens.length >= 2) {
+    const tail = tokens.slice(1).join(" ").replace(/\s*-\s*/g, "-");
+    add(`${tokens[0]} ${tail}`);
+  }
+
+  return [...keys];
+}
+
 /** Reject stop labels / street addresses accidentally stored as camper names. */
 export function isLikelyCamperName(name: string): boolean {
   const trimmed = name.trim();

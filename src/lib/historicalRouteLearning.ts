@@ -13,6 +13,7 @@ import {
   loadCamperRoutingPriorsForImport,
   loadRouteReferenceImport,
   normCamperNameKey,
+  rosterNameLookupKeys,
   type CamperRoutingPrior,
   type RouteReferenceAssignment,
   type RouteReferenceImportPayload,
@@ -51,21 +52,16 @@ export function normCamperName(name: string): string {
   return normCamperNameKey(name);
 }
 
-/** Match roster names to MapPoint priors (handles "Last, First" roster rows). */
+/** Match roster names to MapPoint priors (middle names, hyphens, Last/First). */
 export function lookupCamperPrior(
   priorMap: Map<string, CamperRoutingPrior>,
   camperName: string,
   direction: "AM" | "PM" = "AM",
 ): CamperRoutingPrior | undefined {
-  const direct = priorMap.get(`${normCamperNameKey(camperName)}|${direction}`);
-  if (direct) return direct;
-
-  const commaMatch = camperName.match(/^([^,]+),\s*(.+)$/);
-  if (commaMatch) {
-    const flipped = `${commaMatch[2].trim()} ${commaMatch[1].trim()}`;
-    return priorMap.get(`${normCamperNameKey(flipped)}|${direction}`);
+  for (const key of rosterNameLookupKeys(camperName)) {
+    const prior = priorMap.get(`${key}|${direction}`);
+    if (prior) return prior;
   }
-
   return undefined;
 }
 
