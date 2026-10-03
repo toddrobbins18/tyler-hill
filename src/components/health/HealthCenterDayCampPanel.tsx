@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import {
   isHealthVisitSentHome,
   submitNurseSentHomeTransportException,
 } from "@/lib/nurseTransportException";
+import { healthVisitGroupForCamper } from "@/lib/camperGroupDisplay";
 
 type CamperRow = {
   id: string;
@@ -28,6 +29,7 @@ type CamperRow = {
   group_name?: string | null;
   division?: { name?: string | null } | null;
   leader?: { name?: string | null } | null;
+  bunk?: { bunk_name?: string | null; bunk_number?: number | null } | null;
 };
 
 type StaffRow = {
@@ -76,6 +78,7 @@ export default function HealthCenterDayCampPanel({
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
   const { toast } = useToast();
+  const isDayCamp = currentCompany?.camp_type === "day_camp";
 
   const [entityType, setEntityType] = useState<"camper" | "staff">("camper");
   const [search, setSearch] = useState("");
@@ -89,10 +92,10 @@ export default function HealthCenterDayCampPanel({
 
   const groupOptions = useMemo(() => {
     const names = children
-      .map((c) => c.group_name?.trim())
-      .filter((n): n is string => Boolean(n));
+      .map((c) => healthVisitGroupForCamper(c, isDayCamp))
+      .filter(Boolean);
     return [...new Set(names)].sort((a, b) => a.localeCompare(b));
-  }, [children]);
+  }, [children, isDayCamp]);
 
   const counselorOptions = useMemo(() => {
     const names = [
@@ -116,7 +119,7 @@ export default function HealthCenterDayCampPanel({
         ? children.map((c) => ({
             id: c.id,
             name: c.name,
-            subtitle: c.group_name || c.division?.name || "",
+            subtitle: healthVisitGroupForCamper(c, isDayCamp),
           }))
         : staff.map((s) => ({
             id: s.id,
@@ -141,12 +144,27 @@ export default function HealthCenterDayCampPanel({
       if (camper) {
         setForm((prev) => ({
           ...prev,
-          group_name: camper.group_name || camper.division?.name || prev.group_name,
-          counselor_name: camper.leader?.name || prev.counselor_name,
+          group_name: healthVisitGroupForCamper(camper, isDayCamp),
+          counselor_name: camper.leader?.name?.trim() || "",
         }));
       }
+    } else {
+      setForm((prev) => ({ ...prev, group_name: "" }));
     }
   };
+
+  useEffect(() => {
+    if (entityType !== "camper" || !selectedId) return;
+    const camper = children.find((c) => c.id === selectedId);
+    if (!camper) return;
+    const group_name = healthVisitGroupForCamper(camper, isDayCamp);
+    const counselor_name = camper.leader?.name?.trim() || "";
+    setForm((prev) =>
+      prev.group_name === group_name && prev.counselor_name === counselor_name
+        ? prev
+        : { ...prev, group_name, counselor_name },
+    );
+  }, [entityType, selectedId, children, isDayCamp]);
 
   const logVisit = async () => {
     if (!currentCompany?.id || !selectedId) {

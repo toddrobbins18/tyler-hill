@@ -37,7 +37,8 @@ export default function Nurse() {
           name,
           group_name,
           division:divisions(id, name),
-          leader:leader_id(id, name)
+          leader:leader_id(id, name),
+          bunk:bunk_id(bunk_name, bunk_number)
         `)
         .neq("status", "inactive")
         .eq("season", currentSeason)

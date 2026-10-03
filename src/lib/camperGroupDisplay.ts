@@ -27,3 +27,19 @@ export function camperAssignmentDisplay(
 export function camperHasAssignment(child: CamperWithGroup): boolean {
   return camperAssignmentDisplay(child, true) != null || camperAssignmentDisplay(child, false) != null;
 }
+
+type HealthVisitCamper = CamperWithGroup & {
+  division?: { name?: string | null } | null;
+};
+
+/** Group/bunk for health center visit log — roster group first, then division. */
+export function healthVisitGroupForCamper(
+  camper: HealthVisitCamper,
+  isDayCamp: boolean,
+): string {
+  return (
+    camperAssignmentDisplay(camper, isDayCamp)?.trim() ||
+    camper.division?.name?.trim() ||
+    ""
+  );
+}

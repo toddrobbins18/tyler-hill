@@ -260,7 +260,8 @@ export default function Nurse() {
       .select(`
         *,
         division:divisions(id, name, gender, sort_order),
-        leader:leader_id(id, name)
+        leader:leader_id(id, name),
+        bunk:bunk_id(bunk_name, bunk_number)
       `)
       .eq("status", "active")
       .eq("season", currentSeason)
