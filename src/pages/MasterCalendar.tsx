@@ -4,8 +4,10 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useSeasonContext } from "@/contexts/SeasonContext";
-import { campDateInSeason } from "@/lib/campSeasonDate";
-import { Calendar as CalendarIcon, Plus, Minus, Maximize2, List, Pencil, Trash2, Search, X, Trophy, Users, Star, Sparkles, MapPin, Clock, Home, Plane, FileText, Download } from "lucide-react";
+import { campDateInSeason, campSeasonDefaultCalendarDate } from "@/lib/campSeasonDate";
+import { isDayCampCompany } from "@/lib/camps";
+import { Calendar as CalendarIcon, Plus, Minus, Maximize2, List, Pencil, Trash2, Search, X, Trophy, Users, Star, Sparkles, MapPin, Clock, Home, Plane, FileText } from "lucide-react";
+import { EventAttachmentPreview } from "@/components/EventAttachmentPreview";
 
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -77,11 +79,15 @@ export default function MasterCalendar() {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [calendarView, setCalendarView] = useState<View>(() => readStoredMasterCalendarView());
-  const [currentDate, setCurrentDate] = useState(() => campDateInSeason(currentSeason));
+  const [currentDate, setCurrentDate] = useState(() => campSeasonDefaultCalendarDate(currentSeason));
 
   useEffect(() => {
-    setCurrentDate(campDateInSeason(currentSeason));
-  }, [currentSeason]);
+    setCurrentDate(
+      isDayCampCompany(currentCompany)
+        ? campSeasonDefaultCalendarDate(currentSeason)
+        : campDateInSeason(currentSeason),
+    );
+  }, [currentSeason, currentCompany?.id]);
   const calendarContainerRef = useRef<HTMLDivElement>(null);
   const [calendarAutoHeight, setCalendarAutoHeight] = useState(600);
   const [calendarZoomOffset, setCalendarZoomOffset] = useState(0);
@@ -423,8 +429,18 @@ export default function MasterCalendar() {
 
   const filteredAndSortedEvents = events
     .filter(event => {
-      // Division filter
-      if (selectedDivision !== "all" && event.division?.id !== selectedDivision) return false;
+      // Division filter (include all linked divisions on special events / sports)
+      if (selectedDivision !== "all") {
+        const divisionIds = new Set<string>();
+        if (event.division?.id) divisionIds.add(event.division.id);
+        for (const div of event.originalData?.divisions ?? []) {
+          if (div?.id) divisionIds.add(div.id);
+        }
+        for (const link of event.originalData?.sports_calendar_divisions ?? []) {
+          if (link?.division_id) divisionIds.add(link.division_id);
+        }
+        if (divisionIds.size > 0 && !divisionIds.has(selectedDivision)) return false;
+      }
       
       // Name search
       if (searchName && !event.title.toLowerCase().includes(searchName.toLowerCase())) return false;
@@ -556,7 +572,12 @@ export default function MasterCalendar() {
         <div className="flex items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold mb-2">Master Calendar</h1>
-            <p className="text-muted-foreground">Consolidated view of all events and activities for The Nest</p>
+            <p className="text-muted-foreground">
+              Consolidated view of all events and activities for The Nest
+              {isDayCampCompany(currentCompany)
+                ? " · Day camp events are usually June–August"
+                : null}
+            </p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -667,6 +688,24 @@ export default function MasterCalendar() {
           <CardContent className="p-6">
             <div ref={calendarContainerRef}>
               <div className="mb-3 rounded-md border bg-muted/40 p-2">
+                {isDayCampCompany(currentCompany) && events.length > 0 ? (
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span>
+                      {filteredAndSortedEvents.length} event{filteredAndSortedEvents.length === 1 ? "" : "s"} in{" "}
+                      {currentSeason}
+                      {activeFilterCount > 0 ? " (filtered)" : ""}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => setCurrentDate(campSeasonDefaultCalendarDate(currentSeason))}
+                    >
+                      Jump to June {currentSeason}
+                    </Button>
+                  </div>
+                ) : null}
                 <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground mb-2">
                   <span>Calendar Zoom</span>
                   <span>{Math.round((effectiveCalendarHeight / calendarAutoHeight) * 100)}%</span>
@@ -748,6 +787,14 @@ export default function MasterCalendar() {
                         endDate = new Date(event.event_date + 'T23:59:59');
                         allDay = true;
                       }
+                    }
+
+                    if (!isValid(startDate) || !isValid(endDate)) {
+                      startDate = new Date(event.event_date + 'T12:00:00');
+                      endDate = new Date(event.event_date + 'T23:59:59');
+                      allDay = true;
+                    } else if (endDate <= startDate) {
+                      endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
                     }
                     
                     return {
@@ -839,7 +886,15 @@ export default function MasterCalendar() {
       {/* Event Detail Dialog */}
       {selectedEvent && (
         <Dialog open={!!selectedEvent} onOpenChange={() => setSelectedEvent(null)}>
-          <DialogContent className="max-w-md">
+          <DialogContent
+            className={
+              (selectedEvent.source === "special_events_activities" ||
+                selectedEvent.source === "activities_field_trips") &&
+              selectedEvent.originalData?.file_url
+                ? "max-w-2xl max-h-[90vh] overflow-y-auto"
+                : "max-w-md"
+            }
+          >
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 {getSourceIcon(selectedEvent.source)}
@@ -942,21 +997,14 @@ export default function MasterCalendar() {
                 </div>
               )}
 
-              {/* File attachment (special events + activities / field trips) */}
-              {(selectedEvent.source === 'special_events_activities' ||
-                selectedEvent.source === 'activities_field_trips') &&
+              {(selectedEvent.source === "special_events_activities" ||
+                selectedEvent.source === "activities_field_trips") &&
                 selectedEvent.originalData?.file_url && (
                 <div className="border-t pt-4">
-                  <a 
-                    href={selectedEvent.originalData.file_url} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-sm text-primary hover:underline"
-                  >
-                    <FileText className="h-4 w-4" />
-                    <span>{selectedEvent.originalData.file_name || 'View Attachment'}</span>
-                    <Download className="h-3 w-3" />
-                  </a>
+                  <EventAttachmentPreview
+                    fileUrl={selectedEvent.originalData.file_url}
+                    fileName={selectedEvent.originalData.file_name}
+                  />
                 </div>
               )}
             </div>

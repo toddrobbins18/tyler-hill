@@ -53,6 +53,13 @@ export function campDateInSeason(season: string, now = new Date()): Date {
   );
 }
 
+/** Default Master Calendar month for day camps (June 1 of the selected season). */
+export function campSeasonDefaultCalendarDate(season: string): Date {
+  const seasonYear = Number.parseInt(season, 10);
+  if (!Number.isFinite(seasonYear)) return new Date();
+  return new Date(seasonYear, 5, 1);
+}
+
 /** YYYY-MM-DD for staff queries — aligned to selected season year. */
 export function campDateStringInSeason(season: string, now = new Date()): string {
   const parts = campTimezoneParts(campDateInSeason(season, now));

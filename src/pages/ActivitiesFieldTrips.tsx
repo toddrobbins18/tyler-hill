@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Palmtree, Plus, List, Pencil, Trash2, Calendar as CalendarIcon, CalendarRange, Paperclip, FileText, X } from "lucide-react";
+import { Palmtree, Plus, List, Pencil, Trash2, Calendar as CalendarIcon, CalendarRange, Paperclip } from "lucide-react";
+import { EventAttachmentPreview } from "@/components/EventAttachmentPreview";
 import { CalendarColorSettings } from "@/components/CalendarColorSettings";
 import { CalendarZoomWrapper } from "@/components/CalendarZoomWrapper";
 import { Badge } from "@/components/ui/badge";
@@ -1037,14 +1038,13 @@ export default function ActivitiesFieldTrips() {
                 className="hidden"
                 accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.xls,.xlsx"
               />
-              {formData.file_name ? (
-                <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/50">
-                  <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span className="flex-1 text-sm truncate">{formData.file_name}</span>
-                  <Button type="button" variant="ghost" size="icon" onClick={handleRemoveFile}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
+              {formData.file_url && formData.file_name ? (
+                <EventAttachmentPreview
+                  variant="form"
+                  fileUrl={formData.file_url}
+                  fileName={formData.file_name}
+                  onRemove={handleRemoveFile}
+                />
               ) : (
                 <Button
                   type="button"

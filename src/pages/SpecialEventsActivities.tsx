@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Sun, Moon, Plus, Pencil, Trash2, Calendar as CalendarIcon, Paperclip, FileText, Download, X } from "lucide-react";
+import { Sun, Moon, Plus, Pencil, Trash2, Calendar as CalendarIcon, Paperclip } from "lucide-react";
+import { EventAttachmentPreview } from "@/components/EventAttachmentPreview";
 import { CalendarColorSettings } from "@/components/CalendarColorSettings";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -868,19 +869,13 @@ export default function SpecialEventsActivities() {
                 className="hidden"
                 accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
               />
-              {formData.file_name ? (
-                <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/50">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  <span className="flex-1 text-sm truncate">{formData.file_name}</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleRemoveFile}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
+              {formData.file_url && formData.file_name ? (
+                <EventAttachmentPreview
+                  variant="form"
+                  fileUrl={formData.file_url}
+                  fileName={formData.file_name}
+                  onRemove={handleRemoveFile}
+                />
               ) : (
                 <Button
                   type="button"
@@ -925,7 +920,11 @@ export default function SpecialEventsActivities() {
 
       {/* Event Detail Dialog */}
       <Dialog open={showEventDetailDialog} onOpenChange={setShowEventDetailDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent
+          className={
+            selectedEvent?.file_url ? "max-w-2xl max-h-[90vh] overflow-y-auto" : "max-w-lg"
+          }
+        >
           <DialogHeader>
             <DialogTitle>{selectedEvent?.title}</DialogTitle>
           </DialogHeader>
@@ -971,19 +970,10 @@ export default function SpecialEventsActivities() {
                 </div>
               )}
               {selectedEvent.file_url && (
-                <div className="border-t pt-4">
-                  <p className="text-muted-foreground text-sm mb-2">Attachment</p>
-                  <a
-                    href={selectedEvent.file_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 p-3 border rounded-md bg-muted/50 hover:bg-muted transition-colors"
-                  >
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span className="flex-1 text-sm">{selectedEvent.file_name || 'Download Attachment'}</span>
-                    <Download className="h-4 w-4 text-muted-foreground" />
-                  </a>
-                </div>
+                <EventAttachmentPreview
+                  fileUrl={selectedEvent.file_url}
+                  fileName={selectedEvent.file_name}
+                />
               )}
             </div>
           )}
