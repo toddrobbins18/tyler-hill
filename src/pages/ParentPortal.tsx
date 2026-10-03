@@ -26,6 +26,8 @@ import {
   userIsCampStaff,
 } from "@/lib/parentPortalConstants";
 import { linkFamilyChildrenByGuardianEmail } from "@/lib/parentFamilyLink";
+import { fetchPublishedCampUpdate } from "@/lib/parentPortalCampUpdates";
+import type { CampAnnouncementContent } from "@/components/parentPortal/CampAnnouncement";
 
 function ParentPortalSkeleton({
   rootRef,
@@ -60,6 +62,7 @@ export default function ParentPortal() {
   const [absences, setAbsences] = useState<Absence[]>([]);
   const [authPickups, setAuthPickups] = useState<AuthorizedPickup[]>([]);
   const [swimLessons, setSwimLessons] = useState<SwimLesson[]>([]);
+  const [campUpdate, setCampUpdate] = useState<CampAnnouncementContent | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadAll = async () => {
@@ -111,7 +114,7 @@ export default function ParentPortal() {
             .order("scheduled_at", { ascending: true })
         : Promise.resolve({ data: [] as SwimLesson[] });
 
-    const [{ data: p }, { data: a }, { data: ap }, { data: sl }] = await Promise.all([
+    const [{ data: p }, { data: a }, { data: ap }, { data: sl }, publishedUpdate] = await Promise.all([
       supabase
         .from("pickup_changes")
         .select("*")
@@ -124,6 +127,7 @@ export default function ParentPortal() {
         .order("absence_date", { ascending: false }),
       supabase.from("authorized_pickups").select("*").eq("family_id", fam.id).order("full_name"),
       swimQuery,
+      fetchPublishedCampUpdate(supabase, companyId).catch(() => null),
     ]);
 
     setCampers(linkedCampers);
@@ -131,6 +135,15 @@ export default function ParentPortal() {
     setAbsences(a ?? []);
     setAuthPickups(ap ?? []);
     setSwimLessons((sl ?? []) as SwimLesson[]);
+    setCampUpdate(
+      publishedUpdate?.body?.trim()
+        ? {
+            title: publishedUpdate.title,
+            body: publishedUpdate.body,
+            publishedAt: publishedUpdate.published_at,
+          }
+        : null,
+    );
     setLoading(false);
   };
 
@@ -225,6 +238,7 @@ export default function ParentPortal() {
     absences,
     authPickups,
     swimLessons,
+    campUpdate,
     onSaved: loadAll,
     onNavigate: setActiveView,
     camperName,

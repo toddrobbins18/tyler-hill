@@ -22,6 +22,7 @@ import { formatCampDateTime } from "@/lib/campTime";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
 import { approveDismissalSwim, DISMISSAL_REALTIME_TABLES } from "@/lib/dismissalDashboard";
 import { linkFamilyChildrenByGuardianEmail } from "@/lib/parentFamilyLink";
+import { CampUpdatesEditor } from "@/components/parentPortal/CampUpdatesEditor";
 
 const CHANGE_TYPES: Record<string, string> = {
   early_pickup: "Early Pickup",
@@ -365,6 +366,10 @@ export default function ParentPortalDashboard() {
           </p>
         </div>
       </div>
+
+      {currentCompany?.id ? (
+        <CampUpdatesEditor companyId={currentCompany.id} season={currentSeason} />
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{families.length}</div><p className="text-xs text-muted-foreground">Families</p></CardContent></Card>

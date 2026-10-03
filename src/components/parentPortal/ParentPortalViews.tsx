@@ -18,7 +18,7 @@ import { WelcomeHeader } from "./WelcomeHeader";
 import { CamperCard } from "./CamperCard";
 import { TodayTimeline } from "./TodayTimeline";
 import { QuickActionCard } from "./QuickActionCard";
-import { CampAnnouncement } from "./CampAnnouncement";
+import { CampAnnouncement, type CampAnnouncementContent } from "./CampAnnouncement";
 import { EmptyState } from "./EmptyState";
 import { StatusBadge } from "./StatusBadge";
 import { PickupChangeDialog } from "./PickupChangeDialog";
@@ -37,6 +37,7 @@ type SharedViewProps = {
   absences: Absence[];
   authPickups: AuthorizedPickup[];
   swimLessons: SwimLesson[];
+  campUpdate?: CampAnnouncementContent | null;
   onSaved: () => void;
   onNavigate: (view: ParentPortalView) => void;
   camperName: (id: string) => string;
@@ -49,10 +50,18 @@ export function ParentHomeView({
   pickups,
   absences,
   swimLessons,
+  campUpdate,
   onNavigate,
 }: Pick<
   SharedViewProps,
-  "campName" | "contactName" | "campers" | "pickups" | "absences" | "swimLessons" | "onNavigate"
+  | "campName"
+  | "contactName"
+  | "campers"
+  | "pickups"
+  | "absences"
+  | "swimLessons"
+  | "campUpdate"
+  | "onNavigate"
 >) {
   const todayIso = todayIsoDate();
 
@@ -141,7 +150,7 @@ export function ParentHomeView({
         </div>
       </section>
 
-      <CampAnnouncement campName={campName} />
+      <CampAnnouncement campName={campName} update={campUpdate} />
     </div>
   );
 }
