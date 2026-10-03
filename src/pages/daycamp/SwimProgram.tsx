@@ -8,8 +8,14 @@ import {
   BRACELETS,
   DATE_FMT,
   PASS_OPTIONS,
-  PROCTORS,
+  SWIM_LEVEL_REPORT_VIEWS,
+  fetchSwimProctorOptions,
+  mergePassOptions,
+  mergeProctorOptions,
+  normalizePassStatus,
+  swimLevelColumnVisible,
   type BraceletColor,
+  type SwimLevelReportView,
   type BraceletRecord,
   type LevelRecord,
   type LevelStatus,
@@ -168,7 +174,16 @@ function BraceletSelect({ value, onChange }: { value: BraceletColor | ""; onChan
   );
 }
 
-function ProctorSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function ProctorSelect({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+}) {
+  const merged = useMemo(() => mergeProctorOptions(options, value ? [value] : []), [options, value]);
   return (
     <select
       value={value}
@@ -177,7 +192,7 @@ function ProctorSelect({ value, onChange }: { value: string; onChange: (v: strin
       className={cn(editableSelect, value && "bg-primary/15 text-primary border-primary/30")}
     >
       <option value="">—</option>
-      {PROCTORS.map((p) => (
+      {merged.map((p) => (
         <option key={p} value={p} className="bg-background text-foreground">
           {p}
         </option>
@@ -248,24 +263,26 @@ function DateEdit({ value, onChange }: { value: string; onChange: (v: string) =>
 }
 
 function PassSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const isPass = value === "Passed";
-  const isFail = value === "Did Not Pass";
+  const normalized = normalizePassStatus(value) || value;
+  const options = useMemo(() => mergePassOptions(value ? [value] : []), [value]);
+  const isPass = normalized === "Passed";
+  const isFail = normalized === "Did Not Pass";
   const styles = isPass
     ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
     : isFail
       ? "bg-red-500/15 text-red-300 border-red-500/30"
-      : value
+      : normalized
         ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
         : "";
   return (
     <select
-      value={value}
+      value={normalized}
       onChange={(e) => onChange(e.target.value)}
       onClick={(e) => e.stopPropagation()}
       className={cn(editableSelect, styles)}
     >
       <option value="">—</option>
-      {PASS_OPTIONS.map((p) => (
+      {options.map((p) => (
         <option key={p} value={p} className="bg-background text-foreground">
           {p}
         </option>
@@ -473,7 +490,11 @@ function LevelPill({ status }: { status: LevelStatus }) {
   );
 }
 
-export default function SwimProgram() {
+type SwimProgramProps = {
+  defaultTab?: "bracelets" | "levels" | "formation" | "history";
+};
+
+export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramProps) {
   const { toast } = useToast();
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
@@ -487,7 +508,9 @@ export default function SwimProgram() {
   const [levelData, setLevelData] = useState<LevelRecord[]>([]);
   const [selectedBraceletId, setSelectedBraceletId] = useState<string | null>(null);
   const [selectedLevelId, setSelectedLevelId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("bracelets");
+  const [activeTab, setActiveTab] = useState(defaultTab);
+  const [proctorOptions, setProctorOptions] = useState<string[]>([]);
+  const [levelReportView, setLevelReportView] = useState<SwimLevelReportView>("red-cross-1");
   const [tablePageSize, setTablePageSize] = useState(DEFAULT_SWIM_PAGE_SIZE);
   const [braceletPage, setBraceletPage] = useState(1);
   const [levelPage, setLevelPage] = useState(1);
@@ -511,7 +534,11 @@ export default function SwimProgram() {
 
   useEffect(() => {
     setLevelPage(1);
-  }, [search, levelGroupFilter, levelDataFilter, currentSeason, tablePageSize]);
+  }, [search, levelGroupFilter, levelDataFilter, levelReportView, currentSeason, tablePageSize]);
+
+  useEffect(() => {
+    setActiveTab(defaultTab);
+  }, [defaultTab]);
 
   useEffect(() => {
     setHistoryPage(1);
@@ -544,6 +571,8 @@ export default function SwimProgram() {
         );
         setBraceletData(mergeBracelets(bracelets, children));
         setLevelData(mergeLevels(levels, children));
+        const proctors = await fetchSwimProctorOptions(supabase, currentCompany.id, currentSeason);
+        setProctorOptions(proctors);
       } catch (err) {
         console.error("[SwimProgram] load error:", err);
         if (showLoading) {
@@ -1104,7 +1133,11 @@ export default function SwimProgram() {
                         <BraceletSelect value={b.currentBracelet} onChange={(v) => updateBracelet(b.id, { currentBracelet: v })} />
                       </TableCell>
                       <TableCell>
-                        <ProctorSelect value={b.proctor1} onChange={(v) => updateBracelet(b.id, { proctor1: v })} />
+                        <ProctorSelect
+                          value={b.proctor1}
+                          options={proctorOptions}
+                          onChange={(v) => updateBracelet(b.id, { proctor1: v })}
+                        />
                       </TableCell>
                       <TableCell>
                         <DateEdit value={b.date1} onChange={(v) => updateBracelet(b.id, { date1: v })} />
@@ -1113,13 +1146,21 @@ export default function SwimProgram() {
                         <PassSelect value={b.note1} onChange={(v) => updateBracelet(b.id, { note1: v })} />
                       </TableCell>
                       <TableCell>
-                        <ProctorSelect value={b.proctor2} onChange={(v) => updateBracelet(b.id, { proctor2: v })} />
+                        <ProctorSelect
+                          value={b.proctor2}
+                          options={proctorOptions}
+                          onChange={(v) => updateBracelet(b.id, { proctor2: v })}
+                        />
                       </TableCell>
                       <TableCell>
                         <DateEdit value={b.date2} onChange={(v) => updateBracelet(b.id, { date2: v })} />
                       </TableCell>
                       <TableCell>
-                        <ProctorSelect value={b.proctor3} onChange={(v) => updateBracelet(b.id, { proctor3: v })} />
+                        <ProctorSelect
+                          value={b.proctor3}
+                          options={proctorOptions}
+                          onChange={(v) => updateBracelet(b.id, { proctor3: v })}
+                        />
                       </TableCell>
                       <TableCell>
                         <DateEdit value={b.date3} onChange={(v) => updateBracelet(b.id, { date3: v })} />
@@ -1174,6 +1215,12 @@ export default function SwimProgram() {
               </CardTitle>
               <div className="flex flex-wrap items-end gap-3">
                 <SwimFilterSelect
+                  label="View"
+                  value={levelReportView}
+                  onChange={(v) => setLevelReportView(v as SwimLevelReportView)}
+                  options={SWIM_LEVEL_REPORT_VIEWS.map((v) => ({ value: v.value, label: v.label }))}
+                />
+                <SwimFilterSelect
                   label="Group"
                   value={levelGroupFilter}
                   onChange={setLevelGroupFilter}
@@ -1201,24 +1248,69 @@ export default function SwimProgram() {
                   <TableRow>
                     <SortableHeader label="Child's Name" sortKey="name" currentSort={levelSort} onSort={requestLevelSort} />
                     <SortableHeader label="Group" sortKey="group" currentSort={levelSort} onSort={requestLevelSort} />
-                    {[1, 2, 3, 4].map((n) => (
-                      <SortableHeader key={`g${n}`} label={`Goldfish 1A${n}`} sortKey={`goldfish.${n - 1}`} currentSort={levelSort} onSort={requestLevelSort} />
-                    ))}
-                    <SortableHeader label="Goldfish Level" sortKey="goldfishLevel" currentSort={levelSort} onSort={requestLevelSort} />
-                    {[1, 2, 3, 4, 5, 6].map((n) => (
-                      <SortableHeader key={`m${n}`} label={`Minnow 1B${n}`} sortKey={`minnow.${n - 1}`} currentSort={levelSort} onSort={requestLevelSort} />
-                    ))}
-                    <SortableHeader label="Minnow Level" sortKey="minnowLevel" currentSort={levelSort} onSort={requestLevelSort} />
-                    {[1, 2, 3, 4].map((n) => (
-                      <SortableHeader key={`t${n}`} label={`Tadpole 1C${n}`} sortKey={`tadpole.${n - 1}`} currentSort={levelSort} onSort={requestLevelSort} />
-                    ))}
-                    <SortableHeader label="Tadpole Level" sortKey="tadpoleLevel" currentSort={levelSort} onSort={requestLevelSort} />
-                    <SortableHeader label="Red Cross L1" sortKey="redCross" currentSort={levelSort} onSort={requestLevelSort} />
-                    <SortableHeader label="Red Cross L2" sortKey="redCross2" currentSort={levelSort} onSort={requestLevelSort} />
-                    <SortableHeader label="Red Cross L3" sortKey="redCross3" currentSort={levelSort} onSort={requestLevelSort} />
-                    <SortableHeader label="Red Cross L4" sortKey="redCross4" currentSort={levelSort} onSort={requestLevelSort} />
-                    <SortableHeader label="Frog Level" sortKey="frog" currentSort={levelSort} onSort={requestLevelSort} />
-                    <SortableHeader label="Last Modified" sortKey="lastModified" currentSort={levelSort} onSort={requestLevelSort} />
+                    {[1, 2, 3, 4].map(
+                      (n) =>
+                        swimLevelColumnVisible(levelReportView, `goldfish-${n - 1}`) && (
+                          <SortableHeader
+                            key={`g${n}`}
+                            label={`Goldfish 1A${n}`}
+                            sortKey={`goldfish.${n - 1}`}
+                            currentSort={levelSort}
+                            onSort={requestLevelSort}
+                          />
+                        ),
+                    )}
+                    {swimLevelColumnVisible(levelReportView, "goldfishLevel") ? (
+                      <SortableHeader label="Goldfish Level" sortKey="goldfishLevel" currentSort={levelSort} onSort={requestLevelSort} />
+                    ) : null}
+                    {[1, 2, 3, 4, 5, 6].map(
+                      (n) =>
+                        swimLevelColumnVisible(levelReportView, `minnow-${n - 1}`) && (
+                          <SortableHeader
+                            key={`m${n}`}
+                            label={`Minnow 1B${n}`}
+                            sortKey={`minnow.${n - 1}`}
+                            currentSort={levelSort}
+                            onSort={requestLevelSort}
+                          />
+                        ),
+                    )}
+                    {swimLevelColumnVisible(levelReportView, "minnowLevel") ? (
+                      <SortableHeader label="Minnow Level" sortKey="minnowLevel" currentSort={levelSort} onSort={requestLevelSort} />
+                    ) : null}
+                    {[1, 2, 3, 4].map(
+                      (n) =>
+                        swimLevelColumnVisible(levelReportView, `tadpole-${n - 1}`) && (
+                          <SortableHeader
+                            key={`t${n}`}
+                            label={`Tadpole 1C${n}`}
+                            sortKey={`tadpole.${n - 1}`}
+                            currentSort={levelSort}
+                            onSort={requestLevelSort}
+                          />
+                        ),
+                    )}
+                    {swimLevelColumnVisible(levelReportView, "tadpoleLevel") ? (
+                      <SortableHeader label="Tadpole Level" sortKey="tadpoleLevel" currentSort={levelSort} onSort={requestLevelSort} />
+                    ) : null}
+                    {swimLevelColumnVisible(levelReportView, "redCross") ? (
+                      <SortableHeader label="Red Cross Level 1" sortKey="redCross" currentSort={levelSort} onSort={requestLevelSort} />
+                    ) : null}
+                    {swimLevelColumnVisible(levelReportView, "redCross2") ? (
+                      <SortableHeader label="Red Cross Level 2" sortKey="redCross2" currentSort={levelSort} onSort={requestLevelSort} />
+                    ) : null}
+                    {swimLevelColumnVisible(levelReportView, "redCross3") ? (
+                      <SortableHeader label="Red Cross Level 3" sortKey="redCross3" currentSort={levelSort} onSort={requestLevelSort} />
+                    ) : null}
+                    {swimLevelColumnVisible(levelReportView, "redCross4") ? (
+                      <SortableHeader label="Red Cross Level 4" sortKey="redCross4" currentSort={levelSort} onSort={requestLevelSort} />
+                    ) : null}
+                    {swimLevelColumnVisible(levelReportView, "frog") ? (
+                      <SortableHeader label="Frog Level" sortKey="frog" currentSort={levelSort} onSort={requestLevelSort} />
+                    ) : null}
+                    {swimLevelColumnVisible(levelReportView, "lastModified") ? (
+                      <SortableHeader label="Last Modified" sortKey="lastModified" currentSort={levelSort} onSort={requestLevelSort} />
+                    ) : null}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1230,46 +1322,73 @@ export default function SwimProgram() {
                       <TableCell className="text-muted-foreground" onClick={() => setSelectedLevelId(r.id)}>
                         {r.group}
                       </TableCell>
-                      {r.goldfish.map((s, i) => (
-                        <TableCell key={`g${i}`}>
-                          <SkillToggle value={s} onChange={(v) => updateSkill(r.id, "goldfish", i, v)} />
+                      {r.goldfish.map(
+                        (s, i) =>
+                          swimLevelColumnVisible(levelReportView, `goldfish-${i}`) && (
+                            <TableCell key={`g${i}`}>
+                              <SkillToggle value={s} onChange={(v) => updateSkill(r.id, "goldfish", i, v)} />
+                            </TableCell>
+                          ),
+                      )}
+                      {swimLevelColumnVisible(levelReportView, "goldfishLevel") ? (
+                        <TableCell>
+                          <LevelSelect value={r.goldfishLevel} onChange={(v) => updateLevel(r.id, { goldfishLevel: v })} />
                         </TableCell>
-                      ))}
-                      <TableCell>
-                        <LevelSelect value={r.goldfishLevel} onChange={(v) => updateLevel(r.id, { goldfishLevel: v })} />
-                      </TableCell>
-                      {r.minnow.map((s, i) => (
-                        <TableCell key={`m${i}`}>
-                          <SkillToggle value={s} onChange={(v) => updateSkill(r.id, "minnow", i, v)} />
+                      ) : null}
+                      {r.minnow.map(
+                        (s, i) =>
+                          swimLevelColumnVisible(levelReportView, `minnow-${i}`) && (
+                            <TableCell key={`m${i}`}>
+                              <SkillToggle value={s} onChange={(v) => updateSkill(r.id, "minnow", i, v)} />
+                            </TableCell>
+                          ),
+                      )}
+                      {swimLevelColumnVisible(levelReportView, "minnowLevel") ? (
+                        <TableCell>
+                          <LevelSelect value={r.minnowLevel} onChange={(v) => updateLevel(r.id, { minnowLevel: v })} />
                         </TableCell>
-                      ))}
-                      <TableCell>
-                        <LevelSelect value={r.minnowLevel} onChange={(v) => updateLevel(r.id, { minnowLevel: v })} />
-                      </TableCell>
-                      {r.tadpole.map((s, i) => (
-                        <TableCell key={`t${i}`}>
-                          <SkillToggle value={s} onChange={(v) => updateSkill(r.id, "tadpole", i, v)} />
+                      ) : null}
+                      {r.tadpole.map(
+                        (s, i) =>
+                          swimLevelColumnVisible(levelReportView, `tadpole-${i}`) && (
+                            <TableCell key={`t${i}`}>
+                              <SkillToggle value={s} onChange={(v) => updateSkill(r.id, "tadpole", i, v)} />
+                            </TableCell>
+                          ),
+                      )}
+                      {swimLevelColumnVisible(levelReportView, "tadpoleLevel") ? (
+                        <TableCell>
+                          <LevelSelect value={r.tadpoleLevel} onChange={(v) => updateLevel(r.id, { tadpoleLevel: v })} />
                         </TableCell>
-                      ))}
-                      <TableCell>
-                        <LevelSelect value={r.tadpoleLevel} onChange={(v) => updateLevel(r.id, { tadpoleLevel: v })} />
-                      </TableCell>
-                      <TableCell>
-                        <LevelSelect value={r.redCross} onChange={(v) => updateLevel(r.id, { redCross: v })} />
-                      </TableCell>
-                      <TableCell>
-                        <LevelSelect value={r.redCross2} onChange={(v) => updateLevel(r.id, { redCross2: v })} />
-                      </TableCell>
-                      <TableCell>
-                        <LevelSelect value={r.redCross3} onChange={(v) => updateLevel(r.id, { redCross3: v })} />
-                      </TableCell>
-                      <TableCell>
-                        <LevelSelect value={r.redCross4} onChange={(v) => updateLevel(r.id, { redCross4: v })} />
-                      </TableCell>
-                      <TableCell>
-                        <LevelSelect value={r.frog} onChange={(v) => updateLevel(r.id, { frog: v })} />
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{r.lastModified}</TableCell>
+                      ) : null}
+                      {swimLevelColumnVisible(levelReportView, "redCross") ? (
+                        <TableCell>
+                          <LevelSelect value={r.redCross} onChange={(v) => updateLevel(r.id, { redCross: v })} />
+                        </TableCell>
+                      ) : null}
+                      {swimLevelColumnVisible(levelReportView, "redCross2") ? (
+                        <TableCell>
+                          <LevelSelect value={r.redCross2} onChange={(v) => updateLevel(r.id, { redCross2: v })} />
+                        </TableCell>
+                      ) : null}
+                      {swimLevelColumnVisible(levelReportView, "redCross3") ? (
+                        <TableCell>
+                          <LevelSelect value={r.redCross3} onChange={(v) => updateLevel(r.id, { redCross3: v })} />
+                        </TableCell>
+                      ) : null}
+                      {swimLevelColumnVisible(levelReportView, "redCross4") ? (
+                        <TableCell>
+                          <LevelSelect value={r.redCross4} onChange={(v) => updateLevel(r.id, { redCross4: v })} />
+                        </TableCell>
+                      ) : null}
+                      {swimLevelColumnVisible(levelReportView, "frog") ? (
+                        <TableCell>
+                          <LevelSelect value={r.frog} onChange={(v) => updateLevel(r.id, { frog: v })} />
+                        </TableCell>
+                      ) : null}
+                      {swimLevelColumnVisible(levelReportView, "lastModified") ? (
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{r.lastModified}</TableCell>
+                      ) : null}
                     </TableRow>
                   ))}
                 </TableBody>

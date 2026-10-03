@@ -8,6 +8,49 @@ const CM_ENTITY_FAMILY_BASES = [
   "https://webapi.campminder.com/api/entity/family",
 ];
 
+export function normCamperNameKey(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * Split MapPoint household rows into individual roster names.
+ * e.g. "Aaron & Layla Weissler" → ["Aaron Weissler", "Layla Weissler"]
+ */
+export function expandMappointCamperNames(raw: string): string[] {
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  if (!trimmed.includes("&") && !trimmed.includes(",")) return [trimmed];
+
+  const segments = trimmed
+    .split(/\s*,\s*|\s*&\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (segments.length <= 1) return [trimmed];
+
+  let sharedLastName = "";
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const tokens = segments[i].split(/\s+/);
+    if (tokens.length >= 2) {
+      sharedLastName = tokens.slice(1).join(" ");
+      break;
+    }
+  }
+
+  const out: string[] = [];
+  for (const segment of segments) {
+    const tokens = segment.split(/\s+/);
+    if (tokens.length >= 2) {
+      out.push(segment);
+    } else if (sharedLastName) {
+      out.push(`${segment} ${sharedLastName}`);
+    } else {
+      out.push(segment);
+    }
+  }
+
+  return [...new Set(out.map((name) => name.trim()))].filter(Boolean);
+}
+
 export type CmAddressParts = {
   line1?: string | null;
   line2?: string | null;
@@ -216,4 +259,41 @@ export async function loadHomeAddressesByPerson(
   }
 
   return result;
+}
+
+/** camper_name_key → formatted address from route_reference_assignments (2026 MapPoint priors). */
+export async function loadRouteReferenceAddressHints(
+  supabase: { from: (table: string) => any },
+  companyId: string,
+  referenceSeason = "2026",
+): Promise<Map<string, string>> {
+  const hints = new Map<string, string>();
+  const { data, error } = await supabase
+    .from("route_reference_assignments")
+    .select("camper_name_key, camper_name, address")
+    .eq("company_id", companyId)
+    .eq("reference_season", referenceSeason);
+
+  if (error) {
+    console.warn("[Addresses] route_reference_assignments load failed:", error.message);
+    return hints;
+  }
+
+  for (const row of data ?? []) {
+    const address = String(row.address ?? "").trim();
+    if (!address) continue;
+    const keys = new Set<string>();
+    if (row.camper_name_key) keys.add(normCamperNameKey(String(row.camper_name_key)));
+    if (row.camper_name) {
+      for (const expanded of expandMappointCamperNames(String(row.camper_name))) {
+        keys.add(normCamperNameKey(expanded));
+      }
+    }
+    for (const key of keys) {
+      if (key && !hints.has(key)) hints.set(key, address);
+    }
+  }
+
+  console.log(`[Addresses] Loaded ${hints.size} route-reference address hints for season ${referenceSeason}`);
+  return hints;
 }

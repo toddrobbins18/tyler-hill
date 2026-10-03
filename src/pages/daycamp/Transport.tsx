@@ -75,6 +75,7 @@ import {
 } from "@/lib/transportRoster";
 import {
   applyHistoricalAssignments,
+  getHistoricalRouteSuggestion,
   getReferenceDatasetStatus,
   loadCamperPriorMap,
   pickHistoricalBusForCamper,
@@ -1373,7 +1374,7 @@ export default function Transport() {
     });
   }, [getEffectiveCore, routeMeta]);
 
-  const routes = buildRoutes(timeOfDay);
+  const routes = useMemo(() => buildRoutes(timeOfDay), [buildRoutes, timeOfDay]);
 
   const camperEnrollmentLookup = useMemo(
     () => buildCamperEnrollmentLookup(groupRoster),
@@ -1424,43 +1425,59 @@ export default function Transport() {
     scheduledCampers: number;
   } | null>(null);
 
+  const busAttendanceRouteSignature = useMemo(
+    () =>
+      displayRoutes
+        .map((r) => {
+          const riders = campersOnRoute(r.id, getEffectiveCore(r.id));
+          return `${r.id}:${riders.length}:${riders.map((c) => c.key).join(",")}`;
+        })
+        .join("|"),
+    [displayRoutes, getEffectiveCore],
+  );
+
   useEffect(() => {
     if (!companyId) {
       setBusAttendanceSummary(null);
       return;
     }
     let cancelled = false;
-    void (async () => {
-      const loaded = await loadBusAttendance(
-        supabase,
-        companyId,
-        currentSeason,
-        overrideDate,
-        timeOfDay,
-      );
-      if (cancelled) return;
-      const busesWithRiders = displayRoutes.filter(
-        (r) => campersOnRoute(r.id, getEffectiveCore(r.id)).length > 0,
-      );
-      let markedCampers = 0;
-      let scheduledCampers = 0;
-      for (const r of busesWithRiders) {
-        for (const c of campersOnRoute(r.id, getEffectiveCore(r.id))) {
-          scheduledCampers++;
-          if (loaded.records[c.key]) markedCampers++;
+    const handle = setTimeout(() => {
+      void (async () => {
+        const loaded = await loadBusAttendance(
+          supabase,
+          companyId,
+          currentSeason,
+          overrideDate,
+          timeOfDay,
+        );
+        if (cancelled) return;
+        const busesWithRiders = displayRoutes.filter(
+          (r) => campersOnRoute(r.id, getEffectiveCore(r.id)).length > 0,
+        );
+        let markedCampers = 0;
+        let scheduledCampers = 0;
+        for (const r of busesWithRiders) {
+          for (const c of campersOnRoute(r.id, getEffectiveCore(r.id))) {
+            scheduledCampers++;
+            if (loaded.records[c.key]) markedCampers++;
+          }
         }
-      }
-      setBusAttendanceSummary({
-        submittedBuses: busesWithRiders.filter((r) =>
-          isRouteBusSubmitted(r.id, loaded.busSubmissions),
-        ).length,
-        totalBuses: busesWithRiders.length,
-        markedCampers,
-        scheduledCampers,
-      });
-    })();
-    return () => { cancelled = true; };
-  }, [companyId, currentSeason, overrideDate, timeOfDay, displayRoutes, getEffectiveCore]);
+        setBusAttendanceSummary({
+          submittedBuses: busesWithRiders.filter((r) =>
+            isRouteBusSubmitted(r.id, loaded.busSubmissions),
+          ).length,
+          totalBuses: busesWithRiders.length,
+          markedCampers,
+          scheduledCampers,
+        });
+      })();
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [companyId, currentSeason, overrideDate, timeOfDay, busAttendanceRouteSignature, displayRoutes, getEffectiveCore]);
 
   const openReportPreview = (preview: Omit<TransportReportPreview, "open">) => {
     setReportPreview({ ...preview, open: true });
@@ -1765,13 +1782,56 @@ export default function Transport() {
     void refreshReferenceStatus();
   }, [refreshReferenceStatus]);
 
+  const priorRouteSuggestions = useMemo(() => {
+    const priorMap = priorMapRef.current;
+    if (!priorMap?.size) return new Map<number, ReturnType<typeof getHistoricalRouteSuggestion>>();
+    const map = new Map<number, ReturnType<typeof getHistoricalRouteSuggestion>>();
+    for (const camper of unplottedCampers) {
+      const suggestion = getHistoricalRouteSuggestion(camper, priorMap, routeMeta);
+      if (suggestion) map.set(camper.id, suggestion);
+    }
+    return map;
+  }, [unplottedCampers, routeMeta, referenceStatus]);
+
+  const applyLearnedPlacementsToPayload = useCallback(
+    async (payload: BoardPayload): Promise<BoardPayload & { placedCount: number; skippedNoBus: number }> => {
+      if (!companyId || !currentSeason || payload.unplottedCampers.length === 0) {
+        return { ...payload, placedCount: 0, skippedNoBus: 0 };
+      }
+      const priorMap =
+        priorMapRef.current ?? (await loadCamperPriorMap(supabase, companyId, currentSeason));
+      priorMapRef.current = priorMap;
+
+      const result = applyHistoricalAssignments({
+        coreStops: payload.coreStops,
+        routeMeta: payload.routeMeta,
+        unplottedCampers: payload.unplottedCampers,
+        priorMap,
+      });
+
+      let nextCore = result.coreStops;
+      if (result.placed.length > 0) {
+        nextCore = reorderStopsByHistoricalPriors(nextCore, priorMap);
+      }
+
+      return {
+        ...payload,
+        coreStops: nextCore,
+        unplottedCampers: result.unplottedCampers,
+        placedCount: result.placed.length,
+        skippedNoBus: result.skippedNoBus.length,
+      };
+    },
+    [companyId, currentSeason],
+  );
+
   const handleApplyRouteTemplate = async () => {
     setApplyingTemplate(true);
     try {
       const { coreStops: templateStops, routeMeta: templateMeta } =
         build2026MappointRouteTemplate(ROUTE_COLORS);
 
-      const payload: BoardPayload = {
+      let payload: BoardPayload = {
         coreStops: templateStops,
         routeMeta: templateMeta,
         unplottedCampers,
@@ -1787,12 +1847,24 @@ export default function Transport() {
         payload,
       );
 
-      await persistBoard(normalized);
-      await finalizeBoardForSeason(normalized);
+      const withLearned = await applyLearnedPlacementsToPayload(normalized);
+      payload = {
+        ...withLearned,
+        routesConfigured: true,
+        routesSeason: currentSeason,
+        routesSource: "mappoint2026",
+      };
+
+      await persistBoard(payload);
+      await finalizeBoardForSeason(payload);
+      void refreshReferenceStatus();
 
       toast({
         title: "Route template applied",
-        description: `${templateMeta.length} buses loaded (stops only). Use Apply Learned Assignments to place returning campers.`,
+        description:
+          withLearned.placedCount > 0
+            ? `${templateMeta.length} buses loaded · ${withLearned.placedCount} returning campers placed from prior routes${withLearned.skippedNoBus ? ` · ${withLearned.skippedNoBus} prior bus not on board` : ""}`
+            : `${templateMeta.length} buses loaded (stops only). No prior route match for unplotted campers yet — assign manually and Nest will remember.`,
       });
     } catch (e: unknown) {
       toast({
@@ -1809,26 +1881,12 @@ export default function Transport() {
     if (!companyId) return;
     setApplyingHistorical(true);
     try {
-      const priorMap =
-        priorMapRef.current ?? (await loadCamperPriorMap(supabase, companyId, currentSeason));
-      priorMapRef.current = priorMap;
-
-      const result = applyHistoricalAssignments({
-        coreStops,
-        routeMeta,
-        unplottedCampers,
-        priorMap,
-      });
-
-      let nextCore = result.coreStops;
-      if (result.placed.length > 0) {
-        nextCore = reorderStopsByHistoricalPriors(nextCore, priorMap);
-      }
+      const withLearned = await applyLearnedPlacementsToPayload(buildBoardPayload());
 
       const payload: BoardPayload = {
-        coreStops: nextCore,
+        coreStops: withLearned.coreStops,
         routeMeta,
-        unplottedCampers: result.unplottedCampers,
+        unplottedCampers: withLearned.unplottedCampers,
         routesConfigured: true,
         routesSeason: currentSeason,
         routesSource: routesSource ?? "manual",
@@ -1836,11 +1894,12 @@ export default function Transport() {
 
       await persistBoard(payload);
       await finalizeBoardForSeason(payload);
+      void refreshReferenceStatus();
 
       toast({
-        title: "Learned assignments applied",
-        description: `${result.placed.length} campers placed on prior buses · ${result.unplottedCampers.length} still unplotted${result.skippedNoBus.length ? ` · ${result.skippedNoBus.length} prior bus not on board` : ""}`,
-        variant: result.placed.length ? "default" : "destructive",
+        title: "Prior routes applied",
+        description: `${withLearned.placedCount} campers placed on prior buses · ${withLearned.unplottedCampers.length} still unplotted${withLearned.skippedNoBus ? ` · ${withLearned.skippedNoBus} prior bus not on board` : ""}`,
+        variant: withLearned.placedCount ? "default" : "destructive",
       });
     } catch (e: unknown) {
       toast({
@@ -2069,7 +2128,7 @@ export default function Transport() {
     try {
       if (companyId) {
         priorMapRef.current =
-          priorMapRef.current ?? (await loadCamperPriorMap(supabase, companyId, "2026"));
+          priorMapRef.current ?? (await loadCamperPriorMap(supabase, companyId, currentSeason));
       }
       const priorMap = priorMapRef.current ?? new Map();
 
@@ -2600,7 +2659,7 @@ export default function Transport() {
             title="Place unplotted campers on buses from learned routing history"
           >
             <History className={`h-4 w-4 ${applyingHistorical ? "animate-pulse" : ""}`} />
-            {applyingHistorical ? "Applying learned routes…" : "Apply Learned Assignments"}
+            {applyingHistorical ? "Placing from prior routes…" : "Place Using Prior Routes"}
           </Button>
           <Button variant="outline" className="gap-2" onClick={() => setBulkImport(prev => ({ ...prev, open: true, log: { ok: 0, skipped: 0, failed: 0, messages: [] }, progress: { done: 0, total: 0 }, failedRows: [] }))}>
             <Upload className="h-4 w-4" /> Bulk Upload Addresses
@@ -3091,7 +3150,9 @@ export default function Transport() {
             <Card><CardContent className="p-8 text-center"><p className="text-muted-foreground">{unplottedCampers.length === 0 ? "All campers have been assigned to routes! 🎉" : "No unplotted campers for this enrollment week."}</p></CardContent></Card>
           ) : (
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {unplottedForWeek.map((c) => (
+              {unplottedForWeek.map((c) => {
+                const priorSuggestion = priorRouteSuggestions.get(c.id);
+                return (
                 <Card key={c.id} className="border-dashed">
                   <CardContent className="p-4">
                     <div className="flex items-start gap-3">
@@ -3110,7 +3171,22 @@ export default function Transport() {
                           <span className="text-[10px] text-muted-foreground">Age {c.age}</span>
                           <span className="text-[10px] text-muted-foreground">{c.session}</span>
                         </div>
-                        <div className="mt-2">
+                        {priorSuggestion ? (
+                          <div className="mt-2 space-y-2">
+                            <Badge variant="secondary" className="text-[10px] font-normal">
+                              Prior route · Bus {priorSuggestion.priorBusNumber} ({priorSuggestion.referenceSeason})
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 w-full text-xs"
+                              onClick={() => handleAssignCamperToRoute(c.id, priorSuggestion.routeId)}
+                            >
+                              Place on prior bus
+                            </Button>
+                          </div>
+                        ) : null}
+                        <div className={priorSuggestion ? "mt-2" : "mt-2"}>
                           <Select onValueChange={(v) => handleAssignCamperToRoute(c.id, parseInt(v))}>
                             <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Assign to route..." /></SelectTrigger>
                             <SelectContent>
@@ -3119,6 +3195,7 @@ export default function Transport() {
                                   <span className="flex items-center gap-2">
                                     <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: r.color }} />
                                     {r.name}
+                                    {priorSuggestion?.routeId === r.id ? " (prior)" : ""}
                                   </span>
                                 </SelectItem>
                               ))}
@@ -3129,7 +3206,8 @@ export default function Transport() {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+              );
+              })}
             </div>
           )}
 

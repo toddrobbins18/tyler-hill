@@ -62,9 +62,102 @@ export interface SwimSeasonHistory {
   levels: LevelRecord | null;
 }
 
+/** Fallback initials when roster proctors have not been loaded yet. */
 export const PROCTORS = ["MF", "JT", "VS", "KL", "AR"];
 export const BRACELETS: BraceletColor[] = ["Red", "Orange", "Yellow", "Green", "Blue"];
 export const PASS_OPTIONS = ["Passed", "Did Not Pass", "Retest"] as const;
+export type PassStatus = (typeof PASS_OPTIONS)[number];
+
+/** Airtable Swim Records views — column sets mirror Red Cross 1–6 + ALL KIDS. */
+export type SwimLevelReportView =
+  | "all"
+  | "red-cross-1"
+  | "red-cross-2"
+  | "red-cross-3"
+  | "red-cross-4"
+  | "red-cross-5"
+  | "red-cross-6";
+
+export const SWIM_LEVEL_REPORT_VIEWS: { value: SwimLevelReportView; label: string }[] = [
+  { value: "red-cross-1", label: "Red Cross 1" },
+  { value: "red-cross-2", label: "Red Cross 2" },
+  { value: "red-cross-3", label: "Red Cross 3" },
+  { value: "red-cross-4", label: "Red Cross 4" },
+  { value: "red-cross-5", label: "Red Cross 5" },
+  { value: "red-cross-6", label: "Red Cross 6" },
+  { value: "all", label: "ALL KIDS" },
+];
+
+const SWIM_LEVEL_VIEW_COLUMNS: Record<Exclude<SwimLevelReportView, "all">, Set<string>> = {
+  "red-cross-1": new Set(["goldfish-0", "goldfish-1", "goldfish-2", "goldfish-3", "goldfishLevel"]),
+  "red-cross-2": new Set([
+    "minnow-0",
+    "minnow-1",
+    "minnow-2",
+    "minnow-3",
+    "minnow-4",
+    "minnow-5",
+    "minnowLevel",
+  ]),
+  "red-cross-3": new Set([
+    "tadpole-0",
+    "tadpole-1",
+    "tadpole-2",
+    "tadpole-3",
+    "tadpoleLevel",
+    "redCross",
+    "frog",
+  ]),
+  "red-cross-4": new Set(["redCross2"]),
+  "red-cross-5": new Set(["redCross3"]),
+  "red-cross-6": new Set(["redCross4"]),
+};
+
+/** Whether a level-report column appears for the selected Airtable-style view. */
+export function swimLevelColumnVisible(view: SwimLevelReportView, column: string): boolean {
+  if (view === "all") return true;
+  if (column === "name" || column === "group" || column === "lastModified") return true;
+  return SWIM_LEVEL_VIEW_COLUMNS[view].has(column);
+}
+
+export function staffNameToInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0]![0] ?? ""}${parts[parts.length - 1]![0] ?? ""}`.toUpperCase();
+  }
+  return parts[0]?.slice(0, 2).toUpperCase() ?? "";
+}
+
+export function mergeProctorOptions(base: string[], extra: string[]): string[] {
+  const seen = new Map<string, string>();
+  for (const raw of [...base, ...extra]) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (!seen.has(key)) seen.set(key, trimmed);
+  }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b));
+}
+
+export function normalizePassStatus(raw: unknown): PassStatus | "" {
+  const s = String(raw ?? "").trim();
+  if (!s) return "";
+  if (s === "Passed" || /^passed$/i.test(s)) return "Passed";
+  if (s === "Did Not Pass" || /^did not pass$/i.test(s) || /^fail(ed)?$/i.test(s)) return "Did Not Pass";
+  if (s === "Retest" || /^retest$/i.test(s)) return "Retest";
+  return "";
+}
+
+export function normalizeBraceletColor(raw: unknown): BraceletColor | "" {
+  const s = String(raw ?? "").trim();
+  if (!s) return "";
+  const match = BRACELETS.find((c) => c.toLowerCase() === s.toLowerCase());
+  return match ?? "";
+}
+
+export function mergePassOptions(extra: string[]): string[] {
+  return mergeProctorOptions([...PASS_OPTIONS], extra);
+}
 export const SKILL_OPTIONS: SkillStatus[] = ["—", "A", "W"];
 export const LEVEL_OPTIONS: LevelStatus[] = ["—", "Complete", "Incomplete"];
 export const DATE_FMT = "MMMM d, yyyy";
@@ -169,16 +262,16 @@ function braceletFromJson(child: RosterChild, raw: Record<string, unknown>): Bra
   return {
     ...base,
     group: importedGroup || base.group,
-    currentBracelet: BRACELETS.includes(color as BraceletColor) ? (color as BraceletColor) : "",
-    proctor1: String(raw.proctor1 ?? ""),
+    currentBracelet: normalizeBraceletColor(color),
+    proctor1: String(raw.proctor1 ?? "").trim(),
     date1: String(raw.date1 ?? ""),
-    note1: String(raw.note1 ?? ""),
-    proctor2: String(raw.proctor2 ?? ""),
+    note1: normalizePassStatus(raw.note1) || String(raw.note1 ?? "").trim(),
+    proctor2: String(raw.proctor2 ?? "").trim(),
     date2: String(raw.date2 ?? ""),
-    note2: String(raw.note2 ?? ""),
-    proctor3: String(raw.proctor3 ?? ""),
+    note2: normalizePassStatus(raw.note2) || String(raw.note2 ?? "").trim(),
+    proctor3: String(raw.proctor3 ?? "").trim(),
     date3: String(raw.date3 ?? ""),
-    note3: String(raw.note3 ?? ""),
+    note3: normalizePassStatus(raw.note3) || String(raw.note3 ?? "").trim(),
     emailSent: Boolean(raw.emailSent),
   };
 }
@@ -529,6 +622,47 @@ export async function fetchSwimHistoryReport(
 }
 
 /** Distinct seasons with campers (for season selector). */
+/** Proctor initials / names for bracelet test dropdowns — staff roster + saved swim data. */
+export async function fetchSwimProctorOptions(
+  supabase: SupabaseClient,
+  companyId: string,
+  season: string,
+): Promise<string[]> {
+  const [{ data: staffRows }, { data: swimRows }] = await Promise.all([
+    supabase
+      .from("staff")
+      .select("name")
+      .eq("company_id", companyId)
+      .eq("season", season)
+      .neq("status", "inactive")
+      .order("name"),
+    supabase
+      .from("swim_program_records")
+      .select("bracelet")
+      .eq("company_id", companyId)
+      .eq("season", season),
+  ]);
+
+  const options: string[] = [...PROCTORS];
+  for (const row of staffRows ?? []) {
+    const name = String(row.name ?? "").trim();
+    if (!name) continue;
+    options.push(name);
+    const initials = staffNameToInitials(name);
+    if (initials) options.push(initials);
+  }
+  for (const row of swimRows ?? []) {
+    const bracelet = row.bracelet as Record<string, unknown> | null;
+    if (!bracelet || typeof bracelet !== "object") continue;
+    for (const key of ["proctor1", "proctor2", "proctor3"] as const) {
+      const val = String(bracelet[key] ?? "").trim();
+      if (val) options.push(val);
+    }
+  }
+
+  return mergeProctorOptions([], options);
+}
+
 export async function fetchSwimSeasons(
   supabase: SupabaseClient,
   companyId: string,
@@ -942,9 +1076,10 @@ export function parseSwimProgramCsv(
 
     if (braceletIdx >= 0) {
       const color = cols[braceletIdx]?.trim();
-      if (color && BRACELETS.includes(color as BraceletColor)) {
+      const normalizedColor = normalizeBraceletColor(color);
+      if (normalizedColor) {
         importRow.bracelet = {
-          currentBracelet: color as BraceletColor,
+          currentBracelet: normalizedColor,
           ...(csvGroup ? { group: csvGroup } : {}),
         };
       }

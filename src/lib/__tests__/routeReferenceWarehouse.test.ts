@@ -5,6 +5,7 @@ import {
   buildReferenceRouteStops,
   buildRouteReferenceFromMappointCsv,
   expandMappointCamperNames,
+  isLikelyCamperName,
   normCamperNameKey,
   summarizeReferenceRoutes,
   validateWarehouseAgainstCsv,
@@ -25,6 +26,11 @@ describe("routeReferenceWarehouse", () => {
 
   it("normalizes camper name keys", () => {
     expect(normCamperNameKey("  Jack & Lucas Fornatale ")).toBe("jack & lucas fornatale");
+  });
+
+  it("rejects street addresses masquerading as camper names", () => {
+    expect(isLikelyCamperName("2 Cambridge Ave")).toBe(false);
+    expect(isLikelyCamperName("Aaron Weissler")).toBe(true);
   });
 
   it("expands MapPoint sibling names for roster matching", () => {

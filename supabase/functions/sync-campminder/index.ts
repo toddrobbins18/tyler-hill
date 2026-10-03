@@ -2,7 +2,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { loadHomeAddressesByPerson } from '../_shared/campminderAddresses.ts';
+import {
+  loadHomeAddressesByPerson,
+  loadRouteReferenceAddressHints,
+  normCamperNameKey,
+} from '../_shared/campminderAddresses.ts';
 import {
   buildMapsFromSessionAttendees,
   ensureDivisionsForAgeGroupLabels,
@@ -824,7 +828,16 @@ const TRACKED_FIELDS: Record<string, string[]> = {
 
 /** When CampMinder omits MedicalInfo, do not wipe manually-entered Nest values on upsert. */
 const PRESERVE_IF_NULL_FIELDS: Record<string, string[]> = {
-  children: ['allergies', 'medical_notes', 'group_name', 'division_id', 'guardian_name', 'guardian_email', 'guardian_phone'],
+  children: [
+    'allergies',
+    'medical_notes',
+    'group_name',
+    'division_id',
+    'guardian_name',
+    'guardian_email',
+    'guardian_phone',
+    'home_address',
+  ],
 };
 
 function resolveGuardianContact(
@@ -1423,9 +1436,39 @@ async function performAddressOnlySync(
     throw new Error('No enrolled campers returned from CampMinder — address sync aborted');
   }
 
+  const personMap = new Map<string, unknown>();
+
   await updateSyncJob(supabase, jobId, {
     progress: {
-      step: 'Fetching home addresses from CampMinder',
+      step: 'Fetching person contact details from CampMinder',
+      syncType: 'addresses',
+      enrolledCampers: personIds.length,
+      season,
+    },
+  });
+
+  await fetchPersonsInParallel(personIds, personMap, token, subscriptionKey, clientId, {
+    label: 'Addresses',
+    season,
+    onProgress: async (done, total) => {
+      if (done % 50 === 0 || done === total) {
+        await updateSyncJob(supabase, jobId, {
+          progress: {
+            step: 'Fetching person contact details from CampMinder',
+            syncType: 'addresses',
+            enrolledCampers: personIds.length,
+            person_fetch_done: done,
+            person_fetch_total: total,
+            season,
+          },
+        });
+      }
+    },
+  });
+
+  await updateSyncJob(supabase, jobId, {
+    progress: {
+      step: 'Resolving home addresses (family API + contact details)',
       syncType: 'addresses',
       enrolledCampers: personIds.length,
       season,
@@ -1434,7 +1477,7 @@ async function performAddressOnlySync(
 
   const homeAddressByPerson = await loadHomeAddressesByPerson(
     personIds,
-    new Map(),
+    personMap,
     token,
     subscriptionKey,
     clientId,
@@ -1442,8 +1485,11 @@ async function performAddressOnlySync(
   );
 
   console.log(
-    `[Addresses] Resolved ${homeAddressByPerson.size}/${personIds.length} home addresses from CampMinder`,
+    `[Addresses] Resolved ${homeAddressByPerson.size}/${personIds.length} from CampMinder APIs`,
   );
+
+  const mappointHints = await loadRouteReferenceAddressHints(supabase, companyId, '2026');
+  let mappointFallbackUsed = 0;
 
   await updateSyncJob(supabase, jobId, {
     progress: {
@@ -1464,7 +1510,7 @@ async function performAddressOnlySync(
     const batch = personIds.slice(i, i + BATCH_SIZE);
     const { data: children, error: fetchErr } = await supabase
       .from('children')
-      .select('id, person_id')
+      .select('id, person_id, name')
       .eq('company_id', companyId)
       .eq('season', season)
       .in('person_id', batch);
@@ -1473,31 +1519,36 @@ async function performAddressOnlySync(
       throw new Error(`Failed to load children for address update: ${fetchErr.message}`);
     }
 
-    const childIdByPerson = new Map<string, string>(
-      (children || []).map((c: { id: string; person_id: string | null }) => [
+    const childByPerson = new Map<string, { id: string; name: string }>(
+      (children || []).map((c: { id: string; person_id: string | null; name: string | null }) => [
         String(c.person_id),
-        c.id,
+        { id: c.id, name: String(c.name ?? '').trim() },
       ]),
     );
 
     const nowIso = new Date().toISOString();
     for (const personId of batch) {
-      const address = homeAddressByPerson.get(personId);
-      if (!address) {
-        skippedNoAddress++;
+      const child = childByPerson.get(personId);
+      if (!child) {
+        skippedNoChild++;
         continue;
       }
 
-      const childId = childIdByPerson.get(personId);
-      if (!childId) {
-        skippedNoChild++;
+      let address = homeAddressByPerson.get(personId);
+      if (!address && child.name && mappointHints.size > 0) {
+        address = mappointHints.get(normCamperNameKey(child.name));
+        if (address) mappointFallbackUsed++;
+      }
+
+      if (!address) {
+        skippedNoAddress++;
         continue;
       }
 
       const { error: updateErr } = await supabase
         .from('children')
         .update({ home_address: address, updated_at: nowIso })
-        .eq('id', childId);
+        .eq('id', child.id);
 
       if (updateErr) {
         console.error(`[Addresses] Update failed for person ${personId}:`, updateErr.message);
@@ -1538,6 +1589,7 @@ async function performAddressOnlySync(
       enrolledCampers: personIds.length,
       addressesResolved: homeAddressByPerson.size,
       addressesWritten: updatedCount,
+      mappointFallbackUsed,
       skippedNoAddress,
       skippedNoChild,
       season,
@@ -1545,11 +1597,12 @@ async function performAddressOnlySync(
     total_counts: {
       addresses_resolved: homeAddressByPerson.size,
       addresses_written: updatedCount,
+      mappoint_fallback_used: mappointFallbackUsed,
     },
   });
 
   console.log(
-    `[Addresses] Done — wrote ${updatedCount}, no CM address: ${skippedNoAddress}, no child row: ${skippedNoChild}`,
+    `[Addresses] Done — wrote ${updatedCount}, CM resolved: ${homeAddressByPerson.size}, MapPoint fallback: ${mappointFallbackUsed}, still missing: ${skippedNoAddress}, no child row: ${skippedNoChild}`,
   );
 }
 

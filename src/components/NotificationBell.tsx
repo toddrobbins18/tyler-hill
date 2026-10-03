@@ -117,12 +117,12 @@ export function NotificationBell() {
   }, [user, currentCompany?.id]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id) return;
 
     fetchUnread();
 
     const channel = supabase
-      .channel("notification-bell")
+      .channel(`notification-bell-${user.id}`)
       .on(
         "postgres_changes",
         {
@@ -153,7 +153,7 @@ export function NotificationBell() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, open, fetchUnread, fetchRecent]);
+  }, [user?.id, open, fetchUnread, fetchRecent]);
 
   useEffect(() => {
     if (open) fetchRecent();

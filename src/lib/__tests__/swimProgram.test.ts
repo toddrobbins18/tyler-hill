@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   isAirtableSwimRecordsCsv,
   levelFromSkills,
+  normalizeBraceletColor,
+  normalizePassStatus,
   normalizeSkillStatus,
   parseSwimProgramCsv,
+  swimLevelColumnVisible,
   type RosterChild,
 } from "@/lib/swimProgram";
 
@@ -76,6 +79,20 @@ describe("swimProgram", () => {
     expect(rows[0].levels?.goldfishLevel).toBe("Complete");
     expect(rows[0].levels?.minnow?.[0]).toBe("A");
     expect(rows[0].levels?.redCross).toBe("Complete");
+  });
+
+  it("normalizes legacy pass and bracelet values", () => {
+    expect(normalizePassStatus("PASSED")).toBe("Passed");
+    expect(normalizePassStatus("did not pass")).toBe("Did Not Pass");
+    expect(normalizeBraceletColor("orange")).toBe("Orange");
+    expect(normalizeBraceletColor("purple")).toBe("");
+  });
+
+  it("filters level report columns by Red Cross view", () => {
+    expect(swimLevelColumnVisible("red-cross-1", "goldfish-0")).toBe(true);
+    expect(swimLevelColumnVisible("red-cross-1", "minnow-0")).toBe(false);
+    expect(swimLevelColumnVisible("red-cross-3", "frog")).toBe(true);
+    expect(swimLevelColumnVisible("all", "redCross4")).toBe(true);
   });
 
   it("matches PersonID across seasons when importing historical data", () => {

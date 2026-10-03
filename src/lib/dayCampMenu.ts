@@ -25,17 +25,12 @@ import {
   BedDouble,
   Camera,
 } from "lucide-react";
-import { LogIn } from "lucide-react";
 import type { CampLike } from "@/lib/camps";
 import {
   isNorthShoreDayCamp,
   northShoreBusTransportEnabled,
   staffTimeClockEnabledForCompany,
 } from "@/lib/camps";
-function parentPortalUrl(slug: string, path: "/parents" | "/parents/portal" = "/parents") {
-  return `${path}?company=${encodeURIComponent(slug)}`;
-}
-
 export type DayCampMenuItem = {
   title: string;
   url: string;
@@ -102,7 +97,7 @@ export function getDayCampPocItems(): DayCampMenuItem[] {
     { title: "Change Sheets", url: "/day-camp/change-sheets", icon: FileText, menuId: "change-sheets" },
     { title: "Pending Changes", url: "/day-camp/pending-transport-changes", icon: Clock, menuId: "pending-transport-changes" },
     { title: "Office Changes", url: "/day-camp/office-changes", icon: ClipboardEdit, menuId: "office-changes" },
-    { title: "Swim", url: "/day-camp/swim", icon: Waves, menuId: "swim" },
+    { title: "Swim Program", url: "/day-camp/swim", icon: Waves, menuId: "swim" },
   ];
 }
 
@@ -159,58 +154,19 @@ export function getParentPortalMenuItems(): DayCampMenuItem[] {
   ];
 }
 
-/** Parent-facing links — flat sidebar (Login, Family Portal, Portal Dashboard). */
-export function getDayCampParentFacingSidebarItems(company: CampLike): DayCampMenuItem[] {
-  if (!company?.slug) return [];
-  return [
-    {
-      title: "Family Portal",
-      url: parentPortalUrl(company.slug, "/parents/portal"),
-      icon: Users,
-      menuId: "parent-portal",
-    },
-    {
-      title: "Login / Signup",
-      url: parentPortalUrl(company.slug, "/parents"),
-      icon: LogIn,
-      menuId: "parent-portal",
-    },
-    {
-      title: "Portal Dashboard",
-      url: "/day-camp/parent-portal-dashboard",
-      icon: ClipboardList,
-      menuId: "parent-portal-dashboard",
-    },
-  ];
+/** Todd carryover — sorted for Main Menu (same Nest sidebar style). */
+export function getDayCampMainMenuItems(company: CampLike): DayCampMenuItem[] {
+  return [...getDayCampNestCarryoverItems()]
+    .filter(
+      (item) =>
+        item.menuId !== "staff-time-clock" || staffTimeClockEnabledForCompany(company),
+    )
+    .sort((a, b) => a.title.localeCompare(b.title));
 }
 
-/** Single alphabetized day camp sidebar — Main Menu + Day Camp + Parent Facing merged. */
-export function getDayCampUnifiedSidebarItems(company: CampLike): DayCampMenuItem[] {
-  const seen = new Set<string>();
-  const items = [
-    ...getDayCampNestCarryoverItems(),
-    ...getDayCampSidebarPocItems(company),
-    ...getDayCampParentFacingSidebarItems(company),
-  ].filter((item) => {
-    if (item.menuId === "staff-time-clock" && !staffTimeClockEnabledForCompany(company)) {
-      return false;
-    }
-    if (seen.has(item.url)) return false;
-    seen.add(item.url);
-    return true;
-  });
-
-  return items.sort((a, b) => a.title.localeCompare(b.title));
-}
-
-/** @deprecated Use getDayCampUnifiedSidebarItems — kept for route access helpers. */
-export function getDayCampMainMenuItems(): DayCampMenuItem[] {
-  return [...getDayCampNestCarryoverItems()].sort((a, b) => a.title.localeCompare(b.title));
-}
-
-/** @deprecated Use getDayCampUnifiedSidebarItems. */
-export function getDayCampMenuPocItemsSorted(): DayCampMenuItem[] {
-  return [...getDayCampPocItems()].sort((a, b) => a.title.localeCompare(b.title));
+/** Day Camp POC items — sorted for Day Camp menu section. */
+export function getDayCampMenuPocItemsSorted(company: CampLike): DayCampMenuItem[] {
+  return [...getDayCampSidebarPocItems(company)].sort((a, b) => a.title.localeCompare(b.title));
 }
 
 /** Role permission rows for day camps — mirrors AppSidebar Main Menu + Day Camp sections. */

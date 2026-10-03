@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Upload, FileJson, AlertCircle, CheckCircle2, RefreshCw, Clock, Building2, XCircle, Mail } from "lucide-react";
+import { Upload, FileJson, AlertCircle, CheckCircle2, RefreshCw, Clock, Building2, XCircle, Mail, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -134,7 +134,11 @@ export default function CampDataImporter() {
     }
   };
 
-  const handleCampMinderSync = async (companyId: string, companyName: string, syncType: 'full' | 'staff' | 'campers' = 'full') => {
+  const handleCampMinderSync = async (
+    companyId: string,
+    companyName: string,
+    syncType: 'full' | 'staff' | 'campers' | 'addresses' = 'full',
+  ) => {
     setSyncingCompanyId(companyId);
     setSyncResults(prev => ({ ...prev, [companyId]: {} }));
 
@@ -419,25 +423,46 @@ export default function CampDataImporter() {
                         )}
                       </Button>
                       {isNorthShoreDayCamp(company.slug) && (
-                        <Button
-                          onClick={() => handleGuardianEmailBackfill(company.slug, company.name)}
-                          disabled={!company.campminder_sync_enabled || backfillingSlug !== null || syncingCompanyId !== null}
-                          size="sm"
-                          variant="secondary"
-                          title="Fetch parent emails from CampMinder (2027 + 2026)"
-                        >
-                          {backfillingSlug === company.slug ? (
-                            <>
-                              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                              Backfilling…
-                            </>
-                          ) : (
-                            <>
-                              <Mail className="h-4 w-4 mr-2" />
-                              Parent emails
-                            </>
-                          )}
-                        </Button>
+                        <>
+                          <Button
+                            onClick={() => handleCampMinderSync(company.id, company.name, 'addresses')}
+                            disabled={!company.campminder_sync_enabled || backfillingSlug !== null || syncingCompanyId !== null}
+                            size="sm"
+                            variant="secondary"
+                            title="Fetch household addresses from CampMinder for Transport"
+                          >
+                            {syncingCompanyId === company.id ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                Syncing…
+                              </>
+                            ) : (
+                              <>
+                                <MapPin className="h-4 w-4 mr-2" />
+                                Addresses
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            onClick={() => handleGuardianEmailBackfill(company.slug, company.name)}
+                            disabled={!company.campminder_sync_enabled || backfillingSlug !== null || syncingCompanyId !== null}
+                            size="sm"
+                            variant="secondary"
+                            title="Fetch parent emails from CampMinder (2027 + 2026)"
+                          >
+                            {backfillingSlug === company.slug ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                Backfilling…
+                              </>
+                            ) : (
+                              <>
+                                <Mail className="h-4 w-4 mr-2" />
+                                Parent emails
+                              </>
+                            )}
+                          </Button>
+                        </>
                       )}
                     </div>
                   </div>

@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef, ReactNode, useC
 import { supabase } from '@/integrations/supabase/client';
 import type { User } from '@supabase/supabase-js';
 import { resolvePermissionDivisionIds } from '@/lib/divisionFilterUtils';
+import { hasMenuPermissionWithAliases } from '@/lib/dayCampPermissionAliases';
 
 export type AppRole = 'admin' | 'staff' | 'division_leader' | 'specialist' | 'viewer' | 'super_admin' | 'health_center';
 
@@ -182,7 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (isSuperAdmin) return true;
 
     const perms = allPermissions[companyId];
-    if (perms?.[menuItem] === true) return true;
+    if (hasMenuPermissionWithAliases(perms, menuItem)) return true;
 
     // Transport sub-pages: allow anyone with Transportation until toggled per role
     if (

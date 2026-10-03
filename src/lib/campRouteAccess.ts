@@ -2,7 +2,6 @@ import type { CampLike } from "@/lib/camps";
 import {
   appointmentsEnabledForCompany,
   isDayCampCompany,
-  staffTimeClockEnabledForCompany,
 } from "@/lib/camps";
 import {
   getDayCampMainMenuItems,
@@ -32,10 +31,7 @@ function getAllowedPathsForCompany(company: CampLike): Set<string> {
   const paths = new Set<string>();
 
   if (isDayCampCompany(company)) {
-    for (const item of getDayCampMainMenuItems()) {
-      if (item.menuId === "staff-time-clock" && !staffTimeClockEnabledForCompany(company)) {
-        continue;
-      }
+    for (const item of getDayCampMainMenuItems(company)) {
       paths.add(item.url);
     }
     for (const item of getDayCampSidebarPocItems(company)) {

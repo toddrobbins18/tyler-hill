@@ -86,8 +86,12 @@ export default function DayCampModulePage() {
     return <PendingTransportChanges />;
   }
 
-  if (moduleId === "swim") {
-    return <SwimProgram />;
+  if (moduleId === "swim" || moduleId === "swim-bracelets") {
+    return <SwimProgram defaultTab="bracelets" />;
+  }
+
+  if (moduleId === "swim-progress") {
+    return <SwimProgram defaultTab="levels" />;
   }
 
   if (moduleId === "nurse") {

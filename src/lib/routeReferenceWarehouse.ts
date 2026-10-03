@@ -94,6 +94,15 @@ export function normCamperNameKey(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+/** Reject stop labels / street addresses accidentally stored as camper names. */
+export function isLikelyCamperName(name: string): boolean {
+  const trimmed = name.trim();
+  if (!trimmed || trimmed.length < 3) return false;
+  if (ADDRESS_LIKE.test(trimmed.split(/\s+/)[0] ?? "")) return false;
+  if (!/[a-zA-Z]/.test(trimmed)) return false;
+  return true;
+}
+
 /**
  * Split MapPoint household rows into individual roster names.
  * Handles "Aaron & Layla Weissler", "Aayhan, Kayhan & Orhan Kazmi", "Adam, Jake & Kaia Detore", etc.

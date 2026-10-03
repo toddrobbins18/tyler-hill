@@ -1,4 +1,5 @@
 import { Home, Users, Truck, FileText, Mail, Award, UserCog, Shield, Pill, Utensils, ClipboardList, ClipboardEdit, Settings, CloudRain, AlertTriangle, Calendar, Trophy, Palmtree, BookOpen, Building2, LogOut, BarChart3, ListChecks, ClipboardCheck, Stethoscope, ExternalLink, ClipboardPen, CreditCard, ChevronDown, Clock } from "lucide-react";
+import { NavLink, useLocation } from "react-router-dom";
 import { useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
@@ -21,14 +22,25 @@ import {
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { isDayCampCompany } from "@/lib/camps";
-import { getDayCampUnifiedSidebarItems } from "@/lib/dayCampMenu";
+import {
+  getDayCampMainMenuItems,
+  getDayCampMenuPocItemsSorted,
+} from "@/lib/dayCampMenu";
 import { getOvernightMenuItems } from "@/lib/overnightMenu";
 import { DayCampSidebarMenuList } from "@/components/daycamp/DayCampSidebarMenuList";
 import { SidebarNavItem } from "@/components/sidebar/SidebarNavItem";
+import { isSidebarNavActive } from "@/lib/sidebarNavActive";
 import { useDayCampMenuVisibility } from "@/hooks/useDayCampMenuVisibility";
+import { parentPortalUrl } from "@/hooks/useParentCompany";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 export function AppSidebar() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
 
@@ -42,8 +54,12 @@ export function AppSidebar() {
 
   const isDayCamp = isDayCampCompany(currentCompany);
 
-  const dayCampUnifiedItems = useMemo(
-    () => getDayCampUnifiedSidebarItems(currentCompany),
+  const dayCampMainItems = useMemo(
+    () => getDayCampMainMenuItems(currentCompany),
+    [currentCompany?.slug, currentCompany?.camp_type],
+  );
+  const dayCampPocItems = useMemo(
+    () => getDayCampMenuPocItemsSorted(currentCompany),
     [currentCompany?.slug, currentCompany?.camp_type],
   );
 
@@ -52,7 +68,7 @@ export function AppSidebar() {
     [currentCompany?.slug, currentCompany?.name, currentCompany?.camp_type],
   );
 
-  const items = isDayCamp ? dayCampUnifiedItems : overnightItems;
+  const items = isDayCamp ? dayCampMainItems : overnightItems;
 
   const permissionOptions = {
     currentCompany,
@@ -63,6 +79,10 @@ export function AppSidebar() {
   };
 
   const visibleItems = useDayCampMenuVisibility(items, permissionOptions);
+  const visibleDayCampPocItems = useDayCampMenuVisibility(
+    isDayCamp ? dayCampPocItems : [],
+    permissionOptions,
+  );
 
   const showAdministration = useMemo(() => {
     if (!currentCompany?.id) return false;
@@ -166,7 +186,7 @@ export function AppSidebar() {
         </div>
         
         <SidebarGroup>
-          {!isDayCamp ? <SidebarGroupLabel>Main Menu</SidebarGroupLabel> : null}
+          <SidebarGroupLabel>Main Menu</SidebarGroupLabel>
           <SidebarGroupContent>
             {isDayCamp ? (
               <DayCampSidebarMenuList items={visibleItems} />
@@ -198,6 +218,75 @@ export function AppSidebar() {
             )}
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {isDayCamp && visibleDayCampPocItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Day Camp</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <DayCampSidebarMenuList items={visibleDayCampPocItems} />
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {isDayCamp && currentCompany?.slug && hasPagePermission(currentCompany.id, "parent-portal") && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Parent Facing</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <Collapsible defaultOpen={location.pathname.startsWith("/parents")}>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton className="w-full">
+                        <Users className="h-4 w-4" />
+                        {!isCollapsed && (
+                          <>
+                            <span>Parent Portal</span>
+                            <ChevronDown className="ml-auto h-4 w-4 transition-transform data-[state=open]:rotate-180" />
+                          </>
+                        )}
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                  </SidebarMenuItem>
+                  <CollapsibleContent>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isSidebarNavActive(location.pathname, "/parents")}
+                      >
+                        <NavLink to={parentPortalUrl(currentCompany.slug, "/parents")} end>
+                          <span className="ml-6 text-sm">Login / Signup</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isSidebarNavActive(location.pathname, "/parents/portal")}
+                      >
+                        <NavLink to={parentPortalUrl(currentCompany.slug, "/parents/portal")} end>
+                          <span className="ml-6 text-sm">Family Portal</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isSidebarNavActive(
+                          location.pathname,
+                          "/day-camp/parent-portal-dashboard",
+                        )}
+                      >
+                        <NavLink to="/day-camp/parent-portal-dashboard" end>
+                          <span className="ml-6 text-sm">Portal Dashboard</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </CollapsibleContent>
+                </SidebarMenu>
+              </Collapsible>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {showAdministration && (
           <SidebarGroup>
