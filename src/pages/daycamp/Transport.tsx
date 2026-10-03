@@ -236,6 +236,93 @@ const normalizeAddress = (raw: string): string =>
     .map((tok) => STREET_SUFFIX_MAP[tok] ?? tok)
     .join(" ");
 
+type AssignableCamper = Pick<UnplottedCamper, "name" | "address" | "lat" | "lng">;
+
+function unplottedSiblingsAtAddress(
+  camper: Pick<UnplottedCamper, "id" | "address">,
+  all: UnplottedCamper[],
+): UnplottedCamper[] {
+  const camperNorm = normalizeAddress(camper.address);
+  if (!camperNorm) return [];
+  return all.filter(
+    (c) => c.id !== camper.id && normalizeAddress(c.address) === camperNorm,
+  );
+}
+
+function mergeCampersIntoStops(
+  stops: RouteStop[],
+  campers: AssignableCamper[],
+): { merged: boolean; next: RouteStop[]; mergedNames: string[] | null } {
+  if (campers.length === 0) return { merged: false, next: stops, mergedNames: null };
+
+  const address = campers[0].address;
+  const camperNorm = normalizeAddress(address);
+  const newNames = campers.map((c) => c.name);
+  const idx = stops.findIndex((s) => normalizeAddress(s.address) === camperNorm);
+
+  if (idx === -1) {
+    const newStop: RouteStop = {
+      name: newNames.length === 1 ? newNames[0] : `${newNames.length} kids at this stop`,
+      address,
+      lat: campers[0].lat,
+      lng: campers[0].lng,
+      pickupTime: "TBD",
+      passengers: newNames.length,
+      camperNames: newNames,
+    };
+    return { merged: false, next: [...stops, newStop], mergedNames: newNames.length > 1 ? newNames : null };
+  }
+
+  const existing = stops[idx];
+  const existingNames = existing.camperNames?.length ? existing.camperNames : [existing.name];
+  const uniqueAdd = newNames.filter(
+    (n) => !existingNames.some((e) => e.trim().toLowerCase() === n.trim().toLowerCase()),
+  );
+  if (uniqueAdd.length === 0) {
+    return { merged: true, next: stops, mergedNames: existingNames.length > 1 ? existingNames : null };
+  }
+
+  const mergedNames = [...existingNames, ...uniqueAdd];
+  const updated: RouteStop = {
+    ...existing,
+    passengers: mergedNames.length,
+    camperNames: mergedNames,
+  };
+  const next = [...stops];
+  next[idx] = updated;
+  return { merged: true, next, mergedNames: mergedNames.length > 1 ? mergedNames : null };
+}
+
+/** Put routed campers back on the unplotted list when a stop is unpinned. */
+function restoreStopCampersToUnplotted(
+  stop: RouteStop,
+  existing: UnplottedCamper[],
+  roster: GroupRosterCamper[],
+): UnplottedCamper[] {
+  const names = (stop.camperNames?.length ? stop.camperNames : [stop.name]).filter(Boolean);
+  const existingKeys = new Set(
+    existing.map((c) => `${c.name.trim().toLowerCase()}|${normalizeAddress(c.address)}`),
+  );
+  let nextId = Math.max(300, ...existing.map((c) => c.id), 0);
+  const restored: UnplottedCamper[] = [];
+  for (const name of names) {
+    const key = `${name.trim().toLowerCase()}|${normalizeAddress(stop.address)}`;
+    if (existingKeys.has(key)) continue;
+    const rosterMatch = roster.find((r) => r.name.trim().toLowerCase() === name.trim().toLowerCase());
+    nextId += 1;
+    restored.push({
+      id: nextId,
+      name,
+      address: stop.address,
+      lat: stop.lat,
+      lng: stop.lng,
+      age: rosterMatch?.age ?? 10,
+      session: rosterMatch?.session ?? "Session 1",
+    });
+  }
+  return restored;
+}
+
 const initialUnplottedCampers: UnplottedCamper[] = [];
 
 const GEOCODE_CACHE_KEY = "transport-geocode-cache-v1";
@@ -417,6 +504,14 @@ export default function Transport() {
     description: string;
     onChoose: (scope: "today" | "permanent") => void;
   }>({ open: false, title: "", description: "", onChoose: () => {} });
+
+  /** Same-address siblings — user picks who rides (never auto-add all). */
+  const [siblingAssignDialog, setSiblingAssignDialog] = useState<{
+    open: boolean;
+    routeId: number;
+    candidates: UnplottedCamper[];
+    selectedIds: number[];
+  }>({ open: false, routeId: 0, candidates: [], selectedIds: [] });
 
   // Optimize routes preview dialog
   const [optimizePreview, setOptimizePreview] = useState<{
@@ -1385,6 +1480,111 @@ export default function Transport() {
     toast({ title: "Route added", description: `"${newRoute.name}" has been created for both AM and PM runs.` });
   };
 
+  const executeAssignCampersToRoute = useCallback((
+    camperIds: number[],
+    routeId: number,
+    scope: "today" | "permanent",
+  ) => {
+    const campers = camperIds
+      .map((id) => unplottedCampers.find((c) => c.id === id))
+      .filter((c): c is UnplottedCamper => !!c);
+    if (campers.length === 0) return;
+
+    const assignable: AssignableCamper[] = campers.map((c) => ({
+      name: c.name,
+      address: c.address,
+      lat: c.lat,
+      lng: c.lng,
+    }));
+    const names = campers.map((c) => c.name);
+    const idSet = new Set(camperIds);
+
+    if (scope === "today") {
+      let mergedNames: string[] | null = null;
+      setTodayOverrides((prev) => {
+        const existingAdded = prev.added[routeId] || [];
+        const core = coreStops[routeId] || [];
+        const tryAdded = mergeCampersIntoStops(existingAdded, assignable);
+        if (tryAdded.merged) {
+          mergedNames = tryAdded.mergedNames;
+          return { ...prev, added: { ...prev.added, [routeId]: tryAdded.next } };
+        }
+        const coreMatch = core.find(
+          (s) => normalizeAddress(s.address) === normalizeAddress(campers[0].address),
+        );
+        if (coreMatch) {
+          mergedNames = [...(coreMatch.camperNames || [coreMatch.name]), ...names];
+          const newStop: RouteStop = {
+            name: names.length === 1 ? names[0] : `${names.length} kids at this stop`,
+            address: campers[0].address,
+            lat: campers[0].lat,
+            lng: campers[0].lng,
+            pickupTime: "TBD",
+            passengers: names.length,
+            camperNames: names,
+          };
+          return { ...prev, added: { ...prev.added, [routeId]: [...existingAdded, newStop] } };
+        }
+        mergedNames = names.length > 1 ? names : null;
+        return { ...prev, added: { ...prev.added, [routeId]: tryAdded.next } };
+      });
+      setUnplottedCampers((prev) => prev.filter((c) => !idSet.has(c.id)));
+      if (names.length > 1) {
+        toast({
+          title: "Added for today",
+          description: `${names.join(", ")} added to today's run.`,
+        });
+      } else if (mergedNames && mergedNames.length > 1) {
+        toast({
+          title: "Grouped at stop",
+          description: `${names[0]} joined other riders at this address (+1 for today).`,
+        });
+      } else {
+        toast({ title: "Added for today", description: `${names[0]} added to today's run only.` });
+      }
+    } else {
+      let mergedNames: string[] | null = null;
+      markRoutesConfigured("manual");
+      setCoreStops((cs) => {
+        const { next, mergedNames: mn } = mergeCampersIntoStops(cs[routeId] || [], assignable);
+        mergedNames = mn;
+        return { ...cs, [routeId]: next };
+      });
+      setUnplottedCampers((prev) => prev.filter((c) => !idSet.has(c.id)));
+      if (names.length > 1) {
+        toast({
+          title: "Campers assigned",
+          description: `${names.join(", ")} added permanently (AM & PM).`,
+        });
+      } else if (mergedNames && mergedNames.length > 1) {
+        toast({
+          title: "Grouped at stop",
+          description: `${names[0]} joined other riders at this address (+1 permanent).`,
+        });
+      } else {
+        toast({ title: "Camper assigned", description: `${names[0]} added permanently (AM & PM).` });
+      }
+    }
+  }, [unplottedCampers, coreStops, toast, markRoutesConfigured]);
+
+  const openScopeDialogForAssign = useCallback((camperIds: number[], routeId: number) => {
+    const names = camperIds
+      .map((id) => unplottedCampers.find((c) => c.id === id)?.name)
+      .filter(Boolean) as string[];
+    if (names.length === 0) return;
+
+    const label = names.length === 1 ? names[0] : names.join(", ");
+    setScopeDialog({
+      open: true,
+      title: names.length === 1 ? "Assign camper" : "Assign campers",
+      description: `Add ${label} to this route for today only, or permanently (both AM & PM, every day)?`,
+      onChoose: (scope) => {
+        executeAssignCampersToRoute(camperIds, routeId, scope);
+        setScopeDialog((prev) => ({ ...prev, open: false }));
+      },
+    });
+  }, [unplottedCampers, executeAssignCampersToRoute]);
+
   const handleAssignCamperToRoute = useCallback(async (camperId: number, routeId: number) => {
     const camper = unplottedCampers.find(c => c.id === camperId);
     if (!camper) return;
@@ -1414,7 +1614,23 @@ export default function Transport() {
       }
       lat = geo.lat;
       lng = geo.lng;
-      setUnplottedCampers(prev => prev.map(c => (c.id === camperId ? { ...c, lat, lng } : c)));
+      const camperNorm = normalizeAddress(address);
+      setUnplottedCampers((prev) =>
+        prev.map((c) =>
+          normalizeAddress(c.address) === camperNorm ? { ...c, lat, lng } : c,
+        ),
+      );
+    }
+
+    const siblings = unplottedSiblingsAtAddress(camper, unplottedCampers);
+    if (siblings.length > 0) {
+      setSiblingAssignDialog({
+        open: true,
+        routeId,
+        candidates: [camper, ...siblings],
+        selectedIds: [camperId],
+      });
+      return;
     }
 
     const meta = routeMeta.find(r => r.id === routeId);
@@ -1427,85 +1643,9 @@ export default function Transport() {
         variant: "destructive",
       });
     }
-    const newStop: RouteStop = {
-      name: camper.name,
-      address,
-      lat,
-      lng,
-      pickupTime: "TBD",
-      passengers: 1,
-      camperNames: [camper.name],
-    };
-    // Merge into existing stop at the same address (siblings/shared household)
-    const mergeIntoStops = (stops: RouteStop[]): { merged: boolean; next: RouteStop[] } => {
-      const norm = (a: string) => normalizeAddress(a);
-      const camperNorm = norm(address);
-      const idx = stops.findIndex(s => {
-        const stopNorm = norm(s.address);
-        return stopNorm && stopNorm === camperNorm;
-      });
-      if (idx === -1) return { merged: false, next: [...stops, newStop] };
-      const existing = stops[idx];
-      const updated: RouteStop = {
-        ...existing,
-        passengers: existing.passengers + 1,
-        camperNames: [...(existing.camperNames || [existing.name]), camper.name],
-      };
-      const next = [...stops];
-      next[idx] = updated;
-      return { merged: true, next };
-    };
-    setScopeDialog({
-      open: true,
-      title: "Assign camper",
-      description: `Add ${camper.name} to this route for today only, or permanently (both AM & PM, every day)?`,
-      onChoose: (scope) => {
-        if (scope === "today") {
-          let mergedSiblings: string[] | null = null;
-          setTodayOverrides(prev => {
-            const existingAdded = prev.added[routeId] || [];
-            const core = coreStops[routeId] || [];
-            const tryAdded = mergeIntoStops(existingAdded);
-            if (tryAdded.merged) {
-              const mergedStop = tryAdded.next.find(s => normalizeAddress(s.address) === normalizeAddress(camper.address));
-              mergedSiblings = mergedStop?.camperNames || null;
-              return { ...prev, added: { ...prev.added, [routeId]: tryAdded.next } };
-            }
-            const coreMatch = core.find(s => normalizeAddress(s.address) === normalizeAddress(camper.address));
-            if (coreMatch) {
-              mergedSiblings = [...(coreMatch.camperNames || [coreMatch.name]), camper.name];
-              return { ...prev, added: { ...prev.added, [routeId]: [...existingAdded, newStop] } };
-            }
-            return { ...prev, added: { ...prev.added, [routeId]: [...existingAdded, newStop] } };
-          });
-          setUnplottedCampers(prev => prev.filter(c => c.id !== camperId));
-          if (mergedSiblings && mergedSiblings.length > 1) {
-            toast({ title: "Sibling grouped at stop", description: `${camper.name} joined ${mergedSiblings.length - 1} sibling${mergedSiblings.length > 2 ? "s" : ""} at this address. Bus +1 rider.` });
-          } else {
-            toast({ title: "Added for today", description: `${camper.name} added to today's run only.` });
-          }
-        } else {
-          let mergedSiblings: string[] | null = null;
-          markRoutesConfigured("manual");
-          setCoreStops(cs => {
-            const { merged, next } = mergeIntoStops(cs[routeId] || []);
-            if (merged) {
-              const mergedStop = next.find(s => normalizeAddress(s.address) === normalizeAddress(camper.address));
-              mergedSiblings = mergedStop?.camperNames || null;
-            }
-            return { ...cs, [routeId]: next };
-          });
-          setUnplottedCampers(prev => prev.filter(c => c.id !== camperId));
-          if (mergedSiblings && mergedSiblings.length > 1) {
-            toast({ title: "Sibling grouped at stop", description: `${camper.name} joined ${mergedSiblings.length - 1} sibling${mergedSiblings.length > 2 ? "s" : ""} at this address. Bus +1 rider (permanent).` });
-          } else {
-            toast({ title: "Camper assigned", description: `${camper.name} added permanently (AM & PM).` });
-          }
-        }
-        setScopeDialog(prev => ({ ...prev, open: false }));
-      },
-    });
-  }, [unplottedCampers, routeMeta, coreStops, todayOverrides, toast, markRoutesConfigured, geocodeAddress]);
+
+    openScopeDialogForAssign([camperId], routeId);
+  }, [unplottedCampers, routeMeta, coreStops, todayOverrides, toast, geocodeAddress, openScopeDialogForAssign]);
 
   const handleAddUnplottedCamper = async () => {
     if (!newUnplotted.name.trim() || !newUnplotted.address.trim()) {
@@ -2012,11 +2152,13 @@ export default function Transport() {
       description: `Unpin "${stop.name}" from this route for today only, or permanently (both AM & PM, every day)?`,
       onChoose: (scope) => {
         if (scope === "today") {
+          let restoredToday: UnplottedCamper[] = [];
           setTodayOverrides(prev => {
             // If this is a today-added stop, just remove it from added
             const added = prev.added[routeId] || [];
             const addedIdx = added.findIndex(s => s.address === stop.address);
             if (addedIdx >= 0) {
+              restoredToday = restoreStopCampersToUnplotted(stop, unplottedCampers, groupRoster);
               return { ...prev, added: { ...prev.added, [routeId]: added.filter((_, i) => i !== addedIdx) } };
             }
             return {
@@ -2024,8 +2166,12 @@ export default function Transport() {
               excluded: { ...prev.excluded, [routeId]: [...(prev.excluded[routeId] || []), stop.address] },
             };
           });
+          if (restoredToday.length > 0) {
+            setUnplottedCampers((prev) => [...prev, ...restoredToday]);
+          }
           toast({ title: "Unpinned for today", description: `"${stop.name}" removed from today's run only.` });
         } else {
+          const restored = restoreStopCampersToUnplotted(stop, unplottedCampers, groupRoster);
           markRoutesConfigured("manual");
           setCoreStops(prev => ({
             ...prev,
@@ -2035,6 +2181,9 @@ export default function Transport() {
             excluded: { ...prev.excluded, [routeId]: (prev.excluded[routeId] || []).filter(a => a !== stop.address) },
             added: { ...prev.added, [routeId]: (prev.added[routeId] || []).filter(s => s.address !== stop.address) },
           }));
+          if (restored.length > 0) {
+            setUnplottedCampers((prev) => [...prev, ...restored]);
+          }
           toast({ title: "Stop removed", description: "Removed permanently from both AM and PM runs." });
         }
         setScopeDialog(prev => ({ ...prev, open: false }));
@@ -3300,6 +3449,65 @@ export default function Transport() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddRouteOpen(false)}>Cancel</Button>
             <Button onClick={handleAddRoute}>Add Route</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Same-address siblings — choose who rides before today/permanent */}
+      <Dialog
+        open={siblingAssignDialog.open}
+        onOpenChange={(open) => {
+          if (!open) setSiblingAssignDialog((prev) => ({ ...prev, open: false }));
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Who rides this bus?</DialogTitle>
+            <DialogDescription>
+              These campers share the same home address. Select who to assign — siblings are never added automatically.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-1">
+            {siblingAssignDialog.candidates.map((c) => {
+              const checked = siblingAssignDialog.selectedIds.includes(c.id);
+              return (
+                <label
+                  key={c.id}
+                  className="flex items-center gap-3 rounded-md border px-3 py-2 cursor-pointer hover:bg-muted/50"
+                >
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={(on) => {
+                      setSiblingAssignDialog((prev) => ({
+                        ...prev,
+                        selectedIds: on
+                          ? [...prev.selectedIds, c.id]
+                          : prev.selectedIds.filter((id) => id !== c.id),
+                      }));
+                    }}
+                  />
+                  <span className="text-sm font-medium">{c.name}</span>
+                </label>
+              );
+            })}
+          </div>
+          <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-end gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => setSiblingAssignDialog((prev) => ({ ...prev, open: false }))}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={siblingAssignDialog.selectedIds.length === 0}
+              onClick={() => {
+                const { routeId, selectedIds } = siblingAssignDialog;
+                setSiblingAssignDialog((prev) => ({ ...prev, open: false }));
+                openScopeDialogForAssign(selectedIds, routeId);
+              }}
+            >
+              Continue
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

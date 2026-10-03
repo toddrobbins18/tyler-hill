@@ -219,9 +219,6 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
     layerGroup.clearLayers();
     routeLayersRef.current.clear();
 
-    const routeStopAddressKeys = new Set(
-      routes.flatMap((route) => route.stops.map((stop) => normAddr(stop.address))).filter(Boolean),
-    );
     const unplottedByAddress = new Map<string, UnplottedCamper[]>();
     unplottedCampers.forEach((camper) => {
       const key = normAddr(camper.address);
@@ -314,7 +311,6 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
 
     unplottedCampers.forEach((camper) => {
       if (!isValidRouteCoordinate(camper.lat, camper.lng)) return;
-      if (routeStopAddressKeys.has(normAddr(camper.address))) return;
 
       const assignDropdown = availableRoutes.length > 0
         ? `<div style="margin-top:8px;border-top:1px solid #e5e7eb;padding-top:8px;">
@@ -345,7 +341,7 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
           <p style="margin:1px 0;">📍 ${camper.address}</p>
           ${!isHousehold ? `<p style="margin:1px 0;">🎂 Age ${camper.age}</p>` : ""}
           <p style="margin:1px 0;">📅 ${sharedSession}</p>
-          ${isHousehold ? `<p style="margin:4px 0 0;font-size:10px;color:#6b7280;font-style:italic;">Assigning will auto-group all ${allKids.length} kids at this stop (+${allKids.length} riders)</p>` : ""}
+          ${isHousehold ? `<p style="margin:4px 0 0;font-size:10px;color:#6b7280;font-style:italic;">You'll choose which kids to assign — siblings are not added automatically.</p>` : ""}
         </div>`;
 
       L.marker([camper.lat, camper.lng], { icon: createCamperIcon() })
