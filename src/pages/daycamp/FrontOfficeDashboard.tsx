@@ -244,21 +244,21 @@ export default function FrontOfficeDashboard() {
         ) : null}
       </div>
 
-      {showTransport && frontOfficeTransportLinks.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {frontOfficeTransportLinks.map((item) => (
-            <Button key={item.menuId} variant="outline" size="sm" asChild>
-              <Link to={item.url}>
-                <item.icon className="mr-2 h-4 w-4" />
-                {item.title}
-              </Link>
-            </Button>
-          ))}
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/day-camp/office-changes">+ Log office change</Link>
-          </Button>
-        </div>
-      ) : null}
+      <div className="flex flex-wrap gap-2">
+        {showTransport
+          ? frontOfficeTransportLinks.map((item) => (
+              <Button key={item.menuId} variant="outline" size="sm" asChild>
+                <Link to={item.url}>
+                  <item.icon className="mr-2 h-4 w-4" />
+                  {item.title}
+                </Link>
+              </Button>
+            ))
+          : null}
+        <Button variant="outline" size="sm" asChild>
+          <Link to="/day-camp/office-changes">+ Log office change</Link>
+        </Button>
+      </div>
 
       {loading && !data ? (
         <div className="flex justify-center py-12">

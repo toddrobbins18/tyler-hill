@@ -16,9 +16,6 @@ import { Bus, MapPin, Users, Plus, FileText, Map as MapIcon, Route as RouteIcon,
 import { pickFirst } from "@/lib/csv";
 import { isSpreadsheetFileName, loadSpreadsheetRowsFromFile } from "@/lib/spreadsheetImport";
 import {
-  getBundledMappointRoutesCsv2026,
-  mappointRoutesSummary,
-  parseMappointRoutesCsv,
   resolveBundledGeocodeResult,
   seedGeocodeCacheFromBundled,
 } from "@/lib/mappointTransportImport";
@@ -79,11 +76,10 @@ import {
 import {
   applyHistoricalAssignments,
   getReferenceDatasetStatus,
-  importMapPointCsvToWarehouse,
   loadCamperPriorMap,
   pickHistoricalBusForCamper,
   reorderStopsByHistoricalPriors,
-  syncBundledMapPointToWarehouse,
+  syncTransportBoardToRoutingWarehouse,
   type ReferenceDatasetStatus,
 } from "@/lib/historicalRouteLearning";
 import { supabase } from "@/integrations/supabase/client";
@@ -566,6 +562,7 @@ export default function Transport() {
   const importInProgressRef = useRef(false);
   const loadedScopeRef = useRef<string | null>(null);
   const lastKnownStopCountRef = useRef(0);
+  const refreshReferenceStatusRef = useRef<(() => Promise<void>) | null>(null);
   const boardStateRef = useRef({
     coreStops: {} as Record<number, RouteStop[]>,
     routeMeta: [] as typeof initialRouteMeta,
@@ -610,6 +607,26 @@ export default function Transport() {
         console.error("[Transport] Save board failed:", error.message);
         return false;
       }
+
+      if (
+        marked.routesConfigured &&
+        marked.routeMeta.length > 0 &&
+        countBoardStops(marked.coreStops) > 0
+      ) {
+        try {
+          await syncTransportBoardToRoutingWarehouse(supabase, companyId, {
+            referenceSeason: currentSeason,
+            coreStops: marked.coreStops,
+            routeMeta: marked.routeMeta,
+            userId: userRes.user?.id,
+            excludeAddress: CAMP_LOCATION.address,
+          });
+        } catch (learnErr) {
+          console.warn("[Transport] Routing learn sync failed:", learnErr);
+        }
+        void refreshReferenceStatusRef.current?.();
+      }
+
       return true;
     } catch (err) {
       console.error("[Transport] Save board error:", err);
@@ -1731,167 +1748,22 @@ export default function Transport() {
     URL.revokeObjectURL(url);
   };
 
-  const [mappointImporting, setMappointImporting] = useState(false);
   const [applyingHistorical, setApplyingHistorical] = useState(false);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
   const [referenceStatus, setReferenceStatus] = useState<ReferenceDatasetStatus | null>(null);
-  const [importingReference, setImportingReference] = useState(false);
-  const mappointReferenceInputRef = useRef<HTMLInputElement>(null);
   const priorMapRef = useRef<Map<string, import("@/lib/routeReferenceWarehouse").CamperRoutingPrior> | null>(null);
 
   const refreshReferenceStatus = useCallback(async () => {
-    if (!companyId) return;
-    const status = await getReferenceDatasetStatus(supabase, companyId, "2026");
+    if (!companyId || !currentSeason) return;
+    const status = await getReferenceDatasetStatus(supabase, companyId, currentSeason);
     setReferenceStatus(status);
-    priorMapRef.current = await loadCamperPriorMap(supabase, companyId, "2026");
-  }, [companyId]);
+    priorMapRef.current = await loadCamperPriorMap(supabase, companyId, currentSeason);
+  }, [companyId, currentSeason]);
 
   useEffect(() => {
+    refreshReferenceStatusRef.current = refreshReferenceStatus;
     void refreshReferenceStatus();
   }, [refreshReferenceStatus]);
-
-  const handleLoadMappointRoutes = async () => {
-    setMappointImporting(true);
-    importInProgressRef.current = true;
-    skipPersistRef.current = true;
-    try {
-      const routes = parseMappointRoutesCsv(getBundledMappointRoutesCsv2026(), { direction: "AM" });
-      const summary = mappointRoutesSummary(routes);
-      if (!routes.length) {
-        toast({ title: "No routes found", description: "MapPoint CSV had no AM routes.", variant: "destructive" });
-        return;
-      }
-
-      const uniqueAddresses = Array.from(
-        new Set(routes.flatMap((r) => r.stops.map((s) => s.address))),
-      );
-
-      const resolveFromBundled = (addr: string): GeocodeResult | null => resolveBundledGeocodeResult(addr);
-
-      const bundledHits = uniqueAddresses.filter((a) => isGeocodePoint(resolveFromBundled(a))).length;
-      const needsNetwork = uniqueAddresses.filter((a) => !isGeocodePoint(resolveFromBundled(a)));
-
-      toast({
-        title: "Applying 2026 MapPoint routes",
-        description: bundledHits === uniqueAddresses.length
-          ? `Building ${summary.routeCount} buses from 2026 coordinates (${bundledHits} stops, no geocoding)…`
-          : `Geocoding ${needsNetwork.length} new stops across ${summary.routeCount} 2026 buses…`,
-      });
-
-      const geos: (GeocodeResult | null)[] = uniqueAddresses.map((addr) => {
-        const bundled = resolveFromBundled(addr);
-        if (isGeocodePoint(bundled)) {
-          cacheGeocodeResult(addr, bundled);
-          return bundled;
-        }
-        return geocodeCacheRef.current.get(addr.trim().toLowerCase()) ?? null;
-      });
-
-      const stillMissing = uniqueAddresses
-        .map((addr, i) => ({ addr, i }))
-        .filter(({ addr, i }) => !isGeocodePoint(geos[i]));
-
-      if (stillMissing.length > 0) {
-        const missResults = await geocodeBatch(
-          stillMissing.map((m) => m.addr),
-          2,
-        );
-        stillMissing.forEach(({ addr, i }, j) => {
-          geos[i] = missResults[j] ?? null;
-        });
-      }
-
-      const geoByAddress = new Map<string, GeocodeResult | null>();
-      uniqueAddresses.forEach((addr, i) => geoByAddress.set(addr, geos[i] ?? null));
-
-      const geocodedCount = geos.filter(isGeocodePoint).length;
-
-      const nextCore: Record<number, RouteStop[]> = {};
-      const nextMeta: typeof initialRouteMeta = [];
-      let geocodeFailed = 0;
-
-      for (const route of routes) {
-        const stops: RouteStop[] = [];
-        for (const stop of route.stops) {
-          const geo = geoByAddress.get(stop.address);
-          if (!isGeocodePoint(geo)) {
-            geocodeFailed++;
-            continue;
-          }
-          stops.push({
-            name: stop.label,
-            address: stop.address,
-            lat: geo.lat,
-            lng: geo.lng,
-            pickupTime: "",
-            passengers: stop.camperNames.length,
-            camperNames: stop.camperNames,
-          });
-        }
-        if (!stops.length) continue;
-        nextCore[route.busNumber] = stops;
-        nextMeta.push({
-          id: route.busNumber,
-          name: `${route.routeName} · Bus ${route.busNumber}`,
-          bus: route.busCounselor
-            ? `Bus ${route.busNumber} (${route.busCounselor})`
-            : `Bus ${route.busNumber}`,
-          departure: "7:00 AM",
-          status: "Confirmed",
-          color: ROUTE_COLORS[(route.busNumber - 1) % ROUTE_COLORS.length],
-          capacity: Math.max(22, stops.reduce((n, s) => n + (s.passengers || 0), 0)),
-        });
-      }
-
-      const importPayload: BoardPayload = {
-        coreStops: nextCore,
-        routeMeta: nextMeta,
-        unplottedCampers: [],
-        routesConfigured: true,
-        routesSeason: currentSeason,
-        routesSource: "mappoint2026",
-      };
-
-      const saved = await persistBoard(importPayload);
-      if (saved) {
-        lastKnownStopCountRef.current = countBoardStops(nextCore);
-        loadedScopeRef.current = companyId ? `${companyId}:${currentSeason}` : null;
-      }
-
-      await finalizeBoardForSeason(importPayload);
-      setTodayOverrides(emptyManualOverrides());
-      overrideLoadedKeyRef.current = null;
-
-      if (companyId) {
-        const synced = await syncBundledMapPointToWarehouse(supabase, companyId, {
-          userId: user?.id,
-          referenceSeason: "2026",
-        });
-        if (!synced.ok) {
-          console.warn("[Transport] MapPoint warehouse sync failed:", synced.error);
-        }
-        await refreshReferenceStatus();
-      }
-
-      toast({
-        title: geocodeFailed ? "2026 MapPoint routes applied (partial)" : "2026 MapPoint routes applied",
-        description: geocodeFailed
-          ? `${nextMeta.length} buses · ${geocodedCount}/${uniqueAddresses.length} addresses geocoded · ${geocodeFailed} stops skipped${saved ? "" : " · save failed, stay on page and retry"}`
-          : `${nextMeta.length} buses from 2026 · ${summary.camperCount} historical camper assignments · ${saved ? "saved for " + currentSeason : "save failed — retry Apply 2026 MapPoint Routes"}${stillMissing.length === 0 ? " · instant load (bundled coordinates)" : ""}`,
-        variant: geocodeFailed || !saved ? "destructive" : "default",
-      });
-    } catch (e: unknown) {
-      toast({
-        title: "MapPoint import failed",
-        description: e instanceof Error ? e.message : String(e),
-        variant: "destructive",
-      });
-    } finally {
-      importInProgressRef.current = false;
-      skipPersistRef.current = false;
-      setMappointImporting(false);
-    }
-  };
 
   const handleApplyRouteTemplate = async () => {
     setApplyingTemplate(true);
@@ -1920,7 +1792,7 @@ export default function Transport() {
 
       toast({
         title: "Route template applied",
-        description: `${templateMeta.length} buses loaded (stops only). Use Apply Historical Assignments to place returning campers.`,
+        description: `${templateMeta.length} buses loaded (stops only). Use Apply Learned Assignments to place returning campers.`,
       });
     } catch (e: unknown) {
       toast({
@@ -1938,7 +1810,7 @@ export default function Transport() {
     setApplyingHistorical(true);
     try {
       const priorMap =
-        priorMapRef.current ?? (await loadCamperPriorMap(supabase, companyId, "2026"));
+        priorMapRef.current ?? (await loadCamperPriorMap(supabase, companyId, currentSeason));
       priorMapRef.current = priorMap;
 
       const result = applyHistoricalAssignments({
@@ -1966,7 +1838,7 @@ export default function Transport() {
       await finalizeBoardForSeason(payload);
 
       toast({
-        title: "Historical assignments applied",
+        title: "Learned assignments applied",
         description: `${result.placed.length} campers placed on prior buses · ${result.unplottedCampers.length} still unplotted${result.skippedNoBus.length ? ` · ${result.skippedNoBus.length} prior bus not on board` : ""}`,
         variant: result.placed.length ? "default" : "destructive",
       });
@@ -1978,42 +1850,6 @@ export default function Transport() {
       });
     } finally {
       setApplyingHistorical(false);
-    }
-  };
-
-  const handleImportMapPointReference = async (file: File) => {
-    if (!companyId) return;
-    setImportingReference(true);
-    try {
-      const csvText = await file.text();
-      const result = await importMapPointCsvToWarehouse(supabase, companyId, csvText, {
-        referenceSeason: "2026",
-        label: file.name,
-        userId: user?.id,
-      });
-
-      if (!result.ok) {
-        toast({
-          title: "Reference import failed",
-          description: result.error ?? "Unknown error",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      await refreshReferenceStatus();
-      toast({
-        title: "MapPoint reference dataset updated",
-        description: `${result.stats?.assignmentCount ?? 0} assignments · ${result.stats?.busCount ?? 0} buses stored for learning`,
-      });
-    } catch (e: unknown) {
-      toast({
-        title: "Reference import failed",
-        description: e instanceof Error ? e.message : String(e),
-        variant: "destructive",
-      });
-    } finally {
-      setImportingReference(false);
     }
   };
 
@@ -2726,12 +2562,20 @@ export default function Transport() {
               <Badge
                 variant={referenceStatus.loaded ? "secondary" : "outline"}
                 className="gap-1 px-2 py-1 text-[10px] font-normal whitespace-nowrap"
-                title={`${referenceStatus.priorCount} camper routing priors from ${referenceStatus.source === "warehouse" ? "warehouse" : "bundled MapPoint"}`}
+                title={
+                  referenceStatus.source === "nest"
+                    ? `${referenceStatus.priorCount} campers learned from your saved routes`
+                    : referenceStatus.source === "mappoint"
+                      ? `${referenceStatus.priorCount} campers from imported reference data`
+                      : "No learned routes yet — assign campers and Nest will remember"
+                }
               >
                 <Database className="h-3 w-3" />
                 {referenceStatus.loaded
-                  ? `${referenceStatus.referenceSeason} priors · ${referenceStatus.priorCount} (${referenceStatus.source})`
-                  : "No reference dataset"}
+                  ? referenceStatus.source === "nest"
+                    ? `Learned · ${referenceStatus.priorCount} campers`
+                    : `${referenceStatus.referenceSeason} reference · ${referenceStatus.priorCount}`
+                  : "No learned routes yet"}
               </Badge>
             )}
           </div>
@@ -2741,18 +2585,9 @@ export default function Transport() {
           <Button
             variant="outline"
             className="gap-2"
-            onClick={handleLoadMappointRoutes}
-            disabled={mappointImporting}
-          >
-            <RouteIcon className={`h-4 w-4 ${mappointImporting ? "animate-pulse" : ""}`} />
-            {mappointImporting ? "Applying 2026 routes…" : "Apply 2026 MapPoint Routes"}
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2"
             onClick={handleApplyRouteTemplate}
             disabled={applyingTemplate}
-            title="Load 2026 bus routes (stops only, no campers)"
+            title="Load starter bus routes (stops only, no campers)"
           >
             <LayoutTemplate className={`h-4 w-4 ${applyingTemplate ? "animate-pulse" : ""}`} />
             {applyingTemplate ? "Applying template…" : "Apply Route Template"}
@@ -2762,31 +2597,10 @@ export default function Transport() {
             className="gap-2"
             onClick={handleApplyHistoricalAssignments}
             disabled={applyingHistorical || unplottedCampers.length === 0}
-            title="Place unplotted campers on their prior bus from MapPoint history"
+            title="Place unplotted campers on buses from learned routing history"
           >
             <History className={`h-4 w-4 ${applyingHistorical ? "animate-pulse" : ""}`} />
-            {applyingHistorical ? "Applying history…" : "Apply Historical Assignments"}
-          </Button>
-          <input
-            ref={mappointReferenceInputRef}
-            type="file"
-            accept=".csv,text/csv"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) void handleImportMapPointReference(file);
-              e.target.value = "";
-            }}
-          />
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => mappointReferenceInputRef.current?.click()}
-            disabled={importingReference}
-            title="Import MapPoint CSV into the reference warehouse for route learning"
-          >
-            <Upload className={`h-4 w-4 ${importingReference ? "animate-pulse" : ""}`} />
-            {importingReference ? "Importing reference…" : "Import MapPoint Reference"}
+            {applyingHistorical ? "Applying learned routes…" : "Apply Learned Assignments"}
           </Button>
           <Button variant="outline" className="gap-2" onClick={() => setBulkImport(prev => ({ ...prev, open: true, log: { ok: 0, skipped: 0, failed: 0, messages: [] }, progress: { done: 0, total: 0 }, failedRows: [] }))}>
             <Upload className="h-4 w-4" /> Bulk Upload Addresses
@@ -3193,9 +3007,9 @@ export default function Transport() {
                 </Button>
               </div>
               <div className={`${MAP_PANEL_HEIGHT[mapHeight]} w-full relative`}>
-                {(boardLoading || companyLoading || authLoading || mappointImporting) && (
+                {(boardLoading || companyLoading || authLoading) && (
                   <div className="absolute inset-0 z-[1001] flex items-center justify-center bg-background/60 backdrop-blur-[1px] text-sm text-muted-foreground">
-                    {mappointImporting ? "Loading MapPoint routes…" : "Loading saved board…"}
+                    Loading saved board…
                   </div>
                 )}
                 <TransportRouteMap

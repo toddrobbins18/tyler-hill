@@ -45,6 +45,12 @@ export const FRONT_OFFICE_TRANSPORT_MENU_IDS = new Set([
   "group-bubble-sheets",
 ]);
 
+/** Front Office child modules — hidden from sidebar, opened from Front Office dashboard. */
+export const FRONT_OFFICE_ONLY_MENU_IDS = new Set([
+  ...FRONT_OFFICE_TRANSPORT_MENU_IDS,
+  "office-changes",
+]);
+
 /** Bus transport modules — gated when North Shore bus transport is disabled. */
 const BUS_TRANSPORT_MENU_IDS = new Set(["transportation", ...FRONT_OFFICE_TRANSPORT_MENU_IDS]);
 
@@ -112,11 +118,11 @@ export function getDayCampPocItemsForCompany(company: CampLike): DayCampMenuItem
   });
 }
 
-/** Day Camp sidebar — excludes Front Office transport links and Parent Portal items. */
+/** Day Camp sidebar — excludes Front Office child links and Parent Portal items. */
 export function getDayCampSidebarPocItems(company: CampLike): DayCampMenuItem[] {
   return getDayCampPocItemsForCompany(company).filter(
     (item) =>
-      !FRONT_OFFICE_TRANSPORT_MENU_IDS.has(item.menuId) &&
+      !FRONT_OFFICE_ONLY_MENU_IDS.has(item.menuId) &&
       !PARENT_PORTAL_MENU_IDS.has(item.menuId),
   );
 }

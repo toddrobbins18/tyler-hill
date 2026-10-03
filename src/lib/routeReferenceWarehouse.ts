@@ -7,7 +7,7 @@ import {
 } from "@/lib/mappointTransportImport";
 import { parseCSV } from "@/lib/csv";
 
-export type RouteReferenceSource = "mappoint";
+export type RouteReferenceSource = "mappoint" | "nest";
 
 export type RouteReferenceAssignment = {
   routeFile: string;
@@ -371,14 +371,27 @@ export async function importRouteReference(
   const replace = options?.replace !== false;
 
   if (replace) {
-    const { error: deleteAssignmentsError } = await supabase
-      .from("route_reference_assignments" as "profiles")
-      .delete()
+    const { data: existingImports, error: listError } = await supabase
+      .from("route_reference_imports" as "profiles")
+      .select("id")
       .eq("company_id", companyId)
-      .eq("reference_season", payload.referenceSeason);
+      .eq("reference_season", payload.referenceSeason)
+      .eq("source", payload.source);
 
-    if (deleteAssignmentsError) {
-      return { importId: null, error: deleteAssignmentsError.message };
+    if (listError) {
+      return { importId: null, error: listError.message };
+    }
+
+    const importIds = (existingImports ?? []).map((row) => String((row as { id: string }).id));
+    if (importIds.length > 0) {
+      const { error: deleteAssignmentsError } = await supabase
+        .from("route_reference_assignments" as "profiles")
+        .delete()
+        .in("import_id", importIds);
+
+      if (deleteAssignmentsError) {
+        return { importId: null, error: deleteAssignmentsError.message };
+      }
     }
 
     const { error: deleteImportError } = await supabase
@@ -556,6 +569,45 @@ export async function loadCamperRoutingPriors(
   }
 
   return priors.sort((a, b) => a.camperName.localeCompare(b.camperName));
+}
+
+export async function loadCamperRoutingPriorsForImport(
+  supabase: SupabaseClient,
+  companyId: string,
+  importId: string,
+  direction: "AM" | "PM" = "AM",
+): Promise<CamperRoutingPrior[]> {
+  const { data, error } = await supabase
+    .from("route_reference_assignments" as "profiles")
+    .select("*")
+    .eq("company_id", companyId)
+    .eq("import_id", importId)
+    .eq("direction", direction)
+    .order("bus_number")
+    .order("stop_order")
+    .order("camper_name_key");
+
+  if (error) {
+    console.error("[RouteReference] load priors for import failed:", error.message);
+    return [];
+  }
+
+  return (data ?? []).map((raw) => {
+    const row = mapAssignmentRow(raw as Record<string, unknown>);
+    return {
+      camperName: row.camperName,
+      camperNameKey: row.camperNameKey,
+      referenceSeason: String((raw as { reference_season?: string }).reference_season ?? ""),
+      busNumber: row.busNumber,
+      routeName: row.routeName,
+      direction: row.direction,
+      stopOrder: row.stopOrder,
+      address: row.address,
+      lat: row.lat,
+      lng: row.lng,
+      routeFile: row.routeFile,
+    };
+  });
 }
 
 /** Parsed MapPoint routes from warehouse assignments (merged stops). */

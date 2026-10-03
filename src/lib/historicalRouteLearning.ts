@@ -9,9 +9,12 @@ import {
   buildRouteReferenceFromMappointCsv,
   importRouteReference,
   loadCamperRoutingPriors,
+  loadCamperRoutingPriorsForImport,
   loadRouteReferenceImport,
   normCamperNameKey,
   type CamperRoutingPrior,
+  type RouteReferenceAssignment,
+  type RouteReferenceImportPayload,
   type RouteReferenceImportStats,
 } from "@/lib/routeReferenceWarehouse";
 import type {
@@ -34,7 +37,7 @@ export type ApplyHistoricalResult = {
 export type ReferenceDatasetStatus = {
   referenceSeason: string;
   loaded: boolean;
-  source: "warehouse" | "bundled";
+  source: "nest" | "mappoint" | "bundled";
   stats: RouteReferenceImportStats | null;
   priorCount: number;
 };
@@ -78,21 +81,37 @@ export function buildPriorsFromBundledMappoint(
   return priors;
 }
 
+async function loadPriorsForSeasonSource(
+  supabase: SupabaseClient,
+  companyId: string,
+  referenceSeason: string,
+  source: "nest" | "mappoint",
+): Promise<CamperRoutingPrior[]> {
+  const importRecord = await loadRouteReferenceImport(supabase, companyId, referenceSeason, source);
+  if (!importRecord) return [];
+  return loadCamperRoutingPriorsForImport(supabase, companyId, importRecord.id, "AM");
+}
+
 export async function loadCamperPriorMap(
   supabase: SupabaseClient,
   companyId: string,
   referenceSeason = DEFAULT_REFERENCE_SEASON,
 ): Promise<Map<string, CamperRoutingPrior>> {
-  const priors = await loadCamperRoutingPriors(supabase, companyId, {
-    referenceSeason,
-    direction: "AM",
-  });
+  const seasons =
+    referenceSeason === DEFAULT_REFERENCE_SEASON
+      ? [referenceSeason]
+      : [referenceSeason, DEFAULT_REFERENCE_SEASON];
 
-  if (priors.length > 0) {
-    return buildCamperPriorMap(priors);
+  for (const season of seasons) {
+    for (const source of ["nest", "mappoint"] as const) {
+      const priors = await loadPriorsForSeasonSource(supabase, companyId, season, source);
+      if (priors.length > 0) {
+        return buildCamperPriorMap(priors);
+      }
+    }
   }
 
-  return buildCamperPriorMap(buildPriorsFromBundledMappoint(referenceSeason));
+  return buildCamperPriorMap(buildPriorsFromBundledMappoint(DEFAULT_REFERENCE_SEASON));
 }
 
 export async function getReferenceDatasetStatus(
@@ -100,19 +119,24 @@ export async function getReferenceDatasetStatus(
   companyId: string,
   referenceSeason = DEFAULT_REFERENCE_SEASON,
 ): Promise<ReferenceDatasetStatus> {
-  const importRecord = await loadRouteReferenceImport(supabase, companyId, referenceSeason);
-  const priors = importRecord
-    ? await loadCamperRoutingPriors(supabase, companyId, { referenceSeason, direction: "AM" })
-    : [];
-
-  if (importRecord && priors.length > 0) {
-    return {
-      referenceSeason,
-      loaded: true,
-      source: "warehouse",
-      stats: importRecord.stats,
-      priorCount: priors.length,
-    };
+  for (const source of ["nest", "mappoint"] as const) {
+    const importRecord = await loadRouteReferenceImport(supabase, companyId, referenceSeason, source);
+    if (!importRecord) continue;
+    const priors = await loadCamperRoutingPriorsForImport(
+      supabase,
+      companyId,
+      importRecord.id,
+      "AM",
+    );
+    if (priors.length > 0) {
+      return {
+        referenceSeason,
+        loaded: true,
+        source,
+        stats: importRecord.stats,
+        priorCount: priors.length,
+      };
+    }
   }
 
   const bundled = buildPriorsFromBundledMappoint(referenceSeason);
@@ -123,6 +147,111 @@ export async function getReferenceDatasetStatus(
     stats: null,
     priorCount: bundled.length,
   };
+}
+
+/** Build routing priors from the live Nest transport board (manual routing). */
+export function buildRouteReferenceFromTransportBoard(options: {
+  referenceSeason: string;
+  coreStops: Record<number, TransportRouteStop[]>;
+  routeMeta: TransportRouteMeta[];
+  excludeAddress?: string;
+}): RouteReferenceImportPayload {
+  const { referenceSeason, coreStops, routeMeta, excludeAddress } = options;
+  const excludeKey = excludeAddress?.trim().toLowerCase() ?? "";
+  const assignments: RouteReferenceAssignment[] = [];
+
+  for (const meta of routeMeta) {
+    const stops = coreStops[meta.id] ?? [];
+    stops.forEach((stop, stopIdx) => {
+      const address = stop.address?.trim();
+      if (!address) return;
+      if (excludeKey && address.toLowerCase() === excludeKey) return;
+
+      const camperNames = (stop.camperNames?.length ? stop.camperNames : [stop.name]).filter(Boolean);
+      if (camperNames.length === 0) return;
+
+      const street = address.split(",")[0]?.trim() || address;
+      for (const camperName of camperNames) {
+        assignments.push({
+          routeFile: `nest-${referenceSeason}`,
+          busNumber: meta.id,
+          routeName: meta.name,
+          direction: "AM",
+          stopOrder: stopIdx + 1,
+          camperName,
+          camperNameKey: normCamperNameKey(camperName),
+          street,
+          city: "",
+          zip: "",
+          address,
+          lat: stop.lat ?? null,
+          lng: stop.lng ?? null,
+          geocodeProvider: "nest",
+          busCounselor: meta.bus ?? "",
+        });
+      }
+    });
+  }
+
+  assignments.sort(
+    (a, b) =>
+      a.busNumber - b.busNumber ||
+      a.stopOrder - b.stopOrder ||
+      a.camperName.localeCompare(b.camperName),
+  );
+
+  const routeKeys = new Set(
+    assignments.map((a) => `${a.routeFile}|${a.busNumber}|${a.direction}`),
+  );
+  const busKeys = new Set(assignments.map((a) => `${a.busNumber}|${a.direction}`));
+
+  const stats: RouteReferenceImportStats = {
+    referenceSeason,
+    assignmentCount: assignments.length,
+    routeCount: routeKeys.size,
+    busCount: busKeys.size,
+    amAssignmentCount: assignments.length,
+    pmAssignmentCount: 0,
+    geocodedCount: assignments.filter((a) => a.lat != null && a.lng != null).length,
+    missingAddressCount: 0,
+  };
+
+  return {
+    referenceSeason,
+    source: "nest",
+    label: `Nest transport ${referenceSeason}`,
+    assignments,
+    stats,
+  };
+}
+
+/** Persist current board assignments so future runs can apply learned routing. */
+export async function syncTransportBoardToRoutingWarehouse(
+  supabase: SupabaseClient,
+  companyId: string,
+  options: {
+    referenceSeason: string;
+    coreStops: Record<number, TransportRouteStop[]>;
+    routeMeta: TransportRouteMeta[];
+    userId?: string | null;
+    excludeAddress?: string;
+  },
+): Promise<{ ok: boolean; error?: string; stats?: RouteReferenceImportStats }> {
+  const payload = buildRouteReferenceFromTransportBoard(options);
+  if (payload.assignments.length === 0) {
+    return { ok: true, stats: payload.stats };
+  }
+
+  const { importId, error } = await importRouteReference(supabase, companyId, payload, {
+    userId: options.userId,
+    replace: true,
+  });
+
+  if (error || !importId) {
+    return { ok: false, error: error ?? "Import failed" };
+  }
+
+  return { ok: true, stats: payload.stats };
 }
 
 export async function syncBundledMapPointToWarehouse(
