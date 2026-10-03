@@ -121,7 +121,7 @@ export default function ParentAuth() {
         <div className="pp-card w-full max-w-md rounded-3xl p-8 shadow-lg">
           <h1 className="text-xl font-semibold">Camp not found</h1>
           <p className="pp-text-muted mt-2 text-sm">
-            Open the Parent Portal using the link from your camp&apos;s menu (Parent Facing → Login / Signup).
+            Open the Parent Portal using the link from your camp&apos;s menu (Login / Signup).
           </p>
         </div>
       </div>

@@ -10,7 +10,7 @@ export function DayCampSidebarMenuList({ items }: Props) {
   return (
     <SidebarMenu>
       {items.map((item) => (
-        <SidebarNavItem key={item.menuId} to={item.url}>
+        <SidebarNavItem key={`${item.menuId}-${item.url}`} to={item.url}>
           <item.icon className="h-4 w-4" />
           <span>{item.title}</span>
         </SidebarNavItem>
