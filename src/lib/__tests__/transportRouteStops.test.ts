@@ -69,4 +69,43 @@ describe("consolidateRouteStopsByAddress", () => {
     const merged = consolidateRouteStopsByAddress(stops);
     expect(merged).toHaveLength(2);
   });
+
+  it("does not merge different streets that share the same bad geocode", () => {
+    const sharedLat = 40.84;
+    const sharedLng = -73.71;
+    const stops = [
+      {
+        name: "Alex Rubel",
+        address: "34 Dunes Ln, Port Washington, NY",
+        lat: sharedLat,
+        lng: sharedLng,
+        pickupTime: "7:00 AM",
+        passengers: 1,
+        camperNames: ["Alex Rubel"],
+      },
+      {
+        name: "26 Cove Dr",
+        address: "26 Cove Dr, Port Washington, NY",
+        lat: sharedLat,
+        lng: sharedLng,
+        pickupTime: "",
+        passengers: 0,
+        camperNames: [] as string[],
+      },
+      {
+        name: "Audrey Anteby",
+        address: "26 Cove Dr, Port Washington, NY",
+        lat: sharedLat,
+        lng: sharedLng,
+        pickupTime: "7:05 AM",
+        passengers: 1,
+        camperNames: ["Audrey Anteby"],
+      },
+    ];
+
+    const merged = consolidateRouteStopsByAddress(stops);
+    expect(merged).toHaveLength(2);
+    expect(merged.some((s) => s.camperNames?.includes("Alex Rubel"))).toBe(true);
+    expect(merged.some((s) => s.camperNames?.includes("Audrey Anteby"))).toBe(true);
+  });
 });

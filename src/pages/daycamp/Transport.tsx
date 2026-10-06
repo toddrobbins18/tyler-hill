@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { TransportRouteMap } from "@/components/TransportRouteMap";
-import { Bus, MapPin, Users, Plus, FileText, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Eye, EyeOff, History, LayoutTemplate, Database, Car, CornerDownRight, Clock } from "lucide-react";
+import { Bus, MapPin, Users, Plus, FileText, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Eye, EyeOff, History, LayoutTemplate, Database, Car, CornerDownRight, Clock, Undo2 } from "lucide-react";
 import { pickFirst } from "@/lib/csv";
 import { isSpreadsheetFileName, loadSpreadsheetRowsFromFile } from "@/lib/spreadsheetImport";
 import {
@@ -106,7 +106,7 @@ import {
   type TransportBoardSettings,
 } from "@/lib/transportBoardSettings";
 import { normalizeTransportAddress as normalizeAddress } from "@/lib/transportAddressNormalize";
-import { consolidateRouteStopsByAddress } from "@/lib/transportRouteStops";
+import { consolidateExactAddressDuplicatesOnly, consolidateRouteStopsByAddress } from "@/lib/transportRouteStops";
 import { optimizeStopsFromFirstStop, optimizeStopsWithPinned } from "@/lib/transportRouteOptimize";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
@@ -338,6 +338,34 @@ const initialUnplottedCampers: UnplottedCamper[] = [];
 
 const GEOCODE_CACHE_KEY = "transport-geocode-cache-v1";
 const ROUTE_LEG_CACHE_KEY = "transport-route-leg-cache-v1";
+const OPTIMIZE_UNDO_KEY = "transport-optimize-undo-v1";
+
+type OptimizeUndoSnapshot = {
+  coreStops: Record<number, RouteStop[]>;
+  unplottedCampers: UnplottedCamper[];
+  description: string;
+  savedAt: number;
+};
+
+const loadPersistedOptimizeUndoStack = (): OptimizeUndoSnapshot[] => {
+  try {
+    const raw = sessionStorage.getItem(OPTIMIZE_UNDO_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as OptimizeUndoSnapshot[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const persistOptimizeUndoStack = (stack: OptimizeUndoSnapshot[]) => {
+  try {
+    if (stack.length === 0) sessionStorage.removeItem(OPTIMIZE_UNDO_KEY);
+    else sessionStorage.setItem(OPTIMIZE_UNDO_KEY, JSON.stringify(stack));
+  } catch {
+    // ignore quota errors
+  }
+};
 
 const loadPersistedRouteLegCache = (): Record<string, number[]> => {
   try {
@@ -579,9 +607,23 @@ export default function Transport() {
     afterMiles: number;
     reassignments: { name: string; from: string; to: string }[];
     reorderedRoutes: number;
-    perRoute: { id: number; name: string; bus: string; beforeMi: number; afterMi: number; changed: boolean; addedCampers: string[] }[];
+    perRoute: {
+      id: number;
+      name: string;
+      bus: string;
+      beforeMi: number;
+      afterMi: number;
+      beforeStops: number;
+      afterStops: number;
+      changed: boolean;
+      addedCampers: string[];
+    }[];
     selectedRouteIds: number[];
   }>({ open: false, proposedCore: {}, proposedUnplotted: [], beforeMiles: 0, afterMiles: 0, reassignments: [], reorderedRoutes: 0, perRoute: [], selectedRouteIds: [] });
+
+  const [optimizeUndoStack, setOptimizeUndoStack] = useState<OptimizeUndoSnapshot[]>(
+    loadPersistedOptimizeUndoStack,
+  );
 
   // Turn-by-turn directions dialog
   const [directionsDialog, setDirectionsDialog] = useState<{
@@ -2611,48 +2653,8 @@ export default function Transport() {
             return aHasStops - bHasStops || a.id - b.id;
           });
 
-      // Build all stops to optimize: existing core + unplotted campers (only for full-batch mode)
+      // ─── Full-board optimize: reorder each bus locally + assign unplotted campers ───
       const proposedCore: Record<number, RouteStop[]> = {};
-      targetRoutes.forEach(r => { proposedCore[r.id] = []; });
-
-      // Collect every stop and unplotted camper as a "job" for ORS optimization.
-      // ORS uses [lng, lat] order.
-      type JobRef = { kind: "stop"; stop: RouteStop } | { kind: "camper"; camper: UnplottedCamper };
-      const jobRefs: JobRef[] = [];
-      targetRoutes.forEach(r => {
-        consolidateRouteStopsByAddress(coreStops[r.id] || []).forEach((stop) =>
-          jobRefs.push({ kind: "stop", stop }),
-        );
-      });
-      // Only include unplotted campers when optimizing ALL routes — single-route mode
-      // just re-orders that route's existing stops without grabbing new campers.
-      if (targetRouteId === undefined) {
-        unplottedCampers.forEach(camper => jobRefs.push({ kind: "camper", camper }));
-      }
-
-      const jobs = jobRefs.map((ref, i) => ({
-        id: i + 1,
-        location: ref.kind === "stop"
-          ? [ref.stop.lng, ref.stop.lat] as [number, number]
-          : [ref.camper.lng, ref.camper.lat] as [number, number],
-        // ORS uses `amount` to enforce vehicle capacity. Stops carry their passenger count;
-        // each unplotted camper is 1 seat.
-        amount: ref.kind === "stop"
-          ? [Math.max(1, ref.stop.passengers || 1)]
-          : [1],
-      }));
-
-      // Each route = one vehicle, starts AND ends at camp (round trip).
-      // In single-route mode we send only that one vehicle so the optimizer
-      // doesn't try to reshuffle other buses.
-      const vehicles = targetRoutes.map(r => ({
-        id: r.id,
-        start: [CAMP_LOCATION.lng, CAMP_LOCATION.lat] as [number, number],
-        end: [CAMP_LOCATION.lng, CAMP_LOCATION.lat] as [number, number],
-        capacity: [r.capacity],
-      }));
-
-      let usedORS = false;
       const reassignments: { name: string; from: string; to: string }[] = [];
 
       const pinsForTarget =
@@ -2669,10 +2671,11 @@ export default function Transport() {
         if (options?.fromFirstStop && pins.length === 0 && before[0]?.address) {
           pins = [normalizeAddress(before[0].address)];
         }
-        const optimized = consolidateRouteStopsByAddress(
+        const beforeConsolidated = consolidateRouteStopsByAddress(before);
+        const optimized = consolidateExactAddressDuplicatesOnly(
           pins.length > 0
-            ? optimizeStopsWithPinned(before, pins)
-            : optimizeStopsFromFirstStop(before),
+            ? optimizeStopsWithPinned(beforeConsolidated, pins)
+            : optimizeStopsFromFirstStop(beforeConsolidated),
         );
         proposedCore[targetRouteId] = optimized;
 
@@ -2684,9 +2687,9 @@ export default function Transport() {
         const afterMi = routeMiles(optimized);
         beforeMiles = beforeMi;
         afterMiles = afterMi;
-        const beforeSeq = before.map((s) => s.address).join("|");
+        const beforeSeq = beforeConsolidated.map((s) => s.address).join("|");
         const afterSeq = optimized.map((s) => s.address).join("|");
-        const reordered = beforeSeq !== afterSeq && before.length > 1;
+        const reordered = beforeSeq !== afterSeq && beforeConsolidated.length > 1;
         if (reordered) reorderedRoutes = 1;
 
         setOptimizePreview({
@@ -2703,123 +2706,149 @@ export default function Transport() {
             bus: meta?.bus || `Bus ${targetRouteId}`,
             beforeMi,
             afterMi,
-            changed: reordered,
+            beforeStops: beforeConsolidated.length,
+            afterStops: optimized.length,
+            changed: reordered || beforeConsolidated.length !== optimized.length,
             addedCampers: [],
           }],
-          selectedRouteIds: reordered ? [targetRouteId] : [],
+          selectedRouteIds: reordered || beforeConsolidated.length !== optimized.length ? [targetRouteId] : [],
         });
         return;
       }
 
-      if (jobs.length > 0 && vehicles.length > 0) {
-        const { data, error } = await supabase.functions.invoke("route-optimizer", {
-          body: { action: "optimize", vehicles, jobs },
-        });
+      // Single-bus optimize: reorder existing stops only (no ORS, no new campers).
+      if (targetRouteId !== undefined) {
+        const before = coreStops[targetRouteId] || [];
+        const beforeConsolidated = consolidateRouteStopsByAddress(before);
+        const optimized = consolidateExactAddressDuplicatesOnly(
+          nearestNeighborOrder(beforeConsolidated),
+        );
+        proposedCore[targetRouteId] = optimized;
 
-        if (!error && data?.routes) {
-          usedORS = true;
-          // Map ORS results back to our RouteStops, in optimized order
-          for (const orsRoute of data.routes) {
-            const vehicleId = orsRoute.vehicle as number;
-            const ordered: RouteStop[] = [];
-            for (const step of orsRoute.steps || []) {
-              if (step.type !== "job") continue;
-              const ref = jobRefs[(step.job as number) - 1];
-              if (!ref) continue;
-              if (ref.kind === "stop") {
-                ordered.push(ref.stop);
-              } else {
-                const c = ref.camper;
-                ordered.push({
-                  name: c.name, address: c.address, lat: c.lat, lng: c.lng,
-                  pickupTime: "TBD", passengers: 1, camperNames: [c.name],
-                });
-                const routeName = routeMeta.find(r => r.id === vehicleId)?.name || `Route ${vehicleId}`;
-                reassignments.push({ name: c.name, from: "Unplotted", to: routeName });
-              }
-            }
-            // For AM run: nearest stop to camp should be LAST (camp = final destination).
-            // ORS round-trip ordering already minimizes total drive, but for cabin pickup
-            // logic we keep the order ORS returned (start→...→end at camp).
-            proposedCore[vehicleId] = consolidateRouteStopsByAddress(ordered);
-          }
-          // Routes with no assignments
-          targetRoutes.forEach(r => { if (!proposedCore[r.id]) proposedCore[r.id] = []; });
-        }
+        const meta = routeMeta.find((r) => r.id === targetRouteId);
+        const beforeMi = routeMiles(before);
+        const afterMi = routeMiles(optimized);
+        const beforeSeq = beforeConsolidated.map((s) => s.address).join("|");
+        const afterSeq = optimized.map((s) => s.address).join("|");
+        const reordered = beforeSeq !== afterSeq && beforeConsolidated.length > 1;
+
+        setOptimizePreview({
+          open: true,
+          proposedCore,
+          proposedUnplotted: [],
+          beforeMiles: beforeMi,
+          afterMiles: afterMi,
+          reassignments: [],
+          reorderedRoutes: reordered ? 1 : 0,
+          perRoute: [{
+            id: targetRouteId,
+            name: meta?.name || `Route ${targetRouteId}`,
+            bus: meta?.bus || `Bus ${targetRouteId}`,
+            beforeMi,
+            afterMi,
+            beforeStops: beforeConsolidated.length,
+            afterStops: optimized.length,
+            changed: reordered || beforeMi !== afterMi || beforeConsolidated.length !== optimized.length,
+            addedCampers: [],
+          }],
+          selectedRouteIds: reordered || beforeMi !== afterMi || beforeConsolidated.length !== optimized.length
+            ? [targetRouteId]
+            : [],
+        });
+        return;
       }
 
-      // Fallback: nearest-neighbor heuristic (haversine) if ORS unavailable
       let remainingUnplotted: UnplottedCamper[] = [];
-      if (!usedORS) {
-        targetRoutes.forEach(r => { proposedCore[r.id] = [...(coreStops[r.id] || [])]; });
-        if (targetRouteId === undefined) {
-          unplottedCampers.forEach(camper => {
-            let bestRouteId = pickHistoricalBusForCamper(camper, priorMap, routeMeta);
-            let bestDist = bestRouteId !== undefined ? 0 : Infinity;
+      targetRoutes.forEach((r) => {
+        proposedCore[r.id] = consolidateRouteStopsByAddress(coreStops[r.id] || []);
+      });
 
-            if (bestRouteId === undefined) {
-              bestRouteId = targetRoutes[0]?.id;
-              targetRoutes.forEach(r => {
-                const stops = proposedCore[r.id];
-                const refPoints = stops.length > 0
-                  ? stops.map(s => ({ lat: s.lat, lng: s.lng }))
-                  : [{ lat: CAMP_LOCATION.lat, lng: CAMP_LOCATION.lng }];
-                const minD = Math.min(...refPoints.map(p => haversineMiles(camper.lat, camper.lng, p.lat, p.lng)));
-                if (minD < bestDist) { bestDist = minD; bestRouteId = r.id; }
-              });
-            }
+      unplottedCampers.forEach((camper) => {
+        let bestRouteId = pickHistoricalBusForCamper(camper, priorMap, routeMeta);
+        let bestDist = bestRouteId !== undefined ? 0 : Infinity;
 
-            if (bestRouteId !== undefined) {
-              proposedCore[bestRouteId].push({
-                name: camper.name, address: camper.address, lat: camper.lat, lng: camper.lng,
-                pickupTime: "TBD", passengers: 1, camperNames: [camper.name],
-              });
-              const routeName = routeMeta.find(r => r.id === bestRouteId)?.name || `Route ${bestRouteId}`;
-              reassignments.push({ name: camper.name, from: "Unplotted", to: routeName });
-            } else {
-              remainingUnplotted.push(camper);
-            }
-          });
-        }
-        targetRoutes.forEach(r => {
-          proposedCore[r.id] = consolidateRouteStopsByAddress(
-            nearestNeighborOrder(proposedCore[r.id]),
-          );
-        });
-        if (priorMap.size > 0) {
-          Object.assign(proposedCore, reorderStopsByHistoricalPriors(proposedCore, priorMap));
+        if (bestRouteId === undefined) {
+          bestRouteId = targetRoutes[0]?.id;
           targetRoutes.forEach((r) => {
-            proposedCore[r.id] = consolidateRouteStopsByAddress(proposedCore[r.id] ?? []);
+            const stops = proposedCore[r.id];
+            const refPoints = stops.length > 0
+              ? stops.map((s) => ({ lat: s.lat, lng: s.lng }))
+              : [{ lat: CAMP_LOCATION.lat, lng: CAMP_LOCATION.lng }];
+            const minD = Math.min(...refPoints.map((p) => haversineMiles(camper.lat, camper.lng, p.lat, p.lng)));
+            if (minD < bestDist) { bestDist = minD; bestRouteId = r.id; }
           });
         }
+
+        if (bestRouteId !== undefined) {
+          proposedCore[bestRouteId].push({
+            name: camper.name,
+            address: camper.address,
+            lat: camper.lat,
+            lng: camper.lng,
+            pickupTime: "TBD",
+            passengers: 1,
+            camperNames: [camper.name],
+          });
+          const routeName = routeMeta.find((r) => r.id === bestRouteId)?.name || `Route ${bestRouteId}`;
+          reassignments.push({ name: camper.name, from: "Unplotted", to: routeName });
+        } else {
+          remainingUnplotted.push(camper);
+        }
+      });
+
+      targetRoutes.forEach((r) => {
+        proposedCore[r.id] = consolidateExactAddressDuplicatesOnly(
+          nearestNeighborOrder(proposedCore[r.id] ?? []),
+        );
+      });
+      if (priorMap.size > 0) {
+        Object.assign(proposedCore, reorderStopsByHistoricalPriors(proposedCore, priorMap));
+        targetRoutes.forEach((r) => {
+          proposedCore[r.id] = consolidateExactAddressDuplicatesOnly(proposedCore[r.id] ?? []);
+        });
       }
 
       // Compute miles before/after using haversine for a fair comparison
       let beforeMiles = 0;
       let afterMiles = 0;
       let reorderedRoutes = 0;
-      const perRoute: { id: number; name: string; bus: string; beforeMi: number; afterMi: number; changed: boolean; addedCampers: string[] }[] = [];
+      const perRoute: {
+        id: number;
+        name: string;
+        bus: string;
+        beforeMi: number;
+        afterMi: number;
+        beforeStops: number;
+        afterStops: number;
+        changed: boolean;
+        addedCampers: string[];
+      }[] = [];
       targetRoutes.forEach(r => {
         const before = coreStops[r.id] || [];
+        const beforeConsolidated = consolidateRouteStopsByAddress(before);
+        const afterStops = proposedCore[r.id] ?? [];
         const beforeMi = routeMiles(before);
-        const afterMi = routeMiles(proposedCore[r.id]);
+        const afterMi = routeMiles(afterStops);
         beforeMiles += beforeMi;
         afterMiles += afterMi;
-        const beforeAddrs = new Set(before.map(s => s.address));
-        const afterAddresses = proposedCore[r.id].map(s => s.address);
+        const beforeAddrs = new Set(beforeConsolidated.map(s => s.address));
+        const afterAddresses = afterStops.map(s => s.address);
         const afterSeq = afterAddresses.filter(address => beforeAddrs.has(address)).join("|");
-        const beforeSeq = before.map(s => s.address).join("|");
-        const beforeSet = new Set(before.map(s => s.address));
-        const removedOrMoved = before.some(s => !afterAddresses.includes(s.address));
-        const reordered = (beforeSeq !== afterSeq && before.length > 1) || removedOrMoved;
+        const beforeSeq = beforeConsolidated.map(s => s.address).join("|");
+        const beforeSet = new Set(beforeConsolidated.map(s => s.address));
+        const removedOrMoved = beforeConsolidated.some(s => !afterAddresses.includes(s.address));
+        const reordered = (beforeSeq !== afterSeq && beforeConsolidated.length > 1) || removedOrMoved;
+        const stopCountDrop = afterStops.length < beforeConsolidated.length;
         if (reordered) reorderedRoutes++;
-        const addedCampers = proposedCore[r.id]
+        const addedCampers = afterStops
           .filter(s => !beforeSet.has(s.address))
           .flatMap(s => s.camperNames || [s.name]);
         perRoute.push({
           id: r.id, name: r.name, bus: r.bus,
           beforeMi, afterMi,
-          changed: reordered || addedCampers.length > 0,
+          beforeStops: beforeConsolidated.length,
+          afterStops: afterStops.length,
+          changed: reordered || addedCampers.length > 0 || stopCountDrop,
           addedCampers,
         });
       });
@@ -2837,12 +2866,6 @@ export default function Transport() {
         selectedRouteIds: perRoute.filter(p => p.changed).map(p => p.id),
       });
 
-      if (!usedORS && unplottedCampers.length > 0) {
-        toast({
-          title: "Used local optimizer",
-          description: "Couldn't reach OpenRouteService — fell back to haversine optimization.",
-        });
-      }
     } catch (e: any) {
       toast({ title: "Optimization failed", description: e?.message || String(e), variant: "destructive" });
     } finally {
@@ -2850,12 +2873,32 @@ export default function Transport() {
     }
   };
 
-  const applyOptimization = () => {
+  const applyOptimization = async () => {
     const selected = new Set(optimizePreview.selectedRouteIds);
     if (selected.size === 0) {
       toast({ title: "No routes selected", description: "Pick at least one route to apply.", variant: "destructive" });
       return;
     }
+
+    const collapsedRoutes = optimizePreview.perRoute.filter(
+      (p) => selected.has(p.id) && p.afterStops < p.beforeStops && p.beforeStops >= 3,
+    );
+    if (collapsedRoutes.length > 0) {
+      toast({
+        title: "Stop count would drop",
+        description: `${collapsedRoutes.map((p) => p.bus).join(", ")} would lose stops — check preview before applying.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const undoSnapshot: OptimizeUndoSnapshot = {
+      coreStops: JSON.parse(JSON.stringify(coreStops)) as Record<number, RouteStop[]>,
+      unplottedCampers: JSON.parse(JSON.stringify(unplottedCampers)) as UnplottedCamper[],
+      description: `Before optimizing ${selected.size} route${selected.size === 1 ? "" : "s"}`,
+      savedAt: Date.now(),
+    };
+
     // Merge: keep current order for unselected routes, apply proposed for selected
     const nextCore: Record<number, RouteStop[]> = { ...coreStops };
     let savedMi = 0;
@@ -2866,7 +2909,7 @@ export default function Transport() {
       // Unchanged routes have no proposedCore entry — preserve their existing stops.
       const proposed = optimizePreview.proposedCore[p.id];
       if (proposed && proposed.length > 0) {
-        nextCore[p.id] = consolidateRouteStopsByAddress(proposed);
+        nextCore[p.id] = consolidateExactAddressDuplicatesOnly(proposed);
       }
       savedMi += Math.max(0, p.beforeMi - p.afterMi);
       appliedReassignments += p.addedCampers.length;
@@ -2879,6 +2922,11 @@ export default function Transport() {
     });
     const nextUnplotted = unplottedCampers.filter(c => !reassignedNames.has(c.name));
 
+    setOptimizeUndoStack(prev => {
+      const next = [...prev.slice(-4), undoSnapshot];
+      persistOptimizeUndoStack(next);
+      return next;
+    });
     markRoutesConfigured("manual");
     setCoreStops(nextCore);
     setUnplottedCampers(nextUnplotted);
@@ -2890,9 +2938,55 @@ export default function Transport() {
       return { excluded, added };
     });
     setOptimizePreview(prev => ({ ...prev, open: false }));
+
+    const payload: BoardPayload = {
+      coreStops: nextCore,
+      routeMeta,
+      unplottedCampers: nextUnplotted,
+      routesConfigured: true,
+      routesSeason: currentSeason,
+      routesSource: routesSource ?? "manual",
+    };
+    await persistBoard(payload);
+    await finalizeBoardForSeason(payload);
+
     toast({
       title: `Optimized ${selected.size} route${selected.size === 1 ? "" : "s"}`,
-      description: `Saved ${savedMi.toFixed(1)} mi/run · ${appliedReassignments} camper${appliedReassignments === 1 ? "" : "s"} assigned.`,
+      description: `Saved ${savedMi.toFixed(1)} mi/run · ${appliedReassignments} camper${appliedReassignments === 1 ? "" : "s"} assigned. Use Undo Optimization to revert.`,
+    });
+  };
+
+  const handleUndoOptimization = async () => {
+    const snapshot = optimizeUndoStack[optimizeUndoStack.length - 1];
+    if (!snapshot) {
+      toast({ title: "Nothing to undo", description: "No optimization has been applied yet this session.", variant: "destructive" });
+      return;
+    }
+
+    setOptimizeUndoStack(prev => {
+      const next = prev.slice(0, -1);
+      persistOptimizeUndoStack(next);
+      return next;
+    });
+    setCoreStops(snapshot.coreStops);
+    setUnplottedCampers(snapshot.unplottedCampers);
+    markRoutesConfigured("manual");
+    setTodayOverrides(emptyManualOverrides());
+
+    const payload: BoardPayload = {
+      coreStops: snapshot.coreStops,
+      routeMeta,
+      unplottedCampers: snapshot.unplottedCampers,
+      routesConfigured: true,
+      routesSeason: currentSeason,
+      routesSource: routesSource ?? "manual",
+    };
+    await persistBoard(payload);
+    await finalizeBoardForSeason(payload);
+
+    toast({
+      title: "Optimization undone",
+      description: snapshot.description,
     });
   };
 
@@ -3241,6 +3335,17 @@ export default function Transport() {
             <History className={`h-4 w-4 ${applyingHistorical ? "animate-pulse" : ""}`} />
             {applyingHistorical ? "Placing from prior routes…" : "Place Using Prior Routes"}
           </Button>
+          {optimizeUndoStack.length > 0 && (
+            <Button
+              variant="outline"
+              className="gap-2 border-amber-500/70 bg-amber-50 text-amber-950 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-950/60"
+              onClick={() => void handleUndoOptimization()}
+              title={optimizeUndoStack[optimizeUndoStack.length - 1]?.description}
+            >
+              <Undo2 className="h-4 w-4" />
+              Undo Optimization
+            </Button>
+          )}
           <Button variant="outline" className="gap-2" onClick={() => setBulkImport(prev => ({ ...prev, open: true, log: { ok: 0, skipped: 0, failed: 0, messages: [] }, progress: { done: 0, total: 0 }, failedRows: [] }))}>
             <Upload className="h-4 w-4" /> Bulk Upload Addresses
           </Button>
@@ -3445,16 +3550,18 @@ export default function Transport() {
                 Geocoding addresses…
               </Badge>
             )}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => handleOptimizeRoutes()}
-              disabled={optimizing}
-              className="ml-auto gap-1.5 text-xs border-primary/40 hover:bg-primary/10 hover:text-primary"
-            >
-              <Sparkles className={`h-3.5 w-3.5 ${optimizing ? "animate-pulse" : ""}`} />
-              {optimizing ? "Optimizing…" : "Optimize Routes"}
-            </Button>
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleOptimizeRoutes()}
+                disabled={optimizing}
+                className="gap-1.5 text-xs border-primary/40 hover:bg-primary/10 hover:text-primary"
+              >
+                <Sparkles className={`h-3.5 w-3.5 ${optimizing ? "animate-pulse" : ""}`} />
+                {optimizing ? "Optimizing…" : "Optimize Routes"}
+              </Button>
+            </div>
           </div>
 
           {(hiddenByWeekFilter > 0 || unplottedNeedingGeocode > 0) && (
@@ -4477,7 +4584,7 @@ export default function Transport() {
               Route Optimization Preview
             </DialogTitle>
             <DialogDescription>
-              Groups nearby stops into compact bus clusters first, then orders each bus route. Applies permanently to AM & PM runs.
+              Reorders stops on each bus for a shorter drive and can assign unplotted campers. Stops stay on the same bus — check stop counts before applying.
             </DialogDescription>
           </DialogHeader>
 
@@ -4557,7 +4664,12 @@ export default function Transport() {
                         }}
                       />
                       <span className="font-medium truncate flex-1">{p.bus} <span className="text-muted-foreground font-normal">· {p.name}</span></span>
-                      {p.changed ? (
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                        {p.beforeStops}→{p.afterStops} stops
+                      </span>
+                      {p.afterStops < p.beforeStops ? (
+                        <span className="text-[10px] text-destructive whitespace-nowrap">fewer stops</span>
+                      ) : p.changed ? (
                         <span className="text-[10px] text-success whitespace-nowrap">−{saved.toFixed(1)} mi{p.addedCampers.length ? ` · +${p.addedCampers.length} camper${p.addedCampers.length === 1 ? "" : "s"}` : ""}</span>
                       ) : (
                         <span className="text-[10px] text-muted-foreground whitespace-nowrap">no change</span>

@@ -1,5 +1,5 @@
 import { normalizeTransportAddress } from "@/lib/transportAddressNormalize";
-import { haversineMiles, isValidRouteCoordinate } from "@/lib/transportStopTimes";
+import { isValidRouteCoordinate } from "@/lib/transportStopTimes";
 import type { TransportRouteStop } from "@/lib/transportRoster";
 
 /** Camper names on a stop — never treat a bare address label as a rider. */
@@ -77,8 +77,7 @@ function mergeTwoStops(a: TransportRouteStop, b: TransportRouteStop): TransportR
   };
 }
 
-/** Merge duplicate addresses on a route (template stop + camper stop at same address). */
-export function consolidateRouteStopsByAddress(stops: TransportRouteStop[]): TransportRouteStop[] {
+function mergeStopsByExactAddress(stops: TransportRouteStop[]): TransportRouteStop[] {
   const order: string[] = [];
   const byKey = new Map<string, TransportRouteStop>();
 
@@ -99,10 +98,19 @@ export function consolidateRouteStopsByAddress(stops: TransportRouteStop[]): Tra
     byKey.set(key, mergeTwoStops(existing, stop));
   }
 
-  let merged = order.map((key) => byKey.get(key)!);
+  return order.map((key) => byKey.get(key)!);
+}
 
-  // Geocodes can drift slightly — merge orphan template stops onto a staffed stop at the same street.
-  const PROXIMITY_MI = 0.02;
+/** Merge only when normalized street address matches — safe after optimize reorder. */
+export function consolidateExactAddressDuplicatesOnly(stops: TransportRouteStop[]): TransportRouteStop[] {
+  return mergeStopsByExactAddress(stops);
+}
+
+/** Merge duplicate addresses on a route (template stop + camper stop at same address). */
+export function consolidateRouteStopsByAddress(stops: TransportRouteStop[]): TransportRouteStop[] {
+  const merged = mergeStopsByExactAddress(stops);
+
+  // Merge empty template stops onto a staffed stop at the same street (not merely nearby coords).
   const remaining: TransportRouteStop[] = [];
   for (const stop of merged) {
     const hasRiders = riderNamesFromStop(stop).length > 0;
@@ -117,11 +125,7 @@ export function consolidateRouteStopsByAddress(stops: TransportRouteStop[]): Tra
       const other = remaining[i];
       if (riderNamesFromStop(other).length === 0) continue;
       const sameStreet = streetKey && streetKey === normalizeTransportAddress(other.address || "");
-      const nearby =
-        isValidRouteCoordinate(stop.lat, stop.lng)
-        && isValidRouteCoordinate(other.lat, other.lng)
-        && haversineMiles(stop.lat, stop.lng, other.lat, other.lng) <= PROXIMITY_MI;
-      if (!sameStreet && !nearby) continue;
+      if (!sameStreet) continue;
       remaining[i] = mergeTwoStops(other, stop);
       absorbed = true;
       break;

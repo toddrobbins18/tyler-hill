@@ -6,7 +6,7 @@ import { applyHistoricalAssignments, buildPriorsFromBundledMappoint } from "@/li
 import { normalizeTransportAddress } from "@/lib/transportAddressNormalize";
 import { buildCamperPriorMap } from "@/lib/routeReferenceWarehouse";
 import { optimizeStopsFromFirstStop, optimizeStopsWithPinned } from "@/lib/transportRouteOptimize";
-import { consolidateRouteStopsByAddress } from "@/lib/transportRouteStops";
+import { consolidateExactAddressDuplicatesOnly, consolidateRouteStopsByAddress } from "@/lib/transportRouteStops";
 import { routeStopListLines } from "@/lib/transportStopTimes";
 
 const bus2BeforeOptimize = [
@@ -202,7 +202,7 @@ describe("transport optimize smoke", () => {
       { name: "Jack Lovens", address: "2 Sands Lane, Manhasset, NY", lat: 40.8301, lng: -73.7001, pickupTime: "TBD", passengers: 1, camperNames: ["Jack Lovens"] },
       { name: "Noa Lovens", address: "2 Sands Lane, Manhasset, NY", lat: 40.8301, lng: -73.7001, pickupTime: "TBD", passengers: 1, camperNames: ["Noa Lovens"] },
     ];
-    const afterApply = consolidateRouteStopsByAddress(orsOrdered);
+    const afterApply = consolidateExactAddressDuplicatesOnly(orsOrdered);
     expect(afterApply).toHaveLength(1);
     expect(afterApply[0].camperNames?.sort()).toEqual(["Jack Lovens", "Noa Lovens"].sort());
     expect(routeStopListLines(afterApply[0], { isCamp: false }).isOpenStop).toBe(false);
