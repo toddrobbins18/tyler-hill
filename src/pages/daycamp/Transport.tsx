@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { TransportRouteMap } from "@/components/TransportRouteMap";
-import { Bus, MapPin, Users, Plus, FileText, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Eye, EyeOff, History, LayoutTemplate, Database, Car } from "lucide-react";
+import { Bus, MapPin, Users, Plus, FileText, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Eye, EyeOff, History, LayoutTemplate, Database, Car, CornerDownRight, Clock } from "lucide-react";
 import { pickFirst } from "@/lib/csv";
 import { isSpreadsheetFileName, loadSpreadsheetRowsFromFile } from "@/lib/spreadsheetImport";
 import {
@@ -90,6 +90,7 @@ import {
 } from "@/lib/transportRoster";
 import {
   applyHistoricalAssignments,
+  enrichUnplottedCampersForHistoricalPlacement,
   getHistoricalRouteSuggestion,
   getReferenceDatasetStatus,
   loadCamperPriorMap,
@@ -98,6 +99,13 @@ import {
   syncTransportBoardToRoutingWarehouse,
   type ReferenceDatasetStatus,
 } from "@/lib/historicalRouteLearning";
+import {
+  DEFAULT_TRANSPORT_BOARD_SETTINGS,
+  effectiveStopDwellMinutes,
+  normalizeTransportBoardSettings,
+  type TransportBoardSettings,
+} from "@/lib/transportBoardSettings";
+import { optimizeStopsFromFirstStop } from "@/lib/transportRouteOptimize";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -392,6 +400,7 @@ type BoardPayload = {
   routeMeta: typeof initialRouteMeta;
   unplottedCampers: UnplottedCamper[];
   parentTransportCampers?: ParentTransportCamper[];
+  settings?: TransportBoardSettings;
   routesConfigured?: boolean;
   routesSeason?: string;
   routesSource?: TransportRoutesSource;
@@ -500,6 +509,9 @@ export default function Transport() {
   const [newRoute, setNewRoute] = useState({ name: "", bus: "", departure: "", capacity: 50 });
   const [visibleRoutes, setVisibleRoutes] = useState<number[]>(initialRouteMeta.map(r => r.id));
   const [timeOfDay, setTimeOfDay] = useState<"am" | "pm">("am");
+  const [boardSettings, setBoardSettings] = useState<TransportBoardSettings>(
+    () => ({ ...DEFAULT_TRANSPORT_BOARD_SETTINGS }),
+  );
   const [routeLegMinutesCache, setRouteLegMinutesCache] = useState<Record<string, number[]>>({});
   const [optimizing, setOptimizing] = useState(false);
   const [editRoute, setEditRoute] = useState<{
@@ -627,11 +639,12 @@ export default function Transport() {
     routeMeta,
     unplottedCampers,
     parentTransportCampers,
+    settings: boardSettings,
     routesConfigured,
     routesSeason: routesConfigured ? currentSeason : undefined,
     routesSource,
     ...overrides,
-  }), [coreStops, routeMeta, unplottedCampers, parentTransportCampers, routesConfigured, routesSource, currentSeason]);
+  }), [coreStops, routeMeta, unplottedCampers, parentTransportCampers, boardSettings, routesConfigured, routesSource, currentSeason]);
 
   const markRoutesConfigured = useCallback((source: TransportRoutesSource = "manual") => {
     setRoutesConfigured(true);
@@ -709,6 +722,7 @@ export default function Transport() {
     setVisibleRoutes(normalizedMeta.map((r) => r.id));
     setUnplottedCampers(scrubbed.unplottedCampers);
     setParentTransportCampers(scrubbed.parentTransportCampers ?? []);
+    setBoardSettings(normalizeTransportBoardSettings(scrubbed.settings));
     setRoutesConfigured(scrubbed.routesConfigured === true);
     setRoutesSource(scrubbed.routesSource);
     lastKnownStopCountRef.current = countBoardStops(scrubbed.coreStops);
@@ -815,6 +829,7 @@ export default function Transport() {
             parentTransportCampers: Array.isArray(saved.parentTransportCampers)
               ? saved.parentTransportCampers
               : [],
+            settings: normalizeTransportBoardSettings(saved.settings),
             routesConfigured: saved.routesConfigured,
             routesSeason: saved.routesSeason,
             routesSource: saved.routesSource,
@@ -951,7 +966,7 @@ export default function Transport() {
       });
     }, 600);
     return () => clearTimeout(handle);
-  }, [coreStops, routeMeta, unplottedCampers, parentTransportCampers, routesConfigured, routesSource, persistLoaded, companyId, currentSeason, persistBoard, buildBoardPayload]);
+  }, [coreStops, routeMeta, unplottedCampers, parentTransportCampers, boardSettings, routesConfigured, routesSource, persistLoaded, companyId, currentSeason, persistBoard, buildBoardPayload]);
 
   // Flush unsaved board state when leaving the page (debounced save may not have fired yet).
   useEffect(() => {
@@ -1497,15 +1512,20 @@ export default function Transport() {
     };
   }, [routesNeedingLegDurations]);
 
+  const stopDwellMinutes = effectiveStopDwellMinutes(boardSettings);
+
   // Build display routes from effective core stops + meta
   const buildRoutes = useCallback((tod: "am" | "pm"): Route[] => {
+    const stopTimeOptions = {
+      dwellMinutesPerStop: stopDwellMinutes,
+    };
     return routeMeta.map(meta => {
       const core = getEffectiveCore(meta.id);
       const legMinutes = routeLegMinutesById.get(meta.id);
       const stops =
         tod === "am"
-          ? buildAMStops(core, meta.departure, legMinutes)
-          : buildPMStops(core, meta.departure, legMinutes);
+          ? buildAMStops(core, meta.departure, { ...stopTimeOptions, legMinutes })
+          : buildPMStops(core, meta.departure, { ...stopTimeOptions, legMinutes });
       const campers = core.reduce((sum, s) => sum + s.passengers, 0);
       return {
         ...meta,
@@ -1514,7 +1534,7 @@ export default function Transport() {
         direction: tod === "am" ? "Inbound" : "Outbound",
       };
     });
-  }, [getEffectiveCore, routeMeta, routeLegMinutesById]);
+  }, [getEffectiveCore, routeMeta, routeLegMinutesById, stopDwellMinutes]);
 
   const camperEnrollmentLookup = useMemo(
     () => buildCamperEnrollmentLookup(groupRoster),
@@ -2174,10 +2194,20 @@ export default function Transport() {
         priorMapRef.current ?? (await loadCamperPriorMap(supabase, companyId, currentSeason));
       priorMapRef.current = priorMap;
 
+      const enrichedUnplotted = await enrichUnplottedCampersForHistoricalPlacement(
+        payload.unplottedCampers,
+        priorMap,
+        async (address) => {
+          const geo = await geocodeAddress(address);
+          if (geo && isGeocodePoint(geo)) return { lat: geo.lat, lng: geo.lng };
+          return null;
+        },
+      );
+
       const result = applyHistoricalAssignments({
         coreStops: payload.coreStops,
         routeMeta: payload.routeMeta,
-        unplottedCampers: payload.unplottedCampers,
+        unplottedCampers: enrichedUnplotted,
         priorMap,
       });
 
@@ -2495,9 +2525,21 @@ export default function Transport() {
     return ordered.reverse();
   };
 
-  const handleOptimizeRoutes = async (targetRouteId?: number) => {
+  const handleOptimizeRoutes = async (
+    targetRouteId?: number,
+    options?: { fromFirstStop?: boolean },
+  ) => {
     setOptimizing(true);
     try {
+      if (options?.fromFirstStop && targetRouteId === undefined) {
+        toast({
+          title: "Pick a bus first",
+          description: "Optimize from stop #1 works on one route at a time — use the button on that bus.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       if (companyId) {
         priorMapRef.current =
           priorMapRef.current ?? (await loadCamperPriorMap(supabase, companyId, currentSeason));
@@ -2554,6 +2596,46 @@ export default function Transport() {
 
       let usedORS = false;
       const reassignments: { name: string; from: string; to: string }[] = [];
+
+      if (options?.fromFirstStop && targetRouteId !== undefined) {
+        const before = coreStops[targetRouteId] || [];
+        const optimized = optimizeStopsFromFirstStop(before);
+        proposedCore[targetRouteId] = optimized;
+
+        const meta = routeMeta.find((r) => r.id === targetRouteId);
+        let beforeMiles = 0;
+        let afterMiles = 0;
+        let reorderedRoutes = 0;
+        const beforeMi = routeMiles(before);
+        const afterMi = routeMiles(optimized);
+        beforeMiles = beforeMi;
+        afterMiles = afterMi;
+        const beforeSeq = before.map((s) => s.address).join("|");
+        const afterSeq = optimized.map((s) => s.address).join("|");
+        const reordered = beforeSeq !== afterSeq && before.length > 1;
+        if (reordered) reorderedRoutes = 1;
+
+        setOptimizePreview({
+          open: true,
+          proposedCore,
+          proposedUnplotted: [],
+          beforeMiles,
+          afterMiles,
+          reassignments,
+          reorderedRoutes,
+          perRoute: [{
+            id: targetRouteId,
+            name: meta?.name || `Route ${targetRouteId}`,
+            bus: meta?.bus || `Bus ${targetRouteId}`,
+            beforeMi,
+            afterMi,
+            changed: reordered,
+            addedCampers: [],
+          }],
+          selectedRouteIds: reordered ? [targetRouteId] : [],
+        });
+        return;
+      }
 
       if (jobs.length > 0 && vehicles.length > 0) {
         const { data, error } = await supabase.functions.invoke("route-optimizer", {
@@ -3197,6 +3279,40 @@ export default function Transport() {
                 ? "Routes end at 85 Crescent Beach Rd, Glen Cove"
                 : "Routes start at 85 Crescent Beach Rd, Glen Cove"}
             </span>
+            <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-1.5">
+              <Checkbox
+                id="stop-pickup-enabled"
+                checked={boardSettings.stopPickupEnabled}
+                onCheckedChange={(checked) => {
+                  setBoardSettings((prev) => ({
+                    ...prev,
+                    stopPickupEnabled: checked === true,
+                  }));
+                }}
+              />
+              <Label htmlFor="stop-pickup-enabled" className="text-xs flex items-center gap-1.5 cursor-pointer">
+                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                Pickup time at stops
+              </Label>
+              <Input
+                type="number"
+                min={0}
+                max={15}
+                step={1}
+                disabled={!boardSettings.stopPickupEnabled}
+                value={boardSettings.stopPickupMinutes}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  setBoardSettings((prev) => ({
+                    ...prev,
+                    stopPickupMinutes: Number.isFinite(n) ? Math.min(15, Math.max(0, n)) : prev.stopPickupMinutes,
+                  }));
+                }}
+                className="h-7 w-14 text-xs text-center"
+                title="Minutes added at each passenger stop (AM & PM)"
+              />
+              <span className="text-[10px] text-muted-foreground">min · all buses</span>
+            </div>
             <div className="flex items-center gap-2">
               <Label htmlFor="route-enrollment-week" className="text-xs text-muted-foreground whitespace-nowrap">
                 Enrollment week
@@ -3389,9 +3505,20 @@ export default function Transport() {
                                 }}
                                 disabled={optimizing}
                                 className="text-muted-foreground hover:text-primary p-1 rounded transition-colors disabled:opacity-50"
-                                title="Optimize this route"
+                                title="Optimize this route (full reorder)"
                               >
                                 <Sparkles className={`h-3 w-3 ${optimizing ? "animate-pulse" : ""}`} />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOptimizeRoutes(r.id, { fromFirstStop: true });
+                                }}
+                                disabled={optimizing || (coreStops[r.id]?.length ?? 0) < 2}
+                                className="text-muted-foreground hover:text-primary p-1 rounded transition-colors disabled:opacity-50"
+                                title="Keep stop #1 fixed — optimize the rest from there"
+                              >
+                                <CornerDownRight className={`h-3 w-3 ${optimizing ? "animate-pulse" : ""}`} />
                               </button>
                               <button
                                 onClick={(e) => {

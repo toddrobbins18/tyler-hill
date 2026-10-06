@@ -4,6 +4,7 @@ import {
   parseMappointRoutesCsv,
   resolveBundledGeocodeResult,
 } from "@/lib/mappointTransportImport";
+import { isValidRouteCoordinate } from "@/lib/transportStopTimes";
 import {
   buildCamperPriorMap,
   buildRouteReferenceFromMappointCsv,
@@ -394,6 +395,54 @@ function addCamperToStop(stop: TransportRouteStop, camperName: string): Transpor
   };
 }
 
+/** Fill missing coordinates/addresses before prior-route placement. */
+export async function enrichUnplottedCampersForHistoricalPlacement(
+  campers: TransportUnplottedCamper[],
+  priorMap: Map<string, CamperRoutingPrior>,
+  geocode?: (address: string) => Promise<{ lat: number; lng: number } | null>,
+): Promise<TransportUnplottedCamper[]> {
+  const out: TransportUnplottedCamper[] = [];
+
+  for (const camper of campers) {
+    const prior = lookupCamperPrior(priorMap, camper.name, "AM");
+    const address = camper.address?.trim() || prior?.address?.trim() || "";
+
+    if (isValidRouteCoordinate(camper.lat, camper.lng)) {
+      out.push(address && !camper.address?.trim() ? { ...camper, address } : camper);
+      continue;
+    }
+
+    if (!address) {
+      out.push(camper);
+      continue;
+    }
+
+    let lat = camper.lat;
+    let lng = camper.lng;
+
+    if (prior && isValidRouteCoordinate(prior.lat ?? 0, prior.lng ?? 0)) {
+      lat = prior.lat!;
+      lng = prior.lng!;
+    } else {
+      const bundled = resolveBundledGeocodeResult(address);
+      if (bundled) {
+        lat = bundled.lat;
+        lng = bundled.lng;
+      } else if (geocode) {
+        const geo = await geocode(address);
+        if (geo) {
+          lat = geo.lat;
+          lng = geo.lng;
+        }
+      }
+    }
+
+    out.push({ ...camper, address, lat, lng });
+  }
+
+  return out;
+}
+
 /**
  * Place unplotted campers onto their historical bus/stop using MapPoint priors.
  */
@@ -427,11 +476,24 @@ export function applyHistoricalAssignments(options: {
       continue;
     }
 
-    const lat = camper.lat || prior.lat || 0;
-    const lng = camper.lng || prior.lng || 0;
-    const address = camper.address || prior.address;
+    const address = camper.address?.trim() || prior.address?.trim() || "";
+    let lat = camper.lat;
+    let lng = camper.lng;
 
-    if (!address || (lat === 0 && lng === 0)) {
+    if (!isValidRouteCoordinate(lat, lng)) {
+      if (isValidRouteCoordinate(prior.lat ?? 0, prior.lng ?? 0)) {
+        lat = prior.lat!;
+        lng = prior.lng!;
+      } else if (address) {
+        const bundled = resolveBundledGeocodeResult(address);
+        if (bundled) {
+          lat = bundled.lat;
+          lng = bundled.lng;
+        }
+      }
+    }
+
+    if (!address || !isValidRouteCoordinate(lat, lng)) {
       skippedNoCoords.push(camper.name);
       remaining.push(camper);
       continue;

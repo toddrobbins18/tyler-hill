@@ -140,30 +140,41 @@ export function assignStopTimesFromLegMinutes(
   });
 }
 
+export type BuildRouteStopsOptions = {
+  legMinutes?: number[] | null;
+  dwellMinutesPerStop?: number;
+};
+
 /** AM routes: stops → camp (camp is last stop). */
 export const buildAMStops = (
   stops: TransportRouteStop[],
   departureTime?: string | null,
-  legMinutes?: number[] | null,
+  options?: BuildRouteStopsOptions | number[] | null,
 ): TransportRouteStop[] => {
+  const opts = Array.isArray(options) ? { legMinutes: options } : options;
   const withCamp = [...stops, { ...CAMP_LOCATION, pickupTime: "", passengers: 0 }];
-  const legs = legMinutes?.length === withCamp.length - 1
-    ? legMinutes
+  const legs = opts?.legMinutes?.length === withCamp.length - 1
+    ? opts.legMinutes
     : computeHaversineLegMinutes(withCamp);
-  return assignStopTimesFromLegMinutes(withCamp, departureTime, legs);
+  return assignStopTimesFromLegMinutes(withCamp, departureTime, legs, {
+    dwellMinutesPerStop: opts?.dwellMinutesPerStop,
+  });
 };
 
 /** PM routes: camp first, then same stop order as AM. */
 export const buildPMStops = (
   stops: TransportRouteStop[],
   departureTime?: string | null,
-  legMinutes?: number[] | null,
+  options?: BuildRouteStopsOptions | number[] | null,
 ): TransportRouteStop[] => {
+  const opts = Array.isArray(options) ? { legMinutes: options } : options;
   const withCamp = [{ ...CAMP_LOCATION, pickupTime: "", passengers: 0 }, ...stops];
-  const legs = legMinutes?.length === withCamp.length - 1
-    ? legMinutes
+  const legs = opts?.legMinutes?.length === withCamp.length - 1
+    ? opts.legMinutes
     : computeHaversineLegMinutes(withCamp);
-  return assignStopTimesFromLegMinutes(withCamp, departureTime, legs);
+  return assignStopTimesFromLegMinutes(withCamp, departureTime, legs, {
+    dwellMinutesPerStop: opts?.dwellMinutesPerStop,
+  });
 };
 
 export const displayStopToCoreIndex = (displayIdx: number, isAM: boolean): number =>

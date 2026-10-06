@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolvePersonAge } from "@/lib/birthdayCalendar";
+import {
+  DEFAULT_TRANSPORT_BOARD_SETTINGS,
+  normalizeTransportBoardSettings,
+  type TransportBoardSettings,
+} from "@/lib/transportBoardSettings";
 import { isValidRouteCoordinate } from "@/lib/transportStopTimes";
 import {
   filterUnplottedExcludingParentTransport,
@@ -70,11 +75,15 @@ export type TransportBoardPayload = {
   unplottedCampers: TransportUnplottedCamper[];
   /** Parent drop-off / pick-up — assigned to a bus for reporting, no map address. */
   parentTransportCampers?: ParentTransportCamper[];
+  /** Global pickup-time setting for stop clock estimates (AM & PM). */
+  settings?: TransportBoardSettings;
   /** True after explicit MapPoint apply or manual routing for this season. */
   routesConfigured?: boolean;
   routesSeason?: string;
   routesSource?: TransportRoutesSource;
 };
+
+export { DEFAULT_TRANSPORT_BOARD_SETTINGS, normalizeTransportBoardSettings, type TransportBoardSettings };
 
 const normName = (name: string) => name.trim().toLowerCase();
 
