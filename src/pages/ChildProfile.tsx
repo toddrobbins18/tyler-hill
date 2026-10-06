@@ -33,9 +33,8 @@ import EnrolledWeeksDisplay from "@/components/EnrolledWeeksDisplay";
 import CamperSwimHistoryTab from "@/components/CamperSwimHistoryTab";
 import { CamperParentContactLogTab } from "@/components/CamperParentContactLogTab";
 import {
-  fetchCamperFamilyContact,
   hasCamperContactInfo,
-  mergeCamperContact,
+  resolveCamperContactInfo,
   type CamperContactDisplay,
 } from "@/lib/camperContactInfo";
 import { resolveChildForCampView } from "@/lib/profileCampResolution";
@@ -163,11 +162,21 @@ export default function ChildProfile() {
       }
 
       if (childId) {
-        const { family, authorizedPickups } = await fetchCamperFamilyContact(supabase, childId);
+        const contact = await resolveCamperContactInfo(supabase, {
+          id: childId,
+          person_id: childData.person_id,
+          company_id: childData.company_id,
+          season: childData.season,
+          guardian_name: childData.guardian_name,
+          guardian_name_p2: childData.guardian_name_p2,
+          guardian_email: childData.guardian_email,
+          guardian_phone: childData.guardian_phone,
+          emergency_contact: childData.emergency_contact,
+        });
         if (isStale()) return;
         setChild(childData);
         setAllergyText(childData?.allergies || "");
-        setContactInfo(mergeCamperContact(childData, family, authorizedPickups));
+        setContactInfo(contact);
       } else {
         if (isStale()) return;
         setChild(childData);
