@@ -124,8 +124,7 @@ import {
   routeStopListLines,
 } from "@/lib/transportStopTimes";
 import {
-  fetchRouteLegDurationsSec,
-  legDurationsSecToMinutes,
+  haversineLegMinutesFromCoords,
   routeStopCoordinateSignature,
 } from "@/lib/transportRouteLegDurations";
 
@@ -338,6 +337,26 @@ function restoreStopCampersToUnplotted(
 const initialUnplottedCampers: UnplottedCamper[] = [];
 
 const GEOCODE_CACHE_KEY = "transport-geocode-cache-v1";
+const ROUTE_LEG_CACHE_KEY = "transport-route-leg-cache-v1";
+
+const loadPersistedRouteLegCache = (): Record<string, number[]> => {
+  try {
+    const raw = sessionStorage.getItem(ROUTE_LEG_CACHE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, number[]>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const persistRouteLegCache = (cache: Record<string, number[]>) => {
+  try {
+    sessionStorage.setItem(ROUTE_LEG_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // ignore quota errors
+  }
+};
 
 const loadPersistedGeocodeCache = (): Map<string, GeocodeResult | null> => {
   try {
@@ -499,7 +518,9 @@ export default function Transport() {
   const [boardSettings, setBoardSettings] = useState<TransportBoardSettings>(
     () => ({ ...DEFAULT_TRANSPORT_BOARD_SETTINGS }),
   );
-  const [routeLegMinutesCache, setRouteLegMinutesCache] = useState<Record<string, number[]>>({});
+  const [routeLegMinutesCache, setRouteLegMinutesCache] = useState<Record<string, number[]>>(
+    loadPersistedRouteLegCache,
+  );
   const [optimizing, setOptimizing] = useState(false);
   const [applyingHistorical, setApplyingHistorical] = useState(false);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
@@ -1466,51 +1487,28 @@ export default function Transport() {
     routeLegMinutesCache,
   ]);
 
+  // Local drive-time estimates for pickup times — avoids dozens of route-optimizer calls on load.
   useEffect(() => {
-    if (routesNeedingLegDurations.length === 0 || applyingTemplate || applyingHistorical) return;
+    if (
+      routesNeedingLegDurations.length === 0
+      || boardLoading
+      || !persistLoaded
+      || applyingTemplate
+      || applyingHistorical
+    ) return;
 
-    let cancelled = false;
-    const pending = routesNeedingLegDurations;
-
-    const handle = setTimeout(async () => {
-      const BATCH = 4;
-      for (let i = 0; i < pending.length; i += BATCH) {
-        if (cancelled) return;
-        const batch = pending.slice(i, i + BATCH);
-        const results = await Promise.all(
-          batch.map((item) =>
-            fetchRouteLegDurationsSec(
-              (body) => supabase.functions.invoke("route-optimizer", { body }),
-              item.coords,
-            ),
-          ),
-        );
-        if (cancelled) return;
-
-        setRouteLegMinutesCache((prev) => {
-          const next = { ...prev };
-          let changed = false;
-          batch.forEach((item, idx) => {
-            const sec = results[idx];
-            if (sec && sec.length === item.coords.length - 1) {
-              next[item.sig] = legDurationsSecToMinutes(sec);
-              changed = true;
-            }
-          });
-          return changed ? next : prev;
-        });
-
-        if (i + BATCH < pending.length) {
-          await new Promise((r) => setTimeout(r, 300));
-        }
+    setRouteLegMinutesCache((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const item of routesNeedingLegDurations) {
+        if (next[item.sig]) continue;
+        next[item.sig] = haversineLegMinutesFromCoords(item.coords);
+        changed = true;
       }
-    }, 1500);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(handle);
-    };
-  }, [routesNeedingLegDurations, applyingTemplate, applyingHistorical]);
+      if (changed) persistRouteLegCache(next);
+      return changed ? next : prev;
+    });
+  }, [routesNeedingLegDurations, boardLoading, persistLoaded, applyingTemplate, applyingHistorical]);
 
   const stopDwellMinutes = effectiveStopDwellMinutes(boardSettings);
 
@@ -1701,6 +1699,7 @@ export default function Transport() {
       || importInProgressRef.current
       || applyingTemplate
       || applyingHistorical
+      || geocodingBoard
     ) return;
 
     const pending = collectTransportAddressesNeedingGeocode(
@@ -1723,7 +1722,7 @@ export default function Transport() {
         });
       }
     })();
-  }, [persistLoaded, boardLoading, applyingTemplate, applyingHistorical, unplottedCampers, coreStops, geocodeBoardAddresses, toast]);
+  }, [persistLoaded, boardLoading, applyingTemplate, applyingHistorical, geocodingBoard, unplottedCampers, coreStops, geocodeBoardAddresses, toast]);
 
   const enrollmentWeekForReport = useMemo(
     () => enrollmentWeekForDate(enrollmentWeekCalendar, overrideDate),
@@ -2278,35 +2277,8 @@ export default function Transport() {
 
       toast({
         title: "Route template applied",
-        description: `${templateMeta.length} buses loaded. Placing returning campers from prior routes in the background…`,
+        description: `${templateMeta.length} buses loaded (stops only). Click "Place Using Prior Routes" when you want returning campers assigned.`,
       });
-
-      void (async () => {
-        try {
-          const withLearned = await applyLearnedPlacementsToPayload(fastPayload);
-          if (withLearned.placedCount === 0 && withLearned.unplottedCampers.length === fastPayload.unplottedCampers.length) {
-            return;
-          }
-          const payload: BoardPayload = {
-            ...withLearned,
-            routesConfigured: true,
-            routesSeason: currentSeason,
-            routesSource: "mappoint2026",
-          };
-          await persistBoard(payload);
-          await finalizeBoardForSeason(payload);
-          toast({
-            title: "Prior routes placed",
-            description: `${withLearned.placedCount} returning campers placed · ${withLearned.unplottedCampers.length} still unplotted${withLearned.skippedNoBus ? ` · ${withLearned.skippedNoBus} prior bus not on board` : ""}`,
-          });
-        } catch (e: unknown) {
-          toast({
-            title: "Prior route placement failed",
-            description: e instanceof Error ? e.message : String(e),
-            variant: "destructive",
-          });
-        }
-      })();
     } catch (e: unknown) {
       toast({
         title: "Template apply failed",
@@ -3688,15 +3660,8 @@ export default function Transport() {
                         >
                           {r.stops.map((stop, i) => {
                             const isCamp = stop.address === CAMP_LOCATION.address;
-                            const stopAddressNorm = normalizeAddress(stop.address);
-                            const pendingAtStop = !isCamp && stopAddressNorm
-                              ? unplottedForWeek.filter(
-                                  (c) => normalizeAddress(c.address) === stopAddressNorm,
-                                )
-                              : [];
                             const stopLines = routeStopListLines(stop, {
                               isCamp,
-                              pendingNames: pendingAtStop.map((c) => c.name),
                             });
                             const isDragging = reorderDrag?.routeId === r.id && reorderDrag.displayIndex === i;
                             return (

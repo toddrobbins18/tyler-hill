@@ -682,6 +682,12 @@ Deno.serve(async (req) => {
         });
       }
       if (!Array.isArray(body.coordinates) || body.coordinates.length < 2) {
+        if (body.action === "legDurations") {
+          return jsonResponse({
+            legDurationsSec: [],
+            warning: "at least 2 coordinates required — using estimated stop times.",
+          });
+        }
         return new Response(JSON.stringify({ error: "at least 2 coordinates required" }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });

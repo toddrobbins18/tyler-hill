@@ -1,4 +1,4 @@
-import { isValidRouteCoordinate } from "@/lib/transportStopTimes";
+import { estimateDrivingLegMinutes, isValidRouteCoordinate } from "@/lib/transportStopTimes";
 
 type LegDurationsResponse = {
   legDurationsSec?: number[];
@@ -20,22 +20,41 @@ export function legDurationsSecToMinutes(sec: number[]): number[] {
   return sec.map((s) => Math.max(0, s) / 60);
 }
 
+/** Local fallback when ORS leg durations are unavailable — prevents infinite retries. */
+export function haversineLegMinutesFromCoords(coordinates: [number, number][]): number[] {
+  const legs: number[] = [];
+  for (let i = 1; i < coordinates.length; i++) {
+    const [lng1, lat1] = coordinates[i - 1];
+    const [lng2, lat2] = coordinates[i];
+    legs.push(estimateDrivingLegMinutes(lat1, lng1, lat2, lng2));
+  }
+  return legs;
+}
+
 /** Fetch driving leg durations (stop[i] → stop[i+1]) via route-optimizer / ORS. */
 export async function fetchRouteLegDurationsSec(
   invoke: (body: { action: "legDurations"; coordinates: [number, number][] }) => Promise<{ data: LegDurationsResponse | null; error: Error | null }>,
   coordinates: [number, number][],
-): Promise<number[] | null> {
+): Promise<number[]> {
   if (coordinates.length < 2) return [];
 
-  const { data, error } = await invoke({
-    action: "legDurations",
-    coordinates,
-  });
+  const fallback = () => haversineLegMinutesFromCoords(coordinates);
 
-  if (error || data?.error) return null;
+  try {
+    const { data, error } = await invoke({
+      action: "legDurations",
+      coordinates,
+    });
 
-  const legs = data?.legDurationsSec;
-  if (!Array.isArray(legs) || legs.length !== coordinates.length - 1) return null;
+    if (error || data?.error) return fallback();
 
-  return legs;
+    const legs = data?.legDurationsSec;
+    if (!Array.isArray(legs) || legs.length !== coordinates.length - 1 || legs.every((s) => s === 0)) {
+      return fallback();
+    }
+
+    return legs;
+  } catch {
+    return fallback();
+  }
 }
