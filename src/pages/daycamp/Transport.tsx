@@ -501,6 +501,8 @@ export default function Transport() {
   );
   const [routeLegMinutesCache, setRouteLegMinutesCache] = useState<Record<string, number[]>>({});
   const [optimizing, setOptimizing] = useState(false);
+  const [applyingHistorical, setApplyingHistorical] = useState(false);
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
   const [editRoute, setEditRoute] = useState<{
     id: number;
     name: string;
@@ -1465,15 +1467,16 @@ export default function Transport() {
   ]);
 
   useEffect(() => {
-    if (routesNeedingLegDurations.length === 0) return;
+    if (routesNeedingLegDurations.length === 0 || applyingTemplate || applyingHistorical) return;
 
     let cancelled = false;
     const pending = routesNeedingLegDurations;
 
     const handle = setTimeout(async () => {
-      for (let i = 0; i < pending.length; i += 2) {
+      const BATCH = 4;
+      for (let i = 0; i < pending.length; i += BATCH) {
         if (cancelled) return;
-        const batch = pending.slice(i, i + 2);
+        const batch = pending.slice(i, i + BATCH);
         const results = await Promise.all(
           batch.map((item) =>
             fetchRouteLegDurationsSec(
@@ -1497,17 +1500,17 @@ export default function Transport() {
           return changed ? next : prev;
         });
 
-        if (i + 2 < pending.length) {
-          await new Promise((r) => setTimeout(r, 600));
+        if (i + BATCH < pending.length) {
+          await new Promise((r) => setTimeout(r, 300));
         }
       }
-    }, 900);
+    }, 1500);
 
     return () => {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [routesNeedingLegDurations]);
+  }, [routesNeedingLegDurations, applyingTemplate, applyingHistorical]);
 
   const stopDwellMinutes = effectiveStopDwellMinutes(boardSettings);
 
@@ -1692,7 +1695,13 @@ export default function Transport() {
   }, [geocodeBatch]);
 
   useEffect(() => {
-    if (!persistLoaded || boardLoading || importInProgressRef.current) return;
+    if (
+      !persistLoaded
+      || boardLoading
+      || importInProgressRef.current
+      || applyingTemplate
+      || applyingHistorical
+    ) return;
 
     const pending = collectTransportAddressesNeedingGeocode(
       unplottedCampers,
@@ -1714,7 +1723,7 @@ export default function Transport() {
         });
       }
     })();
-  }, [persistLoaded, boardLoading, unplottedCampers, coreStops, geocodeBoardAddresses, toast]);
+  }, [persistLoaded, boardLoading, applyingTemplate, applyingHistorical, unplottedCampers, coreStops, geocodeBoardAddresses, toast]);
 
   const enrollmentWeekForReport = useMemo(
     () => enrollmentWeekForDate(enrollmentWeekCalendar, overrideDate),
@@ -2158,8 +2167,6 @@ export default function Transport() {
     URL.revokeObjectURL(url);
   };
 
-  const [applyingHistorical, setApplyingHistorical] = useState(false);
-  const [applyingTemplate, setApplyingTemplate] = useState(false);
   const [referenceStatus, setReferenceStatus] = useState<ReferenceDatasetStatus | null>(null);
   const priorMapRef = useRef<Map<string, import("@/lib/routeReferenceWarehouse").CamperRoutingPrior> | null>(null);
 
@@ -2187,22 +2194,27 @@ export default function Transport() {
   }, [unplottedCampers, routeMeta, referenceStatus]);
 
   const applyLearnedPlacementsToPayload = useCallback(
-    async (payload: BoardPayload): Promise<BoardPayload & { placedCount: number; skippedNoBus: number }> => {
+    async (
+      payload: BoardPayload,
+    ): Promise<
+      BoardPayload & {
+        placedCount: number;
+        skippedNoBus: number;
+        skippedNoPrior: number;
+        skippedNoCoords: number;
+      }
+    > => {
       if (!companyId || !currentSeason || payload.unplottedCampers.length === 0) {
-        return { ...payload, placedCount: 0, skippedNoBus: 0 };
+        return { ...payload, placedCount: 0, skippedNoBus: 0, skippedNoPrior: 0, skippedNoCoords: 0 };
       }
       const priorMap =
         priorMapRef.current ?? (await loadCamperPriorMap(supabase, companyId, currentSeason));
       priorMapRef.current = priorMap;
 
+      // Use roster/prior/bundled coords only — template stops supply lat/lng for most placements.
       const enrichedUnplotted = await enrichUnplottedCampersForHistoricalPlacement(
         payload.unplottedCampers,
         priorMap,
-        async (address) => {
-          const geo = await geocodeAddress(address);
-          if (geo && isGeocodePoint(geo)) return { lat: geo.lat, lng: geo.lng };
-          return null;
-        },
       );
 
       const result = applyHistoricalAssignments({
@@ -2226,6 +2238,8 @@ export default function Transport() {
         unplottedCampers: result.unplottedCampers,
         placedCount: result.placed.length,
         skippedNoBus: result.skippedNoBus.length,
+        skippedNoPrior: result.skippedNoPrior.length,
+        skippedNoCoords: result.skippedNoCoords.length,
       };
     },
     [companyId, currentSeason],
@@ -2237,41 +2251,62 @@ export default function Transport() {
       const { coreStops: templateStops, routeMeta: templateMeta } =
         build2026MappointRouteTemplate(ROUTE_COLORS);
 
-      let payload: BoardPayload = {
-        coreStops: templateStops,
-        routeMeta: templateMeta,
-        unplottedCampers,
-        routesConfigured: true,
-        routesSeason: currentSeason,
-        routesSource: "mappoint2026",
-      };
-
       const normalized = await normalizeTransportBoardForSeason(
         supabase,
         companyId!,
         currentSeason,
-        payload,
+        {
+          coreStops: templateStops,
+          routeMeta: templateMeta,
+          unplottedCampers,
+          routesConfigured: true,
+          routesSeason: currentSeason,
+          routesSource: "mappoint2026",
+        },
       );
 
-      const withLearned = await applyLearnedPlacementsToPayload(normalized);
-      payload = {
-        ...withLearned,
+      const fastPayload: BoardPayload = {
+        ...normalized,
         routesConfigured: true,
         routesSeason: currentSeason,
         routesSource: "mappoint2026",
       };
 
-      await persistBoard(payload);
-      await finalizeBoardForSeason(payload);
+      await persistBoard(fastPayload);
+      await finalizeBoardForSeason(fastPayload);
       void refreshReferenceStatus();
 
       toast({
         title: "Route template applied",
-        description:
-          withLearned.placedCount > 0
-            ? `${templateMeta.length} buses loaded · ${withLearned.placedCount} returning campers placed from prior routes${withLearned.skippedNoBus ? ` · ${withLearned.skippedNoBus} prior bus not on board` : ""}`
-            : `${templateMeta.length} buses loaded (stops only). No prior route match for unplotted campers yet — assign manually and Nest will remember.`,
+        description: `${templateMeta.length} buses loaded. Placing returning campers from prior routes in the background…`,
       });
+
+      void (async () => {
+        try {
+          const withLearned = await applyLearnedPlacementsToPayload(fastPayload);
+          if (withLearned.placedCount === 0 && withLearned.unplottedCampers.length === fastPayload.unplottedCampers.length) {
+            return;
+          }
+          const payload: BoardPayload = {
+            ...withLearned,
+            routesConfigured: true,
+            routesSeason: currentSeason,
+            routesSource: "mappoint2026",
+          };
+          await persistBoard(payload);
+          await finalizeBoardForSeason(payload);
+          toast({
+            title: "Prior routes placed",
+            description: `${withLearned.placedCount} returning campers placed · ${withLearned.unplottedCampers.length} still unplotted${withLearned.skippedNoBus ? ` · ${withLearned.skippedNoBus} prior bus not on board` : ""}`,
+          });
+        } catch (e: unknown) {
+          toast({
+            title: "Prior route placement failed",
+            description: e instanceof Error ? e.message : String(e),
+            variant: "destructive",
+          });
+        }
+      })();
     } catch (e: unknown) {
       toast({
         title: "Template apply failed",
@@ -2286,6 +2321,7 @@ export default function Transport() {
   const handleApplyHistoricalAssignments = async () => {
     if (!companyId) return;
     setApplyingHistorical(true);
+    geocodeAttemptRef.current = "";
     try {
       const withLearned = await applyLearnedPlacementsToPayload(buildBoardPayload());
 
@@ -2302,10 +2338,20 @@ export default function Transport() {
       await finalizeBoardForSeason(payload);
       void refreshReferenceStatus();
 
+      const description = withLearned.placedCount > 0
+        ? `${withLearned.placedCount} campers placed on prior buses · ${withLearned.unplottedCampers.length} still unplotted${withLearned.skippedNoBus ? ` · ${withLearned.skippedNoBus} prior bus not on board` : ""}`
+        : [
+            "No new placements this run.",
+            withLearned.skippedNoPrior > 0 ? `${withLearned.skippedNoPrior} new campers (no 2026 route)` : null,
+            withLearned.skippedNoCoords > 0 ? `${withLearned.skippedNoCoords} need a geocoded address` : null,
+            withLearned.skippedNoBus > 0 ? `${withLearned.skippedNoBus} prior bus not on board` : null,
+            `${withLearned.unplottedCampers.length} still unplotted`,
+          ].filter(Boolean).join(" · ");
+
       toast({
-        title: "Prior routes applied",
-        description: `${withLearned.placedCount} campers placed on prior buses · ${withLearned.unplottedCampers.length} still unplotted${withLearned.skippedNoBus ? ` · ${withLearned.skippedNoBus} prior bus not on board` : ""}`,
-        variant: withLearned.placedCount ? "default" : "destructive",
+        title: withLearned.placedCount > 0 ? "Prior routes applied" : "Prior routes — nothing new to place",
+        description,
+        variant: withLearned.placedCount > 0 ? "default" : "destructive",
       });
     } catch (e: unknown) {
       toast({

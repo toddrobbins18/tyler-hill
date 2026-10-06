@@ -2,7 +2,9 @@
  * Smoke tests for transport route optimization — Todd's duplicate-open-stop scenario.
  */
 import { describe, expect, it } from "vitest";
+import { applyHistoricalAssignments, buildPriorsFromBundledMappoint } from "@/lib/historicalRouteLearning";
 import { normalizeTransportAddress } from "@/lib/transportAddressNormalize";
+import { buildCamperPriorMap } from "@/lib/routeReferenceWarehouse";
 import { optimizeStopsFromFirstStop, optimizeStopsWithPinned } from "@/lib/transportRouteOptimize";
 import { consolidateRouteStopsByAddress } from "@/lib/transportRouteStops";
 import { routeStopListLines } from "@/lib/transportStopTimes";
@@ -104,6 +106,93 @@ describe("transport optimize smoke", () => {
 
     expect(normalizeTransportAddress(optimized[0].address)).toBe(pinKey);
     expect(optimized[0].camperNames).toEqual(["Jack Lovens", "Noa Lovens"]);
+  });
+
+  it("prior placement uses historical stop order when address text differs", () => {
+    const priors = buildPriorsFromBundledMappoint("2026");
+    const priorMap = buildCamperPriorMap(priors);
+    const sample = priors.find((p) => p.busNumber === 1 && p.stopOrder > 1);
+    expect(sample).toBeTruthy();
+
+    const result = applyHistoricalAssignments({
+      coreStops: {
+        1: [
+          {
+            name: "2 Cambridge Ave",
+            address: "2 Cambridge Ave, Port Washington, NY",
+            lat: 40.84,
+            lng: -73.71,
+            pickupTime: "",
+            passengers: 0,
+            camperNames: [],
+          },
+          {
+            name: sample!.address.split(",")[0],
+            address: sample!.address,
+            lat: sample!.lat ?? 40.841,
+            lng: sample!.lng ?? -73.711,
+            pickupTime: "",
+            passengers: 0,
+            camperNames: [],
+          },
+        ],
+      },
+      routeMeta: [{ id: 1, name: "Bus 1", bus: "Bus 1" }],
+      unplottedCampers: [
+        {
+          id: 100,
+          name: sample!.camperName,
+          address: "Different formatting 999 Nowhere Rd",
+          lat: 0,
+          lng: 0,
+          age: 10,
+          session: "1st",
+        },
+      ],
+      priorMap,
+    });
+
+    expect(result.placed.length).toBe(1);
+    expect(result.coreStops[1][sample!.stopOrder - 1].camperNames).toContain(sample!.camperName);
+  });
+
+  it("prior placement assigns to template stop without camper coordinates", () => {
+    const priors = buildPriorsFromBundledMappoint("2026");
+    const priorMap = buildCamperPriorMap(priors);
+    const sample = priors.find((p) => p.busNumber === 6 && p.address);
+    expect(sample).toBeTruthy();
+
+    const result = applyHistoricalAssignments({
+      coreStops: {
+        [sample!.busNumber]: [
+          {
+            name: sample!.address.split(",")[0],
+            address: sample!.address,
+            lat: sample!.lat ?? 40.83,
+            lng: sample!.lng ?? -73.7,
+            pickupTime: "",
+            passengers: 0,
+            camperNames: [],
+          },
+        ],
+      },
+      routeMeta: [{ id: sample!.busNumber, name: "Bus 6", bus: "Bus 6" }],
+      unplottedCampers: [
+        {
+          id: 99,
+          name: sample!.camperName,
+          address: sample!.address,
+          lat: 0,
+          lng: 0,
+          age: 10,
+          session: "1st",
+        },
+      ],
+      priorMap,
+    });
+
+    expect(result.placed.length).toBe(1);
+    expect(result.coreStops[sample!.busNumber][0].camperNames).toContain(sample!.camperName);
   });
 
   it("simulated ORS output: template job + camper job at same street becomes one named stop", () => {

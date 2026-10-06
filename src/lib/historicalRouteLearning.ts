@@ -384,6 +384,31 @@ function insertStopByOrder(
   return next;
 }
 
+/** Match template stop by address (camper + prior) or fall back to historical stop order. */
+function findStopForHistoricalPlacement(
+  stops: TransportRouteStop[],
+  camperAddress: string,
+  prior: CamperRoutingPrior,
+): number {
+  const addressKeys = new Set<string>();
+  if (camperAddress.trim()) addressKeys.add(normAddressKey(camperAddress));
+  if (prior.address?.trim()) addressKeys.add(normAddressKey(prior.address));
+
+  for (let i = 0; i < stops.length; i++) {
+    const stopKey = normAddressKey(stops[i].address || "");
+    if (stopKey && addressKeys.has(stopKey)) return i;
+  }
+
+  if (prior.stopOrder > 0 && stops.length > 0) {
+    const idx = Math.min(prior.stopOrder - 1, stops.length - 1);
+    if (isValidRouteCoordinate(stops[idx]?.lat ?? 0, stops[idx]?.lng ?? 0)) {
+      return idx;
+    }
+  }
+
+  return -1;
+}
+
 function addCamperToStop(stop: TransportRouteStop, camperName: string): TransportRouteStop {
   const camperNames = [...(stop.camperNames ?? []), camperName];
   return {
@@ -397,12 +422,43 @@ function addCamperToStop(stop: TransportRouteStop, camperName: string): Transpor
   };
 }
 
+const addressLookupKey = (address: string) => address.trim().toLowerCase();
+
+export type HistoricalGeocodeBatch = (
+  addresses: string[],
+) => Promise<Map<string, { lat: number; lng: number }>>;
+
 /** Fill missing coordinates/addresses before prior-route placement. */
 export async function enrichUnplottedCampersForHistoricalPlacement(
   campers: TransportUnplottedCamper[],
   priorMap: Map<string, CamperRoutingPrior>,
-  geocode?: (address: string) => Promise<{ lat: number; lng: number } | null>,
+  options?: {
+    geocodeOne?: (address: string) => Promise<{ lat: number; lng: number } | null>;
+    geocodeBatch?: HistoricalGeocodeBatch;
+  },
 ): Promise<TransportUnplottedCamper[]> {
+  const pendingAddresses: string[] = [];
+  const pendingSeen = new Set<string>();
+
+  for (const camper of campers) {
+    const prior = lookupCamperPrior(priorMap, camper.name, "AM");
+    if (!prior) continue;
+    const address = camper.address?.trim() || prior.address?.trim() || "";
+    if (!address) continue;
+    if (isValidRouteCoordinate(camper.lat, camper.lng)) continue;
+    if (isValidRouteCoordinate(prior.lat ?? 0, prior.lng ?? 0)) continue;
+    if (resolveBundledGeocodeResult(address)) continue;
+    const key = addressLookupKey(address);
+    if (pendingSeen.has(key)) continue;
+    pendingSeen.add(key);
+    pendingAddresses.push(address);
+  }
+
+  let batchGeocodes = new Map<string, { lat: number; lng: number }>();
+  if (options?.geocodeBatch && pendingAddresses.length > 0) {
+    batchGeocodes = await options.geocodeBatch(pendingAddresses);
+  }
+
   const out: TransportUnplottedCamper[] = [];
 
   for (const camper of campers) {
@@ -430,11 +486,17 @@ export async function enrichUnplottedCampersForHistoricalPlacement(
       if (bundled) {
         lat = bundled.lat;
         lng = bundled.lng;
-      } else if (geocode) {
-        const geo = await geocode(address);
-        if (geo) {
-          lat = geo.lat;
-          lng = geo.lng;
+      } else {
+        const batched = batchGeocodes.get(addressLookupKey(address));
+        if (batched) {
+          lat = batched.lat;
+          lng = batched.lng;
+        } else if (options?.geocodeOne) {
+          const geo = await options.geocodeOne(address);
+          if (geo) {
+            lat = geo.lat;
+            lng = geo.lng;
+          }
         }
       }
     }
@@ -479,14 +541,30 @@ export function applyHistoricalAssignments(options: {
     }
 
     const address = camper.address?.trim() || prior.address?.trim() || "";
+    if (!address) {
+      skippedNoCoords.push(camper.name);
+      remaining.push(camper);
+      continue;
+    }
+
     let lat = camper.lat;
     let lng = camper.lng;
+
+    const stops = coreStops[prior.busNumber] ?? [];
+    const stopIdx = findStopForHistoricalPlacement(stops, address, prior);
+
+    // Template stop already has coordinates — no API geocode needed to assign camper.
+    if (stopIdx >= 0) {
+      stops[stopIdx] = addCamperToStop(stops[stopIdx], camper.name);
+      placed.push({ name: camper.name, busNumber: prior.busNumber, address });
+      continue;
+    }
 
     if (!isValidRouteCoordinate(lat, lng)) {
       if (isValidRouteCoordinate(prior.lat ?? 0, prior.lng ?? 0)) {
         lat = prior.lat!;
         lng = prior.lng!;
-      } else if (address) {
+      } else {
         const bundled = resolveBundledGeocodeResult(address);
         if (bundled) {
           lat = bundled.lat;
@@ -495,19 +573,13 @@ export function applyHistoricalAssignments(options: {
       }
     }
 
-    if (!address || !isValidRouteCoordinate(lat, lng)) {
+    if (!isValidRouteCoordinate(lat, lng)) {
       skippedNoCoords.push(camper.name);
       remaining.push(camper);
       continue;
     }
 
-    const stops = coreStops[prior.busNumber] ?? [];
-    const addrKey = normAddressKey(address);
-    const stopIdx = stops.findIndex((s) => normAddressKey(s.address) === addrKey);
-
-    if (stopIdx >= 0) {
-      stops[stopIdx] = addCamperToStop(stops[stopIdx], camper.name);
-    } else {
+    {
       const newStop: TransportRouteStop = {
         name: address.split(",")[0]?.trim() || camper.name,
         address,
@@ -518,9 +590,8 @@ export function applyHistoricalAssignments(options: {
         camperNames: [camper.name],
       };
       coreStops[prior.busNumber] = insertStopByOrder(stops, newStop, prior.stopOrder);
+      placed.push({ name: camper.name, busNumber: prior.busNumber, address });
     }
-
-    placed.push({ name: camper.name, busNumber: prior.busNumber, address });
   }
 
   for (const busKey of Object.keys(coreStops)) {
