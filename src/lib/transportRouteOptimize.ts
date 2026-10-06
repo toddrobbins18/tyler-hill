@@ -68,7 +68,12 @@ const nearestNeighborFromPoint = (
   return ordered;
 };
 
-/** Pinned stops keep their order; unpinned stops reorder after them. */
+const addressKey = (stop: TransportRouteStop) => normalizeTransportAddress(stop.address || "");
+
+/**
+ * Pinned pickups stay in route order; unpinned stops between them are re-optimized.
+ * Todd: "keep certain pick ups in certain spots then optimize".
+ */
 export function optimizeStopsWithPinned(
   stops: TransportRouteStop[],
   pinnedAddressKeys: string[],
@@ -76,21 +81,44 @@ export function optimizeStopsWithPinned(
   const consolidated = consolidateRouteStopsByAddress(stops);
   if (consolidated.length <= 1) return consolidated;
 
-  const pinSet = new Set(pinnedAddressKeys.filter(Boolean));
+  const pinSet = new Set(pinnedAddressKeys.filter(Boolean).map((k) => normalizeTransportAddress(k)));
   if (pinSet.size === 0) return optimizeStopsFromFirstStop(consolidated);
 
-  const pinned: TransportRouteStop[] = [];
-  const unpinned: TransportRouteStop[] = [];
+  const isPinned = (stop: TransportRouteStop) => {
+    const key = addressKey(stop);
+    return key.length > 0 && pinSet.has(key);
+  };
+
+  const result: TransportRouteStop[] = [];
+  let pending: TransportRouteStop[] = [];
+  let anchor: TransportRouteStop | null = null;
+
+  const flushPending = () => {
+    if (pending.length === 0) return;
+
+    if (!anchor) {
+      if (pending.length === 1) {
+        result.push(pending[0]);
+      } else {
+        const [first, ...rest] = pending;
+        result.push(first, ...nearestNeighborFromPoint(first.lat, first.lng, rest));
+      }
+    } else {
+      result.push(...nearestNeighborFromPoint(anchor.lat, anchor.lng, pending));
+    }
+    pending = [];
+  };
 
   for (const stop of consolidated) {
-    const key = normalizeTransportAddress(stop.address || "");
-    if (key && pinSet.has(key)) pinned.push(stop);
-    else unpinned.push(stop);
+    if (isPinned(stop)) {
+      flushPending();
+      result.push(stop);
+      anchor = stop;
+    } else {
+      pending.push(stop);
+    }
   }
+  flushPending();
 
-  if (unpinned.length === 0) return pinned;
-
-  const start = pinned[pinned.length - 1] ?? consolidated[0];
-  const orderedTail = nearestNeighborFromPoint(start.lat, start.lng, unpinned);
-  return [...pinned, ...orderedTail];
+  return result;
 }

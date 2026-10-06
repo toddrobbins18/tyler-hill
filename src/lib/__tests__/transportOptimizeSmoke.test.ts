@@ -99,7 +99,7 @@ describe("transport optimize smoke", () => {
     expect(allNames).toContain("Ryan Cannon");
   });
 
-  it("pinned stop optimize keeps pinned address first", () => {
+  it("pinned stop optimize keeps pinned address in route order", () => {
     const consolidated = consolidateRouteStopsByAddress(bus2BeforeOptimize);
     const pinKey = normalizeTransportAddress("2 Sands Lane, Manhasset, NY");
     const optimized = optimizeStopsWithPinned(consolidated, [pinKey]);

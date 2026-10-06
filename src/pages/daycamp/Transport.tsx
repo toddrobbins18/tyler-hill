@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { TransportRouteMap } from "@/components/TransportRouteMap";
-import { Bus, MapPin, Users, Plus, FileText, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Eye, EyeOff, History, LayoutTemplate, Database, Car, CornerDownRight, Clock, Undo2, FlaskConical, CheckCircle2 } from "lucide-react";
+import { Bus, MapPin, Users, Plus, FileText, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Eye, EyeOff, History, LayoutTemplate, Database, Car, CornerDownRight, Clock, Undo2, FlaskConical, CheckCircle2, Pin } from "lucide-react";
 import { pickFirst } from "@/lib/csv";
 import { isSpreadsheetFileName, loadSpreadsheetRowsFromFile } from "@/lib/spreadsheetImport";
 import {
@@ -2696,8 +2696,8 @@ export default function Transport() {
 
     setScopeDialog({
       open: true,
-      title: "Unpin stop",
-      description: `Unpin "${stop.name}" from this route for today only, or permanently (both AM & PM, every day)?`,
+      title: "Remove stop from route",
+      description: `Remove "${stop.name}" from this route for today only, or permanently (both AM & PM, every day)?`,
       onChoose: (scope) => {
         if (scope === "today") {
           let restoredToday: UnplottedCamper[] = [];
@@ -2717,7 +2717,7 @@ export default function Transport() {
           if (restoredToday.length > 0) {
             setUnplottedCampers((prev) => [...prev, ...restoredToday]);
           }
-          toast({ title: "Unpinned for today", description: `"${stop.name}" removed from today's run only.` });
+          toast({ title: "Removed for today", description: `"${stop.name}" removed from today's run only.` });
         } else {
           const restored = restoreStopCampersToUnplotted(stop, unplottedCampers, groupRoster);
           markRoutesConfigured("manual");
@@ -2737,6 +2737,55 @@ export default function Transport() {
         setScopeDialog(prev => ({ ...prev, open: false }));
       },
     });
+  };
+
+  const pinnedKeysForRoute = useCallback(
+    (routeId: number) => boardSettings.pinnedStopsByRoute?.[routeId] ?? [],
+    [boardSettings.pinnedStopsByRoute],
+  );
+
+  const isStopPinnedForOptimize = useCallback(
+    (routeId: number, address: string) => {
+      const key = normalizeAddress(address);
+      return pinnedKeysForRoute(routeId).some((p) => normalizeAddress(p) === key);
+    },
+    [pinnedKeysForRoute],
+  );
+
+  const toggleStopPinForOptimize = useCallback((routeId: number, address: string) => {
+    const key = normalizeAddress(address);
+    if (!key) return;
+    setBoardSettings((prev) => {
+      const byRoute = { ...(prev.pinnedStopsByRoute ?? {}) };
+      const list = [...(byRoute[routeId] ?? [])];
+      const idx = list.findIndex((p) => normalizeAddress(p) === key);
+      if (idx >= 0) list.splice(idx, 1);
+      else list.push(key);
+      if (list.length === 0) delete byRoute[routeId];
+      else byRoute[routeId] = list;
+      return {
+        ...prev,
+        pinnedStopsByRoute: Object.keys(byRoute).length > 0 ? byRoute : undefined,
+      };
+    });
+  }, []);
+
+  const reorderRouteForOptimize = (
+    stops: RouteStop[],
+    options?: { fromFirstStop?: boolean; pinnedKeys?: string[] },
+  ): RouteStop[] => {
+    const consolidated = consolidateRouteStopsByAddress(stops);
+    let pins = [...(options?.pinnedKeys ?? [])];
+    if (options?.fromFirstStop && pins.length === 0 && consolidated[0]?.address) {
+      pins = [normalizeAddress(consolidated[0].address)];
+    }
+    if (pins.length > 0) {
+      return sanitizeRouteStops(optimizeStopsWithPinned(consolidated, pins));
+    }
+    if (options?.fromFirstStop) {
+      return sanitizeRouteStops(optimizeStopsFromFirstStop(consolidated));
+    }
+    return sanitizeRouteStops(nearestNeighborOrder(consolidated));
   };
 
   // ─── Route Optimization ─────────────────────────────────────────────
@@ -2824,20 +2873,8 @@ export default function Transport() {
       const proposedCore: Record<number, RouteStop[]> = {};
       const reassignments: { name: string; from: string; to: string }[] = [];
 
-      const pinsForTarget =
-        targetRouteId !== undefined
-          ? boardSettings.pinnedStopsByRoute?.[targetRouteId] ?? []
-          : [];
-
-      if (
-        targetRouteId !== undefined
-        && (options?.fromFirstStop || pinsForTarget.length > 0)
-      ) {
+      if (targetRouteId !== undefined && options?.fromFirstStop) {
         const before = coreStops[targetRouteId] || [];
-        let pins = [...pinsForTarget];
-        if (options?.fromFirstStop && pins.length === 0 && before[0]?.address) {
-          pins = [normalizeAddress(before[0].address)];
-        }
         const beforeConsolidated = consolidateRouteStopsByAddress(before);
         const assignResult = assignCampersDuringOptimize({
           coreStops: { ...coreStops, [targetRouteId]: beforeConsolidated },
@@ -2852,11 +2889,10 @@ export default function Transport() {
           from: "Unplotted",
           to: routeMeta.find((r) => r.id === p.busNumber)?.bus || `Bus ${p.busNumber}`,
         }));
-        const optimized = sanitizeRouteStops(
-          pins.length > 0
-            ? optimizeStopsWithPinned(withCampers, pins)
-            : optimizeStopsFromFirstStop(withCampers),
-        );
+        const optimized = reorderRouteForOptimize(withCampers, {
+          fromFirstStop: true,
+          pinnedKeys: pinnedKeysForRoute(targetRouteId),
+        });
         proposedCore[targetRouteId] = optimized;
 
         const meta = routeMeta.find((r) => r.id === targetRouteId);
@@ -2914,9 +2950,9 @@ export default function Transport() {
           from: "Unplotted",
           to: routeMeta.find((r) => r.id === p.busNumber)?.bus || `Bus ${p.busNumber}`,
         }));
-        const optimized = sanitizeRouteStops(
-          nearestNeighborOrder(withCampers),
-        );
+        const optimized = reorderRouteForOptimize(withCampers, {
+          pinnedKeys: pinnedKeysForRoute(targetRouteId),
+        });
         proposedCore[targetRouteId] = optimized;
 
         const meta = routeMeta.find((r) => r.id === targetRouteId);
@@ -2973,14 +3009,16 @@ export default function Transport() {
       );
 
       targetRoutes.forEach((r) => {
-        proposedCore[r.id] = sanitizeRouteStops(
-          nearestNeighborOrder(proposedCore[r.id] ?? []),
-        );
+        proposedCore[r.id] = reorderRouteForOptimize(proposedCore[r.id] ?? [], {
+          pinnedKeys: pinnedKeysForRoute(r.id),
+        });
       });
       if (priorMap.size > 0) {
         Object.assign(proposedCore, reorderStopsByHistoricalPriors(proposedCore, priorMap));
         targetRoutes.forEach((r) => {
-          proposedCore[r.id] = sanitizeRouteStops(proposedCore[r.id] ?? []);
+          proposedCore[r.id] = reorderRouteForOptimize(proposedCore[r.id] ?? [], {
+            pinnedKeys: pinnedKeysForRoute(r.id),
+          });
         });
       }
 
@@ -3970,6 +4008,15 @@ export default function Transport() {
                   Showing {displayRoutes.find(r => r.id === visibleRoutes[0])?.bus ?? "1 bus"} only — click again to hide.
                 </p>
               )}
+              {visibleRoutes.length === 0 && (
+                <p className="shrink-0 text-[10px] text-amber-700 dark:text-amber-300 mb-2 px-0.5">
+                  Map hidden — click a bus below to show its route and pin pickups (📌 on each stop).
+                </p>
+              )}
+              <p className="shrink-0 text-[10px] text-muted-foreground mb-2 px-0.5 flex items-center gap-1">
+                <Pin className="h-3 w-3 shrink-0 opacity-70" />
+                Pin icon is on the right of each stop — lock pickups, then tap ✨ Optimize.
+              </p>
               <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
               {displayRoutes.map(r => {
                 const isVisible = visibleRoutes.includes(r.id);
@@ -4014,7 +4061,11 @@ export default function Transport() {
                                 }}
                                 disabled={optimizing}
                                 className="text-muted-foreground hover:text-primary p-1 rounded transition-colors disabled:opacity-50"
-                                title="Optimize this route (full reorder)"
+                                title={
+                                  pinnedKeysForRoute(r.id).length > 0
+                                    ? `Optimize — ${pinnedKeysForRoute(r.id).length} pinned stop(s) stay put`
+                                    : "Optimize this route (full reorder)"
+                                }
                               >
                                 <Sparkles className={`h-3 w-3 ${optimizing ? "animate-pulse" : ""}`} />
                               </button>
@@ -4025,7 +4076,7 @@ export default function Transport() {
                                 }}
                                 disabled={optimizing || (coreStops[r.id]?.length ?? 0) < 2}
                                 className="text-muted-foreground hover:text-primary p-1 rounded transition-colors disabled:opacity-50"
-                                title="Keep stop #1 fixed — optimize the rest from there"
+                                title="Pin stop #1 and optimize the rest from that direction"
                               >
                                 <CornerDownRight className={`h-3 w-3 ${optimizing ? "animate-pulse" : ""}`} />
                               </button>
@@ -4041,6 +4092,12 @@ export default function Transport() {
                               </button>
                             </div>
                           </div>
+                          {pinnedKeysForRoute(r.id).length > 0 && (
+                            <p className="text-[10px] text-primary/90 mt-1 flex items-center gap-1">
+                              <Pin className="h-3 w-3 shrink-0 fill-current" />
+                              {pinnedKeysForRoute(r.id).length} pinned — optimize reorders the rest
+                            </p>
+                          )}
                           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                             <span className="text-[10px] text-muted-foreground truncate max-w-full">{r.name}</span>
                             <span className="text-[10px] text-muted-foreground">{core.length} stops</span>
@@ -4073,6 +4130,7 @@ export default function Transport() {
                               isCamp,
                             });
                             const isDragging = reorderDrag?.routeId === r.id && reorderDrag.displayIndex === i;
+                            const stopPinned = !isCamp && isStopPinnedForOptimize(r.id, stop.address);
                             return (
                               <div
                                 key={i}
@@ -4103,7 +4161,7 @@ export default function Transport() {
                                 onDragEnd={() => setReorderDrag(null)}
                                 className={`flex items-start justify-between gap-2 text-[10px] rounded px-1 py-0.5 transition-all ${
                                   !isCamp ? "cursor-grab active:cursor-grabbing hover:bg-muted/40" : ""
-                                } ${isDragging ? "opacity-40" : ""}`}
+                                } ${isDragging ? "opacity-40" : ""} ${stopPinned ? "bg-primary/5 ring-1 ring-primary/20" : ""}`}
                               >
                                 <div className="flex items-start gap-1.5 min-w-0 flex-1">
                                   <span
@@ -4137,9 +4195,33 @@ export default function Transport() {
                                     ) : null}
                                   </div>
                                 </div>
-                                {stop.pickupTime ? (
-                                  <span className="text-muted-foreground shrink-0 whitespace-nowrap">{stop.pickupTime}</span>
-                                ) : null}
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {!isCamp && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleStopPinForOptimize(r.id, stop.address);
+                                      }}
+                                      className={`inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition-colors ${
+                                        stopPinned
+                                          ? "text-primary bg-primary/10"
+                                          : "text-muted-foreground hover:text-primary hover:bg-muted/60"
+                                      }`}
+                                      title={
+                                        stopPinned
+                                          ? "Pinned — click to allow optimize to move this stop"
+                                          : "Pin this pickup — keep it here when optimizing"
+                                      }
+                                    >
+                                      <Pin className={`h-3.5 w-3.5 ${stopPinned ? "fill-current" : ""}`} />
+                                      <span className="text-[9px] font-medium">{stopPinned ? "Pinned" : "Pin"}</span>
+                                    </button>
+                                  )}
+                                  {stop.pickupTime ? (
+                                    <span className="text-muted-foreground whitespace-nowrap">{stop.pickupTime}</span>
+                                  ) : null}
+                                </div>
                               </div>
                             );
                           })}
