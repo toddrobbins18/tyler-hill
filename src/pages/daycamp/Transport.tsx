@@ -2381,6 +2381,40 @@ export default function Transport() {
     }
   };
 
+  /** Empty every route but keep buses — routed campers go back to purple map pins. */
+  const handleClearAllRoutes = useCallback(() => {
+    let nextUnplotted = [...unplottedCampers];
+    let restoredCount = 0;
+
+    for (const stops of Object.values(coreStops)) {
+      for (const stop of stops ?? []) {
+        if (stop.address === CAMP_LOCATION.address) continue;
+        const before = nextUnplotted.length;
+        nextUnplotted = [
+          ...nextUnplotted,
+          ...restoreStopCampersToUnplotted(stop, nextUnplotted, groupRoster),
+        ];
+        restoredCount += nextUnplotted.length - before;
+      }
+    }
+
+    const emptyCore: Record<number, RouteStop[]> = {};
+    routeMeta.forEach((r) => {
+      emptyCore[r.id] = [];
+    });
+
+    setUnplottedCampers(nextUnplotted);
+    setCoreStops(emptyCore);
+    setTodayOverrides(emptyManualOverrides());
+    overrideLoadedKeyRef.current = null;
+    markRoutesConfigured("manual");
+
+    toast({
+      title: "Routes cleared",
+      description: `${restoredCount} camper${restoredCount === 1 ? "" : "s"} back on the map as pins · ${routeMeta.length} empty bus${routeMeta.length === 1 ? "" : "es"} ready to build by hand.`,
+    });
+  }, [unplottedCampers, coreStops, routeMeta, groupRoster, markRoutesConfigured, toast]);
+
   const handleMoveStop = (fromRouteId: number, stopIndex: number, toRouteId: number) => {
     // Map display index to effective core index (effective = core minus today-excluded + today-added)
     const effective = getEffectiveCore(fromRouteId);
@@ -3178,6 +3212,27 @@ export default function Transport() {
             <MapPin className={`h-4 w-4 ${regeocoding ? "animate-pulse" : ""}`} />
             {regeocoding ? "Re-geocoding…" : "Re-geocode All Placements"}
           </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" className="gap-2" title="Remove all stops but keep campers as map pins">
+                <MapPin className="h-4 w-4" /> Clear All Routes
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Clear all routes?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Every camper comes off the buses and goes back to the map as purple pins. Bus routes stay — empty — so you can assign campers by hand, then optimize.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleClearAllRoutes}>
+                  Clear routes
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="outline" className="gap-2 text-destructive hover:text-destructive">
