@@ -90,6 +90,7 @@ import {
 } from "@/lib/transportRoster";
 import {
   applyHistoricalAssignments,
+  assignCampersDuringOptimize,
   enrichUnplottedCampersForHistoricalPlacement,
   getHistoricalRouteSuggestion,
   getReferenceDatasetStatus,
@@ -2672,10 +2673,23 @@ export default function Transport() {
           pins = [normalizeAddress(before[0].address)];
         }
         const beforeConsolidated = consolidateRouteStopsByAddress(before);
+        const assignResult = assignCampersDuringOptimize({
+          coreStops: { ...coreStops, [targetRouteId]: beforeConsolidated },
+          routeMeta,
+          unplottedCampers,
+          priorMap,
+          limitToBusIds: [targetRouteId],
+        });
+        const withCampers = assignResult.coreStops[targetRouteId] ?? beforeConsolidated;
+        const routeReassignments = assignResult.placed.map((p) => ({
+          name: p.name,
+          from: "Unplotted",
+          to: routeMeta.find((r) => r.id === p.busNumber)?.bus || `Bus ${p.busNumber}`,
+        }));
         const optimized = consolidateExactAddressDuplicatesOnly(
           pins.length > 0
-            ? optimizeStopsWithPinned(beforeConsolidated, pins)
-            : optimizeStopsFromFirstStop(beforeConsolidated),
+            ? optimizeStopsWithPinned(withCampers, pins)
+            : optimizeStopsFromFirstStop(withCampers),
         );
         proposedCore[targetRouteId] = optimized;
 
@@ -2690,15 +2704,16 @@ export default function Transport() {
         const beforeSeq = beforeConsolidated.map((s) => s.address).join("|");
         const afterSeq = optimized.map((s) => s.address).join("|");
         const reordered = beforeSeq !== afterSeq && beforeConsolidated.length > 1;
-        if (reordered) reorderedRoutes = 1;
+        const addedCampers = assignResult.placed.map((p) => p.name);
+        if (reordered || addedCampers.length > 0) reorderedRoutes = 1;
 
         setOptimizePreview({
           open: true,
           proposedCore,
-          proposedUnplotted: [],
+          proposedUnplotted: assignResult.unplottedCampers,
           beforeMiles,
           afterMiles,
-          reassignments,
+          reassignments: routeReassignments,
           reorderedRoutes,
           perRoute: [{
             id: targetRouteId,
@@ -2708,20 +2723,35 @@ export default function Transport() {
             afterMi,
             beforeStops: beforeConsolidated.length,
             afterStops: optimized.length,
-            changed: reordered || beforeConsolidated.length !== optimized.length,
-            addedCampers: [],
+            changed: reordered || beforeConsolidated.length !== optimized.length || addedCampers.length > 0,
+            addedCampers,
           }],
-          selectedRouteIds: reordered || beforeConsolidated.length !== optimized.length ? [targetRouteId] : [],
+          selectedRouteIds: reordered || beforeConsolidated.length !== optimized.length || addedCampers.length > 0
+            ? [targetRouteId]
+            : [],
         });
         return;
       }
 
-      // Single-bus optimize: reorder existing stops only (no ORS, no new campers).
+      // Single-bus optimize: assign unplotted campers to open stops, then reorder.
       if (targetRouteId !== undefined) {
         const before = coreStops[targetRouteId] || [];
         const beforeConsolidated = consolidateRouteStopsByAddress(before);
+        const assignResult = assignCampersDuringOptimize({
+          coreStops: { ...coreStops, [targetRouteId]: beforeConsolidated },
+          routeMeta,
+          unplottedCampers,
+          priorMap,
+          limitToBusIds: [targetRouteId],
+        });
+        const withCampers = assignResult.coreStops[targetRouteId] ?? beforeConsolidated;
+        const routeReassignments = assignResult.placed.map((p) => ({
+          name: p.name,
+          from: "Unplotted",
+          to: routeMeta.find((r) => r.id === p.busNumber)?.bus || `Bus ${p.busNumber}`,
+        }));
         const optimized = consolidateExactAddressDuplicatesOnly(
-          nearestNeighborOrder(beforeConsolidated),
+          nearestNeighborOrder(withCampers),
         );
         proposedCore[targetRouteId] = optimized;
 
@@ -2731,15 +2761,16 @@ export default function Transport() {
         const beforeSeq = beforeConsolidated.map((s) => s.address).join("|");
         const afterSeq = optimized.map((s) => s.address).join("|");
         const reordered = beforeSeq !== afterSeq && beforeConsolidated.length > 1;
+        const addedCampers = assignResult.placed.map((p) => p.name);
 
         setOptimizePreview({
           open: true,
           proposedCore,
-          proposedUnplotted: [],
+          proposedUnplotted: assignResult.unplottedCampers,
           beforeMiles: beforeMi,
           afterMiles: afterMi,
-          reassignments: [],
-          reorderedRoutes: reordered ? 1 : 0,
+          reassignments: routeReassignments,
+          reorderedRoutes: reordered || addedCampers.length > 0 ? 1 : 0,
           perRoute: [{
             id: targetRouteId,
             name: meta?.name || `Route ${targetRouteId}`,
@@ -2748,10 +2779,10 @@ export default function Transport() {
             afterMi,
             beforeStops: beforeConsolidated.length,
             afterStops: optimized.length,
-            changed: reordered || beforeMi !== afterMi || beforeConsolidated.length !== optimized.length,
-            addedCampers: [],
+            changed: reordered || beforeMi !== afterMi || beforeConsolidated.length !== optimized.length || addedCampers.length > 0,
+            addedCampers,
           }],
-          selectedRouteIds: reordered || beforeMi !== afterMi || beforeConsolidated.length !== optimized.length
+          selectedRouteIds: reordered || beforeMi !== afterMi || beforeConsolidated.length !== optimized.length || addedCampers.length > 0
             ? [targetRouteId]
             : [],
         });
@@ -2763,38 +2794,21 @@ export default function Transport() {
         proposedCore[r.id] = consolidateRouteStopsByAddress(coreStops[r.id] || []);
       });
 
-      unplottedCampers.forEach((camper) => {
-        let bestRouteId = pickHistoricalBusForCamper(camper, priorMap, routeMeta);
-        let bestDist = bestRouteId !== undefined ? 0 : Infinity;
-
-        if (bestRouteId === undefined) {
-          bestRouteId = targetRoutes[0]?.id;
-          targetRoutes.forEach((r) => {
-            const stops = proposedCore[r.id];
-            const refPoints = stops.length > 0
-              ? stops.map((s) => ({ lat: s.lat, lng: s.lng }))
-              : [{ lat: CAMP_LOCATION.lat, lng: CAMP_LOCATION.lng }];
-            const minD = Math.min(...refPoints.map((p) => haversineMiles(camper.lat, camper.lng, p.lat, p.lng)));
-            if (minD < bestDist) { bestDist = minD; bestRouteId = r.id; }
-          });
-        }
-
-        if (bestRouteId !== undefined) {
-          proposedCore[bestRouteId].push({
-            name: camper.name,
-            address: camper.address,
-            lat: camper.lat,
-            lng: camper.lng,
-            pickupTime: "TBD",
-            passengers: 1,
-            camperNames: [camper.name],
-          });
-          const routeName = routeMeta.find((r) => r.id === bestRouteId)?.name || `Route ${bestRouteId}`;
-          reassignments.push({ name: camper.name, from: "Unplotted", to: routeName });
-        } else {
-          remainingUnplotted.push(camper);
-        }
+      const assignResult = assignCampersDuringOptimize({
+        coreStops: proposedCore,
+        routeMeta,
+        unplottedCampers,
+        priorMap,
       });
+      Object.assign(proposedCore, assignResult.coreStops);
+      remainingUnplotted = assignResult.unplottedCampers;
+      reassignments.push(
+        ...assignResult.placed.map((p) => ({
+          name: p.name,
+          from: "Unplotted",
+          to: routeMeta.find((r) => r.id === p.busNumber)?.bus || `Bus ${p.busNumber}`,
+        })),
+      );
 
       targetRoutes.forEach((r) => {
         proposedCore[r.id] = consolidateExactAddressDuplicatesOnly(
@@ -2840,9 +2854,11 @@ export default function Transport() {
         const reordered = (beforeSeq !== afterSeq && beforeConsolidated.length > 1) || removedOrMoved;
         const stopCountDrop = afterStops.length < beforeConsolidated.length;
         if (reordered) reorderedRoutes++;
-        const addedCampers = afterStops
+        const placedOnRoute = assignResult.placed.filter((p) => p.busNumber === r.id).map((p) => p.name);
+        const addedFromStops = afterStops
           .filter(s => !beforeSet.has(s.address))
           .flatMap(s => s.camperNames || [s.name]);
+        const addedCampers = [...new Set([...placedOnRoute, ...addedFromStops])];
         perRoute.push({
           id: r.id, name: r.name, bus: r.bus,
           beforeMi, afterMi,
@@ -4584,7 +4600,7 @@ export default function Transport() {
               Route Optimization Preview
             </DialogTitle>
             <DialogDescription>
-              Reorders stops on each bus for a shorter drive and can assign unplotted campers. Stops stay on the same bus — check stop counts before applying.
+              Assigns unplotted campers onto open stops (by prior route or matching address), reorders each bus for a shorter drive, and keeps stops on the same bus.
             </DialogDescription>
           </DialogHeader>
 

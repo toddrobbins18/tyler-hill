@@ -636,6 +636,118 @@ export function getHistoricalRouteSuggestion(
   };
 }
 
+function findStopByAddress(stops: TransportRouteStop[], address: string): number {
+  const key = normAddressKey(address);
+  if (!key) return -1;
+  return stops.findIndex((s) => normAddressKey(s.address || "") === key);
+}
+
+/**
+ * Place unplotted campers onto existing open stops when the street address matches
+ * (no prior year required). Used during route optimization.
+ */
+export function assignUnplottedByAddressToOpenStops(options: {
+  coreStops: Record<number, TransportRouteStop[]>;
+  unplottedCampers: TransportUnplottedCamper[];
+  limitToBusIds?: number[];
+}): {
+  coreStops: Record<number, TransportRouteStop[]>;
+  unplottedCampers: TransportUnplottedCamper[];
+  placed: { name: string; busNumber: number; address: string }[];
+} {
+  const coreStops = cloneCoreStops(options.coreStops);
+  const busIds = Object.keys(coreStops)
+    .map(Number)
+    .filter((id) => !options.limitToBusIds?.length || options.limitToBusIds.includes(id));
+
+  const placed: { name: string; busNumber: number; address: string }[] = [];
+  const remaining: TransportUnplottedCamper[] = [];
+
+  for (const camper of options.unplottedCampers) {
+    const address = camper.address?.trim() || "";
+    if (!address) {
+      remaining.push(camper);
+      continue;
+    }
+
+    let assigned = false;
+    for (const busNumber of busIds) {
+      const stops = coreStops[busNumber] ?? [];
+      const stopIdx = findStopByAddress(stops, address);
+      if (stopIdx < 0) continue;
+
+      stops[stopIdx] = addCamperToStop(stops[stopIdx], camper.name);
+      coreStops[busNumber] = stops;
+      placed.push({ name: camper.name, busNumber, address });
+      assigned = true;
+      break;
+    }
+
+    if (!assigned) remaining.push(camper);
+  }
+
+  for (const busKey of Object.keys(coreStops)) {
+    const busNumber = Number(busKey);
+    coreStops[busNumber] = consolidateRouteStopsByAddress(coreStops[busNumber] ?? []);
+  }
+
+  return { coreStops, unplottedCampers: remaining, placed };
+}
+
+/** Run prior + address assignment for optimize (optionally one bus only). */
+export function assignCampersDuringOptimize(options: {
+  coreStops: Record<number, TransportRouteStop[]>;
+  routeMeta: TransportRouteMeta[];
+  unplottedCampers: TransportUnplottedCamper[];
+  priorMap: Map<string, CamperRoutingPrior>;
+  limitToBusIds?: number[];
+}): {
+  coreStops: Record<number, TransportRouteStop[]>;
+  unplottedCampers: TransportUnplottedCamper[];
+  placed: { name: string; busNumber: number; address: string }[];
+} {
+  const limitSet = options.limitToBusIds?.length
+    ? new Set(options.limitToBusIds)
+    : null;
+
+  const routeMeta = limitSet
+    ? options.routeMeta.filter((r) => limitSet.has(r.id))
+    : options.routeMeta;
+
+  const campersToTry = limitSet
+    ? options.unplottedCampers.filter((camper) => {
+        const priorBus = pickHistoricalBusForCamper(camper, options.priorMap, options.routeMeta);
+        if (priorBus !== undefined) return limitSet.has(priorBus);
+        return [...limitSet].some(
+          (busId) => findStopByAddress(options.coreStops[busId] ?? [], camper.address || "") >= 0,
+        );
+      })
+    : options.unplottedCampers;
+
+  const campersDeferred = limitSet
+    ? options.unplottedCampers.filter((c) => !campersToTry.includes(c))
+    : [];
+
+  const priorResult = applyHistoricalAssignments({
+    coreStops: options.coreStops,
+    routeMeta,
+    unplottedCampers: campersToTry,
+    priorMap: options.priorMap,
+  });
+
+  const addressResult = assignUnplottedByAddressToOpenStops({
+    coreStops: priorResult.coreStops,
+    unplottedCampers: priorResult.unplottedCampers,
+    limitToBusIds: options.limitToBusIds,
+  });
+
+  return {
+    coreStops: addressResult.coreStops,
+    unplottedCampers: [...addressResult.unplottedCampers, ...campersDeferred],
+    placed: [...priorResult.placed, ...addressResult.placed],
+  };
+}
+
 /** Prior-aware bus pick for unplotted campers (optimization fallback). */
 export function pickHistoricalBusForCamper(
   camper: TransportUnplottedCamper,

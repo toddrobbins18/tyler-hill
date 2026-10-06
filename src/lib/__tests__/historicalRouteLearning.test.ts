@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyHistoricalAssignments,
+  assignUnplottedByAddressToOpenStops,
   buildPriorsFromBundledMappoint,
   buildRouteReferenceFromTransportBoard,
   getHistoricalRouteSuggestion,
@@ -241,5 +242,39 @@ describe("historicalRouteLearning", () => {
     const reordered = reorderStopsByHistoricalPriors(coreStops, priorMap);
     const first = reordered[a.busNumber][0].camperNames?.[0];
     expect(first).toBe(a.camperName);
+  });
+
+  it("assignUnplottedByAddressToOpenStops fills open template stop with camper name", () => {
+    const result = assignUnplottedByAddressToOpenStops({
+      coreStops: {
+        1: [
+          {
+            name: "56 Ashwood Rd",
+            address: "56 Ashwood Rd, Port Washington, NY",
+            lat: 40.84,
+            lng: -73.71,
+            pickupTime: "",
+            passengers: 0,
+            camperNames: [],
+          },
+        ],
+      },
+      unplottedCampers: [
+        {
+          id: 1,
+          name: "Test Camper",
+          address: "56 Ashwood Road, Port Washington, NY",
+          lat: 40.84,
+          lng: -73.71,
+          age: 10,
+          session: "1st",
+        },
+      ],
+      limitToBusIds: [1],
+    });
+
+    expect(result.placed).toHaveLength(1);
+    expect(result.coreStops[1][0].camperNames).toContain("Test Camper");
+    expect(result.unplottedCampers).toHaveLength(0);
   });
 });
