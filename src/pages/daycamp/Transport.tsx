@@ -105,7 +105,8 @@ import {
   normalizeTransportBoardSettings,
   type TransportBoardSettings,
 } from "@/lib/transportBoardSettings";
-import { optimizeStopsFromFirstStop } from "@/lib/transportRouteOptimize";
+import { consolidateRouteStopsByAddress } from "@/lib/transportRouteStops";
+import { optimizeStopsFromFirstStop, optimizeStopsWithPinned } from "@/lib/transportRouteOptimize";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -2381,8 +2382,8 @@ export default function Transport() {
     }
   };
 
-  /** Empty every route but keep buses — routed campers go back to purple map pins. */
-  const handleClearAllRoutes = useCallback(() => {
+  /** Unmap all campers — empty every route, campers go back to purple map pins. */
+  const handleUnmapAllCampers = useCallback(() => {
     let nextUnplotted = [...unplottedCampers];
     let restoredCount = 0;
 
@@ -2410,8 +2411,8 @@ export default function Transport() {
     markRoutesConfigured("manual");
 
     toast({
-      title: "Routes cleared",
-      description: `${restoredCount} camper${restoredCount === 1 ? "" : "s"} back on the map as pins · ${routeMeta.length} empty bus${routeMeta.length === 1 ? "" : "es"} ready to build by hand.`,
+      title: "Campers unmapped",
+      description: `${restoredCount} camper${restoredCount === 1 ? "" : "s"} back on the map as pins · ${routeMeta.length} empty bus${routeMeta.length === 1 ? "" : "es"} ready — assign by hand, then optimize.`,
     });
   }, [unplottedCampers, coreStops, routeMeta, groupRoster, markRoutesConfigured, toast]);
 
@@ -2598,7 +2599,9 @@ export default function Transport() {
       type JobRef = { kind: "stop"; stop: RouteStop } | { kind: "camper"; camper: UnplottedCamper };
       const jobRefs: JobRef[] = [];
       targetRoutes.forEach(r => {
-        (coreStops[r.id] || []).forEach(stop => jobRefs.push({ kind: "stop", stop }));
+        consolidateRouteStopsByAddress(coreStops[r.id] || []).forEach((stop) =>
+          jobRefs.push({ kind: "stop", stop }),
+        );
       });
       // Only include unplotted campers when optimizing ALL routes — single-route mode
       // just re-orders that route's existing stops without grabbing new campers.
@@ -2631,9 +2634,25 @@ export default function Transport() {
       let usedORS = false;
       const reassignments: { name: string; from: string; to: string }[] = [];
 
-      if (options?.fromFirstStop && targetRouteId !== undefined) {
+      const pinsForTarget =
+        targetRouteId !== undefined
+          ? boardSettings.pinnedStopsByRoute?.[targetRouteId] ?? []
+          : [];
+
+      if (
+        targetRouteId !== undefined
+        && (options?.fromFirstStop || pinsForTarget.length > 0)
+      ) {
         const before = coreStops[targetRouteId] || [];
-        const optimized = optimizeStopsFromFirstStop(before);
+        let pins = [...pinsForTarget];
+        if (options?.fromFirstStop && pins.length === 0 && before[0]?.address) {
+          pins = [normalizeAddress(before[0].address)];
+        }
+        const optimized = consolidateRouteStopsByAddress(
+          pins.length > 0
+            ? optimizeStopsWithPinned(before, pins)
+            : optimizeStopsFromFirstStop(before),
+        );
         proposedCore[targetRouteId] = optimized;
 
         const meta = routeMeta.find((r) => r.id === targetRouteId);
@@ -2701,7 +2720,7 @@ export default function Transport() {
             // For AM run: nearest stop to camp should be LAST (camp = final destination).
             // ORS round-trip ordering already minimizes total drive, but for cabin pickup
             // logic we keep the order ORS returned (start→...→end at camp).
-            proposedCore[vehicleId] = ordered;
+            proposedCore[vehicleId] = consolidateRouteStopsByAddress(ordered);
           }
           // Routes with no assignments
           targetRoutes.forEach(r => { if (!proposedCore[r.id]) proposedCore[r.id] = []; });
@@ -3214,21 +3233,21 @@ export default function Transport() {
           </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="outline" className="gap-2" title="Remove all stops but keep campers as map pins">
-                <MapPin className="h-4 w-4" /> Clear All Routes
+              <Button variant="outline" className="gap-2" title="Take every camper off buses — back to map pins">
+                <MapPin className="h-4 w-4" /> Unmap All Campers
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Clear all routes?</AlertDialogTitle>
+                <AlertDialogTitle>Unmap all campers?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Every camper comes off the buses and goes back to the map as purple pins. Bus routes stay — empty — so you can assign campers by hand, then optimize.
+                  Every camper comes off the buses and goes back to the map as purple pins. Bus routes stay — empty — so you can place them by hand, then optimize.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleClearAllRoutes}>
-                  Clear routes
+                <AlertDialogAction onClick={handleUnmapAllCampers}>
+                  Unmap all
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
