@@ -2,6 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolvePersonAge } from "@/lib/birthdayCalendar";
 import { isValidRouteCoordinate } from "@/lib/transportStopTimes";
 import {
+  filterUnplottedExcludingParentTransport,
+  type ParentTransportCamper,
+} from "@/lib/transportParentTransport";
+import {
   getBundledMappointAddressesCsv2026,
   getBundledMappointRoutesCsv2026,
   parseMappointAddressesCsv,
@@ -64,6 +68,8 @@ export type TransportBoardPayload = {
   coreStops: Record<number, TransportRouteStop[]>;
   routeMeta: TransportRouteMeta[];
   unplottedCampers: TransportUnplottedCamper[];
+  /** Parent drop-off / pick-up — assigned to a bus for reporting, no map address. */
+  parentTransportCampers?: ParentTransportCamper[];
   /** True after explicit MapPoint apply or manual routing for this season. */
   routesConfigured?: boolean;
   routesSeason?: string;
@@ -113,14 +119,18 @@ export async function normalizeTransportBoardForSeason(
   const enrolled = await loadEnrolledCampersForTransport(supabase, companyId, season);
   // MapPoint 2026 priors fill gaps when CampMinder sync has no household address yet.
   const hints = await loadHistoricalAddressHints(supabase, companyId, "2026");
-  const unplottedCampers = buildUnplottedFromEnrollment({
-    enrolled,
-    coreStops: board.coreStops,
-    existingUnplotted: board.unplottedCampers,
-    addressHints: hints,
-  });
+  const parentTransportCampers = board.parentTransportCampers ?? [];
+  const unplottedCampers = filterUnplottedExcludingParentTransport(
+    buildUnplottedFromEnrollment({
+      enrolled,
+      coreStops: board.coreStops,
+      existingUnplotted: board.unplottedCampers,
+      addressHints: hints,
+    }),
+    parentTransportCampers,
+  );
 
-  return { ...board, unplottedCampers };
+  return { ...board, parentTransportCampers, unplottedCampers };
 }
 
 /** Strip unconfigured routes before persisting (2027+ safety). */

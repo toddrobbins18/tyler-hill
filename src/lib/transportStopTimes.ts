@@ -27,13 +27,34 @@ export const haversineMiles = (lat1: number, lng1: number, lat2: number, lng2: n
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
+/** Minutes the bus waits at each passenger pickup (not camp). */
+export const DEFAULT_STOP_DWELL_MINUTES = 2;
+
 /** Estimated driving minutes between two points (fractional — round only at display). */
-const drivingLegMinutes = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+export const estimateDrivingLegMinutes = (
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+): number => {
   if (!isValidRouteCoordinate(lat1, lng1) || !isValidRouteCoordinate(lat2, lng2)) return 0;
   const miles = haversineMiles(lat1, lng1, lat2, lng2) * 1.4;
   if (miles <= 0.001) return 0;
   return (miles / 25) * 60;
 };
+
+/** Haversine-based leg durations for an ordered stop list. */
+export function computeHaversineLegMinutes(stops: TransportRouteStop[]): number[] {
+  const legs: number[] = [];
+  for (let i = 1; i < stops.length; i++) {
+    const prev = stops[i - 1];
+    const next = stops[i];
+    legs.push(estimateDrivingLegMinutes(prev.lat, prev.lng, next.lat, next.lng));
+  }
+  return legs;
+};
+
+const isCampStopAddress = (address: string, campAddress: string) => address === campAddress;
 
 /** Parse route departure (e.g. "7:00 AM") to minutes since midnight. */
 export function parseDepartureToMinutes(departure: string | null | undefined): number | null {
@@ -73,27 +94,43 @@ export function formatMinutesAsPickupTime(totalMinutes: number): string {
   return `${hour12}:${String(min).padStart(2, "0")} ${ampm}`;
 }
 
-const assignDrivingTimes = (
+export function assignStopTimesFromLegMinutes(
   stops: TransportRouteStop[],
-  departureTime?: string | null,
-): TransportRouteStop[] => {
+  departureTime: string | null | undefined,
+  legMinutes: number[],
+  options?: {
+    dwellMinutesPerStop?: number;
+    campAddress?: string;
+  },
+): TransportRouteStop[] {
   if (stops.length === 0) return stops;
+
+  const dwell = options?.dwellMinutesPerStop ?? DEFAULT_STOP_DWELL_MINUTES;
+  const campAddress = options?.campAddress ?? CAMP_LOCATION.address;
   const startMinutes = parseDepartureToMinutes(departureTime);
   const useClock = startMinutes != null;
   let cumulativeMin = 0;
 
   return stops.map((stop, i) => {
+    if (i > 0) {
+      cumulativeMin += legMinutes[i - 1] ?? 0;
+      const prev = stops[i - 1];
+      if (!isCampStopAddress(prev.address, campAddress)) {
+        cumulativeMin += dwell;
+      }
+    }
+
+    const displayMinutes = useClock
+      ? Math.ceil(startMinutes! + cumulativeMin)
+      : Math.ceil(cumulativeMin);
+
     if (i === 0) {
       return {
         ...stop,
-        pickupTime: useClock ? formatMinutesAsPickupTime(startMinutes) : "Start",
+        pickupTime: useClock ? formatMinutesAsPickupTime(startMinutes!) : "Start",
       };
     }
-    const prev = stops[i - 1];
-    cumulativeMin += drivingLegMinutes(prev.lat, prev.lng, stop.lat, stop.lng);
-    const displayMinutes = useClock
-      ? Math.round(startMinutes + cumulativeMin)
-      : Math.round(cumulativeMin);
+
     return {
       ...stop,
       pickupTime: useClock
@@ -101,21 +138,33 @@ const assignDrivingTimes = (
         : `+${displayMinutes} min`,
     };
   });
-};
+}
 
 /** AM routes: stops → camp (camp is last stop). */
 export const buildAMStops = (
   stops: TransportRouteStop[],
   departureTime?: string | null,
-): TransportRouteStop[] =>
-  assignDrivingTimes([...stops, { ...CAMP_LOCATION, pickupTime: "", passengers: 0 }], departureTime);
+  legMinutes?: number[] | null,
+): TransportRouteStop[] => {
+  const withCamp = [...stops, { ...CAMP_LOCATION, pickupTime: "", passengers: 0 }];
+  const legs = legMinutes?.length === withCamp.length - 1
+    ? legMinutes
+    : computeHaversineLegMinutes(withCamp);
+  return assignStopTimesFromLegMinutes(withCamp, departureTime, legs);
+};
 
 /** PM routes: camp first, then same stop order as AM. */
 export const buildPMStops = (
   stops: TransportRouteStop[],
   departureTime?: string | null,
-): TransportRouteStop[] =>
-  assignDrivingTimes([{ ...CAMP_LOCATION, pickupTime: "", passengers: 0 }, ...stops], departureTime);
+  legMinutes?: number[] | null,
+): TransportRouteStop[] => {
+  const withCamp = [{ ...CAMP_LOCATION, pickupTime: "", passengers: 0 }, ...stops];
+  const legs = legMinutes?.length === withCamp.length - 1
+    ? legMinutes
+    : computeHaversineLegMinutes(withCamp);
+  return assignStopTimesFromLegMinutes(withCamp, departureTime, legs);
+};
 
 export const displayStopToCoreIndex = (displayIdx: number, isAM: boolean): number =>
   isAM ? displayIdx : displayIdx - 1;

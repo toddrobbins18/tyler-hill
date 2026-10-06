@@ -10,6 +10,7 @@ import {
   type TransportRouteStop,
 } from "@/lib/transportDailyOverrides";
 import { compareBusLabels } from "@/lib/transportBusAttendance";
+import { countParentTransportOnRoute, type ParentTransportCamper } from "@/lib/transportParentTransport";
 import { normalizeTransportBoardForSeason } from "@/lib/transportRoster";
 
 export type TransportRouteMeta = {
@@ -35,6 +36,7 @@ export const ROUTE_COLORS = [
 export type TransportRunBoard = {
   routeMeta: TransportRouteMeta[];
   coreStops: Record<number, TransportRouteStop[]>;
+  parentTransportCampers: ParentTransportCamper[];
   todayOverrides: TransportManualOverrides;
   transportExceptions: TransportException[];
 };
@@ -58,12 +60,14 @@ export async function loadTransportRunBoard(
 
   let routeMeta: TransportRouteMeta[] = [];
   let coreStops: Record<number, TransportRouteStop[]> = {};
+  let parentTransportCampers: ParentTransportCamper[] = [];
 
   if (boardRow?.data && typeof boardRow.data === "object") {
     const saved = boardRow.data as {
       routeMeta?: TransportRouteMeta[];
       coreStops?: Record<number, TransportRouteStop[]>;
       unplottedCampers?: unknown[];
+      parentTransportCampers?: ParentTransportCamper[];
       routesConfigured?: boolean;
       routesSeason?: string;
       routesSource?: "mappoint2026" | "manual";
@@ -82,17 +86,22 @@ export async function loadTransportRunBoard(
         )
         : {},
       unplottedCampers: Array.isArray(saved.unplottedCampers) ? saved.unplottedCampers as never : [],
+      parentTransportCampers: Array.isArray(saved.parentTransportCampers)
+        ? saved.parentTransportCampers
+        : [],
       routesConfigured: saved.routesConfigured,
       routesSeason: saved.routesSeason,
       routesSource: saved.routesSource,
     });
     routeMeta = normalized.routeMeta;
     coreStops = normalized.coreStops;
+    parentTransportCampers = normalized.parentTransportCampers ?? [];
   }
 
   return {
     routeMeta,
     coreStops,
+    parentTransportCampers,
     todayOverrides: manual ?? emptyManualOverrides(),
     transportExceptions: exceptions,
   };
@@ -115,14 +124,21 @@ export function getEffectiveCoreStops(
 export function buildRunRoutes(
   board: TransportRunBoard,
   runPeriod: "am" | "pm",
+  options?: { runDate?: string },
 ): TransportRunRoute[] {
+  const runDate = options?.runDate ?? new Date().toISOString().slice(0, 10);
   return board.routeMeta
     .map((meta) => {
       const core = getEffectiveCoreStops(board, meta.id, runPeriod);
-      const campers = core.reduce((sum, s) => sum + s.passengers, 0);
+      const busCampers = core.reduce((sum, s) => sum + s.passengers, 0);
+      const ptCampers = countParentTransportOnRoute(
+        meta.id,
+        board.parentTransportCampers,
+        { runDate, runPeriod },
+      );
       return {
         ...meta,
-        campers,
+        campers: busCampers + ptCampers,
         direction: runPeriod === "am" ? "Inbound" : "Outbound",
       };
     })

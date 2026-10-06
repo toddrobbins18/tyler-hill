@@ -104,9 +104,14 @@ export default function BusAttendance() {
         core,
         activeWeek,
         enrollmentCtx.enrollmentLookup,
+        {
+          runDate,
+          runPeriod: timeOfDay,
+          parentTransportCampers: board.parentTransportCampers,
+        },
       );
     },
-    [board, enrollmentCtx, timeOfDay, activeWeek],
+    [board, enrollmentCtx, timeOfDay, activeWeek, runDate],
   );
 
   useEffect(() => {

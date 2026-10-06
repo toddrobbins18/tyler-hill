@@ -26,7 +26,12 @@ interface DirectionsReq {
   profile?: string; // e.g. "driving-car", "driving-hgv"
   includeGeometry?: boolean;
 }
-type ReqBody = GeocodeReq | GeocodeBatchReq | OptimizeReq | DirectionsReq;
+interface LegDurationsReq {
+  action: "legDurations";
+  coordinates: [number, number][];
+  profile?: string;
+}
+type ReqBody = GeocodeReq | GeocodeBatchReq | OptimizeReq | DirectionsReq | LegDurationsReq;
 
 const FOCUS_LAT = 40.8000;
 const FOCUS_LNG = -73.6500;
@@ -659,13 +664,20 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (body.action === "directions") {
+    if (body.action === "directions" || body.action === "legDurations") {
+      const includeGeometry = body.action === "directions" && body.includeGeometry === true;
       if (!ORS_KEY) {
+        if (body.action === "legDurations") {
+          return jsonResponse({
+            legDurationsSec: [],
+            warning: "OPENROUTESERVICE_API_KEY is not configured — using estimated stop times.",
+          });
+        }
         return jsonResponse({
           totalDistanceMi: 0,
           totalDurationSec: 0,
           steps: [],
-          geometry: body.includeGeometry === true ? [] : undefined,
+          geometry: includeGeometry ? [] : undefined,
           warning: "OPENROUTESERVICE_API_KEY is not configured — turn-by-turn directions unavailable.",
         });
       }
@@ -675,7 +687,7 @@ Deno.serve(async (req) => {
         });
       }
       const profile = body.profile || "driving-car";
-      const format = body.includeGeometry === true ? "geojson" : "json";
+      const format = includeGeometry ? "geojson" : "json";
 
       const callOrs = async (coords: [number, number][]) => {
         const r = await fetch(`https://api.openrouteservice.org/v2/directions/${profile}/${format}`, {
@@ -683,8 +695,8 @@ Deno.serve(async (req) => {
           headers: { "Authorization": ORS_KEY, "Content-Type": "application/json" },
           body: JSON.stringify({
             coordinates: coords,
-            instructions: true,
-            geometry: body.includeGeometry === true,
+            instructions: body.action === "directions",
+            geometry: includeGeometry,
             units: "mi",
             language: "en",
           }),
@@ -727,11 +739,17 @@ Deno.serve(async (req) => {
         // Graceful fallback: return empty geometry so the map omits the route line
         // instead of drawing misleading straight segments across water.
         console.error(`ORS directions failed [${result.status}] after ${retries} retries:`, JSON.stringify(result.data));
+        if (body.action === "legDurations") {
+          return jsonResponse({
+            legDurationsSec: [],
+            warning: `ORS unavailable (${result.status}) — using estimated stop times.`,
+          });
+        }
         return new Response(JSON.stringify({
           totalDistanceMi: 0,
           totalDurationSec: 0,
           steps: [],
-          geometry: body.includeGeometry === true ? [] : undefined,
+          geometry: includeGeometry ? [] : undefined,
           warning: `ORS unavailable (${result.status}) — route line hidden until road geometry is available.`,
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -740,6 +758,12 @@ Deno.serve(async (req) => {
       const route = data.routes?.[0] || data.features?.[0]?.properties;
       const geometry = data.features?.[0]?.geometry?.coordinates?.map(([lng, lat]: [number, number]) => [lat, lng]) ?? [];
       const segments = route?.segments || [];
+      const legDurationsSec = segments.map((seg: { duration?: number }) => seg.duration ?? 0);
+
+      if (body.action === "legDurations") {
+        return jsonResponse({ legDurationsSec });
+      }
+
       const steps = segments.flatMap((seg: any, segIdx: number) =>
         (seg.steps || []).map((s: any) => ({
           instruction: s.instruction,
@@ -754,7 +778,7 @@ Deno.serve(async (req) => {
         totalDistanceMi: route?.summary?.distance ?? 0,
         totalDurationSec: route?.summary?.duration ?? 0,
         steps,
-        geometry: body.includeGeometry === true ? geometry : undefined,
+        geometry: includeGeometry ? geometry : undefined,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 

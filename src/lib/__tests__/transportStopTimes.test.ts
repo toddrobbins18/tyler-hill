@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildAMStops, isValidRouteCoordinate, parseDepartureToMinutes } from "@/lib/transportStopTimes";
+import {
+  assignStopTimesFromLegMinutes,
+  buildAMStops,
+  DEFAULT_STOP_DWELL_MINUTES,
+  isValidRouteCoordinate,
+  parseDepartureToMinutes,
+} from "@/lib/transportStopTimes";
 
 describe("transportStopTimes", () => {
   it("parseDepartureToMinutes handles AM/PM", () => {
@@ -21,7 +27,7 @@ describe("transportStopTimes", () => {
     expect(campStop.pickupTime).not.toMatch(/180\d{2}/);
   });
 
-  it("buildAMStops does not force uniform +2 minute jumps on short legs", () => {
+  it("buildAMStops adds dwell time so nearby stops do not share the same clock time", () => {
     const stops = buildAMStops(
       [
         { name: "A", address: "a", lat: 40.88, lng: -73.64, pickupTime: "", passengers: 1 },
@@ -34,8 +40,21 @@ describe("transportStopTimes", () => {
 
     const pickupTimes = stops.slice(0, 4).map((s) => s.pickupTime);
     expect(pickupTimes[0]).toBe("7:00 AM");
+    expect(pickupTimes[1]).toBe(`7:0${DEFAULT_STOP_DWELL_MINUTES} AM`);
     const uniqueTimes = new Set(pickupTimes);
-    expect(uniqueTimes.size).toBeGreaterThan(1);
-    expect(pickupTimes.every((t) => t === "7:00 AM" || /^7:\d{2} AM$/.test(t))).toBe(true);
+    expect(uniqueTimes.size).toBe(4);
+  });
+
+  it("assignStopTimesFromLegMinutes uses provided leg durations", () => {
+    const timed = assignStopTimesFromLegMinutes(
+      [
+        { name: "A", address: "a", lat: 0, lng: 0, pickupTime: "", passengers: 1 },
+        { name: "B", address: "b", lat: 0, lng: 0, pickupTime: "", passengers: 1 },
+      ],
+      "8:00 AM",
+      [15],
+    );
+    expect(timed[0].pickupTime).toBe("8:00 AM");
+    expect(timed[1].pickupTime).toBe("8:17 AM");
   });
 });

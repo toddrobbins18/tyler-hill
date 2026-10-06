@@ -72,8 +72,8 @@ export function useFilteredBusRoutes(runDate: string, timeOfDay: "am" | "pm") {
   }, [companyId, currentSeason, runDate]);
 
   const allRoutes = useMemo(
-    () => (board ? buildRunRoutes(board, timeOfDay) : []),
-    [board, timeOfDay],
+    () => (board ? buildRunRoutes(board, timeOfDay, { runDate }) : []),
+    [board, timeOfDay, runDate],
   );
 
   const routes = useMemo(

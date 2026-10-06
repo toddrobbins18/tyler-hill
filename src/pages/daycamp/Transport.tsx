@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { TransportRouteMap } from "@/components/TransportRouteMap";
-import { Bus, MapPin, Users, Plus, FileText, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Eye, EyeOff, History, LayoutTemplate, Database } from "lucide-react";
+import { Bus, MapPin, Users, Plus, FileText, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Eye, EyeOff, History, LayoutTemplate, Database, Car } from "lucide-react";
 import { pickFirst } from "@/lib/csv";
 import { isSpreadsheetFileName, loadSpreadsheetRowsFromFile } from "@/lib/spreadsheetImport";
 import {
@@ -33,11 +33,23 @@ import {
 } from "@/lib/transportDailyOverrides";
 import {
   buildDigitalBusAttendanceCsvRows,
-  campersOnRoute,
   isRouteBusSubmitted,
   loadBusAttendance,
+  type DigitalBusAttendanceRider,
 } from "@/lib/transportBusAttendance";
-import { campersOnRouteForWeek } from "@/lib/transportBusRunContext";
+import {
+  countParentTransportOnRoute,
+  formatParentTransportSchedule,
+  isParentTransportScheduledForRun,
+  parentTransportRidersForRoute,
+  PARENT_TRANSPORT_WEEKDAYS,
+  PARENT_TRANSPORT_STOP_LABEL,
+  ridersOnRoute,
+  stableParentTransportId,
+  type ParentTransportCamper,
+  type ParentTransportWeekday,
+} from "@/lib/transportParentTransport";
+import SearchableChildSelect from "@/components/SearchableChildSelect";
 import {
   loadGroupRoster,
   type GroupRosterCamper,
@@ -59,6 +71,7 @@ import { DAY_CAMP_ENROLLMENT_WEEKS } from "@/lib/enrolledWeeks";
 import {
   applyEnrollmentWeekToRoutes,
   buildCamperEnrollmentLookup,
+  camperEnrolledInWeekByLookup,
   filterUnplottedForWeek,
 } from "@/lib/transportWeekView";
 import {
@@ -100,8 +113,13 @@ import {
   isValidRouteCoordinate,
   routeStopListLines,
 } from "@/lib/transportStopTimes";
+import {
+  fetchRouteLegDurationsSec,
+  legDurationsSecToMinutes,
+  routeStopCoordinateSignature,
+} from "@/lib/transportRouteLegDurations";
 
-const TRANSPORT_TABS = ["map", "unplotted", "daycamp"] as const;
+const TRANSPORT_TABS = ["map", "unplotted", "pt", "daycamp"] as const;
 type TransportTab = (typeof TRANSPORT_TABS)[number];
 
 function isTransportTab(value: string | null): value is TransportTab {
@@ -373,6 +391,7 @@ type BoardPayload = {
   coreStops: Record<number, RouteStop[]>;
   routeMeta: typeof initialRouteMeta;
   unplottedCampers: UnplottedCamper[];
+  parentTransportCampers?: ParentTransportCamper[];
   routesConfigured?: boolean;
   routesSeason?: string;
   routesSource?: TransportRoutesSource;
@@ -411,7 +430,7 @@ const dayCampReports = [
   { name: "Bus Report", desc: "Day camp bus assignments" },
   { name: "Bus Route Summary", desc: "Route overview with stops" },
   { name: "Car Seat Count by Bus", desc: "Nursery & Pre-K riders per bus (car seats required)" },
-  { name: "Car Report", desc: "Car pickup/dropoff log" },
+  { name: "Car Report", desc: "Parent transport (PT) campers by bus and schedule" },
   { name: "Daily Passenger Update", desc: "Real-time passenger counts" },
   { name: "Extended Care", desc: "Before/after care transport" },
 ];
@@ -453,6 +472,23 @@ export default function Transport() {
   const [unplottedCampers, setUnplottedCampers] = useState<UnplottedCamper[]>(
     () => (currentSeason === "2026" ? initialUnplottedCampers : []),
   );
+  const [parentTransportCampers, setParentTransportCampers] = useState<ParentTransportCamper[]>([]);
+  const [addParentTransportOpen, setAddParentTransportOpen] = useState(false);
+  const [newParentTransport, setNewParentTransport] = useState<{
+    childId: string;
+    routeId: string;
+    am: boolean;
+    pm: boolean;
+    weekdays: ParentTransportWeekday[];
+    notes: string;
+  }>({
+    childId: "",
+    routeId: "",
+    am: true,
+    pm: true,
+    weekdays: [],
+    notes: "",
+  });
   const [routesConfigured, setRoutesConfigured] = useState(false);
   const [routesSource, setRoutesSource] = useState<TransportRoutesSource | undefined>();
   const [addRouteOpen, setAddRouteOpen] = useState(false);
@@ -464,6 +500,7 @@ export default function Transport() {
   const [newRoute, setNewRoute] = useState({ name: "", bus: "", departure: "", capacity: 50 });
   const [visibleRoutes, setVisibleRoutes] = useState<number[]>(initialRouteMeta.map(r => r.id));
   const [timeOfDay, setTimeOfDay] = useState<"am" | "pm">("am");
+  const [routeLegMinutesCache, setRouteLegMinutesCache] = useState<Record<string, number[]>>({});
   const [optimizing, setOptimizing] = useState(false);
   const [editRoute, setEditRoute] = useState<{
     id: number;
@@ -569,11 +606,19 @@ export default function Transport() {
     coreStops: {} as Record<number, RouteStop[]>,
     routeMeta: [] as typeof initialRouteMeta,
     unplottedCampers: [] as UnplottedCamper[],
+    parentTransportCampers: [] as ParentTransportCamper[],
     routesConfigured: false,
     routesSource: undefined as TransportRoutesSource | undefined,
   });
 
-  boardStateRef.current = { coreStops, routeMeta, unplottedCampers, routesConfigured, routesSource };
+  boardStateRef.current = {
+    coreStops,
+    routeMeta,
+    unplottedCampers,
+    parentTransportCampers,
+    routesConfigured,
+    routesSource,
+  };
 
   const buildBoardPayload = useCallback((
     overrides: Partial<BoardPayload> = {},
@@ -581,11 +626,12 @@ export default function Transport() {
     coreStops,
     routeMeta,
     unplottedCampers,
+    parentTransportCampers,
     routesConfigured,
     routesSeason: routesConfigured ? currentSeason : undefined,
     routesSource,
     ...overrides,
-  }), [coreStops, routeMeta, unplottedCampers, routesConfigured, routesSource, currentSeason]);
+  }), [coreStops, routeMeta, unplottedCampers, parentTransportCampers, routesConfigured, routesSource, currentSeason]);
 
   const markRoutesConfigured = useCallback((source: TransportRoutesSource = "manual") => {
     setRoutesConfigured(true);
@@ -662,6 +708,7 @@ export default function Transport() {
     setRouteMeta(normalizedMeta);
     setVisibleRoutes(normalizedMeta.map((r) => r.id));
     setUnplottedCampers(scrubbed.unplottedCampers);
+    setParentTransportCampers(scrubbed.parentTransportCampers ?? []);
     setRoutesConfigured(scrubbed.routesConfigured === true);
     setRoutesSource(scrubbed.routesSource);
     lastKnownStopCountRef.current = countBoardStops(scrubbed.coreStops);
@@ -765,14 +812,17 @@ export default function Transport() {
             coreStops: restoredStops,
             routeMeta: meta,
             unplottedCampers: Array.isArray(saved.unplottedCampers) ? saved.unplottedCampers : [],
+            parentTransportCampers: Array.isArray(saved.parentTransportCampers)
+              ? saved.parentTransportCampers
+              : [],
             routesConfigured: saved.routesConfigured,
             routesSeason: saved.routesSeason,
             routesSource: saved.routesSource,
           }, "supabase");
         } else if (!(await restoreBoardFromCache()) && lastKnownStopCountRef.current === 0) {
           const emptyPayload: BoardPayload = currentSeason === "2026"
-            ? { coreStops: initialCoreStops, routeMeta: initialRouteMeta, unplottedCampers: initialUnplottedCampers }
-            : { coreStops: {}, routeMeta: [], unplottedCampers: [] };
+            ? { coreStops: initialCoreStops, routeMeta: initialRouteMeta, unplottedCampers: initialUnplottedCampers, parentTransportCampers: [] }
+            : { coreStops: {}, routeMeta: [], unplottedCampers: [], parentTransportCampers: [] };
           await finalizeBoardForSeason(emptyPayload);
         }
       } catch (err) {
@@ -877,7 +927,7 @@ export default function Transport() {
     const stopCount = countBoardStops(coreStops);
     const payload = buildBoardPayload();
 
-    if (stopCount === 0 && unplottedCampers.length === 0 && !routesConfigured) {
+    if (stopCount === 0 && unplottedCampers.length === 0 && parentTransportCampers.length === 0 && !routesConfigured) {
       if (lastKnownStopCountRef.current > 0) {
         void persistBoard(payload).then((ok) => {
           if (ok) lastKnownStopCountRef.current = 0;
@@ -901,7 +951,7 @@ export default function Transport() {
       });
     }, 600);
     return () => clearTimeout(handle);
-  }, [coreStops, routeMeta, unplottedCampers, routesConfigured, routesSource, persistLoaded, companyId, currentSeason, persistBoard, buildBoardPayload]);
+  }, [coreStops, routeMeta, unplottedCampers, parentTransportCampers, routesConfigured, routesSource, persistLoaded, companyId, currentSeason, persistBoard, buildBoardPayload]);
 
   // Flush unsaved board state when leaving the page (debounced save may not have fired yet).
   useEffect(() => {
@@ -911,14 +961,16 @@ export default function Transport() {
         coreStops: stops,
         routeMeta: meta,
         unplottedCampers: unplotted,
+        parentTransportCampers: parentTransport,
         routesConfigured: configured,
         routesSource: source,
       } = boardStateRef.current;
-      if (countBoardStops(stops) === 0 && unplotted.length === 0 && !configured) return;
+      if (countBoardStops(stops) === 0 && unplotted.length === 0 && parentTransport.length === 0 && !configured) return;
       void persistBoard({
         coreStops: stops,
         routeMeta: meta,
         unplottedCampers: unplotted,
+        parentTransportCampers: parentTransport,
         routesConfigured: configured,
         routesSeason: configured ? currentSeason : undefined,
         routesSource: source,
@@ -1351,12 +1403,109 @@ export default function Transport() {
     toast({ title: "Stop reordered", description: `Moved "${moved.camperNames?.join(", ") || moved.name}" in this route.` });
   };
 
+  const routeLegMinutesById = useMemo(() => {
+    const map = new Map<number, number[]>();
+    for (const meta of routeMeta) {
+      const core = getEffectiveCore(meta.id);
+      const orderedStops =
+        timeOfDay === "am"
+          ? [...core, { ...CAMP_LOCATION, pickupTime: "", passengers: 0 }]
+          : [{ ...CAMP_LOCATION, pickupTime: "", passengers: 0 }, ...core];
+      const validStops = orderedStops.filter((s) => isValidRouteCoordinate(s.lat, s.lng));
+      if (validStops.length < 2) continue;
+      const sig = `${meta.id}-${timeOfDay}-${routeStopCoordinateSignature(validStops)}`;
+      const cached = routeLegMinutesCache[sig];
+      if (cached?.length === validStops.length - 1) {
+        map.set(meta.id, cached);
+      }
+    }
+    return map;
+  }, [routeMeta, getEffectiveCore, timeOfDay, routeLegMinutesCache]);
+
+  const routesNeedingLegDurations = useMemo(() => {
+    const pending: { sig: string; coords: [number, number][] }[] = [];
+    for (const meta of routeMeta) {
+      const core = getEffectiveCore(meta.id);
+      const orderedStops =
+        timeOfDay === "am"
+          ? [...core, { ...CAMP_LOCATION, pickupTime: "", passengers: 0 }]
+          : [{ ...CAMP_LOCATION, pickupTime: "", passengers: 0 }, ...core];
+      const validStops = orderedStops.filter((s) => isValidRouteCoordinate(s.lat, s.lng));
+      if (validStops.length < 2) continue;
+
+      const sig = `${meta.id}-${timeOfDay}-${routeStopCoordinateSignature(validStops)}`;
+      if (routeLegMinutesCache[sig]) continue;
+
+      pending.push({
+        sig,
+        coords: validStops.map((s) => [s.lng, s.lat] as [number, number]),
+      });
+    }
+    return pending;
+  }, [
+    routeMeta,
+    getEffectiveCore,
+    timeOfDay,
+    coreStops,
+    todayOverrides,
+    excludedCampers,
+    routeLegMinutesCache,
+  ]);
+
+  useEffect(() => {
+    if (routesNeedingLegDurations.length === 0) return;
+
+    let cancelled = false;
+    const pending = routesNeedingLegDurations;
+
+    const handle = setTimeout(async () => {
+      for (let i = 0; i < pending.length; i += 2) {
+        if (cancelled) return;
+        const batch = pending.slice(i, i + 2);
+        const results = await Promise.all(
+          batch.map((item) =>
+            fetchRouteLegDurationsSec(
+              (body) => supabase.functions.invoke("route-optimizer", { body }),
+              item.coords,
+            ),
+          ),
+        );
+        if (cancelled) return;
+
+        setRouteLegMinutesCache((prev) => {
+          const next = { ...prev };
+          let changed = false;
+          batch.forEach((item, idx) => {
+            const sec = results[idx];
+            if (sec && sec.length === item.coords.length - 1) {
+              next[item.sig] = legDurationsSecToMinutes(sec);
+              changed = true;
+            }
+          });
+          return changed ? next : prev;
+        });
+
+        if (i + 2 < pending.length) {
+          await new Promise((r) => setTimeout(r, 600));
+        }
+      }
+    }, 900);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [routesNeedingLegDurations]);
+
   // Build display routes from effective core stops + meta
   const buildRoutes = useCallback((tod: "am" | "pm"): Route[] => {
     return routeMeta.map(meta => {
       const core = getEffectiveCore(meta.id);
+      const legMinutes = routeLegMinutesById.get(meta.id);
       const stops =
-        tod === "am" ? buildAMStops(core, meta.departure) : buildPMStops(core, meta.departure);
+        tod === "am"
+          ? buildAMStops(core, meta.departure, legMinutes)
+          : buildPMStops(core, meta.departure, legMinutes);
       const campers = core.reduce((sum, s) => sum + s.passengers, 0);
       return {
         ...meta,
@@ -1365,9 +1514,7 @@ export default function Transport() {
         direction: tod === "am" ? "Inbound" : "Outbound",
       };
     });
-  }, [getEffectiveCore, routeMeta]);
-
-  const routes = useMemo(() => buildRoutes(timeOfDay), [buildRoutes, timeOfDay]);
+  }, [getEffectiveCore, routeMeta, routeLegMinutesById]);
 
   const camperEnrollmentLookup = useMemo(
     () => buildCamperEnrollmentLookup(groupRoster),
@@ -1377,16 +1524,103 @@ export default function Transport() {
   const activeRouteEnrollmentWeek =
     routeEnrollmentWeek === "all" ? null : routeEnrollmentWeek;
 
-  const displayRoutes = useMemo(
-    () => applyEnrollmentWeekToRoutes(routes, activeRouteEnrollmentWeek, camperEnrollmentLookup),
-    [routes, activeRouteEnrollmentWeek, camperEnrollmentLookup],
+  const routes = useMemo(() => {
+    const base = buildRoutes(timeOfDay);
+    return base.map((route) => ({
+      ...route,
+      campers:
+        route.campers
+        + countParentTransportOnRoute(route.id, parentTransportCampers, {
+          runDate: overrideDate,
+          runPeriod: timeOfDay,
+          enrollmentWeek: activeRouteEnrollmentWeek,
+          enrollmentLookup: camperEnrollmentLookup,
+        }),
+    }));
+  }, [
+    buildRoutes,
+    timeOfDay,
+    parentTransportCampers,
+    overrideDate,
+    activeRouteEnrollmentWeek,
+    camperEnrollmentLookup,
+  ]);
+
+  const ridersForRoute = useCallback(
+    (routeId: number) =>
+      ridersOnRoute(routeId, getEffectiveCore(routeId), parentTransportCampers, {
+        runDate: overrideDate,
+        runPeriod: timeOfDay,
+        enrollmentWeek: activeRouteEnrollmentWeek,
+        enrollmentLookup: camperEnrollmentLookup,
+      }),
+    [
+      getEffectiveCore,
+      parentTransportCampers,
+      overrideDate,
+      timeOfDay,
+      activeRouteEnrollmentWeek,
+      camperEnrollmentLookup,
+    ],
   );
+
+  const displayRoutes = useMemo(() => {
+    const filtered = applyEnrollmentWeekToRoutes(
+      routes,
+      activeRouteEnrollmentWeek,
+      camperEnrollmentLookup,
+    );
+    return filtered.map((route) => {
+      const pt = countParentTransportOnRoute(route.id, parentTransportCampers, {
+        runDate: overrideDate,
+        runPeriod: timeOfDay,
+        enrollmentWeek: activeRouteEnrollmentWeek,
+        enrollmentLookup: camperEnrollmentLookup,
+      });
+      const busStopCampers = route.stops
+        .filter((s) => s.address !== CAMP_LOCATION.address)
+        .reduce((sum, s) => sum + (s.passengers || 0), 0);
+      return { ...route, campers: busStopCampers + pt };
+    });
+  }, [
+    routes,
+    activeRouteEnrollmentWeek,
+    camperEnrollmentLookup,
+    parentTransportCampers,
+    overrideDate,
+    timeOfDay,
+  ]);
 
   const displayedRoutes = displayRoutes.filter((r) => visibleRoutes.includes(r.id));
 
   const unplottedForWeek = useMemo(
     () => filterUnplottedForWeek(unplottedCampers, activeRouteEnrollmentWeek, camperEnrollmentLookup),
     [unplottedCampers, activeRouteEnrollmentWeek, camperEnrollmentLookup],
+  );
+
+  const parentTransportForWeek = useMemo(() => {
+    if (activeRouteEnrollmentWeek == null) return parentTransportCampers;
+    return parentTransportCampers.filter((c) =>
+      camperEnrolledInWeekByLookup(camperEnrollmentLookup, c.name, activeRouteEnrollmentWeek),
+    );
+  }, [parentTransportCampers, activeRouteEnrollmentWeek, camperEnrollmentLookup]);
+
+  const parentTransportByRoute = useMemo(() => {
+    const map = new Map<number, ParentTransportCamper[]>();
+    for (const camper of parentTransportForWeek) {
+      const list = map.get(camper.routeId) ?? [];
+      list.push(camper);
+      map.set(camper.routeId, list);
+    }
+    for (const [, list] of map) {
+      list.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return map;
+  }, [parentTransportForWeek]);
+
+  const rosterChildOptions = useMemo(
+    () => groupRoster.map((c) => ({ id: c.id, name: c.name, guardian_email: null })),
+    [groupRoster],
   );
 
   const unplottedNeedingGeocode = useMemo(
@@ -1498,11 +1732,11 @@ export default function Transport() {
     () =>
       displayRoutes
         .map((r) => {
-          const riders = campersOnRoute(r.id, getEffectiveCore(r.id));
+          const riders = ridersForRoute(r.id);
           return `${r.id}:${riders.length}:${riders.map((c) => c.key).join(",")}`;
         })
         .join("|"),
-    [displayRoutes, getEffectiveCore],
+    [displayRoutes, ridersForRoute],
   );
 
   useEffect(() => {
@@ -1522,12 +1756,12 @@ export default function Transport() {
         );
         if (cancelled) return;
         const busesWithRiders = displayRoutes.filter(
-          (r) => campersOnRoute(r.id, getEffectiveCore(r.id)).length > 0,
+          (r) => ridersForRoute(r.id).length > 0,
         );
         let markedCampers = 0;
         let scheduledCampers = 0;
         for (const r of busesWithRiders) {
-          for (const c of campersOnRoute(r.id, getEffectiveCore(r.id))) {
+          for (const c of ridersForRoute(r.id)) {
             scheduledCampers++;
             if (loaded.records[c.key]) markedCampers++;
           }
@@ -1546,7 +1780,7 @@ export default function Transport() {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [companyId, currentSeason, overrideDate, timeOfDay, busAttendanceRouteSignature, displayRoutes, getEffectiveCore]);
+  }, [companyId, currentSeason, overrideDate, timeOfDay, busAttendanceRouteSignature, displayRoutes, ridersForRoute]);
 
   const openReportPreview = (preview: Omit<TransportReportPreview, "open">) => {
     setReportPreview({ ...preview, open: true });
@@ -1778,6 +2012,75 @@ export default function Transport() {
 
   const handleRemoveUnplotted = (id: number) => {
     setUnplottedCampers(prev => prev.filter(c => c.id !== id));
+  };
+
+  const resetNewParentTransportForm = () => {
+    setNewParentTransport({
+      childId: "",
+      routeId: routeMeta[0] ? String(routeMeta[0].id) : "",
+      am: true,
+      pm: true,
+      weekdays: [],
+      notes: "",
+    });
+  };
+
+  const handleAddParentTransport = () => {
+    const child = rosterChildOptions.find((c) => c.id === newParentTransport.childId);
+    if (!child) {
+      toast({ title: "Pick a camper", variant: "destructive" });
+      return;
+    }
+    const routeId = parseInt(newParentTransport.routeId, 10);
+    if (!routeId || !routeMeta.some((r) => r.id === routeId)) {
+      toast({ title: "Pick a bus", description: "Parent transport campers still roll up to a bus for reports.", variant: "destructive" });
+      return;
+    }
+    if (!newParentTransport.am && !newParentTransport.pm) {
+      toast({ title: "Pick AM and/or PM", variant: "destructive" });
+      return;
+    }
+    if (parentTransportCampers.some((c) => c.name.trim().toLowerCase() === child.name.trim().toLowerCase())) {
+      toast({ title: "Already on Parent Transport", description: `${child.name} is already listed.` });
+      return;
+    }
+
+    const id = stableParentTransportId(child.id, Math.max(500, ...parentTransportCampers.map((c) => c.id), 0) + 1);
+    setParentTransportCampers((prev) => [
+      ...prev,
+      {
+        id,
+        childId: child.id,
+        name: child.name,
+        routeId,
+        am: newParentTransport.am,
+        pm: newParentTransport.pm,
+        weekdays: newParentTransport.weekdays,
+        notes: newParentTransport.notes.trim() || null,
+      },
+    ]);
+    setUnplottedCampers((prev) => prev.filter((c) => c.name.trim().toLowerCase() !== child.name.trim().toLowerCase()));
+    setAddParentTransportOpen(false);
+    resetNewParentTransportForm();
+    markRoutesConfigured("manual");
+    toast({
+      title: "Parent transport added",
+      description: `${child.name} assigned to ${routeMeta.find((r) => r.id === routeId)?.bus ?? `Bus ${routeId}`} for reporting.`,
+    });
+  };
+
+  const handleRemoveParentTransport = (id: number) => {
+    setParentTransportCampers((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const toggleParentTransportWeekday = (day: ParentTransportWeekday) => {
+    setNewParentTransport((prev) => {
+      const has = prev.weekdays.includes(day);
+      return {
+        ...prev,
+        weekdays: has ? prev.weekdays.filter((d) => d !== day) : [...prev.weekdays, day],
+      };
+    });
   };
 
   const handleCSVImport = async (file: File) => {
@@ -2480,11 +2783,16 @@ export default function Transport() {
         .map((r) => ({
           bus: r.bus,
           routeName: r.name,
-          campers: campersOnRouteForWeek(
+          campers: ridersOnRoute(
             r.id,
             getEffectiveCore(r.id),
-            enrollmentWeekForReport,
-            camperEnrollmentLookup,
+            parentTransportCampers,
+            {
+              runDate: overrideDate,
+              runPeriod: timeOfDay,
+              enrollmentWeek: enrollmentWeekForReport,
+              enrollmentLookup: camperEnrollmentLookup,
+            },
           ).map((c) => ({
             name: c.name,
             detail: c.stopName,
@@ -2572,14 +2880,30 @@ export default function Transport() {
         overrideDate,
         timeOfDay,
       );
+      const ptRiders: DigitalBusAttendanceRider[] = displayRoutes.flatMap((route) =>
+        parentTransportRidersForRoute(route.id, parentTransportCampers, {
+          runDate: overrideDate,
+          runPeriod: timeOfDay,
+          enrollmentWeek: activeRouteEnrollmentWeek,
+          enrollmentLookup: camperEnrollmentLookup,
+        }).map((rider) => ({
+          routeId: route.id,
+          bus: route.bus,
+          routeName: route.name,
+          camperName: rider.name,
+          stopName: rider.stopName,
+          transportMode: "parent" as const,
+        })),
+      );
       const rows = buildDigitalBusAttendanceCsvRows(
         displayRoutes,
         CAMP_LOCATION.address,
         loaded.records,
         loaded.busSubmissions,
         { date: overrideDate, runPeriod: timeOfDay },
+        ptRiders,
       );
-      const marked = rows.slice(1).filter((r) => r[8] === "Present" || r[8] === "Absent").length;
+      const marked = rows.slice(1).filter((r) => r[9] === "Present" || r[9] === "Absent").length;
       openReportPreview({
         title: "Digital Attendance Log",
         description: `${overrideDate} · ${timeOfDay.toUpperCase()} · ${marked} marked in system · ${loaded.submittedAt ? "all buses submitted" : "in progress"}`,
@@ -2600,9 +2924,26 @@ export default function Transport() {
 
     switch (reportName) {
       case "Bus Report": {
-        rows.push(["Bus", "Route", "Direction", "Departure", "Total Stops", "Total Campers", "Status"]);
+        rows.push(["Bus", "Route", "Direction", "Departure", "Total Stops", "Bus Campers", "Parent Transport", "Total Campers", "Status"]);
         routes.forEach(r => {
-          rows.push([r.bus, r.name, r.direction, r.departure, (coreStops[r.id] || []).length, r.campers, r.status]);
+          const ptCount = countParentTransportOnRoute(r.id, parentTransportCampers, {
+            runDate: overrideDate,
+            runPeriod: timeOfDay,
+            enrollmentWeek: activeRouteEnrollmentWeek,
+            enrollmentLookup: camperEnrollmentLookup,
+          });
+          const busCount = Math.max(0, r.campers - ptCount);
+          rows.push([
+            r.bus,
+            r.name,
+            r.direction,
+            r.departure,
+            (coreStops[r.id] || []).length,
+            busCount,
+            ptCount,
+            r.campers,
+            r.status,
+          ]);
         });
         break;
       }
@@ -2616,11 +2957,19 @@ export default function Transport() {
         break;
       }
       case "Car Report": {
-        rows.push(["Camper Name", "Address", "Age", "Session", "Notes"]);
-        unplottedCampers.forEach(c => {
-          rows.push([c.name, c.address, c.age, c.session, "Private car / unassigned"]);
+        rows.push(["Camper Name", "Bus", "Schedule", "AM", "PM", "Notes"]);
+        parentTransportCampers.forEach((c) => {
+          const meta = routeMeta.find((r) => r.id === c.routeId);
+          rows.push([
+            c.name,
+            meta?.bus ?? `Bus ${c.routeId}`,
+            formatParentTransportSchedule(c),
+            c.am ? "Yes" : "No",
+            c.pm ? "Yes" : "No",
+            c.notes ?? "",
+          ]);
         });
-        if (rows.length === 1) rows.push(["(No private car / unassigned campers today)", "", "", "", ""]);
+        if (rows.length === 1) rows.push(["(No parent transport campers)", "", "", "", "", ""]);
         break;
       }
       case "Daily Passenger Update": {
@@ -2662,6 +3011,7 @@ export default function Transport() {
     () => displayRoutes.reduce((sum, r) => sum + r.campers, 0),
     [displayRoutes],
   );
+  const parentTransportCountForWeek = parentTransportForWeek.length;
   const totalCamperCount = assignedCamperCount + unplottedForWeek.length;
 
   return (
@@ -2680,7 +3030,7 @@ export default function Transport() {
                 <span className="text-sm font-semibold">
                   {totalCamperCount}
                   <span className="ml-1 text-[10px] font-normal text-muted-foreground">
-                    ({assignedCamperCount} routed · {unplottedForWeek.length} unplotted
+                    ({assignedCamperCount} on routes{parentTransportCountForWeek > 0 ? ` incl. ${parentTransportCountForWeek} PT` : ""} · {unplottedForWeek.length} unplotted
                     {activeRouteEnrollmentWeek != null ? ` · Week ${activeRouteEnrollmentWeek}` : ""})
                   </span>
                 </span>
@@ -2786,6 +3136,7 @@ export default function Transport() {
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="map" className="text-xs gap-1"><MapIcon className="h-3.5 w-3.5" /> Route Map</TabsTrigger>
           <TabsTrigger value="unplotted" className="text-xs gap-1"><UserRound className="h-3.5 w-3.5" /> Unplotted Campers{unplottedForWeek.length > 0 && <Badge variant="secondary" className="ml-1 text-[9px] px-1.5">{unplottedForWeek.length}</Badge>}</TabsTrigger>
+          <TabsTrigger value="pt" className="text-xs gap-1"><Car className="h-3.5 w-3.5" /> Parent Transport{parentTransportForWeek.length > 0 && <Badge variant="secondary" className="ml-1 text-[9px] px-1.5">{parentTransportForWeek.length}</Badge>}</TabsTrigger>
           <TabsTrigger value="daycamp" className="text-xs gap-1"><FileText className="h-3.5 w-3.5" /> Reports</TabsTrigger>
         </TabsList>
 
@@ -2999,6 +3350,10 @@ export default function Transport() {
                 const isVisible = visibleRoutes.includes(r.id);
                 const isSolo = visibleRoutes.length === 1 && visibleRoutes[0] === r.id;
                 const core = coreStops[r.id] || [];
+                const ptOnRoute = parentTransportByRoute.get(r.id) ?? [];
+                const ptActiveToday = ptOnRoute.filter((c) =>
+                  isParentTransportScheduledForRun(c, overrideDate, timeOfDay),
+                );
                 return (
                   <Card
                     key={r.id}
@@ -3055,6 +3410,14 @@ export default function Transport() {
                             <span className="text-[10px] text-muted-foreground">{core.length} stops</span>
                             <span className={`text-[10px] ${r.campers > r.capacity ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
                               {r.campers}/{r.capacity} campers{r.campers > r.capacity ? " ⚠" : ""}
+                              {ptOnRoute.length > 0 ? (
+                                <span className="text-sky-700 dark:text-sky-400">
+                                  {" "}· {ptOnRoute.length} PT
+                                  {ptActiveToday.length !== ptOnRoute.length
+                                    ? ` (${ptActiveToday.length} today)`
+                                    : ""}
+                                </span>
+                              ) : null}
                             </span>
                             <Badge variant="secondary" className={`text-[9px] px-1.5 py-0 h-4 ${statusColors[r.status]}`}>
                               {r.status}
@@ -3062,7 +3425,7 @@ export default function Transport() {
                           </div>
                         </div>
                       </div>
-                      {isVisible && r.stops.length > 0 && (
+                      {isVisible && (r.stops.length > 0 || ptOnRoute.length > 0) && (
                         <div
                           className="mt-2 pl-6 border-l-2 space-y-1.5 max-h-[220px] overflow-y-auto overscroll-y-contain pr-1"
                           style={{ borderColor: r.color + "40" }}
@@ -3151,6 +3514,39 @@ export default function Transport() {
                               </div>
                             );
                           })}
+                          {ptOnRoute.length > 0 ? (
+                            <div className="pt-2 mt-1 border-t border-dashed border-sky-500/30 space-y-1">
+                              <p className="text-[9px] font-bold uppercase tracking-wide text-sky-700 dark:text-sky-400 px-1">
+                                {PARENT_TRANSPORT_STOP_LABEL}
+                              </p>
+                              {ptOnRoute.map((camper) => {
+                                const activeToday = isParentTransportScheduledForRun(
+                                  camper,
+                                  overrideDate,
+                                  timeOfDay,
+                                );
+                                return (
+                                  <div
+                                    key={camper.id}
+                                    className={`flex items-start gap-1.5 rounded px-1 py-0.5 text-[10px] ${
+                                      activeToday ? "bg-sky-500/5" : "opacity-60"
+                                    }`}
+                                  >
+                                    <span className="flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-sky-600 text-[8px] font-bold text-white mt-0.5">
+                                      PT
+                                    </span>
+                                    <div className="min-w-0 flex-1 leading-snug">
+                                      <p className="font-medium text-foreground truncate">{camper.name}</p>
+                                      <p className="text-muted-foreground truncate">
+                                        {formatParentTransportSchedule(camper)}
+                                        {!activeToday ? " · not on this run date" : ""}
+                                      </p>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : null}
                         </div>
                       )}
                     </CardContent>
@@ -3359,6 +3755,168 @@ export default function Transport() {
               <DialogFooter>
                 <Button variant="outline" onClick={() => setAddCamperOpen(false)}>Cancel</Button>
                 <Button onClick={handleAddUnplottedCamper}>Add Camper</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
+
+        <TabsContent value="pt" className="mt-4 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold">Parent Transport (PT)</h2>
+              <p className="text-sm text-muted-foreground max-w-2xl">
+                Parents drop off or pick up — no map address needed. Campers still count on their assigned bus for attendance and all bus reports.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => {
+                resetNewParentTransportForm();
+                setAddParentTransportOpen(true);
+              }}
+              disabled={routeMeta.length === 0}
+            >
+              <UserPlus className="h-3.5 w-3.5" /> Add to PT
+            </Button>
+          </div>
+
+          {routeMeta.length === 0 ? (
+            <Card>
+              <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                Apply a route template or add routes first — PT campers still need a bus assignment for reporting.
+              </CardContent>
+            </Card>
+          ) : parentTransportForWeek.length === 0 ? (
+            <Card>
+              <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                {parentTransportCampers.length === 0
+                  ? "No parent transport campers yet."
+                  : "No parent transport campers for this enrollment week."}
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {parentTransportForWeek.map((c) => {
+                const meta = routeMeta.find((r) => r.id === c.routeId);
+                return (
+                  <Card key={c.id} className="border-dashed border-sky-500/40">
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="rounded-full bg-sky-500/10 p-2">
+                          <Car className="h-4 w-4 text-sky-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-medium">{c.name}</p>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveParentTransport(c.id)}
+                              className="text-muted-foreground hover:text-destructive"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            🚌 {meta?.name ?? `Bus ${c.routeId}`}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {formatParentTransportSchedule(c)}
+                          </p>
+                          {c.notes ? (
+                            <p className="text-xs text-muted-foreground mt-2">{c.notes}</p>
+                          ) : null}
+                          <Badge variant="outline" className="mt-2 text-[10px]">
+                            Counts on bus reports · no map pin
+                          </Badge>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          <Dialog open={addParentTransportOpen} onOpenChange={setAddParentTransportOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Add parent transport camper</DialogTitle>
+                <DialogDescription>
+                  Assign a bus for reporting. Pick which runs the parent handles and which weekdays apply.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 py-2">
+                <div className="space-y-2">
+                  <Label>Camper</Label>
+                  <SearchableChildSelect
+                    children={rosterChildOptions}
+                    value={newParentTransport.childId}
+                    onValueChange={(childId) => setNewParentTransport((prev) => ({ ...prev, childId }))}
+                    placeholder="Search roster…"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Assigned bus (for reports)</Label>
+                  <Select
+                    value={newParentTransport.routeId}
+                    onValueChange={(routeId) => setNewParentTransport((prev) => ({ ...prev, routeId }))}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select bus…" /></SelectTrigger>
+                    <SelectContent>
+                      {routeMeta.map((r) => (
+                        <SelectItem key={r.id} value={String(r.id)}>{r.bus} · {r.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={newParentTransport.am}
+                      onCheckedChange={(checked) => setNewParentTransport((prev) => ({ ...prev, am: checked === true }))}
+                    />
+                    AM parent drop-off
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={newParentTransport.pm}
+                      onCheckedChange={(checked) => setNewParentTransport((prev) => ({ ...prev, pm: checked === true }))}
+                    />
+                    PM parent pick-up
+                  </label>
+                </div>
+                <div className="space-y-2">
+                  <Label>Weekdays</Label>
+                  <p className="text-xs text-muted-foreground">Leave all unchecked for every camp day.</p>
+                  <div className="flex flex-wrap gap-2">
+                    {PARENT_TRANSPORT_WEEKDAYS.map((day) => (
+                      <Button
+                        key={day}
+                        type="button"
+                        size="sm"
+                        variant={newParentTransport.weekdays.includes(day) ? "default" : "outline"}
+                        className="h-7 px-2 text-xs capitalize"
+                        onClick={() => toggleParentTransportWeekday(day)}
+                      >
+                        {day}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pt-notes">Notes</Label>
+                  <Input
+                    id="pt-notes"
+                    value={newParentTransport.notes}
+                    onChange={(e) => setNewParentTransport((prev) => ({ ...prev, notes: e.target.value }))}
+                    placeholder="e.g. Grandparent pickup Wed only"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setAddParentTransportOpen(false)}>Cancel</Button>
+                <Button onClick={handleAddParentTransport}>Add to PT</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>

@@ -5,7 +5,8 @@ import {
   camperEnrolledInWeekByLookup,
   type CamperEnrollmentInfo,
 } from "@/lib/transportWeekView";
-import { campersOnRoute } from "@/lib/transportBusAttendance";
+import { ridersOnRoute } from "@/lib/transportParentTransport";
+import type { ParentTransportCamper } from "@/lib/transportParentTransport";
 import { loadGroupRoster } from "@/lib/transportGroupAttendance";
 import {
   configuredEnrollmentWeekRows,
@@ -84,12 +85,20 @@ export function campersOnRouteForWeek(
   coreStops: TransportRouteStop[],
   enrollmentWeek: number | null,
   enrollmentLookup: Map<string, CamperEnrollmentInfo>,
+  options?: {
+    runDate?: string;
+    runPeriod?: "am" | "pm";
+    parentTransportCampers?: ParentTransportCamper[];
+  },
 ) {
-  const all = campersOnRoute(routeId, coreStops);
-  if (enrollmentWeek == null) return all;
-  return all.filter((c) =>
-    camperEnrolledInWeekByLookup(enrollmentLookup, c.name, enrollmentWeek),
-  );
+  const runDate = options?.runDate ?? new Date().toISOString().slice(0, 10);
+  const runPeriod = options?.runPeriod ?? "am";
+  return ridersOnRoute(routeId, coreStops, options?.parentTransportCampers ?? [], {
+    runDate,
+    runPeriod,
+    enrollmentWeek,
+    enrollmentLookup,
+  });
 }
 
 /** Mon–Fri with AM and PM bubble columns for weekly bus sheets. */
