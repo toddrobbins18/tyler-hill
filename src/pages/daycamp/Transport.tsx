@@ -68,7 +68,9 @@ import {
 } from "@/lib/transportCarSeatReport";
 import { TransportReportPreviewDialog, type TransportReportPreview } from "@/components/TransportReportPreviewDialog";
 import {
+  applyGeocodeResultsToTransportBoard,
   build2026MappointRouteTemplate,
+  collectTransportAddressesNeedingGeocode,
   normalizeTransportBoardForSeason,
   prepareBoardForPersist,
   type TransportRoutesSource,
@@ -491,7 +493,6 @@ export default function Transport() {
   const [groupRoster, setGroupRoster] = useState<GroupRosterCamper[]>([]);
   const [enrollmentWeekCalendar, setEnrollmentWeekCalendar] = useState<EnrollmentWeekCalendar>([]);
   const [routeEnrollmentWeek, setRouteEnrollmentWeek] = useState<number | "all">("all");
-  const routeWeekInitRef = useRef(false);
   const groupLoadedKeyRef = useRef<string | null>(null);
 
   // Scope-choice dialog (Today only vs Permanent vs Cancel)
@@ -868,16 +869,8 @@ export default function Transport() {
   }, [companyId, currentSeason]);
 
   useEffect(() => {
-    routeWeekInitRef.current = false;
     setRouteEnrollmentWeek("all");
   }, [companyId, currentSeason]);
-
-  useEffect(() => {
-    if (routeWeekInitRef.current || enrollmentWeekCalendar.length === 0) return;
-    const w = enrollmentWeekForDate(enrollmentWeekCalendar, overrideDate);
-    if (w != null) setRouteEnrollmentWeek(w);
-    routeWeekInitRef.current = true;
-  }, [enrollmentWeekCalendar, overrideDate]);
 
   useEffect(() => {
     if (!persistLoaded || !companyId || skipPersistRef.current || importInProgressRef.current) return;
@@ -1395,6 +1388,82 @@ export default function Transport() {
     () => filterUnplottedForWeek(unplottedCampers, activeRouteEnrollmentWeek, camperEnrollmentLookup),
     [unplottedCampers, activeRouteEnrollmentWeek, camperEnrollmentLookup],
   );
+
+  const unplottedNeedingGeocode = useMemo(
+    () =>
+      unplottedForWeek.filter(
+        (c) => c.address?.trim() && !isValidRouteCoordinate(c.lat, c.lng),
+      ).length,
+    [unplottedForWeek],
+  );
+
+  const hiddenByWeekFilter = useMemo(
+    () => Math.max(0, unplottedCampers.length - unplottedForWeek.length),
+    [unplottedCampers.length, unplottedForWeek.length],
+  );
+
+  const geocodeAttemptRef = useRef<string>("");
+  const [geocodingBoard, setGeocodingBoard] = useState(false);
+
+  const geocodeBoardAddresses = useCallback(async (addresses: string[]) => {
+    if (addresses.length === 0) return 0;
+    setGeocodingBoard(true);
+    try {
+      const results = await geocodeBatch(addresses, 8);
+      const resultsByAddress = new Map<string, { lat: number; lng: number }>();
+      addresses.forEach((address, index) => {
+        const result = results[index];
+        if (isGeocodePoint(result)) {
+          resultsByAddress.set(address.trim().toLowerCase(), {
+            lat: result.lat,
+            lng: result.lng,
+          });
+        }
+      });
+
+      if (resultsByAddress.size === 0) return 0;
+
+      const board = boardStateRef.current;
+      const applied = applyGeocodeResultsToTransportBoard(
+        board.unplottedCampers,
+        board.coreStops,
+        resultsByAddress,
+        CAMP_LOCATION.address,
+      );
+      if (applied.updatedCount > 0) {
+        setUnplottedCampers(applied.unplotted);
+        setCoreStops(applied.coreStops);
+      }
+      return applied.updatedCount;
+    } finally {
+      setGeocodingBoard(false);
+    }
+  }, [geocodeBatch]);
+
+  useEffect(() => {
+    if (!persistLoaded || boardLoading || importInProgressRef.current) return;
+
+    const pending = collectTransportAddressesNeedingGeocode(
+      unplottedCampers,
+      coreStops,
+      CAMP_LOCATION.address,
+    );
+    if (pending.length === 0) return;
+
+    const signature = pending.sort().join("|");
+    if (geocodeAttemptRef.current === signature) return;
+    geocodeAttemptRef.current = signature;
+
+    void (async () => {
+      const updated = await geocodeBoardAddresses(pending);
+      if (updated > 0) {
+        toast({
+          title: "Map pins updated",
+          description: `${updated} stop${updated === 1 ? "" : "s"} geocoded and plotted on the map.`,
+        });
+      }
+    })();
+  }, [persistLoaded, boardLoading, unplottedCampers, coreStops, geocodeBoardAddresses, toast]);
 
   const enrollmentWeekForReport = useMemo(
     () => enrollmentWeekForDate(enrollmentWeekCalendar, overrideDate),
@@ -2801,6 +2870,12 @@ export default function Transport() {
             {activeRouteEnrollmentWeek != null && (
               <Badge variant="secondary" className="text-[10px]">
                 Week {activeRouteEnrollmentWeek} riders only
+                {hiddenByWeekFilter > 0 ? ` · ${hiddenByWeekFilter} hidden` : ""}
+              </Badge>
+            )}
+            {geocodingBoard && (
+              <Badge variant="outline" className="text-[10px]">
+                Geocoding addresses…
               </Badge>
             )}
             <Button
@@ -2814,6 +2889,50 @@ export default function Transport() {
               {optimizing ? "Optimizing…" : "Optimize Routes"}
             </Button>
           </div>
+
+          {(hiddenByWeekFilter > 0 || unplottedNeedingGeocode > 0) && (
+            <div className="mb-4 rounded-lg border border-violet-500/30 bg-violet-500/5 px-3 py-2 space-y-1">
+              {hiddenByWeekFilter > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {hiddenByWeekFilter} unplotted camper{hiddenByWeekFilter === 1 ? "" : "s"} hidden by enrollment week filter.{" "}
+                  <button
+                    type="button"
+                    className="underline hover:text-foreground font-medium"
+                    onClick={() => setRouteEnrollmentWeek("all")}
+                  >
+                    Show all weeks
+                  </button>
+                </p>
+              )}
+              {unplottedNeedingGeocode > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {unplottedNeedingGeocode} camper{unplottedNeedingGeocode === 1 ? "" : "s"} have an address but aren&apos;t on the map yet
+                  {geocodingBoard ? " — geocoding…" : "."}
+                  {!geocodingBoard && (
+                    <>
+                      {" "}
+                      <button
+                        type="button"
+                        className="underline hover:text-foreground font-medium"
+                        onClick={() => {
+                          geocodeAttemptRef.current = "";
+                          void geocodeBoardAddresses(
+                            collectTransportAddressesNeedingGeocode(
+                              unplottedCampers,
+                              coreStops,
+                              CAMP_LOCATION.address,
+                            ),
+                          );
+                        }}
+                      >
+                        Retry geocoding
+                      </button>
+                    </>
+                  )}
+                </p>
+              )}
+            </div>
+          )}
 
           {transportExceptions.length > 0 && (
             <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">

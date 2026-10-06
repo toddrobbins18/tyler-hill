@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolvePersonAge } from "@/lib/birthdayCalendar";
+import { isValidRouteCoordinate } from "@/lib/transportStopTimes";
 import {
   getBundledMappointAddressesCsv2026,
   getBundledMappointRoutesCsv2026,
@@ -18,6 +19,7 @@ import {
 
 export type TransportEnrolledCamper = {
   id: string;
+  personId: string | null;
   name: string;
   age: number | null;
   session: string | null;
@@ -181,7 +183,7 @@ export async function loadEnrolledCampersForTransport(
     const to = from + TRANSPORT_ROSTER_PAGE_SIZE - 1;
     const { data, error } = await supabase
       .from("children")
-      .select("id, name, age, date_of_birth, session, grade, group_name, home_address")
+      .select("id, person_id, name, age, date_of_birth, session, grade, group_name, home_address")
       .eq("company_id", companyId)
       .eq("season", season)
       .neq("status", "inactive")
@@ -199,8 +201,9 @@ export async function loadEnrolledCampersForTransport(
     from += TRANSPORT_ROSTER_PAGE_SIZE;
   }
 
-  return rows.map((row) => ({
+  const enrolled = rows.map((row) => ({
     id: row.id as string,
+    personId: (row.person_id as string | null) ?? null,
     name: (row.name as string)?.trim() ?? "",
     age: resolvePersonAge(row.date_of_birth, row.age),
     session: row.session as string | null,
@@ -208,6 +211,125 @@ export async function loadEnrolledCampersForTransport(
     groupName: row.group_name as string | null,
     homeAddress: (row.home_address as string | null)?.trim() || null,
   })).filter((c) => c.name);
+
+  return enrichEnrolledHomeAddresses(supabase, companyId, season, enrolled);
+}
+
+/** Fill blank home_address from prior seasons (same person_id). */
+async function enrichEnrolledHomeAddresses(
+  supabase: SupabaseClient,
+  companyId: string,
+  season: string,
+  enrolled: TransportEnrolledCamper[],
+): Promise<TransportEnrolledCamper[]> {
+  const missingPersonIds = [
+    ...new Set(
+      enrolled
+        .filter((c) => !c.homeAddress && c.personId)
+        .map((c) => c.personId as string),
+    ),
+  ];
+  if (missingPersonIds.length === 0) return enrolled;
+
+  const { data: historical } = await supabase
+    .from("children")
+    .select("person_id, home_address, season")
+    .eq("company_id", companyId)
+    .in("person_id", missingPersonIds)
+    .neq("season", season)
+    .order("season", { ascending: false });
+
+  const addressByPerson = new Map<string, string>();
+  for (const row of historical ?? []) {
+    const personId = row.person_id as string | null;
+    const address = (row.home_address as string | null)?.trim();
+    if (personId && address && !addressByPerson.has(personId)) {
+      addressByPerson.set(personId, address);
+    }
+  }
+
+  if (addressByPerson.size === 0) return enrolled;
+
+  return enrolled.map((camper) => {
+    if (camper.homeAddress || !camper.personId) return camper;
+    const fallback = addressByPerson.get(camper.personId);
+    return fallback ? { ...camper, homeAddress: fallback } : camper;
+  });
+}
+
+const normAddressKey = (address: string) => address.trim().toLowerCase();
+
+/** Unique addresses on the board that still need lat/lng before map plotting. */
+export function collectTransportAddressesNeedingGeocode(
+  unplotted: TransportUnplottedCamper[],
+  coreStops: Record<number, TransportRouteStop[]>,
+  campAddress: string,
+): string[] {
+  const addresses = new Set<string>();
+
+  for (const camper of unplotted) {
+    const address = camper.address?.trim();
+    if (address && !isValidRouteCoordinate(camper.lat, camper.lng)) {
+      addresses.add(address);
+    }
+  }
+
+  for (const stops of Object.values(coreStops)) {
+    for (const stop of stops ?? []) {
+      const address = stop.address?.trim();
+      if (
+        address
+        && address !== campAddress
+        && !isValidRouteCoordinate(stop.lat, stop.lng)
+      ) {
+        addresses.add(address);
+      }
+    }
+  }
+
+  return [...addresses];
+}
+
+export function applyGeocodeResultsToTransportBoard(
+  unplotted: TransportUnplottedCamper[],
+  coreStops: Record<number, TransportRouteStop[]>,
+  resultsByAddress: Map<string, { lat: number; lng: number }>,
+  campAddress: string,
+): {
+  unplotted: TransportUnplottedCamper[];
+  coreStops: Record<number, TransportRouteStop[]>;
+  updatedCount: number;
+} {
+  let updatedCount = 0;
+
+  const nextUnplotted = unplotted.map((camper) => {
+    const geo = resultsByAddress.get(normAddressKey(camper.address));
+    if (!geo || isValidRouteCoordinate(camper.lat, camper.lng)) return camper;
+    updatedCount += 1;
+    return { ...camper, lat: geo.lat, lng: geo.lng };
+  });
+
+  const nextCoreStops: Record<number, TransportRouteStop[]> = {};
+  for (const [routeId, stops] of Object.entries(coreStops)) {
+    nextCoreStops[Number(routeId)] = (stops ?? []).map((stop) => {
+      const geo = resultsByAddress.get(normAddressKey(stop.address));
+      if (
+        !geo
+        || stop.address === campAddress
+        || isValidRouteCoordinate(stop.lat, stop.lng)
+      ) {
+        return stop;
+      }
+      updatedCount += 1;
+      return { ...stop, lat: geo.lat, lng: geo.lng };
+    });
+  }
+
+  return {
+    unplotted: nextUnplotted,
+    coreStops: nextCoreStops,
+    updatedCount,
+  };
 }
 
 /** Names currently assigned to any route stop. */
