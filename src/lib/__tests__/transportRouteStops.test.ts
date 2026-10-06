@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeTransportAddress } from "@/lib/transportAddressNormalize";
-import { consolidateRouteStopsByAddress } from "@/lib/transportRouteStops";
+import { consolidateRouteStopsByAddress, dedupeRidersAcrossRoute } from "@/lib/transportRouteStops";
 
 describe("normalizeTransportAddress", () => {
   it("matches abbreviated and full street suffixes", () => {
@@ -107,5 +107,33 @@ describe("consolidateRouteStopsByAddress", () => {
     expect(merged).toHaveLength(2);
     expect(merged.some((s) => s.camperNames?.includes("Alex Rubel"))).toBe(true);
     expect(merged.some((s) => s.camperNames?.includes("Audrey Anteby"))).toBe(true);
+  });
+
+  it("dedupeRidersAcrossRoute keeps each camper on one stop only", () => {
+    const stops = [
+      {
+        name: "Stop A",
+        address: "10 Main St",
+        lat: 40.84,
+        lng: -73.71,
+        pickupTime: "7:00 AM",
+        passengers: 1,
+        camperNames: ["Sam Cohen"],
+      },
+      {
+        name: "Stop B",
+        address: "20 Oak Ave",
+        lat: 40.85,
+        lng: -73.72,
+        pickupTime: "7:05 AM",
+        passengers: 1,
+        camperNames: ["Sam Cohen"],
+      },
+    ];
+    const deduped = dedupeRidersAcrossRoute(stops);
+    const allNames = deduped.flatMap((s) => s.camperNames ?? []);
+    expect(allNames.filter((n) => n === "Sam Cohen")).toHaveLength(1);
+    expect(deduped[0].camperNames).toContain("Sam Cohen");
+    expect(deduped[1].camperNames ?? []).not.toContain("Sam Cohen");
   });
 });

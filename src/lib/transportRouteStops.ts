@@ -2,6 +2,28 @@ import { normalizeTransportAddress } from "@/lib/transportAddressNormalize";
 import { isValidRouteCoordinate } from "@/lib/transportStopTimes";
 import type { TransportRouteStop } from "@/lib/transportRoster";
 
+const normRiderKey = (name: string) => name.trim().toLowerCase();
+
+function refreshStopRiders(stop: TransportRouteStop, names: string[]): TransportRouteStop {
+  if (names.length === 0) {
+    return {
+      ...stop,
+      camperNames: [],
+      passengers: 0,
+      name: stop.address.split(",")[0]?.trim() || stop.address || stop.name,
+    };
+  }
+  return {
+    ...stop,
+    camperNames: names,
+    passengers: names.length,
+    name:
+      names.length === 1
+        ? names[0]
+        : `${names[0]} +${names.length - 1}`,
+  };
+}
+
 /** Camper names on a stop — never treat a bare address label as a rider. */
 export function riderNamesFromStop(stop: TransportRouteStop): string[] {
   const names = (stop.camperNames ?? []).filter(Boolean);
@@ -134,4 +156,43 @@ export function consolidateRouteStopsByAddress(stops: TransportRouteStop[]): Tra
   }
 
   return remaining;
+}
+
+/** True if a camper name already appears on any stop in this route. */
+export function riderOnRoute(stops: TransportRouteStop[], camperName: string): boolean {
+  const key = normRiderKey(camperName);
+  return stops.some((s) => riderNamesFromStop(s).some((n) => normRiderKey(n) === key));
+}
+
+/** Remove one camper from every stop on a route (before re-assigning elsewhere). */
+export function removeRiderFromRouteStops(
+  stops: TransportRouteStop[],
+  camperName: string,
+): TransportRouteStop[] {
+  const key = normRiderKey(camperName);
+  return stops.map((stop) => {
+    const names = riderNamesFromStop(stop).filter((n) => normRiderKey(n) !== key);
+    if (names.length === riderNamesFromStop(stop).length) return stop;
+    return refreshStopRiders(stop, names);
+  });
+}
+
+/** Each camper name may appear on only one stop per route (first stop wins). */
+export function dedupeRidersAcrossRoute(stops: TransportRouteStop[]): TransportRouteStop[] {
+  const seen = new Set<string>();
+  return stops.map((stop) => {
+    const names = riderNamesFromStop(stop).filter((n) => {
+      const k = normRiderKey(n);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    if (names.length === riderNamesFromStop(stop).length) return stop;
+    return refreshStopRiders(stop, names);
+  });
+}
+
+/** Remove duplicate riders, then merge same-address stops. */
+export function sanitizeRouteStops(stops: TransportRouteStop[]): TransportRouteStop[] {
+  return consolidateRouteStopsByAddress(dedupeRidersAcrossRoute(stops));
 }

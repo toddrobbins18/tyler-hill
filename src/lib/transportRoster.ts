@@ -81,6 +81,10 @@ export type TransportBoardPayload = {
   routesConfigured?: boolean;
   routesSeason?: string;
   routesSource?: TransportRoutesSource;
+  /** 2027+ sandbox — test moves without treating board as final. */
+  routesDraftMode?: boolean;
+  /** User confirmed routes are ready (exits draft). */
+  routesConfirmed?: boolean;
 };
 
 export { DEFAULT_TRANSPORT_BOARD_SETTINGS, normalizeTransportBoardSettings, type TransportBoardSettings };

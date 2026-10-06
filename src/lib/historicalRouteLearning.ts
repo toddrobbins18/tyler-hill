@@ -26,7 +26,13 @@ import type {
   TransportUnplottedCamper,
 } from "@/lib/transportRoster";
 import { normalizeTransportAddress } from "@/lib/transportAddressNormalize";
-import { consolidateRouteStopsByAddress } from "@/lib/transportRouteStops";
+import {
+  consolidateRouteStopsByAddress,
+  dedupeRidersAcrossRoute,
+  removeRiderFromRouteStops,
+  riderNamesFromStop,
+  sanitizeRouteStops,
+} from "@/lib/transportRouteStops";
 
 export const DEFAULT_REFERENCE_SEASON = "2026";
 
@@ -410,16 +416,32 @@ function findStopForHistoricalPlacement(
 }
 
 function addCamperToStop(stop: TransportRouteStop, camperName: string): TransportRouteStop {
-  const camperNames = [...(stop.camperNames ?? []), camperName];
+  const existing = riderNamesFromStop(stop);
+  const key = normCamperName(camperName);
+  if (existing.some((n) => normCamperName(n) === key)) return stop;
+  const merged = [...existing, camperName];
   return {
     ...stop,
-    camperNames,
-    passengers: camperNames.length,
+    camperNames: merged,
+    passengers: merged.length,
     name:
-      camperNames.length === 1
-        ? camperNames[0]
-        : `${camperNames[0]} +${camperNames.length - 1}`,
+      merged.length === 1
+        ? merged[0]
+        : `${merged[0]} +${merged.length - 1}`,
   };
+}
+
+function assignCamperToBusStop(
+  coreStops: Record<number, TransportRouteStop[]>,
+  busNumber: number,
+  stopIdx: number,
+  camperName: string,
+): void {
+  let stops = removeRiderFromRouteStops(coreStops[busNumber] ?? [], camperName);
+  if (stopIdx >= 0 && stopIdx < stops.length) {
+    stops[stopIdx] = addCamperToStop(stops[stopIdx], camperName);
+  }
+  coreStops[busNumber] = stops;
 }
 
 const addressLookupKey = (address: string) => address.trim().toLowerCase();
@@ -550,12 +572,12 @@ export function applyHistoricalAssignments(options: {
     let lat = camper.lat;
     let lng = camper.lng;
 
-    const stops = coreStops[prior.busNumber] ?? [];
+    let stops = coreStops[prior.busNumber] ?? [];
     const stopIdx = findStopForHistoricalPlacement(stops, address, prior);
 
     // Template stop already has coordinates — no API geocode needed to assign camper.
     if (stopIdx >= 0) {
-      stops[stopIdx] = addCamperToStop(stops[stopIdx], camper.name);
+      assignCamperToBusStop(coreStops, prior.busNumber, stopIdx, camper.name);
       placed.push({ name: camper.name, busNumber: prior.busNumber, address });
       continue;
     }
@@ -596,7 +618,7 @@ export function applyHistoricalAssignments(options: {
 
   for (const busKey of Object.keys(coreStops)) {
     const busNumber = Number(busKey);
-    coreStops[busNumber] = consolidateRouteStopsByAddress(coreStops[busNumber] ?? []);
+    coreStops[busNumber] = sanitizeRouteStops(coreStops[busNumber] ?? []);
   }
 
   return {
@@ -676,8 +698,7 @@ export function assignUnplottedByAddressToOpenStops(options: {
       const stopIdx = findStopByAddress(stops, address);
       if (stopIdx < 0) continue;
 
-      stops[stopIdx] = addCamperToStop(stops[stopIdx], camper.name);
-      coreStops[busNumber] = stops;
+      assignCamperToBusStop(coreStops, busNumber, stopIdx, camper.name);
       placed.push({ name: camper.name, busNumber, address });
       assigned = true;
       break;
@@ -688,7 +709,7 @@ export function assignUnplottedByAddressToOpenStops(options: {
 
   for (const busKey of Object.keys(coreStops)) {
     const busNumber = Number(busKey);
-    coreStops[busNumber] = consolidateRouteStopsByAddress(coreStops[busNumber] ?? []);
+    coreStops[busNumber] = sanitizeRouteStops(coreStops[busNumber] ?? []);
   }
 
   return { coreStops, unplottedCampers: remaining, placed };
@@ -741,8 +762,14 @@ export function assignCampersDuringOptimize(options: {
     limitToBusIds: options.limitToBusIds,
   });
 
+  const mergedCore = addressResult.coreStops;
+  for (const busKey of Object.keys(mergedCore)) {
+    const busNumber = Number(busKey);
+    mergedCore[busNumber] = sanitizeRouteStops(mergedCore[busNumber] ?? []);
+  }
+
   return {
-    coreStops: addressResult.coreStops,
+    coreStops: mergedCore,
     unplottedCampers: [...addressResult.unplottedCampers, ...campersDeferred],
     placed: [...priorResult.placed, ...addressResult.placed],
   };

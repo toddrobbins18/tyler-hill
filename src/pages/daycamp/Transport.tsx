@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { TransportRouteMap } from "@/components/TransportRouteMap";
-import { Bus, MapPin, Users, Plus, FileText, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Eye, EyeOff, History, LayoutTemplate, Database, Car, CornerDownRight, Clock, Undo2 } from "lucide-react";
+import { Bus, MapPin, Users, Plus, FileText, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Eye, EyeOff, History, LayoutTemplate, Database, Car, CornerDownRight, Clock, Undo2, FlaskConical, CheckCircle2 } from "lucide-react";
 import { pickFirst } from "@/lib/csv";
 import { isSpreadsheetFileName, loadSpreadsheetRowsFromFile } from "@/lib/spreadsheetImport";
 import {
@@ -107,7 +107,11 @@ import {
   type TransportBoardSettings,
 } from "@/lib/transportBoardSettings";
 import { normalizeTransportAddress as normalizeAddress } from "@/lib/transportAddressNormalize";
-import { consolidateExactAddressDuplicatesOnly, consolidateRouteStopsByAddress } from "@/lib/transportRouteStops";
+import {
+  consolidateExactAddressDuplicatesOnly,
+  consolidateRouteStopsByAddress,
+  sanitizeRouteStops,
+} from "@/lib/transportRouteStops";
 import { optimizeStopsFromFirstStop, optimizeStopsWithPinned } from "@/lib/transportRouteOptimize";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
@@ -439,6 +443,35 @@ type BoardPayload = {
   routesConfigured?: boolean;
   routesSeason?: string;
   routesSource?: TransportRoutesSource;
+  routesDraftMode?: boolean;
+  routesConfirmed?: boolean;
+};
+
+const confirmedBoardCacheKey = (companyId: string, season: string) =>
+  `transport-confirmed-board-v1:${companyId}:${season}`;
+
+const loadConfirmedBoardSnapshot = (companyId: string, season: string): BoardPayload | null => {
+  try {
+    const key = confirmedBoardCacheKey(companyId, season);
+    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as BoardPayload;
+    if (!parsed?.coreStops || !Array.isArray(parsed.routeMeta)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+const persistConfirmedBoardSnapshot = (companyId: string, season: string, payload: BoardPayload) => {
+  try {
+    const serialized = JSON.stringify(payload);
+    const key = confirmedBoardCacheKey(companyId, season);
+    localStorage.setItem(key, serialized);
+    sessionStorage.setItem(key, serialized);
+  } catch {
+    // ignore quota errors
+  }
 };
 
 const boardCacheKey = (companyId: string, season: string) =>
@@ -535,6 +568,8 @@ export default function Transport() {
   });
   const [routesConfigured, setRoutesConfigured] = useState(false);
   const [routesSource, setRoutesSource] = useState<TransportRoutesSource | undefined>();
+  const [routesDraftMode, setRoutesDraftMode] = useState(false);
+  const [routesConfirmed, setRoutesConfirmed] = useState(false);
   const [addRouteOpen, setAddRouteOpen] = useState(false);
   const [addCamperOpen, setAddCamperOpen] = useState(false);
   const [reportPreview, setReportPreview] = useState<TransportReportPreview | null>(null);
@@ -672,8 +707,11 @@ export default function Transport() {
     routeMeta: [] as typeof initialRouteMeta,
     unplottedCampers: [] as UnplottedCamper[],
     parentTransportCampers: [] as ParentTransportCamper[],
+    boardSettings: DEFAULT_TRANSPORT_BOARD_SETTINGS,
     routesConfigured: false,
     routesSource: undefined as TransportRoutesSource | undefined,
+    routesDraftMode: false,
+    routesConfirmed: false,
   });
 
   boardStateRef.current = {
@@ -681,9 +719,15 @@ export default function Transport() {
     routeMeta,
     unplottedCampers,
     parentTransportCampers,
+    boardSettings,
     routesConfigured,
     routesSource,
+    routesDraftMode,
+    routesConfirmed,
   };
+
+  const draftModeAvailable = currentSeason !== "2026" && routesConfigured;
+  const hasDraftBaseline = Boolean(companyId && currentSeason && loadConfirmedBoardSnapshot(companyId, currentSeason));
 
   const buildBoardPayload = useCallback((
     overrides: Partial<BoardPayload> = {},
@@ -697,23 +741,100 @@ export default function Transport() {
       routesConfigured,
       routesSeason: routesConfigured ? currentSeason : undefined,
       routesSource,
+      routesDraftMode,
+      routesConfirmed,
       ...overrides,
     };
     const consolidatedCore: Record<number, RouteStop[]> = {};
     for (const [routeId, stops] of Object.entries(draft.coreStops ?? {})) {
-      consolidatedCore[Number(routeId)] = consolidateRouteStopsByAddress(stops ?? []);
+      consolidatedCore[Number(routeId)] = sanitizeRouteStops(stops ?? []);
     }
     return { ...draft, coreStops: consolidatedCore };
-  }, [coreStops, routeMeta, unplottedCampers, parentTransportCampers, boardSettings, routesConfigured, routesSource, currentSeason]);
+  }, [coreStops, routeMeta, unplottedCampers, parentTransportCampers, boardSettings, routesConfigured, routesSource, routesDraftMode, routesConfirmed, currentSeason]);
 
   const markRoutesConfigured = useCallback((source: TransportRoutesSource = "manual") => {
     setRoutesConfigured(true);
     setRoutesSource(source);
   }, []);
 
+  const enterRoutesDraftMode = async () => {
+    if (!companyId || !currentSeason) return;
+    if (routesDraftMode) {
+      toast({
+        title: "Already in draft mode",
+        description: "Your test edits are safe. Confirm or Discard when you are done testing.",
+      });
+      return;
+    }
+    if (!routesConfigured) {
+      toast({
+        title: "Add routes first",
+        description: "Apply a route template or add buses before entering draft mode.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const baseline = buildBoardPayload({ routesDraftMode: false, routesConfirmed });
+    persistConfirmedBoardSnapshot(companyId, currentSeason, baseline);
+    const payload: BoardPayload = {
+      ...baseline,
+      routesDraftMode: true,
+      routesConfirmed: false,
+    };
+    setRoutesDraftMode(true);
+    setRoutesConfirmed(false);
+    await persistBoard(payload);
+    toast({
+      title: "Draft mode ON",
+      description: "Purple banner stays visible until you Confirm or Discard. Your pre-draft routes are saved.",
+    });
+  };
+
+  const discardRoutesDraft = async () => {
+    if (!companyId || !currentSeason) return;
+    const snapshot = loadConfirmedBoardSnapshot(companyId, currentSeason);
+    if (!snapshot) {
+      toast({
+        title: "Nothing to restore",
+        description: "No pre-draft snapshot found — use Confirm Routes to keep current edits instead.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const restored: BoardPayload = {
+      ...snapshot,
+      routesDraftMode: false,
+      routesConfirmed: snapshot.routesConfirmed === true,
+    };
+    applyBoardPayload(restored);
+    await persistBoard(restored);
+    toast({ title: "Draft mode OFF", description: "Restored routes from before you entered draft mode." });
+  };
+
+  const confirmRoutesBoard = async () => {
+    if (!companyId || !currentSeason) return;
+    const payload = buildBoardPayload({ routesDraftMode: false, routesConfirmed: true });
+    persistConfirmedBoardSnapshot(companyId, currentSeason, payload);
+    setRoutesDraftMode(false);
+    setRoutesConfirmed(true);
+    await persistBoard(payload);
+    toast({
+      title: "Draft mode OFF — routes confirmed",
+      description: "These routes are saved as your live board. Enter Draft Mode again anytime to experiment.",
+    });
+  };
+
   const persistBoard = useCallback(async (payload: BoardPayload) => {
     if (!companyId || !currentSeason) return false;
-    const marked = prepareBoardForPersist(payload, currentSeason);
+    const ref = boardStateRef.current;
+    const complete: BoardPayload = {
+      ...payload,
+      parentTransportCampers: payload.parentTransportCampers ?? ref.parentTransportCampers,
+      settings: payload.settings ?? ref.boardSettings,
+      routesDraftMode: payload.routesDraftMode ?? ref.routesDraftMode,
+      routesConfirmed: payload.routesConfirmed ?? ref.routesConfirmed,
+    };
+    const marked = prepareBoardForPersist(complete, currentSeason);
     persistBoardCache(companyId, currentSeason, marked);
     try {
       const { data: userRes } = await supabase.auth.getUser();
@@ -731,6 +852,7 @@ export default function Transport() {
 
       if (
         marked.routesConfigured &&
+        !marked.routesDraftMode &&
         marked.routeMeta.length > 0 &&
         countBoardStops(marked.coreStops) > 0
       ) {
@@ -778,14 +900,25 @@ export default function Transport() {
   const applyBoardPayload = (payload: BoardPayload, source?: "supabase" | "cache") => {
     const scrubbed = scrubBrokenPlacements(payload);
     const normalizedMeta = normalizeRouteMeta(scrubbed.routeMeta);
+    const metaIds = normalizedMeta.map((r) => r.id);
+    const metaIdSet = new Set(metaIds);
     setCoreStops(scrubbed.coreStops);
     setRouteMeta(normalizedMeta);
-    setVisibleRoutes(normalizedMeta.map((r) => r.id));
+    setVisibleRoutes((prev) => {
+      const kept = prev.filter((id) => metaIdSet.has(id));
+      if (source === "supabase" || source === "cache") {
+        return kept.length > 0 ? kept : metaIds;
+      }
+      // Local saves (optimize apply, undo, drag) — never expand back to all buses
+      return kept.length > 0 ? kept : prev;
+    });
     setUnplottedCampers(scrubbed.unplottedCampers);
     setParentTransportCampers(scrubbed.parentTransportCampers ?? []);
     setBoardSettings(normalizeTransportBoardSettings(scrubbed.settings));
     setRoutesConfigured(scrubbed.routesConfigured === true);
     setRoutesSource(scrubbed.routesSource);
+    setRoutesDraftMode(scrubbed.routesDraftMode === true);
+    setRoutesConfirmed(scrubbed.routesConfirmed === true);
     lastKnownStopCountRef.current = countBoardStops(scrubbed.coreStops);
     if (companyId && currentSeason) {
       persistBoardCache(companyId, currentSeason, prepareBoardForPersist(scrubbed, currentSeason));
@@ -800,11 +933,15 @@ export default function Transport() {
 
   const finalizeBoardForSeason = useCallback(async (payload: BoardPayload, source?: "supabase" | "cache") => {
     if (!companyId || !currentSeason) return;
-    const normalized = await normalizeTransportBoardForSeason(supabase, companyId, currentSeason, payload);
+    const isRemoteLoad = source === "supabase" || source === "cache";
+    const fullPayload = isRemoteLoad
+      ? payload
+      : { ...buildBoardPayload(), ...payload };
+    const normalized = await normalizeTransportBoardForSeason(supabase, companyId, currentSeason, fullPayload);
     const strippedLegacyRoutes =
       currentSeason !== "2026"
-      && countBoardStops(payload.coreStops) > 0
-      && !payload.routesConfigured;
+      && countBoardStops(fullPayload.coreStops) > 0
+      && !fullPayload.routesConfigured;
     applyBoardPayload(normalized, source);
     if (strippedLegacyRoutes) {
       await persistBoard({
@@ -814,7 +951,7 @@ export default function Transport() {
         routesSource: undefined,
       });
     }
-  }, [companyId, currentSeason, persistBoard]);
+  }, [companyId, currentSeason, persistBoard, buildBoardPayload]);
 
   const restoreBoardFromCache = async () => {
     if (!companyId || !currentSeason) return false;
@@ -838,13 +975,6 @@ export default function Transport() {
     skipPersistRef.current = true;
     setPersistLoaded(false);
     setBoardLoading(true);
-    if (currentSeason !== "2026") {
-      setCoreStops({});
-      setRouteMeta([]);
-      setVisibleRoutes([]);
-      setRoutesConfigured(false);
-      setRoutesSource(undefined);
-    }
     (async () => {
       try {
         const { data, error } = await supabase
@@ -894,6 +1024,8 @@ export default function Transport() {
             routesConfigured: saved.routesConfigured,
             routesSeason: saved.routesSeason,
             routesSource: saved.routesSource,
+            routesDraftMode: saved.routesDraftMode,
+            routesConfirmed: saved.routesConfirmed,
           }, "supabase");
         } else if (!(await restoreBoardFromCache()) && lastKnownStopCountRef.current === 0) {
           const emptyPayload: BoardPayload = currentSeason === "2026"
@@ -1012,22 +1144,37 @@ export default function Transport() {
       return;
     }
 
+    const debounceMs = routesDraftMode ? 0 : 600;
+
     if (stopCount === 0) {
+      if (debounceMs === 0) {
+        void persistBoard(payload).then((ok) => {
+          if (ok) lastKnownStopCountRef.current = 0;
+        });
+        return;
+      }
       const handle = setTimeout(() => {
         void persistBoard(payload).then((ok) => {
           if (ok) lastKnownStopCountRef.current = 0;
         });
-      }, 600);
+      }, debounceMs);
       return () => clearTimeout(handle);
+    }
+
+    if (debounceMs === 0) {
+      void persistBoard(payload).then((ok) => {
+        if (ok) lastKnownStopCountRef.current = countBoardStops(coreStops);
+      });
+      return;
     }
 
     const handle = setTimeout(() => {
       void persistBoard(payload).then((ok) => {
         if (ok) lastKnownStopCountRef.current = countBoardStops(coreStops);
       });
-    }, 600);
+    }, debounceMs);
     return () => clearTimeout(handle);
-  }, [coreStops, routeMeta, unplottedCampers, parentTransportCampers, boardSettings, routesConfigured, routesSource, persistLoaded, companyId, currentSeason, persistBoard, buildBoardPayload]);
+  }, [coreStops, routeMeta, unplottedCampers, parentTransportCampers, boardSettings, routesConfigured, routesSource, routesDraftMode, routesConfirmed, persistLoaded, companyId, currentSeason, persistBoard, buildBoardPayload]);
 
   // Flush unsaved board state when leaving the page (debounced save may not have fired yet).
   useEffect(() => {
@@ -1040,6 +1187,8 @@ export default function Transport() {
         parentTransportCampers: parentTransport,
         routesConfigured: configured,
         routesSource: source,
+        routesDraftMode: draftMode,
+        routesConfirmed: confirmed,
       } = boardStateRef.current;
       if (countBoardStops(stops) === 0 && unplotted.length === 0 && parentTransport.length === 0 && !configured) return;
       void persistBoard({
@@ -1050,6 +1199,8 @@ export default function Transport() {
         routesConfigured: configured,
         routesSeason: configured ? currentSeason : undefined,
         routesSource: source,
+        routesDraftMode: draftMode,
+        routesConfirmed: confirmed,
       });
     };
   }, [companyId, currentSeason, persistBoard]);
@@ -2307,12 +2458,15 @@ export default function Transport() {
         },
       );
 
-      const fastPayload: BoardPayload = {
-        ...normalized,
+      const fastPayload: BoardPayload = buildBoardPayload({
+        coreStops: normalized.coreStops,
+        routeMeta: normalized.routeMeta,
+        unplottedCampers: normalized.unplottedCampers,
+        parentTransportCampers: normalized.parentTransportCampers,
         routesConfigured: true,
         routesSeason: currentSeason,
         routesSource: "mappoint2026",
-      };
+      });
 
       await persistBoard(fastPayload);
       await finalizeBoardForSeason(fastPayload);
@@ -2340,14 +2494,13 @@ export default function Transport() {
     try {
       const withLearned = await applyLearnedPlacementsToPayload(buildBoardPayload());
 
-      const payload: BoardPayload = {
+      const payload: BoardPayload = buildBoardPayload({
         coreStops: withLearned.coreStops,
-        routeMeta,
         unplottedCampers: withLearned.unplottedCampers,
         routesConfigured: true,
         routesSeason: currentSeason,
         routesSource: routesSource ?? "manual",
-      };
+      });
 
       await persistBoard(payload);
       await finalizeBoardForSeason(payload);
@@ -2624,6 +2777,20 @@ export default function Transport() {
     return ordered.reverse();
   };
 
+  const defaultOptimizeSelectedRouteIds = (
+    perRoute: { id: number; changed: boolean }[],
+    focusRouteId?: number,
+  ): number[] => {
+    const ids = new Set<number>();
+    if (focusRouteId != null) ids.add(focusRouteId);
+    if (visibleRoutes.length === 1) ids.add(visibleRoutes[0]);
+    perRoute.filter((p) => p.changed).forEach((p) => ids.add(p.id));
+    if (ids.size > 0) return [...ids];
+    if (focusRouteId != null) return [focusRouteId];
+    if (visibleRoutes.length === 1) return [visibleRoutes[0]];
+    return perRoute.map((p) => p.id);
+  };
+
   const handleOptimizeRoutes = async (
     targetRouteId?: number,
     options?: { fromFirstStop?: boolean },
@@ -2726,9 +2893,7 @@ export default function Transport() {
             changed: reordered || beforeConsolidated.length !== optimized.length || addedCampers.length > 0,
             addedCampers,
           }],
-          selectedRouteIds: reordered || beforeConsolidated.length !== optimized.length || addedCampers.length > 0
-            ? [targetRouteId]
-            : [],
+          selectedRouteIds: [targetRouteId],
         });
         return;
       }
@@ -2782,9 +2947,7 @@ export default function Transport() {
             changed: reordered || beforeMi !== afterMi || beforeConsolidated.length !== optimized.length || addedCampers.length > 0,
             addedCampers,
           }],
-          selectedRouteIds: reordered || beforeMi !== afterMi || beforeConsolidated.length !== optimized.length || addedCampers.length > 0
-            ? [targetRouteId]
-            : [],
+          selectedRouteIds: [targetRouteId],
         });
         return;
       }
@@ -2878,8 +3041,7 @@ export default function Transport() {
         reassignments,
         reorderedRoutes,
         perRoute,
-        // By default, pre-select only routes that actually changed
-        selectedRouteIds: perRoute.filter(p => p.changed).map(p => p.id),
+        selectedRouteIds: defaultOptimizeSelectedRouteIds(perRoute, targetRouteId),
       });
 
     } catch (e: any) {
@@ -2925,7 +3087,7 @@ export default function Transport() {
       // Unchanged routes have no proposedCore entry — preserve their existing stops.
       const proposed = optimizePreview.proposedCore[p.id];
       if (proposed && proposed.length > 0) {
-        nextCore[p.id] = consolidateExactAddressDuplicatesOnly(proposed);
+        nextCore[p.id] = sanitizeRouteStops(consolidateExactAddressDuplicatesOnly(proposed));
       }
       savedMi += Math.max(0, p.beforeMi - p.afterMi);
       appliedReassignments += p.addedCampers.length;
@@ -2955,14 +3117,13 @@ export default function Transport() {
     });
     setOptimizePreview(prev => ({ ...prev, open: false }));
 
-    const payload: BoardPayload = {
+    const payload: BoardPayload = buildBoardPayload({
       coreStops: nextCore,
-      routeMeta,
       unplottedCampers: nextUnplotted,
       routesConfigured: true,
       routesSeason: currentSeason,
       routesSource: routesSource ?? "manual",
-    };
+    });
     await persistBoard(payload);
     await finalizeBoardForSeason(payload);
 
@@ -2989,14 +3150,13 @@ export default function Transport() {
     markRoutesConfigured("manual");
     setTodayOverrides(emptyManualOverrides());
 
-    const payload: BoardPayload = {
+    const payload: BoardPayload = buildBoardPayload({
       coreStops: snapshot.coreStops,
-      routeMeta,
       unplottedCampers: snapshot.unplottedCampers,
       routesConfigured: true,
       routesSeason: currentSeason,
       routesSource: routesSource ?? "manual",
-    };
+    });
     await persistBoard(payload);
     await finalizeBoardForSeason(payload);
 
@@ -3327,6 +3487,38 @@ export default function Transport() {
                   : "No learned routes yet"}
               </Badge>
             )}
+            {draftModeAvailable && (
+              routesDraftMode ? (
+                <Badge
+                  variant="outline"
+                  className="gap-1.5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap border-violet-500/60 bg-violet-500/15 text-violet-950 dark:text-violet-100"
+                  title="Changes are sandboxed until you Confirm Routes or Discard Draft"
+                >
+                  <span className="relative flex h-2 w-2 shrink-0">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-500 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-violet-600" />
+                  </span>
+                  Draft mode ON
+                </Badge>
+              ) : routesConfirmed ? (
+                <Badge
+                  variant="outline"
+                  className="gap-1 px-2.5 py-1 text-[10px] font-medium whitespace-nowrap border-emerald-500/50 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100"
+                  title={`Routes confirmed for ${currentSeason} — enter Draft Mode to experiment safely`}
+                >
+                  <CheckCircle2 className="h-3 w-3" />
+                  Routes confirmed
+                </Badge>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className="gap-1 px-2.5 py-1 text-[10px] font-normal whitespace-nowrap"
+                  title="Live board — use Draft Mode before big changes"
+                >
+                  Live board
+                </Badge>
+              )
+            )}
           </div>
         </div>
 
@@ -3351,6 +3543,45 @@ export default function Transport() {
             <History className={`h-4 w-4 ${applyingHistorical ? "animate-pulse" : ""}`} />
             {applyingHistorical ? "Placing from prior routes…" : "Place Using Prior Routes"}
           </Button>
+          {currentSeason !== "2026" && routesConfigured && !routesDraftMode && (
+            <Button
+              variant="outline"
+              className="gap-2 border-violet-500/60 bg-violet-50 text-violet-950 hover:bg-violet-100 dark:bg-violet-950/40 dark:text-violet-100"
+              onClick={() => void enterRoutesDraftMode()}
+              title="Sandbox — test template, prior routes, and optimize without committing"
+            >
+              <FlaskConical className="h-4 w-4" />
+              Draft Mode
+            </Button>
+          )}
+          {currentSeason !== "2026" && routesDraftMode && (
+            <>
+              <Badge
+                variant="outline"
+                className="gap-1.5 h-9 px-3 text-xs font-semibold border-violet-500/60 bg-violet-500/15 text-violet-950 dark:text-violet-100 pointer-events-none"
+              >
+                <FlaskConical className="h-3.5 w-3.5" />
+                Draft ON
+              </Badge>
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => void discardRoutesDraft()}
+                disabled={!hasDraftBaseline}
+                title={hasDraftBaseline ? "Revert to routes from before Draft Mode" : "No saved snapshot — use Confirm Routes to keep current edits"}
+              >
+                <Undo2 className="h-4 w-4" />
+                Discard Draft
+              </Button>
+              <Button
+                className="gap-2 bg-violet-600 hover:bg-violet-700 text-white"
+                onClick={() => void confirmRoutesBoard()}
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Confirm Routes
+              </Button>
+            </>
+          )}
           {optimizeUndoStack.length > 0 && (
             <Button
               variant="outline"
@@ -3433,9 +3664,65 @@ export default function Transport() {
           </AlertDialog>
           <Button className="gap-2" onClick={() => setAddRouteOpen(true)}><Plus className="h-4 w-4" /> Add Route</Button>
         </div>
+
+        {draftModeAvailable && routesDraftMode && (
+          <div className="sticky top-0 z-20 rounded-lg border-2 border-violet-500/50 bg-violet-500/10 px-4 py-3 flex flex-wrap items-center gap-3 shadow-sm">
+            <FlaskConical className="h-5 w-5 text-violet-600 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-violet-950 dark:text-violet-100">
+                Draft mode is ON — changes are not final
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Test optimize, drag campers, and reorder stops freely.
+                {" "}
+                <strong>Confirm Routes</strong> saves this board and turns draft OFF.
+                {" "}
+                <strong>Discard Draft</strong> restores routes from before you entered draft mode.
+              </p>
+              {!hasDraftBaseline && (
+                <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                  Restore snapshot unavailable — confirm to keep edits, or re-enter Draft Mode after a refresh.
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2 shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => void discardRoutesDraft()}
+                disabled={!hasDraftBaseline}
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+                Discard
+              </Button>
+              <Button
+                size="sm"
+                className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
+                onClick={() => void confirmRoutesBoard()}
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Confirm
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {draftModeAvailable && routesConfirmed && !routesDraftMode && (
+          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs text-muted-foreground flex flex-wrap items-center gap-2">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+            <span>
+              Routes confirmed for {currentSeason}. Edits save live — use <strong>Draft Mode</strong> to experiment without committing.
+            </span>
+          </div>
+        )}
       </div>
 
-      <Tabs value={activeTransportTab} onValueChange={setActiveTransportTab} className="min-w-0">
+      <Tabs
+        value={activeTransportTab}
+        onValueChange={setActiveTransportTab}
+        className={`min-w-0 ${routesDraftMode && draftModeAvailable ? "rounded-xl ring-2 ring-violet-500/30 ring-offset-2 ring-offset-background p-0.5" : ""}`}
+      >
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="map" className="text-xs gap-1"><MapIcon className="h-3.5 w-3.5" /> Route Map</TabsTrigger>
           <TabsTrigger value="unplotted" className="text-xs gap-1"><UserRound className="h-3.5 w-3.5" /> Unplotted Campers{unplottedForWeek.length > 0 && <Badge variant="secondary" className="ml-1 text-[9px] px-1.5">{unplottedForWeek.length}</Badge>}</TabsTrigger>
