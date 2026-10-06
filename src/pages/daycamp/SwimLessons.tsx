@@ -13,7 +13,10 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Waves, Plus, Trash2, CheckCircle2, Clock, Bus, Repeat, Phone, XCircle } from "lucide-react";
+import { Waves, Plus, Trash2, CheckCircle2, Clock, Bus, Repeat, Phone, XCircle, Search } from "lucide-react";
+import { SortableHeader } from "@/components/SortableHeader";
+import { useSortable } from "@/hooks/use-sortable";
+import { cn } from "@/lib/utils";
 import { approveDismissalSwim } from "@/lib/dismissalDashboard";
 import {
   approveSwimLessonRequest,
@@ -41,6 +44,8 @@ import {
 } from "@/lib/enrollmentWeekCalendar";
 
 type Camper = { id: string; name: string; guardian_email: string | null };
+type ParentFilter = "all" | "confirmed" | "pending";
+type TransportFilter = "all" | "needs_approval" | "approved";
 type Lesson = {
   id: string;
   camper_id: string;
@@ -57,6 +62,56 @@ type Lesson = {
   rejection_reason: string | null;
   notes: string | null;
 };
+type LessonRow = Lesson & {
+  camperName: string;
+  familyEmail: string;
+};
+
+function matchesLessonSearch(row: LessonRow, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const haystack = [
+    row.camperName,
+    row.familyEmail,
+    row.instructor ?? "",
+    row.notes ?? "",
+    row.status,
+  ]
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(q);
+}
+
+function SwimFilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+  className,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex flex-col gap-1", className)}>
+      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-8 min-w-[130px] rounded-md border border-border/60 bg-background px-2 text-xs"
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
 
 export default function SwimLessons() {
   const { currentCompany } = useCompany();
@@ -64,6 +119,9 @@ export default function SwimLessons() {
   const [campers, setCampers] = useState<Camper[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [parentFilter, setParentFilter] = useState<ParentFilter>("all");
+  const [transportFilter, setTransportFilter] = useState<TransportFilter>("all");
 
   const load = async () => {
     if (!currentCompany?.id) return;
@@ -80,12 +138,20 @@ export default function SwimLessons() {
 
   useEffect(() => { load(); }, [currentCompany?.id, currentSeason]);
 
-  const camperName = (id: string) => {
-    const c = campers.find(x => x.id === id);
-    return c ? c.name : "—";
-  };
-  
-  const familyEmail = (id: string) => campers.find(f => f.id === id)?.guardian_email ?? "—";
+  const camperById = useMemo(() => new Map(campers.map((c) => [c.id, c])), [campers]);
+
+  const camperName = (id: string) => camperById.get(id)?.name ?? "—";
+  const familyEmail = (id: string) => camperById.get(id)?.guardian_email ?? "—";
+
+  const lessonRows = useMemo<LessonRow[]>(
+    () =>
+      lessons.map((l) => ({
+        ...l,
+        camperName: camperById.get(l.camper_id)?.name ?? "—",
+        familyEmail: camperById.get(l.camper_id)?.guardian_email ?? "—",
+      })),
+    [lessons, camperById],
+  );
 
   const remove = async (id: string) => {
     const { error } = await supabase.from("swim_lessons").delete().eq("id", id);
@@ -124,13 +190,48 @@ export default function SwimLessons() {
   };
 
   const pendingLessons = useMemo(
-    () => lessons.filter((l) => l.status === "pending"),
-    [lessons],
+    () => lessonRows.filter((l) => l.status === "pending"),
+    [lessonRows],
   );
   const activeLessons = useMemo(
-    () => lessons.filter((l) => l.status !== "pending" && l.status !== "rejected" && l.status !== "cancelled"),
-    [lessons],
+    () =>
+      lessonRows.filter(
+        (l) => l.status !== "pending" && l.status !== "rejected" && l.status !== "cancelled",
+      ),
+    [lessonRows],
   );
+
+  const filteredPendingLessons = useMemo(
+    () => pendingLessons.filter((l) => matchesLessonSearch(l, search)),
+    [pendingLessons, search],
+  );
+
+  const filteredActiveLessons = useMemo(
+    () =>
+      activeLessons.filter((l) => {
+        if (!matchesLessonSearch(l, search)) return false;
+        if (parentFilter === "confirmed" && !l.parent_confirmed) return false;
+        if (parentFilter === "pending" && l.parent_confirmed) return false;
+        if (transportFilter === "approved" && l.transport_status !== "acknowledged") return false;
+        if (transportFilter === "needs_approval") {
+          if (!l.parent_confirmed || l.transport_status === "acknowledged") return false;
+        }
+        return true;
+      }),
+    [activeLessons, search, parentFilter, transportFilter],
+  );
+
+  const {
+    sorted: sortedPendingLessons,
+    sort: pendingSort,
+    handleSort: requestPendingSort,
+  } = useSortable(filteredPendingLessons, { key: "scheduled_at", direction: "asc" });
+
+  const {
+    sorted: sortedActiveLessons,
+    sort: activeSort,
+    handleSort: requestActiveSort,
+  } = useSortable(filteredActiveLessons, { key: "scheduled_at", direction: "asc" });
 
   return (
     <div className="space-y-6 p-4 md:p-6">
@@ -152,6 +253,42 @@ export default function SwimLessons() {
         </div>
       </div>
 
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+        <div className="relative flex-1 min-w-[220px] max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search camper, email, instructor, notes…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        {activeLessons.length > 0 ? (
+          <>
+            <SwimFilterSelect
+              label="Parent"
+              value={parentFilter}
+              onChange={(v) => setParentFilter(v as ParentFilter)}
+              options={[
+                { value: "all", label: "All parent status" },
+                { value: "confirmed", label: "Confirmed" },
+                { value: "pending", label: "Awaiting confirm" },
+              ]}
+            />
+            <SwimFilterSelect
+              label="Transport"
+              value={transportFilter}
+              onChange={(v) => setTransportFilter(v as TransportFilter)}
+              options={[
+                { value: "all", label: "All transport" },
+                { value: "needs_approval", label: "Needs bus approval" },
+                { value: "approved", label: "Bus approved" },
+              ]}
+            />
+          </>
+        ) : null}
+      </div>
+
       {pendingLessons.length > 0 ? (
         <Card className="border-amber-500/40">
           <CardHeader className="pb-2">
@@ -159,20 +296,30 @@ export default function SwimLessons() {
               Pending requests
               <Badge variant="secondary">{pendingLessons.length}</Badge>
             </CardTitle>
-            <CardDescription>Phone-ins and parent portal requests — approve or reject.</CardDescription>
+            <CardDescription>
+              Phone-ins and parent portal requests — approve or reject.
+              {search.trim() && filteredPendingLessons.length !== pendingLessons.length ? (
+                <span className="ml-1">
+                  Showing {filteredPendingLessons.length} of {pendingLessons.length}.
+                </span>
+              ) : null}
+            </CardDescription>
           </CardHeader>
           <CardContent>
+            {filteredPendingLessons.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No pending requests match the current search.</p>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date / Time</TableHead>
-                  <TableHead>Camper</TableHead>
-                  <TableHead>Notes</TableHead>
+                  <SortableHeader label="Date / Time" sortKey="scheduled_at" currentSort={pendingSort} onSort={requestPendingSort} />
+                  <SortableHeader label="Camper" sortKey="camperName" currentSort={pendingSort} onSort={requestPendingSort} />
+                  <SortableHeader label="Notes" sortKey="notes" currentSort={pendingSort} onSort={requestPendingSort} />
                   <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pendingLessons.map((l) => (
+                {sortedPendingLessons.map((l) => (
                   <TableRow key={l.id}>
                     <TableCell>
                       <div className="font-medium">{formatCampDate(l.scheduled_at)}</div>
@@ -203,6 +350,7 @@ export default function SwimLessons() {
                 ))}
               </TableBody>
             </Table>
+            )}
           </CardContent>
         </Card>
       ) : null}
@@ -210,31 +358,40 @@ export default function SwimLessons() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Approved lessons</CardTitle>
-          <CardDescription>Parents confirm attendance in the Parent Portal after approval.</CardDescription>
+          <CardDescription>
+            Parents confirm attendance in the Parent Portal after approval.
+            {!loading && activeLessons.length > 0 && filteredActiveLessons.length !== activeLessons.length ? (
+              <span className="ml-1">
+                Showing {filteredActiveLessons.length} of {activeLessons.length}.
+              </span>
+            ) : null}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : activeLessons.length === 0 ? (
             <p className="text-sm text-muted-foreground">No approved lessons yet.</p>
+          ) : filteredActiveLessons.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No approved lessons match the current search or filters.</p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date / Time</TableHead>
-                  <TableHead>Camper</TableHead>
-                  <TableHead>Parent Email</TableHead>
-                  <TableHead>Instructor</TableHead>
-                  <TableHead>Cost</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Parent</TableHead>
-                  <TableHead>Bus</TableHead>
-                  <TableHead>Reminder</TableHead>
+                  <SortableHeader label="Date / Time" sortKey="scheduled_at" currentSort={activeSort} onSort={requestActiveSort} />
+                  <SortableHeader label="Camper" sortKey="camperName" currentSort={activeSort} onSort={requestActiveSort} />
+                  <SortableHeader label="Parent Email" sortKey="familyEmail" currentSort={activeSort} onSort={requestActiveSort} />
+                  <SortableHeader label="Instructor" sortKey="instructor" currentSort={activeSort} onSort={requestActiveSort} />
+                  <SortableHeader label="Cost" sortKey="cost_cents" currentSort={activeSort} onSort={requestActiveSort} />
+                  <SortableHeader label="Status" sortKey="status" currentSort={activeSort} onSort={requestActiveSort} />
+                  <SortableHeader label="Parent" sortKey="parent_confirmed" currentSort={activeSort} onSort={requestActiveSort} />
+                  <SortableHeader label="Bus" sortKey="transport_status" currentSort={activeSort} onSort={requestActiveSort} />
+                  <SortableHeader label="Reminder" sortKey="reminder_sent_at" currentSort={activeSort} onSort={requestActiveSort} />
                   <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {activeLessons.map(l => (
+                {sortedActiveLessons.map(l => (
                   <TableRow key={l.id}>
                     <TableCell>
                       <div className="font-medium">{formatCampDate(l.scheduled_at)}</div>
