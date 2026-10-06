@@ -6,7 +6,7 @@ import { applyHistoricalAssignments, buildPriorsFromBundledMappoint } from "@/li
 import { normalizeTransportAddress } from "@/lib/transportAddressNormalize";
 import { buildCamperPriorMap } from "@/lib/routeReferenceWarehouse";
 import { optimizeStopsFromFirstStop, optimizeStopsWithPinned } from "@/lib/transportRouteOptimize";
-import { consolidateExactAddressDuplicatesOnly, consolidateRouteStopsByAddress } from "@/lib/transportRouteStops";
+import { consolidateRouteStopsByAddress, sanitizeRouteStops } from "@/lib/transportRouteStops";
 import { routeStopListLines } from "@/lib/transportStopTimes";
 
 const bus2BeforeOptimize = [
@@ -196,15 +196,71 @@ describe("transport optimize smoke", () => {
   });
 
   it("simulated ORS output: template job + camper job at same street becomes one named stop", () => {
-    // Mirrors handleOptimizeRoutes ORS mapping + consolidateRouteStopsByAddress
+    // Mirrors handleOptimizeRoutes post-reorder sanitize (Todd Bus 2 / Bus 3 duplicate scenario)
     const orsOrdered = [
       { name: "2 Sands Ln", address: "2 Sands Ln", lat: 40.83, lng: -73.7, pickupTime: "", passengers: 0, camperNames: [] as string[] },
       { name: "Jack Lovens", address: "2 Sands Lane, Manhasset, NY", lat: 40.8301, lng: -73.7001, pickupTime: "TBD", passengers: 1, camperNames: ["Jack Lovens"] },
       { name: "Noa Lovens", address: "2 Sands Lane, Manhasset, NY", lat: 40.8301, lng: -73.7001, pickupTime: "TBD", passengers: 1, camperNames: ["Noa Lovens"] },
     ];
-    const afterApply = consolidateExactAddressDuplicatesOnly(orsOrdered);
+    const afterApply = sanitizeRouteStops(orsOrdered);
     expect(afterApply).toHaveLength(1);
     expect(afterApply[0].camperNames?.sort()).toEqual(["Jack Lovens", "Noa Lovens"].sort());
     expect(routeStopListLines(afterApply[0], { isCamp: false }).isOpenStop).toBe(false);
+  });
+
+  it("Bus 3 style: open template stop + plotted camper at same street — no duplicate names after sanitize", () => {
+    const bus3 = [
+      {
+        name: "15 Harbor Rd",
+        address: "15 Harbor Rd",
+        lat: 40.8,
+        lng: -73.6,
+        pickupTime: "",
+        passengers: 0,
+        camperNames: [] as string[],
+      },
+      {
+        name: "Sam Cohen",
+        address: "15 Harbor Road, Roslyn, NY",
+        lat: 40.8001,
+        lng: -73.6001,
+        pickupTime: "7:05 AM",
+        passengers: 1,
+        camperNames: ["Sam Cohen"],
+      },
+    ];
+    const afterOptimize = sanitizeRouteStops(bus3);
+    expect(afterOptimize).toHaveLength(1);
+    expect(afterOptimize[0].camperNames).toEqual(["Sam Cohen"]);
+    const allNames = afterOptimize.flatMap((s) => s.camperNames ?? []);
+    expect(allNames.filter((n) => n === "Sam Cohen")).toHaveLength(1);
+    expect(routeStopListLines(afterOptimize[0], { isCamp: false }).title).toBe("Sam Cohen");
+  });
+
+  it("removes duplicate camper name if listed on two stops on same bus", () => {
+    const bus3 = [
+      {
+        name: "Sam Cohen",
+        address: "15 Harbor Rd, Roslyn, NY",
+        lat: 40.8,
+        lng: -73.6,
+        pickupTime: "7:05 AM",
+        passengers: 1,
+        camperNames: ["Sam Cohen"],
+      },
+      {
+        name: "15 Harbor Rd",
+        address: "15 Harbor Road, Roslyn, NY",
+        lat: 40.8001,
+        lng: -73.6001,
+        pickupTime: "",
+        passengers: 1,
+        camperNames: ["Sam Cohen"],
+      },
+    ];
+    const deduped = sanitizeRouteStops(bus3);
+    const allNames = deduped.flatMap((s) => s.camperNames ?? []);
+    expect(allNames.filter((n) => n === "Sam Cohen")).toHaveLength(1);
+    expect(deduped).toHaveLength(1);
   });
 });

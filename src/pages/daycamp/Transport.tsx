@@ -108,7 +108,6 @@ import {
 } from "@/lib/transportBoardSettings";
 import { normalizeTransportAddress as normalizeAddress } from "@/lib/transportAddressNormalize";
 import {
-  consolidateExactAddressDuplicatesOnly,
   consolidateRouteStopsByAddress,
   sanitizeRouteStops,
 } from "@/lib/transportRouteStops";
@@ -2853,7 +2852,7 @@ export default function Transport() {
           from: "Unplotted",
           to: routeMeta.find((r) => r.id === p.busNumber)?.bus || `Bus ${p.busNumber}`,
         }));
-        const optimized = consolidateExactAddressDuplicatesOnly(
+        const optimized = sanitizeRouteStops(
           pins.length > 0
             ? optimizeStopsWithPinned(withCampers, pins)
             : optimizeStopsFromFirstStop(withCampers),
@@ -2915,7 +2914,7 @@ export default function Transport() {
           from: "Unplotted",
           to: routeMeta.find((r) => r.id === p.busNumber)?.bus || `Bus ${p.busNumber}`,
         }));
-        const optimized = consolidateExactAddressDuplicatesOnly(
+        const optimized = sanitizeRouteStops(
           nearestNeighborOrder(withCampers),
         );
         proposedCore[targetRouteId] = optimized;
@@ -2974,14 +2973,14 @@ export default function Transport() {
       );
 
       targetRoutes.forEach((r) => {
-        proposedCore[r.id] = consolidateExactAddressDuplicatesOnly(
+        proposedCore[r.id] = sanitizeRouteStops(
           nearestNeighborOrder(proposedCore[r.id] ?? []),
         );
       });
       if (priorMap.size > 0) {
         Object.assign(proposedCore, reorderStopsByHistoricalPriors(proposedCore, priorMap));
         targetRoutes.forEach((r) => {
-          proposedCore[r.id] = consolidateExactAddressDuplicatesOnly(proposedCore[r.id] ?? []);
+          proposedCore[r.id] = sanitizeRouteStops(proposedCore[r.id] ?? []);
         });
       }
 
@@ -3087,7 +3086,7 @@ export default function Transport() {
       // Unchanged routes have no proposedCore entry — preserve their existing stops.
       const proposed = optimizePreview.proposedCore[p.id];
       if (proposed && proposed.length > 0) {
-        nextCore[p.id] = sanitizeRouteStops(consolidateExactAddressDuplicatesOnly(proposed));
+        nextCore[p.id] = sanitizeRouteStops(proposed);
       }
       savedMi += Math.max(0, p.beforeMi - p.afterMi);
       appliedReassignments += p.addedCampers.length;
