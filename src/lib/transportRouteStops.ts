@@ -1,5 +1,5 @@
 import { normalizeTransportAddress } from "@/lib/transportAddressNormalize";
-import { isValidRouteCoordinate } from "@/lib/transportStopTimes";
+import { haversineMiles, isValidRouteCoordinate } from "@/lib/transportStopTimes";
 import type { TransportRouteStop } from "@/lib/transportRoster";
 
 function riderNamesFromStop(stop: TransportRouteStop): string[] {
@@ -98,5 +98,35 @@ export function consolidateRouteStopsByAddress(stops: TransportRouteStop[]): Tra
     byKey.set(key, mergeTwoStops(existing, stop));
   }
 
-  return order.map((key) => byKey.get(key)!);
+  let merged = order.map((key) => byKey.get(key)!);
+
+  // Geocodes can drift slightly — merge orphan template stops onto a staffed stop at the same street.
+  const PROXIMITY_MI = 0.02;
+  const remaining: TransportRouteStop[] = [];
+  for (const stop of merged) {
+    const hasRiders = riderNamesFromStop(stop).length > 0;
+    if (hasRiders) {
+      remaining.push(stop);
+      continue;
+    }
+
+    const streetKey = normalizeTransportAddress(stop.address || "");
+    let absorbed = false;
+    for (let i = 0; i < remaining.length; i++) {
+      const other = remaining[i];
+      if (riderNamesFromStop(other).length === 0) continue;
+      const sameStreet = streetKey && streetKey === normalizeTransportAddress(other.address || "");
+      const nearby =
+        isValidRouteCoordinate(stop.lat, stop.lng)
+        && isValidRouteCoordinate(other.lat, other.lng)
+        && haversineMiles(stop.lat, stop.lng, other.lat, other.lng) <= PROXIMITY_MI;
+      if (!sameStreet && !nearby) continue;
+      remaining[i] = mergeTwoStops(other, stop);
+      absorbed = true;
+      break;
+    }
+    if (!absorbed) remaining.push(stop);
+  }
+
+  return remaining;
 }

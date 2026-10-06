@@ -105,6 +105,7 @@ import {
   normalizeTransportBoardSettings,
   type TransportBoardSettings,
 } from "@/lib/transportBoardSettings";
+import { normalizeTransportAddress as normalizeAddress } from "@/lib/transportAddressNormalize";
 import { consolidateRouteStopsByAddress } from "@/lib/transportRouteStops";
 import { optimizeStopsFromFirstStop, optimizeStopsWithPinned } from "@/lib/transportRouteOptimize";
 import { supabase } from "@/integrations/supabase/client";
@@ -226,42 +227,6 @@ const geocodeFailureMessage = (result: GeocodeResult | null, address: string) =>
 
 const UNPLOTTED_COLOR = "#8b5cf6";
 
-// Normalize an address so abbreviations match full words (Ln↔Lane, Rd↔Road, St↔Street, etc.)
-const STREET_SUFFIX_MAP: Record<string, string> = {
-  st: "street", str: "street", street: "street",
-  rd: "road", road: "road",
-  ln: "lane", lane: "lane",
-  ave: "avenue", av: "avenue", avenue: "avenue",
-  blvd: "boulevard", boulevard: "boulevard",
-  dr: "drive", drive: "drive",
-  ct: "court", court: "court",
-  pl: "place", place: "place",
-  pkwy: "parkway", parkway: "parkway",
-  hwy: "highway", highway: "highway",
-  ter: "terrace", terr: "terrace", terrace: "terrace",
-  cir: "circle", circle: "circle",
-  trl: "trail", trail: "trail",
-  way: "way",
-  sq: "square", square: "square",
-  hl: "hill", hill: "hill",
-  hts: "heights", heights: "heights",
-  pt: "point", point: "point",
-  cv: "cove", cove: "cove",
-  xing: "crossing", crossing: "crossing",
-  n: "north", s: "south", e: "east", w: "west",
-  north: "north", south: "south", east: "east", west: "west",
-  ne: "northeast", nw: "northwest", se: "southeast", sw: "southwest",
-};
-const normalizeAddress = (raw: string): string =>
-  raw
-    .toLowerCase()
-    .replace(/[.,#]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .split(" ")
-    .map((tok) => STREET_SUFFIX_MAP[tok] ?? tok)
-    .join(" ");
-
 type AssignableCamper = Pick<UnplottedCamper, "name" | "address" | "lat" | "lng">;
 
 function unplottedSiblingsAtAddress(
@@ -313,6 +278,10 @@ function mergeCampersIntoStops(
     ...existing,
     passengers: mergedNames.length,
     camperNames: mergedNames,
+    name:
+      mergedNames.length === 1
+        ? mergedNames[0]
+        : `${mergedNames[0]} +${mergedNames.length - 1}`,
   };
   const next = [...stops];
   next[idx] = updated;
@@ -706,11 +675,12 @@ export default function Transport() {
   const scrubBrokenPlacements = (payload: BoardPayload): BoardPayload => {
     const coreStops: BoardPayload["coreStops"] = {};
     for (const [routeId, stops] of Object.entries(payload.coreStops ?? {})) {
-      coreStops[Number(routeId)] = (stops ?? []).filter((stop) => {
+      const filtered = (stops ?? []).filter((stop) => {
         if (stop.address === CAMP_LOCATION.address) return true;
         if (isValidRouteCoordinate(stop.lat, stop.lng)) return true;
         return !!stop.address?.trim();
       });
+      coreStops[Number(routeId)] = consolidateRouteStopsByAddress(filtered);
     }
     return { ...payload, coreStops };
   };
@@ -2761,7 +2731,9 @@ export default function Transport() {
           });
         }
         targetRoutes.forEach(r => {
-          proposedCore[r.id] = nearestNeighborOrder(proposedCore[r.id]);
+          proposedCore[r.id] = consolidateRouteStopsByAddress(
+            nearestNeighborOrder(proposedCore[r.id]),
+          );
         });
         if (priorMap.size > 0) {
           Object.assign(proposedCore, reorderStopsByHistoricalPriors(proposedCore, priorMap));
@@ -2840,7 +2812,7 @@ export default function Transport() {
       // Unchanged routes have no proposedCore entry — preserve their existing stops.
       const proposed = optimizePreview.proposedCore[p.id];
       if (proposed && proposed.length > 0) {
-        nextCore[p.id] = proposed;
+        nextCore[p.id] = consolidateRouteStopsByAddress(proposed);
       }
       savedMi += Math.max(0, p.beforeMi - p.afterMi);
       appliedReassignments += p.addedCampers.length;

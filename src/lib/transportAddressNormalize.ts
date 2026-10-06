@@ -25,8 +25,15 @@ const STREET_SUFFIX_MAP: Record<string, string> = {
   ne: "northeast", nw: "northwest", se: "southeast", sw: "southwest",
 };
 
+/** Street line only — city/state/zip must not affect dedupe keys. */
+export function transportAddressStreetLine(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  return trimmed.split(",")[0]?.trim() || trimmed;
+}
+
 export function normalizeTransportAddress(raw: string): string {
-  return raw
+  return transportAddressStreetLine(raw)
     .toLowerCase()
     .replace(/[.,#]/g, " ")
     .replace(/\s+/g, " ")
