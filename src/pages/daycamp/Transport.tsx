@@ -40,7 +40,10 @@ import {
 import {
   countParentTransportOnRoute,
   formatParentTransportSchedule,
+  isParentTransportBusAssigned,
   isParentTransportScheduledForRun,
+  parentTransportBusLabel,
+  PARENT_TRANSPORT_NO_BUS_LABEL,
   parentTransportRidersForRoute,
   PARENT_TRANSPORT_WEEKDAYS,
   PARENT_TRANSPORT_STOP_LABEL,
@@ -506,7 +509,7 @@ const dayCampReports = [
   { name: "Bus Report", desc: "Day camp bus assignments" },
   { name: "Bus Route Summary", desc: "Route overview with stops" },
   { name: "Car Seat Count by Bus", desc: "Nursery & Pre-K riders per bus (car seats required)" },
-  { name: "Car Report", desc: "Parent transport (PT) campers by bus and schedule" },
+  { name: "Car Report", desc: "All parent transport (PT) campers — with or without a bus assignment" },
   { name: "Daily Passenger Update", desc: "Real-time passenger counts" },
   { name: "Extended Care", desc: "Before/after care transport" },
 ];
@@ -1819,6 +1822,7 @@ export default function Transport() {
   const parentTransportByRoute = useMemo(() => {
     const map = new Map<number, ParentTransportCamper[]>();
     for (const camper of parentTransportForWeek) {
+      if (!isParentTransportBusAssigned(camper)) continue;
       const list = map.get(camper.routeId) ?? [];
       list.push(camper);
       map.set(camper.routeId, list);
@@ -1828,6 +1832,11 @@ export default function Transport() {
     }
     return map;
   }, [parentTransportForWeek]);
+
+  const parentTransportNoBusForWeek = useMemo(
+    () => parentTransportForWeek.filter((c) => !isParentTransportBusAssigned(c)),
+    [parentTransportForWeek],
+  );
 
   const rosterChildOptions = useMemo(
     () => groupRoster.map((c) => ({ id: c.id, name: c.name, guardian_email: null })),
@@ -2239,7 +2248,7 @@ export default function Transport() {
   const resetNewParentTransportForm = () => {
     setNewParentTransport({
       childId: "",
-      routeId: routeMeta[0] ? String(routeMeta[0].id) : "",
+      routeId: "none",
       am: true,
       pm: true,
       weekdays: [],
@@ -2253,9 +2262,12 @@ export default function Transport() {
       toast({ title: "Pick a camper", variant: "destructive" });
       return;
     }
-    const routeId = parseInt(newParentTransport.routeId, 10);
-    if (!routeId || !routeMeta.some((r) => r.id === routeId)) {
-      toast({ title: "Pick a bus", description: "Parent transport campers still roll up to a bus for reports.", variant: "destructive" });
+    const routeId =
+      newParentTransport.routeId === "none" || newParentTransport.routeId === ""
+        ? null
+        : parseInt(newParentTransport.routeId, 10);
+    if (routeId != null && !routeMeta.some((r) => r.id === routeId)) {
+      toast({ title: "Pick a valid bus", description: "Choose a bus from the list or select PT only (no bus).", variant: "destructive" });
       return;
     }
     if (!newParentTransport.am && !newParentTransport.pm) {
@@ -2287,7 +2299,9 @@ export default function Transport() {
     markRoutesConfigured("manual");
     toast({
       title: "Parent transport added",
-      description: `${child.name} assigned to ${routeMeta.find((r) => r.id === routeId)?.bus ?? `Bus ${routeId}`} for reporting.`,
+      description: routeId == null
+        ? `${child.name} added — PT only (Car Report, no bus).`
+        : `${child.name} on ${routeMeta.find((r) => r.id === routeId)?.bus ?? `Bus ${routeId}`} for PT + bus reports.`,
     });
   };
 
@@ -3425,12 +3439,11 @@ export default function Transport() {
         break;
       }
       case "Car Report": {
-        rows.push(["Camper Name", "Bus", "Schedule", "AM", "PM", "Notes"]);
+        rows.push(["Camper Name", "Bus assignment", "Schedule", "AM", "PM", "Notes"]);
         parentTransportCampers.forEach((c) => {
-          const meta = routeMeta.find((r) => r.id === c.routeId);
           rows.push([
             c.name,
-            meta?.bus ?? `Bus ${c.routeId}`,
+            parentTransportBusLabel(c, routeMeta),
             formatParentTransportSchedule(c),
             c.am ? "Yes" : "No",
             c.pm ? "Yes" : "No",
@@ -3480,7 +3493,7 @@ export default function Transport() {
     [displayRoutes],
   );
   const parentTransportCountForWeek = parentTransportForWeek.length;
-  const totalCamperCount = assignedCamperCount + unplottedForWeek.length;
+  const totalCamperCount = assignedCamperCount + unplottedForWeek.length + parentTransportNoBusForWeek.length;
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 min-w-0">
@@ -3498,7 +3511,7 @@ export default function Transport() {
                 <span className="text-sm font-semibold">
                   {totalCamperCount}
                   <span className="ml-1 text-[10px] font-normal text-muted-foreground">
-                    ({assignedCamperCount} on routes{parentTransportCountForWeek > 0 ? ` incl. ${parentTransportCountForWeek} PT` : ""} · {unplottedForWeek.length} unplotted
+                    ({assignedCamperCount} on routes{parentTransportCountForWeek > 0 ? ` incl. ${parentTransportCountForWeek} PT` : ""}{parentTransportNoBusForWeek.length > 0 ? ` · ${parentTransportNoBusForWeek.length} PT-only` : ""} · {unplottedForWeek.length} unplotted
                     {activeRouteEnrollmentWeek != null ? ` · Week ${activeRouteEnrollmentWeek}` : ""})
                   </span>
                 </span>
@@ -4476,7 +4489,7 @@ export default function Transport() {
             <div>
               <h2 className="text-base font-semibold">Parent Transport (PT)</h2>
               <p className="text-sm text-muted-foreground max-w-2xl">
-                Parents drop off or pick up — no map address needed. Campers still count on their assigned bus for attendance and all bus reports.
+                Parents drop off or pick up — no map address. Optional bus for attendance roll-up; otherwise <strong>PT only (no bus)</strong> and they appear on the <strong>Car Report</strong> only.
               </p>
             </div>
             <Button
@@ -4486,19 +4499,12 @@ export default function Transport() {
                 resetNewParentTransportForm();
                 setAddParentTransportOpen(true);
               }}
-              disabled={routeMeta.length === 0}
             >
               <UserPlus className="h-3.5 w-3.5" /> Add to PT
             </Button>
           </div>
 
-          {routeMeta.length === 0 ? (
-            <Card>
-              <CardContent className="p-8 text-center text-sm text-muted-foreground">
-                Apply a route template or add routes first — PT campers still need a bus assignment for reporting.
-              </CardContent>
-            </Card>
-          ) : parentTransportForWeek.length === 0 ? (
+          {parentTransportForWeek.length === 0 ? (
             <Card>
               <CardContent className="p-8 text-center text-sm text-muted-foreground">
                 {parentTransportCampers.length === 0
@@ -4507,45 +4513,92 @@ export default function Transport() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {parentTransportForWeek.map((c) => {
-                const meta = routeMeta.find((r) => r.id === c.routeId);
-                return (
-                  <Card key={c.id} className="border-dashed border-sky-500/40">
-                    <CardContent className="p-4">
-                      <div className="flex items-start gap-3">
-                        <div className="rounded-full bg-sky-500/10 p-2">
-                          <Car className="h-4 w-4 text-sky-600" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="text-sm font-medium">{c.name}</p>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveParentTransport(c.id)}
-                              className="text-muted-foreground hover:text-destructive"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
+            <div className="space-y-4">
+              {parentTransportNoBusForWeek.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    PT only — no bus ({parentTransportNoBusForWeek.length})
+                  </p>
+                  <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                    {parentTransportNoBusForWeek.map((c) => (
+                      <Card key={c.id} className="border-dashed border-amber-500/40 bg-amber-500/5">
+                        <CardContent className="p-4">
+                          <div className="flex items-start gap-3">
+                            <div className="rounded-full bg-amber-500/15 p-2">
+                              <Car className="h-4 w-4 text-amber-700 dark:text-amber-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-sm font-medium">{c.name}</p>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveParentTransport(c.id)}
+                                  className="text-muted-foreground hover:text-destructive"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">{formatParentTransportSchedule(c)}</p>
+                              {c.notes ? (
+                                <p className="text-xs text-muted-foreground mt-2">{c.notes}</p>
+                              ) : null}
+                              <Badge variant="outline" className="mt-2 text-[10px] border-amber-500/40">
+                                {PARENT_TRANSPORT_NO_BUS_LABEL} · Car Report only
+                              </Badge>
+                            </div>
                           </div>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            🚌 {meta?.name ?? `Bus ${c.routeId}`}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {formatParentTransportSchedule(c)}
-                          </p>
-                          {c.notes ? (
-                            <p className="text-xs text-muted-foreground mt-2">{c.notes}</p>
-                          ) : null}
-                          <Badge variant="outline" className="mt-2 text-[10px]">
-                            Counts on bus reports · no map pin
-                          </Badge>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {parentTransportForWeek.some((c) => isParentTransportBusAssigned(c)) && (
+                <div className="space-y-2">
+                  {parentTransportNoBusForWeek.length > 0 && (
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      PT with bus assignment
+                    </p>
+                  )}
+                  <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                    {parentTransportForWeek.filter(isParentTransportBusAssigned).map((c) => (
+                      <Card key={c.id} className="border-dashed border-sky-500/40">
+                        <CardContent className="p-4">
+                          <div className="flex items-start gap-3">
+                            <div className="rounded-full bg-sky-500/10 p-2">
+                              <Car className="h-4 w-4 text-sky-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-sm font-medium">{c.name}</p>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveParentTransport(c.id)}
+                                  className="text-muted-foreground hover:text-destructive"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                🚌 {parentTransportBusLabel(c, routeMeta)}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {formatParentTransportSchedule(c)}
+                              </p>
+                              {c.notes ? (
+                                <p className="text-xs text-muted-foreground mt-2">{c.notes}</p>
+                              ) : null}
+                              <Badge variant="outline" className="mt-2 text-[10px]">
+                                Counts on bus + Car Report · no map pin
+                              </Badge>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -4554,7 +4607,7 @@ export default function Transport() {
               <DialogHeader>
                 <DialogTitle>Add parent transport camper</DialogTitle>
                 <DialogDescription>
-                  Assign a bus for reporting. Pick which runs the parent handles and which weekdays apply.
+                  Pick AM/PM and weekdays. Bus is optional — choose <strong>PT only (no bus)</strong> for Car Report without a bus assignment.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3 py-2">
@@ -4568,18 +4621,22 @@ export default function Transport() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Assigned bus (for reports)</Label>
+                  <Label>Bus assignment (optional)</Label>
                   <Select
-                    value={newParentTransport.routeId}
+                    value={newParentTransport.routeId || "none"}
                     onValueChange={(routeId) => setNewParentTransport((prev) => ({ ...prev, routeId }))}
                   >
-                    <SelectTrigger><SelectValue placeholder="Select bus…" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="none">{PARENT_TRANSPORT_NO_BUS_LABEL}</SelectItem>
                       {routeMeta.map((r) => (
                         <SelectItem key={r.id} value={String(r.id)}>{r.bus} · {r.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">
+                    No bus = listed on Car Report only. With a bus = also rolls up on that bus attendance.
+                  </p>
                 </div>
                 <div className="flex gap-4">
                   <label className="flex items-center gap-2 text-sm">

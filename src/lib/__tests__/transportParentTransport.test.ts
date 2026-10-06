@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   filterUnplottedExcludingParentTransport,
+  isParentTransportBusAssigned,
   isParentTransportScheduledForRun,
+  parentTransportBusLabel,
+  PARENT_TRANSPORT_NO_BUS_LABEL,
   parentTransportRidersForRoute,
   ridersOnRoute,
 } from "@/lib/transportParentTransport";
@@ -95,5 +98,26 @@ describe("transportParentTransport", () => {
 
     expect(riders).toHaveLength(1);
     expect(riders[0]?.name).toBe("Parent Dropoff");
+  });
+
+  it("PT-only campers (no bus) do not appear on any bus roster", () => {
+    const riders = parentTransportRidersForRoute(
+      12,
+      [
+        {
+          id: 4,
+          name: "Car Only Kid",
+          routeId: null,
+          am: true,
+          pm: true,
+          weekdays: [],
+        },
+      ],
+      { runDate: "2027-07-08", runPeriod: "am" },
+    );
+
+    expect(riders).toHaveLength(0);
+    expect(isParentTransportBusAssigned({ routeId: null })).toBe(false);
+    expect(parentTransportBusLabel({ routeId: null })).toBe(PARENT_TRANSPORT_NO_BUS_LABEL);
   });
 });

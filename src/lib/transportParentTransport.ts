@@ -15,11 +15,15 @@ export const PARENT_TRANSPORT_WEEKDAYS: ParentTransportWeekday[] = [
 
 export const PARENT_TRANSPORT_STOP_LABEL = "Parent Transport (PT)";
 
+/** Shown on Car Report when camper is parent transport only — not assigned to a bus. */
+export const PARENT_TRANSPORT_NO_BUS_LABEL = "PT only (no bus)";
+
 export type ParentTransportCamper = {
   id: number;
   childId?: string | null;
   name: string;
-  routeId: number;
+  /** When null, camper is PT-only — appears on Car Report, not on any bus roster. */
+  routeId: number | null;
   /** Parent drop-off — counts on AM bus roster when scheduled. */
   am: boolean;
   /** Parent pick-up — counts on PM bus roster when scheduled. */
@@ -37,6 +41,21 @@ export type RouteRider = {
 };
 
 const normName = (name: string) => name.trim().toLowerCase();
+
+export function isParentTransportBusAssigned(
+  camper: Pick<ParentTransportCamper, "routeId">,
+): camper is ParentTransportCamper & { routeId: number } {
+  return camper.routeId != null && Number.isFinite(camper.routeId);
+}
+
+export function parentTransportBusLabel(
+  camper: Pick<ParentTransportCamper, "routeId">,
+  routeMeta?: { id: number; bus: string }[],
+): string {
+  if (!isParentTransportBusAssigned(camper)) return PARENT_TRANSPORT_NO_BUS_LABEL;
+  const meta = routeMeta?.find((r) => r.id === camper.routeId);
+  return meta?.bus ?? `Bus ${camper.routeId}`;
+}
 
 export function stableParentTransportId(seed: string, fallback: number): number {
   let h = 0;
@@ -104,7 +123,7 @@ export function parentTransportRidersForRoute(
   const { runDate, runPeriod, enrollmentWeek = null, enrollmentLookup } = options;
 
   return parentTransport
-    .filter((c) => c.routeId === routeId)
+    .filter((c) => isParentTransportBusAssigned(c) && c.routeId === routeId)
     .filter((c) => isParentTransportScheduledForRun(c, runDate, runPeriod))
     .filter((c) => {
       if (enrollmentWeek == null || !enrollmentLookup) return true;
