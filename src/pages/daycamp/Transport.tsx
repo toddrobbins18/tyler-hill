@@ -2628,7 +2628,7 @@ export default function Transport() {
 
     toast({
       title: "Campers unmapped",
-      description: `${restoredCount} camper${restoredCount === 1 ? "" : "s"} back on the map as pins · ${routeMeta.length} empty bus${routeMeta.length === 1 ? "" : "es"} ready — assign by hand, then optimize.`,
+      description: `${restoredCount} camper${restoredCount === 1 ? "" : "s"} unmapped to purple pins · ${routeMeta.length} empty bus${routeMeta.length === 1 ? "" : "es"} — place them on routes yourselves, then optimize.`,
     });
   }, [unplottedCampers, coreStops, routeMeta, groupRoster, markRoutesConfigured, toast]);
 
@@ -3610,7 +3610,7 @@ export default function Transport() {
           </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="outline" className="gap-2" title="Take every camper off buses — back to map pins">
+              <Button variant="outline" className="gap-2" title="Unmap every camper from buses — place them on routes yourselves">
                 <MapPin className="h-4 w-4" /> Unmap All Campers
               </Button>
             </AlertDialogTrigger>
@@ -3618,7 +3618,7 @@ export default function Transport() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Unmap all campers?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Every camper comes off the buses and goes back to the map as purple pins. Bus routes stay — empty — so you can place them by hand, then optimize.
+                  Every camper comes off the buses and goes back to the map as purple pins. Empty bus routes stay on the board so you can place campers on routes yourselves, then optimize.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
