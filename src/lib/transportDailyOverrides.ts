@@ -6,6 +6,7 @@ import {
   formatCampTime,
   swimLessonBusRun,
 } from "@/lib/campTime";
+import { consolidateRouteStopsByAddress, riderNamesFromStop } from "@/lib/transportRouteStops";
 
 export interface TransportRouteStop {
   name: string;
@@ -488,14 +489,16 @@ export function applyRouteOverrides(
   const filtered = baseStops
     .filter((s) => !excludedAddresses.has(s.address))
     .map((s) => {
-      const names = (s.camperNames?.length ? s.camperNames : [s.name]).filter(
-        (n) => !excludedCampers.has(normName(n)),
-      );
-      if (!names.length) return null;
-      if (names.length === (s.camperNames?.length ? s.camperNames.length : 1)) return s;
+      const assigned = riderNamesFromStop(s);
+      const names = assigned.filter((n) => !excludedCampers.has(normName(n)));
+      if (!names.length) {
+        if (assigned.length === 0 && (s.passengers ?? 0) === 0) return s;
+        return null;
+      }
+      if (names.length === assigned.length) return s;
       return {
         ...s,
-        name: names[0],
+        name: names.length === 1 ? names[0] : `${names[0]} +${names.length - 1}`,
         camperNames: names,
         passengers: names.length,
       };
@@ -504,15 +507,19 @@ export function applyRouteOverrides(
 
   const added = (manual.added[routeId] ?? [])
     .map((s) => {
-      const names = (s.camperNames?.length ? s.camperNames : [s.name]).filter(
-        (n) => !excludedCampers.has(normName(n)),
-      );
+      const assigned = riderNamesFromStop(s);
+      const names = assigned.filter((n) => !excludedCampers.has(normName(n)));
       if (!names.length) return null;
-      return { ...s, name: names[0], camperNames: names, passengers: names.length };
+      return {
+        ...s,
+        name: names.length === 1 ? names[0] : `${names[0]} +${names.length - 1}`,
+        camperNames: names,
+        passengers: names.length,
+      };
     })
     .filter((s): s is TransportRouteStop => s != null);
 
-  return [...filtered, ...added];
+  return consolidateRouteStopsByAddress([...filtered, ...added]);
 }
 
 export function excludedCamperSet(

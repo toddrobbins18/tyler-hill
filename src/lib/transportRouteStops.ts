@@ -2,7 +2,8 @@ import { normalizeTransportAddress } from "@/lib/transportAddressNormalize";
 import { haversineMiles, isValidRouteCoordinate } from "@/lib/transportStopTimes";
 import type { TransportRouteStop } from "@/lib/transportRoster";
 
-function riderNamesFromStop(stop: TransportRouteStop): string[] {
+/** Camper names on a stop — never treat a bare address label as a rider. */
+export function riderNamesFromStop(stop: TransportRouteStop): string[] {
   const names = (stop.camperNames ?? []).filter(Boolean);
   if (names.length > 0) return names;
 

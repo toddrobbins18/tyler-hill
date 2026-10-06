@@ -261,16 +261,29 @@ function mergeCampersIntoStops(
       passengers: newNames.length,
       camperNames: newNames,
     };
-    return { merged: false, next: [...stops, newStop], mergedNames: newNames.length > 1 ? newNames : null };
+    return {
+      merged: false,
+      next: consolidateRouteStopsByAddress([...stops, newStop]),
+      mergedNames: newNames.length > 1 ? newNames : null,
+    };
   }
 
   const existing = stops[idx];
-  const existingNames = existing.camperNames?.length ? existing.camperNames : [existing.name];
+  const existingNames =
+    existing.camperNames?.length
+      ? existing.camperNames
+      : (existing.passengers ?? 0) > 0
+        ? [existing.name].filter(Boolean)
+        : [];
   const uniqueAdd = newNames.filter(
     (n) => !existingNames.some((e) => e.trim().toLowerCase() === n.trim().toLowerCase()),
   );
   if (uniqueAdd.length === 0) {
-    return { merged: true, next: stops, mergedNames: existingNames.length > 1 ? existingNames : null };
+    return {
+      merged: true,
+      next: consolidateRouteStopsByAddress(stops),
+      mergedNames: existingNames.length > 1 ? existingNames : null,
+    };
   }
 
   const mergedNames = [...existingNames, ...uniqueAdd];
@@ -285,7 +298,11 @@ function mergeCampersIntoStops(
   };
   const next = [...stops];
   next[idx] = updated;
-  return { merged: true, next, mergedNames: mergedNames.length > 1 ? mergedNames : null };
+  return {
+    merged: true,
+    next: consolidateRouteStopsByAddress(next),
+    mergedNames: mergedNames.length > 1 ? mergedNames : null,
+  };
 }
 
 /** Put routed campers back on the unplotted list when a stop is unpinned. */
@@ -604,17 +621,24 @@ export default function Transport() {
 
   const buildBoardPayload = useCallback((
     overrides: Partial<BoardPayload> = {},
-  ): BoardPayload => ({
-    coreStops,
-    routeMeta,
-    unplottedCampers,
-    parentTransportCampers,
-    settings: boardSettings,
-    routesConfigured,
-    routesSeason: routesConfigured ? currentSeason : undefined,
-    routesSource,
-    ...overrides,
-  }), [coreStops, routeMeta, unplottedCampers, parentTransportCampers, boardSettings, routesConfigured, routesSource, currentSeason]);
+  ): BoardPayload => {
+    const draft: BoardPayload = {
+      coreStops,
+      routeMeta,
+      unplottedCampers,
+      parentTransportCampers,
+      settings: boardSettings,
+      routesConfigured,
+      routesSeason: routesConfigured ? currentSeason : undefined,
+      routesSource,
+      ...overrides,
+    };
+    const consolidatedCore: Record<number, RouteStop[]> = {};
+    for (const [routeId, stops] of Object.entries(draft.coreStops ?? {})) {
+      consolidatedCore[Number(routeId)] = consolidateRouteStopsByAddress(stops ?? []);
+    }
+    return { ...draft, coreStops: consolidatedCore };
+  }, [coreStops, routeMeta, unplottedCampers, parentTransportCampers, boardSettings, routesConfigured, routesSource, currentSeason]);
 
   const markRoutesConfigured = useCallback((source: TransportRoutesSource = "manual") => {
     setRoutesConfigured(true);
@@ -698,7 +722,7 @@ export default function Transport() {
     setRoutesSource(scrubbed.routesSource);
     lastKnownStopCountRef.current = countBoardStops(scrubbed.coreStops);
     if (companyId && currentSeason) {
-      persistBoardCache(companyId, currentSeason, prepareBoardForPersist(payload, currentSeason));
+      persistBoardCache(companyId, currentSeason, prepareBoardForPersist(scrubbed, currentSeason));
     }
     const stops = lastKnownStopCountRef.current;
     if (source) {
@@ -1352,11 +1376,13 @@ export default function Transport() {
 
   // Compute the effective core stops for a given route, applying manual + external exceptions
   const getEffectiveCore = useCallback((routeId: number): RouteStop[] => {
-    return applyRouteOverrides(
-      coreStops[routeId] || [],
-      routeId,
-      todayOverrides,
-      excludedCampers,
+    return consolidateRouteStopsByAddress(
+      applyRouteOverrides(
+        coreStops[routeId] || [],
+        routeId,
+        todayOverrides,
+        excludedCampers,
+      ),
     );
   }, [coreStops, todayOverrides, excludedCampers]);
 
@@ -1841,17 +1867,21 @@ export default function Transport() {
           (s) => normalizeAddress(s.address) === normalizeAddress(campers[0].address),
         );
         if (coreMatch) {
-          mergedNames = [...(coreMatch.camperNames || [coreMatch.name]), ...names];
-          const newStop: RouteStop = {
-            name: names.length === 1 ? names[0] : `${names.length} kids at this stop`,
-            address: campers[0].address,
-            lat: campers[0].lat,
-            lng: campers[0].lng,
-            pickupTime: "TBD",
-            passengers: names.length,
-            camperNames: names,
+          const merged = mergeCampersIntoStops([coreMatch], assignable);
+          mergedNames = merged.mergedNames ?? (names.length > 1 ? names : null);
+          const excludedAddrs = [...(prev.excluded[routeId] ?? [])];
+          if (!excludedAddrs.includes(coreMatch.address)) {
+            excludedAddrs.push(coreMatch.address);
+          }
+          const addedBase = existingAdded.filter(
+            (s) => normalizeAddress(s.address) !== normalizeAddress(coreMatch.address),
+          );
+          const added = mergeCampersIntoStops([...addedBase, ...merged.next], []).next;
+          return {
+            ...prev,
+            excluded: { ...prev.excluded, [routeId]: excludedAddrs },
+            added: { ...prev.added, [routeId]: added },
           };
-          return { ...prev, added: { ...prev.added, [routeId]: [...existingAdded, newStop] } };
         }
         mergedNames = names.length > 1 ? names : null;
         return { ...prev, added: { ...prev.added, [routeId]: tryAdded.next } };
@@ -2185,6 +2215,9 @@ export default function Transport() {
       let nextCore = result.coreStops;
       if (result.placed.length > 0) {
         nextCore = reorderStopsByHistoricalPriors(nextCore, priorMap);
+        for (const [routeId, stops] of Object.entries(nextCore)) {
+          nextCore[Number(routeId)] = consolidateRouteStopsByAddress(stops ?? []);
+        }
       }
 
       return {
@@ -2737,6 +2770,9 @@ export default function Transport() {
         });
         if (priorMap.size > 0) {
           Object.assign(proposedCore, reorderStopsByHistoricalPriors(proposedCore, priorMap));
+          targetRoutes.forEach((r) => {
+            proposedCore[r.id] = consolidateRouteStopsByAddress(proposedCore[r.id] ?? []);
+          });
         }
       }
 

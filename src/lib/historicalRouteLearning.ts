@@ -25,6 +25,8 @@ import type {
   TransportRouteStop,
   TransportUnplottedCamper,
 } from "@/lib/transportRoster";
+import { normalizeTransportAddress } from "@/lib/transportAddressNormalize";
+import { consolidateRouteStopsByAddress } from "@/lib/transportRouteStops";
 
 export const DEFAULT_REFERENCE_SEASON = "2026";
 
@@ -46,7 +48,7 @@ export type ReferenceDatasetStatus = {
 };
 
 export function normAddressKey(address: string): string {
-  return address.trim().toLowerCase();
+  return normalizeTransportAddress(address);
 }
 
 export function normCamperName(name: string): string {
@@ -519,6 +521,11 @@ export function applyHistoricalAssignments(options: {
     }
 
     placed.push({ name: camper.name, busNumber: prior.busNumber, address });
+  }
+
+  for (const busKey of Object.keys(coreStops)) {
+    const busNumber = Number(busKey);
+    coreStops[busNumber] = consolidateRouteStopsByAddress(coreStops[busNumber] ?? []);
   }
 
   return {
