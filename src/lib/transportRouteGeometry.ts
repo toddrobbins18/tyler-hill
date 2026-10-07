@@ -4,8 +4,25 @@ export type LatLng = [number, number];
 
 /** Only successful road paths are cached — failed lookups can be retried. */
 const successCache = new Map<string, LatLng[]>();
+const inflightRequests = new Map<string, Promise<LatLng[] | null>>();
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function mapWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  if (!items.length) return;
+  let nextIndex = 0;
+  const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      await worker(items[index]);
+    }
+  });
+  await Promise.all(runners);
+}
 
 export function routeGeometryCacheKey(coordsLngLat: [number, number][]): string {
   return coordsLngLat.map(([lng, lat]) => `${lng.toFixed(5)},${lat.toFixed(5)}`).join("|");
@@ -155,20 +172,43 @@ export async function fetchRoadRouteGeometry(
   return merged;
 }
 
+export async function fetchRoadRouteGeometryShared(
+  supabase: SupabaseClient,
+  coordsLngLat: [number, number][],
+): Promise<LatLng[] | null> {
+  if (coordsLngLat.length < 2) return null;
+
+  const key = routeGeometryCacheKey(coordsLngLat);
+  const cached = readCachedPath(key);
+  if (cached) return cached;
+
+  let pending = inflightRequests.get(key);
+  if (!pending) {
+    pending = fetchRoadRouteGeometry(supabase, coordsLngLat).finally(() => {
+      inflightRequests.delete(key);
+    });
+    inflightRequests.set(key, pending);
+  }
+  return pending;
+}
+
 export async function fetchRoadGeometriesForRoutes(
   supabase: SupabaseClient,
   routes: { id: number; coords: [number, number][] }[],
+  options?: {
+    concurrency?: number;
+    onRouteComplete?: (result: { id: number; path: LatLng[] | null }) => void;
+  },
 ): Promise<Record<number, LatLng[] | null>> {
   const eligible = routes.filter((route) => route.coords.length >= 2);
   const out: Record<number, LatLng[] | null> = {};
+  const concurrency = options?.concurrency ?? 4;
 
-  for (let i = 0; i < eligible.length; i++) {
-    const route = eligible[i];
-    out[route.id] = await fetchRoadRouteGeometry(supabase, route.coords);
-    if (eligible.length > 1 && i < eligible.length - 1) {
-      await sleep(150);
-    }
-  }
+  await mapWithConcurrency(eligible, concurrency, async (route) => {
+    const path = await fetchRoadRouteGeometryShared(supabase, route.coords);
+    out[route.id] = path;
+    options?.onRouteComplete?.({ id: route.id, path });
+  });
 
   return out;
 }
@@ -176,4 +216,5 @@ export async function fetchRoadGeometriesForRoutes(
 /** @internal test helper */
 export function clearRouteGeometryCacheForTests() {
   successCache.clear();
+  inflightRequests.clear();
 }

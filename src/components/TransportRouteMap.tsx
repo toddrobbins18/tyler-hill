@@ -44,6 +44,8 @@ interface TransportRouteMapProps {
   unplottedCampers?: UnplottedCamper[];
   /** Camp address — excluded from stop numbering; shown as "C" marker. */
   campAddress?: string;
+  /** When false, map container may be hidden behind a loading overlay — refresh size when true. */
+  layoutReady?: boolean;
   onMoveStop?: (fromRouteId: number, stopIndex: number, toRouteId: number) => void;
   onRemoveStop?: (routeId: number, stopIndex: number) => void;
   onAssignCamper?: (camperId: number, routeId: number) => void;
@@ -126,7 +128,7 @@ interface RouteLayerRefs {
   onRoad?: boolean;
 }
 
-export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], campAddress, onMoveStop, onRemoveStop, onAssignCamper }: TransportRouteMapProps) {
+export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], campAddress, layoutReady = true, onMoveStop, onRemoveStop, onAssignCamper }: TransportRouteMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const leafletMapRef = useRef<L.Map | null>(null);
   const layerGroupRef = useRef<L.LayerGroup | null>(null);
@@ -138,7 +140,10 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
   roadPathsRef.current = roadPaths;
   const routesRef = useRef(routes);
   routesRef.current = routes;
-  const roadFetchGenRef = useRef(0);
+  /** Per-route coord signature — avoids cancelling in-flight fetches when unrelated routes update. */
+  const routeCoordSigRef = useRef<Map<number, string>>(new Map());
+  const syncAllPolylinesRef = useRef<() => void>(() => {});
+  const syncPolylinesScheduledRef = useRef(false);
   const visibleRoutesKey = useMemo(() => routes.map((r) => r.id).join(","), [routes]);
 
   const roadFetchSignature = useMemo(
@@ -209,45 +214,82 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
   }, []);
 
   useEffect(() => {
-    const fetchGen = ++roadFetchGenRef.current;
     const currentRoutes = routesRef.current;
-    const payload = currentRoutes
-      .map((route) => {
-        const coords = routeCoordinates(route);
-        return { id: route.id, coords };
-      })
-      .filter((route) => route.coords.length >= 2);
-
-    if (!payload.length) {
+    if (!currentRoutes.length) {
+      routeCoordSigRef.current.clear();
       setRoadPaths({});
       return;
     }
 
-    const nextPaths: Record<number, LatLng[] | null | undefined> = {};
+    const visibleIds = new Set(currentRoutes.map((route) => route.id));
+    const pendingSigById = new Map<number, string>();
     const needsFetch: { id: number; coords: [number, number][] }[] = [];
+    const pathUpdates: Record<number, LatLng[] | null | undefined> = {};
 
-    for (const route of payload) {
-      const cacheKey = routeGeometryCacheKey(route.coords);
+    for (const route of currentRoutes) {
+      const coords = routeCoordinates(route);
+      if (coords.length < 2) {
+        routeCoordSigRef.current.delete(route.id);
+        continue;
+      }
+
+      const sig = coords.map(([lng, lat]) => `${lng.toFixed(5)},${lat.toFixed(5)}`).join(";");
+      pendingSigById.set(route.id, sig);
+
+      if (routeCoordSigRef.current.get(route.id) === sig) continue;
+
+      routeCoordSigRef.current.set(route.id, sig);
+      const cacheKey = routeGeometryCacheKey(coords);
       const cached = readCachedRoadPath(cacheKey);
-      if (cached) nextPaths[route.id] = cached;
+      if (cached) pathUpdates[route.id] = cached;
       else {
-        nextPaths[route.id] = undefined;
-        needsFetch.push(route);
+        pathUpdates[route.id] = undefined;
+        needsFetch.push({ id: route.id, coords });
       }
     }
-    setRoadPaths(nextPaths);
 
-    if (!needsFetch.length) return;
+    for (const id of [...routeCoordSigRef.current.keys()]) {
+      if (!visibleIds.has(id)) routeCoordSigRef.current.delete(id);
+    }
+
+    if (Object.keys(pathUpdates).length > 0) {
+      setRoadPaths((prev) => {
+        const next = { ...prev };
+        for (const id of Object.keys(next).map(Number)) {
+          if (!visibleIds.has(id)) delete next[id];
+        }
+        for (const [id, path] of Object.entries(pathUpdates)) {
+          next[Number(id)] = path;
+        }
+        return next;
+      });
+    } else {
+      setRoadPaths((prev) => {
+        const next = { ...prev };
+        let changed = false;
+        for (const id of Object.keys(next).map(Number)) {
+          if (!visibleIds.has(id)) {
+            delete next[id];
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }
+
+    if (!needsFetch.length) {
+      queueMicrotask(() => syncAllPolylinesRef.current());
+      return;
+    }
 
     void (async () => {
-      const fetched = await fetchRoadGeometriesForRoutes(supabase, needsFetch);
-      if (roadFetchGenRef.current !== fetchGen) return;
-      setRoadPaths((prev) => {
-        const merged = { ...prev };
-        for (const route of needsFetch) {
-          merged[route.id] = fetched[route.id] ?? null;
-        }
-        return merged;
+      await fetchRoadGeometriesForRoutes(supabase, needsFetch, {
+        concurrency: 4,
+        onRouteComplete: ({ id, path }) => {
+          if (routeCoordSigRef.current.get(id) !== pendingSigById.get(id)) return;
+          setRoadPaths((prev) => ({ ...prev, [id]: path }));
+          queueMicrotask(() => syncAllPolylinesRef.current());
+        },
       });
     })();
   }, [roadFetchSignature]);
@@ -305,6 +347,17 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
       }
     }
   }, [attachRoutePolyline]);
+
+  syncAllPolylinesRef.current = syncAllPolylines;
+
+  const scheduleSyncPolylines = useCallback(() => {
+    if (syncPolylinesScheduledRef.current) return;
+    syncPolylinesScheduledRef.current = true;
+    requestAnimationFrame(() => {
+      syncPolylinesScheduledRef.current = false;
+      syncAllPolylinesRef.current();
+    });
+  }, []);
 
   // Build/rebuild layers ONLY when underlying data actually changes (NOT on selection change, NOT on parent re-render)
   const buildSignatureRef = useRef<string>("");
@@ -453,7 +506,8 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
     });
 
     syncAllPolylines();
-  }, [routes, availableRoutes, unplottedCampers, bounds, campAddress, syncAllPolylines]);
+    scheduleSyncPolylines();
+  }, [routes, availableRoutes, unplottedCampers, bounds, campAddress, syncAllPolylines, scheduleSyncPolylines]);
 
   useEffect(() => {
     const map = leafletMapRef.current;
@@ -467,7 +521,29 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
 
   useEffect(() => {
     syncAllPolylines();
-  }, [roadPaths, syncAllPolylines]);
+    scheduleSyncPolylines();
+  }, [roadPaths, syncAllPolylines, scheduleSyncPolylines]);
+
+  useEffect(() => {
+    const el = mapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      leafletMapRef.current?.invalidateSize({ animate: false });
+      scheduleSyncPolylines();
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [scheduleSyncPolylines]);
+
+  useEffect(() => {
+    if (!layoutReady) return;
+    const map = leafletMapRef.current;
+    if (!map) return;
+    requestAnimationFrame(() => {
+      map.invalidateSize({ animate: false });
+      scheduleSyncPolylines();
+    });
+  }, [layoutReady, scheduleSyncPolylines]);
 
   // Restyle existing layers when selection changes — no clearing/redraw
   useEffect(() => {

@@ -580,7 +580,8 @@ export default function Transport() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedRoute, setSelectedRoute] = useState<Route | null>(null);
   const [newRoute, setNewRoute] = useState({ name: "", bus: "", departure: "", capacity: 50 });
-  const [visibleRoutes, setVisibleRoutes] = useState<number[]>(initialRouteMeta.map(r => r.id));
+  const [visibleRoutes, setVisibleRoutes] = useState<number[]>([]);
+  const mapDefaultRoutesAppliedRef = useRef(false);
   const [timeOfDay, setTimeOfDay] = useState<"am" | "pm">("am");
   const [boardSettings, setBoardSettings] = useState<TransportBoardSettings>(
     () => ({ ...DEFAULT_TRANSPORT_BOARD_SETTINGS }),
@@ -903,16 +904,15 @@ export default function Transport() {
   const applyBoardPayload = (payload: BoardPayload, source?: "supabase" | "cache") => {
     const scrubbed = scrubBrokenPlacements(payload);
     const normalizedMeta = normalizeRouteMeta(scrubbed.routeMeta);
-    const metaIds = normalizedMeta.map((r) => r.id);
-    const metaIdSet = new Set(metaIds);
+    const metaIdSet = new Set(normalizedMeta.map((r) => r.id));
     setCoreStops(scrubbed.coreStops);
     setRouteMeta(normalizedMeta);
     setVisibleRoutes((prev) => {
       const kept = prev.filter((id) => metaIdSet.has(id));
-      if (source === "supabase" || source === "cache") {
-        return kept.length > 0 ? kept : metaIds;
+      if (!mapDefaultRoutesAppliedRef.current && normalizedMeta.length > 0) {
+        mapDefaultRoutesAppliedRef.current = true;
+        return normalizedMeta.map((r) => r.id);
       }
-      // Local saves (optimize apply, undo, drag) — never expand back to all buses
       return kept.length > 0 ? kept : prev;
     });
     setUnplottedCampers(scrubbed.unplottedCampers);
@@ -2022,9 +2022,17 @@ export default function Transport() {
 
   const showAllRoutes = () => setVisibleRoutes(routeMeta.map(r => r.id));
 
-  /** Show one route on the map; click the same card again to hide it. */
+  /** Toggle buses on the map. Show all → first card click focuses one bus; then add/remove individually. */
   const selectRouteOnMap = (id: number) => {
-    setVisibleRoutes(prev => (prev.length === 1 && prev[0] === id ? [] : [id]));
+    setVisibleRoutes((prev) => {
+      const allIds = routeMeta.map((r) => r.id);
+      const allSelected = allIds.length > 0 && allIds.every((routeId) => prev.includes(routeId));
+
+      if (allSelected) return [id];
+
+      if (prev.includes(id)) return prev.filter((routeId) => routeId !== id);
+      return [...prev, id];
+    });
   };
 
   const handleAddRoute = () => {
@@ -2849,11 +2857,11 @@ export default function Transport() {
   ): number[] => {
     const ids = new Set<number>();
     if (focusRouteId != null) ids.add(focusRouteId);
-    if (visibleRoutes.length === 1) ids.add(visibleRoutes[0]);
+    visibleRoutes.forEach((routeId) => ids.add(routeId));
     perRoute.filter((p) => p.changed).forEach((p) => ids.add(p.id));
     if (ids.size > 0) return [...ids];
     if (focusRouteId != null) return [focusRouteId];
-    if (visibleRoutes.length === 1) return [visibleRoutes[0]];
+    if (visibleRoutes.length > 0) return [...visibleRoutes];
     return perRoute.map((p) => p.id);
   };
 
@@ -4015,19 +4023,21 @@ export default function Transport() {
                   </Button>
                 </div>
               </div>
-              {visibleRoutes.length === 0 && (
-                <p className="shrink-0 text-[10px] text-muted-foreground mb-2 px-0.5">
-                  Map is clear — click a bus below to view one route at a time.
-                </p>
-              )}
-              {visibleRoutes.length === 1 && (
-                <p className="shrink-0 text-[10px] text-muted-foreground mb-2 px-0.5">
-                  Showing {displayRoutes.find(r => r.id === visibleRoutes[0])?.bus ?? "1 bus"} only — click again to hide.
-                </p>
-              )}
-              {visibleRoutes.length === 0 && (
+              {visibleRoutes.length === 0 ? (
                 <p className="shrink-0 text-[10px] text-amber-700 dark:text-amber-300 mb-2 px-0.5">
-                  Map hidden — click a bus below to show its route and pin pickups (📌 on each stop).
+                  Map hidden — click buses to add routes, or use Show all.
+                </p>
+              ) : visibleRoutes.length === routeMeta.length ? (
+                <p className="shrink-0 text-[10px] text-muted-foreground mb-2 px-0.5">
+                  All buses on map — click a card to focus one bus, or Hide all.
+                </p>
+              ) : visibleRoutes.length === 1 ? (
+                <p className="shrink-0 text-[10px] text-muted-foreground mb-2 px-0.5">
+                  Showing {displayRoutes.find((r) => r.id === visibleRoutes[0])?.bus ?? "1 bus"} — click another bus to add it to the map.
+                </p>
+              ) : (
+                <p className="shrink-0 text-[10px] text-muted-foreground mb-2 px-0.5">
+                  {visibleRoutes.length} buses on map — click a card to add or remove.
                 </p>
               )}
               <p className="shrink-0 text-[10px] text-muted-foreground mb-2 px-0.5 flex items-center gap-1">
@@ -4037,7 +4047,6 @@ export default function Transport() {
               <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
               {displayRoutes.map(r => {
                 const isVisible = visibleRoutes.includes(r.id);
-                const isSolo = visibleRoutes.length === 1 && visibleRoutes[0] === r.id;
                 const core = coreStops[r.id] || [];
                 const ptOnRoute = parentTransportByRoute.get(r.id) ?? [];
                 const ptActiveToday = ptOnRoute.filter((c) =>
@@ -4047,7 +4056,7 @@ export default function Transport() {
                   <Card
                     key={r.id}
                     className={`cursor-pointer transition-all shrink-0 ${
-                      isSolo ? "ring-2 ring-primary/40 shadow-md" : isVisible ? "hover:shadow-md" : "opacity-50"
+                      isVisible ? "ring-2 ring-primary/40 shadow-md" : "opacity-50 hover:opacity-70"
                     }`}
                     onClick={() => selectRouteOnMap(r.id)}
                   >
@@ -4318,6 +4327,7 @@ export default function Transport() {
                   routes={displayedRoutes}
                   allRoutes={routes}
                   campAddress={CAMP_LOCATION.address}
+                  layoutReady={!boardLoading && !companyLoading && !authLoading}
                   onMoveStop={handleMoveStop}
                   onRemoveStop={handleRemoveStop}
                   unplottedCampers={unplottedForWeek}
@@ -4340,6 +4350,7 @@ export default function Transport() {
                     routes={displayedRoutes}
                     allRoutes={routes}
                     campAddress={CAMP_LOCATION.address}
+                    layoutReady={!boardLoading && !companyLoading && !authLoading}
                     onMoveStop={handleMoveStop}
                     onRemoveStop={handleRemoveStop}
                     unplottedCampers={unplottedForWeek}
