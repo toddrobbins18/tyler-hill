@@ -12,9 +12,23 @@ describe("routeStopListLines", () => {
       },
       { isCamp: false },
     );
-    expect(lines.title).toBe("Alex Smith, Jamie Smith");
+    expect(lines.title).toBe("Alex & Jamie Smith");
     expect(lines.subtitle).toBe("2 Cambridge Ave");
     expect(lines.isOpenStop).toBe(false);
+  });
+
+  it("shortens hyphenated siblings at one stop", () => {
+    const lines = routeStopListLines(
+      {
+        name: "Caleb Wissner-Goldman +1",
+        address: "127 Village Rd, Locust Valley, NY",
+        camperNames: ["Caleb Wissner-Goldman", "Julian Wissner-Goldman"],
+        passengers: 2,
+      },
+      { isCamp: false },
+    );
+    expect(lines.title).toBe("Caleb & Julian Wissner-Goldman");
+    expect(lines.subtitle).toBe("127 Village Rd");
   });
 
   it("shows assigned campers even when others are pending at the same address", () => {

@@ -71,7 +71,7 @@ export default function OperationLivePanel({
         <Progress value={computedPct} className="h-1.5" />
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="max-h-56 overflow-y-auto rounded-lg border bg-muted/20 divide-y">
+        <div className="max-h-44 sm:max-h-52 overflow-y-auto rounded-lg border bg-muted/20 divide-y">
           {steps.map((step) => (
             <div key={step.id} className="flex gap-3 px-3 py-2.5 text-sm">
               <StepIcon status={step.status} />

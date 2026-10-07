@@ -18,23 +18,32 @@ export function camperEnrolledInWeek(
   return resolveEnrolledWeeks(enrolledWeeks, session).includes(weekNumber);
 }
 
+/** YYYY-MM-DD even when Postgres returns a timestamp. */
+function calendarDateOnly(value: string): string {
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(value.trim());
+  return match?.[1] ?? value.trim();
+}
+
 export function enrollmentWeekForDate(
   calendar: EnrollmentWeekCalendar,
   date: string,
 ): number | null {
+  const day = calendarDateOnly(date);
   for (const row of calendar) {
-    if (row.startDate && row.endDate && date >= row.startDate && date <= row.endDate) {
-      return row.weekNumber;
-    }
+    if (!row.startDate || !row.endDate) continue;
+    const start = calendarDateOnly(row.startDate);
+    const end = calendarDateOnly(row.endDate);
+    if (day >= start && day <= end) return row.weekNumber;
   }
   return null;
 }
 
 /** Weeks that have valid start/end dates configured. */
 export function configuredEnrollmentWeekRows(calendar: EnrollmentWeekCalendar): EnrollmentWeekRow[] {
-  return calendar.filter(
-    (row) => row.startDate && row.endDate && row.endDate >= row.startDate,
-  );
+  return calendar.filter((row) => {
+    if (!row.startDate || !row.endDate) return false;
+    return calendarDateOnly(row.endDate) >= calendarDateOnly(row.startDate);
+  });
 }
 
 /** Match run date to a week, or pick the nearest configured week (for offseason / test dates). */
@@ -48,11 +57,14 @@ export function defaultEnrollmentWeekForDate(
   const rows = configuredEnrollmentWeekRows(calendar);
   if (!rows.length) return null;
 
-  const target = parseISO(runDate).getTime();
+  const target = parseISO(calendarDateOnly(runDate)).getTime();
   let best = rows[0]!;
   let bestDist = Infinity;
   for (const row of rows) {
-    const mid = (parseISO(row.startDate).getTime() + parseISO(row.endDate).getTime()) / 2;
+    const mid =
+      (parseISO(calendarDateOnly(row.startDate)).getTime() +
+        parseISO(calendarDateOnly(row.endDate)).getTime()) /
+      2;
     const dist = Math.abs(mid - target);
     if (dist < bestDist) {
       bestDist = dist;
@@ -67,6 +79,29 @@ export function getEnrollmentWeekRow(
   weekNumber: number,
 ): EnrollmentWeekRow | null {
   return calendar.find((row) => row.weekNumber === weekNumber) ?? null;
+}
+
+/** Week printed on the weekly attendance bubble sheet.
+ *  An explicit pick wins. Otherwise the week containing runDate, then the nearest
+ *  configured week (off-season dates and weekends between Mon–Fri blocks).
+ *  Null only when no weeks have dates.
+ */
+export function attendanceEnrollmentWeek(
+  calendar: EnrollmentWeekCalendar,
+  runDate: string,
+  selectedWeek?: number | null,
+): number | null {
+  if (selectedWeek != null) {
+    const row = getEnrollmentWeekRow(calendar, selectedWeek);
+    if (
+      row?.startDate &&
+      row.endDate &&
+      calendarDateOnly(row.endDate) >= calendarDateOnly(row.startDate)
+    ) {
+      return selectedWeek;
+    }
+  }
+  return defaultEnrollmentWeekForDate(calendar, runDate);
 }
 
 /** Prefer saved calendar rows; fall back to unsaved draft rows for display/print preview. */

@@ -78,7 +78,7 @@ async function geocodeOneAddress(address: string): Promise<GeocodeOneResult> {
       const txt = await r.text();
       const data = txt ? JSON.parse(txt) : {};
       if (!r.ok) {
-        console.warn(`ORS geocode failed [${r.status}], falling back to Nominatim`);
+        console.warn(`ORS geocode failed [${r.status}], falling back to Census`);
         if (r.status === 403 || r.status === 429) rateLimitedProviders.push("ORS");
         orsFailed = true;
       } else {
@@ -97,44 +97,7 @@ async function geocodeOneAddress(address: string): Promise<GeocodeOneResult> {
     orsFailed = true;
   }
 
-  if (lat === undefined || lng === undefined) {
-    const nomParams = new URLSearchParams({
-      q: address,
-      format: "json",
-      limit: "1",
-      countrycodes: "us",
-      viewbox: `${LI_MIN_LON},${LI_MAX_LAT},${LI_MAX_LON},${LI_MIN_LAT}`,
-      bounded: "1",
-    });
-    const nomUrl = `https://nominatim.openstreetmap.org/search?${nomParams.toString()}`;
-    try {
-      const nr = await fetch(nomUrl, {
-        headers: { "User-Agent": "lovable-camp-transport/1.0" },
-      });
-      const txt = await nr.text();
-      if (!nr.ok) {
-        if (nr.status === 403 || nr.status === 429) {
-          rateLimitedProviders.push("Nominatim");
-          console.warn(`Nominatim geocode rate limited [${nr.status}], trying Census`);
-          // Fall through to Census instead of failing immediately.
-        } else {
-          console.warn(`Nominatim geocode failed [${nr.status}]: ${txt.slice(0, 300)}`);
-        }
-      } else {
-        const arr = txt ? JSON.parse(txt) : [];
-        const hit = Array.isArray(arr) ? arr[0] : null;
-        if (hit) {
-          lat = parseFloat(hit.lat);
-          lng = parseFloat(hit.lon);
-          label = hit.display_name;
-          provider = "nominatim";
-        }
-      }
-    } catch (err) {
-      console.warn("Nominatim geocode threw:", err);
-    }
-  }
-
+  // After ORS failure/rate-limit, prefer US Census (no strict rate cap) before Nominatim (blocks server IPs).
   if (lat === undefined || lng === undefined) {
     try {
       const censusParams = new URLSearchParams({
@@ -161,18 +124,20 @@ async function geocodeOneAddress(address: string): Promise<GeocodeOneResult> {
     }
   }
 
+  // Nominatim blocks Supabase edge IPs (403) — skip to avoid noise and wasted time.
   if (lat === undefined || lng === undefined) {
-    if (rateLimitedProviders.length > 0) {
+    console.warn(`No geocode match for "${address.slice(0, 80)}" (Census/ORS)`);
+    if (rateLimitedProviders.includes("ORS")) {
       return {
         found: false,
         error: "GEOCODING_RATE_LIMITED",
-        message: "Geocoding providers are temporarily rate-limited. Please retry the import shortly.",
+        message: "OpenRouteService key rejected or rate-limited (403/429). Census had no Long Island match for this address.",
         providers: rateLimitedProviders,
         retryable: true,
         fallback: true,
       };
     }
-    return { found: false };
+    return { found: false, error: "GEOCODE_NO_MATCH", message: "No Long Island match from Census geocoder." };
   }
 
   if (!inLongIsland(lat, lng)) {
@@ -219,7 +184,7 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: "max 50 addresses per batch" }, 400);
       }
       const concurrency = ORS_KEY
-        ? Math.min(Math.max(body.concurrency ?? 5, 1), 8)
+        ? Math.min(Math.max(body.concurrency ?? 2, 1), 4)
         : 1;
       const results: GeocodeOneResult[] = new Array(body.addresses.length);
       let cursor = 0;
@@ -233,7 +198,8 @@ Deno.serve(async (req) => {
             continue;
           }
           results[i] = await geocodeOneAddress(addr.trim());
-          if (!ORS_KEY) await new Promise((r) => setTimeout(r, 1100));
+          // Pace ORS/Nominatim to avoid 429 bursts during bulk fixes.
+          await new Promise((r) => setTimeout(r, ORS_KEY ? 400 : 1100));
         }
       });
       await Promise.all(workers);

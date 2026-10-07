@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  attendanceEnrollmentWeek,
   buildMonFriEnrollmentWeeks,
   camperEnrolledInWeek,
   enrollmentWeekForDate,
@@ -25,6 +26,25 @@ describe("enrollmentWeekCalendar", () => {
     expect(enrollmentWeekForDate(calendar, "2027-06-30")).toBe(1);
     expect(enrollmentWeekForDate(calendar, "2027-07-06")).toBe(2);
     expect(enrollmentWeekForDate(calendar, "2027-08-01")).toBeNull();
+  });
+
+  it("prints the nearest camp week when the report date is outside the calendar", () => {
+    const calendar = buildMonFriEnrollmentWeeks("2027-06-28");
+    expect(enrollmentWeekForDate(calendar, "2026-10-07")).toBeNull();
+    expect(attendanceEnrollmentWeek(calendar, "2026-10-07")).toBe(1);
+    expect(attendanceEnrollmentWeek(calendar, "2026-10-07", 4)).toBe(4);
+  });
+
+  it("matches week dates stored with a time suffix", () => {
+    const calendar = [
+      {
+        weekNumber: 1,
+        startDate: "2027-06-28T00:00:00+00:00",
+        endDate: "2027-07-02T00:00:00+00:00",
+      },
+    ];
+    expect(enrollmentWeekForDate(calendar, "2027-06-28")).toBe(1);
+    expect(enrollmentWeekForDate(calendar, "2027-07-02")).toBe(1);
   });
 
   it("filters campers by enrolled weeks", () => {

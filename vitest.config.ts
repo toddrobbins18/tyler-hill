@@ -9,6 +9,7 @@ export default defineConfig({
   },
   test: {
     include: [
+      "src/lib/__tests__/enrollmentWeekCalendar.test.ts",
       "src/lib/__tests__/transport*.test.ts",
       "src/lib/__tests__/swimProgress*.test.ts",
       "src/lib/__tests__/operationsDashboard.test.ts",

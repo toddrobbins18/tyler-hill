@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { TransportRouteMap } from "@/components/TransportRouteMap";
-import { Bus, MapPin, Users, Plus, FileText, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Eye, EyeOff, History, LayoutTemplate, Database, Car, CornerDownRight, Clock, Undo2, FlaskConical, CheckCircle2, Pin } from "lucide-react";
+import { Bus, MapPin, Users, Plus, FileText, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Eye, EyeOff, History, LayoutTemplate, Database, Car, CornerDownRight, Clock, Undo2, FlaskConical, CheckCircle2, Pin, Search } from "lucide-react";
 import { pickFirst } from "@/lib/csv";
 import { isSpreadsheetFileName, loadSpreadsheetRowsFromFile } from "@/lib/spreadsheetImport";
 import {
@@ -58,14 +58,17 @@ import {
   type GroupRosterCamper,
 } from "@/lib/transportGroupAttendance";
 import {
-  buildCombinedAttendanceBubbleSheetPdf,
+  buildDayBusBubbleSheetPdf,
+  buildGroupBubbleSheetPdf,
 } from "@/lib/transportBubbleSheetPdf";
 import {
+  attendanceEnrollmentWeek,
   camperEnrolledInWeek,
   enrollmentWeekForDate,
   enrollmentWeekDayColumns,
   formatEnrollmentWeekLabel,
   formatEnrollmentWeekRange,
+  configuredEnrollmentWeekRows,
   getEnrollmentWeekRow,
   loadEnrollmentWeekCalendar,
   type EnrollmentWeekCalendar,
@@ -76,6 +79,7 @@ import {
   buildCamperEnrollmentLookup,
   camperEnrolledInWeekByLookup,
   filterUnplottedForWeek,
+  stopRiderNames,
 } from "@/lib/transportWeekView";
 import {
   buildCarSeatCountByBusCsvRows,
@@ -83,10 +87,14 @@ import {
   summarizeCarSeatsByBus,
 } from "@/lib/transportCarSeatReport";
 import { TransportReportPreviewDialog, type TransportReportPreview } from "@/components/TransportReportPreviewDialog";
+import OperationLivePanel from "@/components/admin/OperationLivePanel";
+import type { OperationStep } from "@/lib/operationLiveLog";
 import {
   applyGeocodeResultsToTransportBoard,
   build2026MappointRouteTemplate,
   collectTransportAddressesNeedingGeocode,
+  fixBoardAddressesFromEnrollment,
+  loadEnrolledCampersForTransport,
   normalizeTransportBoardForSeason,
   prepareBoardForPersist,
   type TransportRoutesSource,
@@ -224,6 +232,29 @@ const PROVIDER_LABEL: Record<GeocodeProvider, string> = {
   ors: "OpenRouteService",
   nominatim: "OpenStreetMap",
   census: "US Census",
+};
+
+type TransportLiveLogState = {
+  visible: boolean;
+  active: boolean;
+  title: string;
+  steps: OperationStep[];
+  progressPct: number;
+  subtitle?: string;
+};
+
+/** ISO timestamp for OperationLivePanel (date-fns `format(new Date(at))`). */
+const transportLogAt = () => new Date().toISOString();
+
+const transportLogTime = () =>
+  new Date().toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" });
+
+const upsertTransportOpStep = (steps: OperationStep[], step: OperationStep): OperationStep[] => {
+  const index = steps.findIndex((s) => s.id === step.id);
+  if (index < 0) return [...steps, step];
+  const next = [...steps];
+  next[index] = { ...next[index], ...step };
+  return next;
 };
 
 const geocodeFailureMessage = (result: GeocodeResult | null, address: string) =>
@@ -505,7 +536,8 @@ const persistBoardCache = (companyId: string, season: string, payload: BoardPayl
 const dayCampReports = [
   { name: "Master Change Sheet", desc: "All buses or pick specific buses — absences, changes, and attendance", href: "/day-camp/change-sheets" },
   { name: "Transport Exceptions", desc: "Absences, swim, office changes, and manual route edits for this date" },
-  { name: "Attendance", desc: "Weekly bubble sheet — AM & PM Mon–Fri (paper backup)" },
+  { name: "Bus Bubble Sheet", desc: "Who is on each bus today — AM and PM. A same-day pickup is left off the afternoon bus only" },
+  { name: "Group Bubble Sheet", desc: "Everyone enrolled in the group this week. Exceptions are never removed" },
   { name: "Digital Attendance Log", desc: "Export Present/Absent saved in Bus Attendance for this date & run" },
   { name: "Bus Report", desc: "Day camp bus assignments" },
   { name: "Bus Route Summary", desc: "Route overview with stops" },
@@ -578,9 +610,12 @@ export default function Transport() {
   const [reportPreview, setReportPreview] = useState<TransportReportPreview | null>(null);
   const [newUnplotted, setNewUnplotted] = useState({ name: "", address: "", age: 10, session: "Session 1" });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const busListScrollRef = useRef<HTMLDivElement>(null);
   const [selectedRoute, setSelectedRoute] = useState<Route | null>(null);
   const [newRoute, setNewRoute] = useState({ name: "", bus: "", departure: "", capacity: 50 });
   const [visibleRoutes, setVisibleRoutes] = useState<number[]>([]);
+  const [focusedSidebarRouteId, setFocusedSidebarRouteId] = useState<number | null>(null);
+  const [busSidebarSearch, setBusSidebarSearch] = useState("");
   const mapDefaultRoutesAppliedRef = useRef(false);
   const [timeOfDay, setTimeOfDay] = useState<"am" | "pm">("am");
   const [boardSettings, setBoardSettings] = useState<TransportBoardSettings>(
@@ -620,6 +655,7 @@ export default function Transport() {
   const [groupRoster, setGroupRoster] = useState<GroupRosterCamper[]>([]);
   const [enrollmentWeekCalendar, setEnrollmentWeekCalendar] = useState<EnrollmentWeekCalendar>([]);
   const [routeEnrollmentWeek, setRouteEnrollmentWeek] = useState<number | "all">("all");
+  const [attendanceWeekOverride, setAttendanceWeekOverride] = useState<number | null>(null);
   const groupLoadedKeyRef = useRef<string | null>(null);
 
   // Scope-choice dialog (Today only vs Permanent vs Cancel)
@@ -1132,6 +1168,10 @@ export default function Transport() {
   useEffect(() => {
     setRouteEnrollmentWeek("all");
   }, [companyId, currentSeason]);
+
+  useEffect(() => {
+    setAttendanceWeekOverride(null);
+  }, [companyId, currentSeason, overrideDate]);
 
   useEffect(() => {
     if (!persistLoaded || !companyId || skipPersistRef.current || importInProgressRef.current) return;
@@ -1816,6 +1856,95 @@ export default function Transport() {
     [unplottedCampers, activeRouteEnrollmentWeek, camperEnrollmentLookup],
   );
 
+  type SidebarCamperHit = {
+    routeId: number;
+    bus: string;
+    routeName: string;
+    camperName: string;
+    address: string;
+  };
+
+  const sidebarCamperHits = useMemo((): SidebarCamperHit[] => {
+    const q = busSidebarSearch.trim().toLowerCase();
+    if (!q) return [];
+    const hits: SidebarCamperHit[] = [];
+    for (const route of displayRoutes) {
+      for (const stop of route.stops) {
+        if (stop.address === CAMP_LOCATION.address) continue;
+        const riders = stopRiderNames(stop);
+        if (riders.length === 0) continue;
+        const address = stop.address?.trim() ?? "";
+        for (const camperName of riders) {
+          if (
+            camperName.toLowerCase().includes(q)
+            || address.toLowerCase().includes(q)
+          ) {
+            hits.push({
+              routeId: route.id,
+              bus: route.bus,
+              routeName: route.name,
+              camperName,
+              address,
+            });
+          }
+        }
+      }
+    }
+    return hits.sort((a, b) => a.camperName.localeCompare(b.camperName));
+  }, [busSidebarSearch, displayRoutes]);
+
+  const sidebarUnplottedHits = useMemo(() => {
+    const q = busSidebarSearch.trim().toLowerCase();
+    if (!q) return [];
+    return unplottedForWeek.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q)
+        || (c.address?.toLowerCase().includes(q) ?? false),
+    );
+  }, [busSidebarSearch, unplottedForWeek]);
+
+  const sidebarRoutesToRender = useMemo(() => {
+    const q = busSidebarSearch.trim().toLowerCase();
+    if (!q) return displayRoutes;
+    const routeIds = new Set(sidebarCamperHits.map((h) => h.routeId));
+    return displayRoutes.filter(
+      (r) =>
+        routeIds.has(r.id)
+        || r.bus.toLowerCase().includes(q)
+        || r.name.toLowerCase().includes(q),
+    );
+  }, [busSidebarSearch, displayRoutes, sidebarCamperHits]);
+
+  const focusSidebarRoute = useCallback((routeId: number) => {
+    setFocusedSidebarRouteId(routeId);
+    setVisibleRoutes((prev) => {
+      if (prev.includes(routeId)) return prev;
+      return [...prev, routeId];
+    });
+  }, []);
+
+  /** Wheel over bus column (incl. gaps between cards) scrolls the route list, not the page/map. */
+  const handleBusListWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    const root = busListScrollRef.current;
+    if (!root) return;
+
+    const nested = (e.target as HTMLElement).closest("[data-stop-list-scroll]");
+    if (nested instanceof HTMLElement && root.contains(nested)) {
+      const { scrollTop, scrollHeight, clientHeight } = nested;
+      const dy = e.deltaY;
+      if (dy > 0 && scrollTop + clientHeight < scrollHeight - 1) return;
+      if (dy < 0 && scrollTop > 0) return;
+    }
+
+    const next = root.scrollTop + e.deltaY;
+    const max = root.scrollHeight - root.clientHeight;
+    if (max <= 0) return;
+
+    root.scrollTop = Math.max(0, Math.min(max, next));
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
   const parentTransportForWeek = useMemo(() => {
     if (activeRouteEnrollmentWeek == null) return parentTransportCampers;
     return parentTransportCampers.filter((c) =>
@@ -1862,6 +1991,9 @@ export default function Transport() {
 
   const geocodeAttemptRef = useRef<string>("");
   const [geocodingBoard, setGeocodingBoard] = useState(false);
+  const [regeocoding, setRegeocoding] = useState(false);
+  const [fixingAddresses, setFixingAddresses] = useState(false);
+  const [transportLiveLog, setTransportLiveLog] = useState<TransportLiveLogState | null>(null);
 
   const geocodeBoardAddresses = useCallback(async (addresses: string[]) => {
     if (addresses.length === 0) return 0;
@@ -1906,6 +2038,8 @@ export default function Transport() {
       || applyingTemplate
       || applyingHistorical
       || geocodingBoard
+      || fixingAddresses
+      || regeocoding
     ) return;
 
     const pending = collectTransportAddressesNeedingGeocode(
@@ -1928,29 +2062,17 @@ export default function Transport() {
         });
       }
     })();
-  }, [persistLoaded, boardLoading, applyingTemplate, applyingHistorical, geocodingBoard, unplottedCampers, coreStops, geocodeBoardAddresses, toast]);
+  }, [persistLoaded, boardLoading, applyingTemplate, applyingHistorical, geocodingBoard, fixingAddresses, regeocoding, unplottedCampers, coreStops, geocodeBoardAddresses, toast]);
 
   const enrollmentWeekForReport = useMemo(
-    () => enrollmentWeekForDate(enrollmentWeekCalendar, overrideDate),
-    [enrollmentWeekCalendar, overrideDate],
+    () => attendanceEnrollmentWeek(enrollmentWeekCalendar, overrideDate, attendanceWeekOverride),
+    [enrollmentWeekCalendar, overrideDate, attendanceWeekOverride],
   );
 
-  const groupRosterForReport = useMemo(() => {
-    if (enrollmentWeekForReport == null) return groupRoster;
-    return groupRoster.filter((c) =>
-      camperEnrolledInWeek(c.enrolledWeeks, c.session, enrollmentWeekForReport),
-    );
-  }, [groupRoster, enrollmentWeekForReport]);
-
-  const groupRosterByGroup = useMemo(() => {
-    const map = new Map<string, GroupRosterCamper[]>();
-    for (const c of groupRosterForReport) {
-      const list = map.get(c.groupName) ?? [];
-      list.push(c);
-      map.set(c.groupName, list);
-    }
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [groupRosterForReport]);
+  const reportDateOutsideEnrollmentWeeks = useMemo(() => {
+    if (enrollmentWeekForReport == null) return false;
+    return enrollmentWeekForDate(enrollmentWeekCalendar, overrideDate) == null;
+  }, [enrollmentWeekCalendar, enrollmentWeekForReport, overrideDate]);
 
   const [busAttendanceSummary, setBusAttendanceSummary] = useState<{
     submittedBuses: number;
@@ -2024,6 +2146,7 @@ export default function Transport() {
 
   /** Toggle buses on the map. Show all → first card click focuses one bus; then add/remove individually. */
   const selectRouteOnMap = (id: number) => {
+    setFocusedSidebarRouteId(id);
     setVisibleRoutes((prev) => {
       const allIds = routeMeta.map((r) => r.id);
       const allSelected = allIds.length > 0 && allIds.every((routeId) => prev.includes(routeId));
@@ -2034,6 +2157,13 @@ export default function Transport() {
       return [...prev, id];
     });
   };
+
+  useEffect(() => {
+    const q = busSidebarSearch.trim();
+    if (!q) return;
+    const first = sidebarCamperHits[0];
+    if (first) focusSidebarRoute(first.routeId);
+  }, [busSidebarSearch, sidebarCamperHits, focusSidebarRoute]);
 
   const handleAddRoute = () => {
     if (!newRoute.name || !newRoute.bus) {
@@ -2559,7 +2689,281 @@ export default function Transport() {
 
   // Re-run every existing pin (unplotted campers + routed stops) through the current
   // geocoder so stale/incorrect coordinates get corrected.
-  const [regeocoding, setRegeocoding] = useState(false);
+  const handleFixAddressesFromEnrollment = async () => {
+    if (!companyId) return;
+    setFixingAddresses(true);
+    let fixLogSteps: OperationStep[] = [
+      {
+        id: "load-enrollment",
+        label: "Loading CampMinder addresses from enrollment",
+        status: "running",
+        at: transportLogAt(),
+      },
+    ];
+    setTransportLiveLog({
+      visible: true,
+      active: true,
+      title: "Fix addresses from CampMinder",
+      steps: fixLogSteps,
+      progressPct: 8,
+      subtitle: "Starting…",
+    });
+
+    try {
+      const enrolled = await loadEnrolledCampersForTransport(supabase, companyId, currentSeason);
+      fixLogSteps = upsertTransportOpStep(fixLogSteps, {
+        id: "load-enrollment",
+        label: "Loading CampMinder addresses from enrollment",
+        status: "done",
+        detail: `${enrolled.length} enrolled campers`,
+        at: transportLogAt(),
+      });
+      fixLogSteps = upsertTransportOpStep(fixLogSteps, {
+        id: "apply-text",
+        label: "Updating route / unplotted addresses on board",
+        status: "running",
+        at: transportLogAt(),
+      });
+      setTransportLiveLog((prev) => prev && {
+        ...prev,
+        steps: [...fixLogSteps],
+        progressPct: 22,
+        subtitle: `Loaded ${enrolled.length} campers · ${transportLogTime()}`,
+      });
+
+      const fixed = fixBoardAddressesFromEnrollment({
+        enrolled,
+        coreStops,
+        unplottedCampers,
+      });
+
+      if (fixed.fixedStopCount === 0 && fixed.fixedUnplottedCount === 0) {
+        fixLogSteps = upsertTransportOpStep(fixLogSteps, {
+          id: "apply-text",
+          label: "Updating route / unplotted addresses on board",
+          status: "done",
+          detail: "Already matched CampMinder",
+          at: transportLogAt(),
+        });
+        fixLogSteps = upsertTransportOpStep(fixLogSteps, {
+          id: "complete",
+          label: "Nothing to change",
+          status: "done",
+          at: transportLogAt(),
+        });
+        setTransportLiveLog({
+          visible: true,
+          active: false,
+          title: "Fix addresses from CampMinder",
+          steps: fixLogSteps,
+          progressPct: 100,
+          subtitle: `Finished ${transportLogTime()}`,
+        });
+        toast({
+          title: "Addresses already match CampMinder",
+          description: "No route or unplotted addresses needed updating.",
+        });
+        return;
+      }
+
+      let nextUnplotted = fixed.unplottedCampers;
+      let nextCoreStops = fixed.coreStops;
+      const addresses = collectTransportAddressesNeedingGeocode(
+        nextUnplotted,
+        nextCoreStops,
+        CAMP_LOCATION.address,
+      );
+
+      fixLogSteps = upsertTransportOpStep(fixLogSteps, {
+        id: "apply-text",
+        label: "Updating route / unplotted addresses on board",
+        status: "done",
+        detail: `${fixed.fixedStopCount} camper address(es) · ${fixed.splitStopCount} shared stop(s) split · ${fixed.fixedUnplottedCount} unplotted`,
+        at: transportLogAt(),
+      });
+      fixLogSteps = upsertTransportOpStep(fixLogSteps, {
+        id: "save-board",
+        label: "Saving board to database",
+        status: "running",
+        at: transportLogAt(),
+      });
+      setTransportLiveLog((prev) => prev && {
+        ...prev,
+        steps: [...fixLogSteps],
+        progressPct: 35,
+        subtitle: `Text updated · saving… · ${transportLogTime()}`,
+      });
+
+      setUnplottedCampers(nextUnplotted);
+      setCoreStops(nextCoreStops);
+      await persistBoard(buildBoardPayload({
+        coreStops: nextCoreStops,
+        unplottedCampers: nextUnplotted,
+      }));
+
+      fixLogSteps = upsertTransportOpStep(fixLogSteps, {
+        id: "save-board",
+        label: "Saving board to database",
+        status: "done",
+        at: transportLogAt(),
+      });
+
+      if (addresses.length > 0) {
+        seedGeocodeCacheFromBundled(geocodeCacheRef.current);
+        fixLogSteps = upsertTransportOpStep(fixLogSteps, {
+          id: "geocode",
+          label: "Geocoding map pins (slow mode)",
+          status: "running",
+          detail: `0 / ${addresses.length} unique addresses`,
+          at: transportLogAt(),
+        });
+        setTransportLiveLog((prev) => prev && {
+          ...prev,
+          steps: [...fixLogSteps],
+          progressPct: 40,
+          subtitle: `${addresses.length} addresses need pins · ${transportLogTime()}`,
+        });
+
+        const resolved = new Map<string, { lat: number; lng: number }>();
+        const BATCH = 12;
+        const batchTotal = Math.ceil(addresses.length / BATCH);
+        for (let start = 0; start < addresses.length; start += BATCH) {
+          const batchIndex = Math.floor(start / BATCH) + 1;
+          const slice = addresses.slice(start, start + BATCH);
+          fixLogSteps = upsertTransportOpStep(fixLogSteps, {
+            id: "geocode",
+            label: "Geocoding map pins (slow mode)",
+            status: "running",
+            detail: `Batch ${batchIndex}/${batchTotal} · ${Math.min(start + BATCH, addresses.length)}/${addresses.length} addresses`,
+            at: transportLogAt(),
+          });
+          const pct = 40 + Math.round((Math.min(start + BATCH, addresses.length) / addresses.length) * 55);
+          setTransportLiveLog((prev) => prev && {
+            ...prev,
+            steps: [...fixLogSteps],
+            progressPct: pct,
+            subtitle: `Batch ${batchIndex}/${batchTotal} — if this time stops updating for 3+ min, check route-optimizer logs · ${transportLogTime()}`,
+          });
+
+          const results = await geocodeBatch(slice, 1, () => {});
+          slice.forEach((address, i) => {
+            const r = results[i];
+            if (isGeocodePoint(r)) {
+              resolved.set(address.trim().toLowerCase(), { lat: r.lat, lng: r.lng });
+            }
+          });
+          const applied = applyGeocodeResultsToTransportBoard(
+            nextUnplotted,
+            nextCoreStops,
+            resolved,
+            CAMP_LOCATION.address,
+          );
+          nextUnplotted = applied.unplotted;
+          nextCoreStops = applied.coreStops;
+          setUnplottedCampers(nextUnplotted);
+          setCoreStops(nextCoreStops);
+          if (start + BATCH < addresses.length) {
+            fixLogSteps = upsertTransportOpStep(fixLogSteps, {
+              id: "geocode-wait",
+              label: "Pausing between batches (rate limit protection)",
+              status: "running",
+              detail: "2.5s",
+              at: transportLogAt(),
+            });
+            setTransportLiveLog((prev) => prev && {
+              ...prev,
+              steps: [...fixLogSteps],
+              subtitle: `Waiting 2.5s before batch ${batchIndex + 1}/${batchTotal} · ${transportLogTime()}`,
+            });
+            await new Promise((r) => setTimeout(r, 2500));
+            fixLogSteps = fixLogSteps.filter((s) => s.id !== "geocode-wait");
+          }
+        }
+        fixLogSteps = upsertTransportOpStep(fixLogSteps, {
+          id: "geocode",
+          label: "Geocoding map pins (slow mode)",
+          status: "done",
+          detail: `${resolved.size} of ${addresses.length} resolved`,
+          at: transportLogAt(),
+        });
+        fixLogSteps = upsertTransportOpStep(fixLogSteps, {
+          id: "save-geocode",
+          label: "Saving geocoded pins",
+          status: "running",
+          at: transportLogAt(),
+        });
+        setTransportLiveLog((prev) => prev && { ...prev, steps: [...fixLogSteps], progressPct: 96 });
+
+        persistGeocodeCache(geocodeCacheRef.current);
+        await persistBoard(buildBoardPayload({
+          coreStops: nextCoreStops,
+          unplottedCampers: nextUnplotted,
+        }));
+        fixLogSteps = upsertTransportOpStep(fixLogSteps, {
+          id: "save-geocode",
+          label: "Saving geocoded pins",
+          status: "done",
+          at: transportLogAt(),
+        });
+      }
+
+      const stillPending = collectTransportAddressesNeedingGeocode(
+        nextUnplotted,
+        nextCoreStops,
+        CAMP_LOCATION.address,
+      );
+      fixLogSteps = upsertTransportOpStep(fixLogSteps, {
+        id: "complete",
+        label: stillPending.length > 0 ? "Finished with pending pins" : "All done",
+        status: stillPending.length > 0 ? "error" : "done",
+        detail: stillPending.length > 0
+          ? `${stillPending.length} address(es) still need geocode — try Re-geocode All`
+          : "Board matches CampMinder and pins are plotted",
+        at: transportLogAt(),
+      });
+      setTransportLiveLog({
+        visible: true,
+        active: false,
+        title: "Fix addresses from CampMinder",
+        steps: fixLogSteps,
+        progressPct: 100,
+        subtitle: `Finished ${transportLogTime()}`,
+      });
+
+      toast({
+        title: stillPending.length > 0 ? "Addresses updated — some pins pending" : "CampMinder addresses applied",
+        description: stillPending.length > 0
+          ? `${fixed.fixedStopCount} stop text fixed · ${stillPending.length} address(es) still need geocode — click Re-geocode All Placements or retry Fix in a few minutes.`
+          : `${fixed.fixedStopCount} route stop(s) · ${fixed.fixedUnplottedCount} unplotted camper(s) updated.`,
+        variant: stillPending.length > 0 ? "destructive" : "default",
+      });
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      fixLogSteps = upsertTransportOpStep(fixLogSteps, {
+        id: "failed",
+        label: "Address fix failed",
+        status: "error",
+        detail: message,
+        at: transportLogAt(),
+      });
+      setTransportLiveLog({
+        visible: true,
+        active: false,
+        title: "Fix addresses from CampMinder",
+        steps: fixLogSteps,
+        progressPct: 100,
+        subtitle: `Failed ${transportLogTime()}`,
+      });
+      toast({
+        title: "Address fix failed",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setFixingAddresses(false);
+    }
+  };
+
   const handleRegeocodeAll = async () => {
     const stopEntries = Object.entries(coreStops).flatMap(([routeId, stops]) =>
       (stops || []).map((stop, index) => ({ routeId: Number(routeId), index, address: stop.address }))
@@ -2577,12 +2981,42 @@ export default function Transport() {
     }
 
     setRegeocoding(true);
+    let regeoSteps: OperationStep[] = [{
+      id: "regeo-run",
+      label: "Re-geocoding all placements",
+      status: "running",
+      detail: `${addresses.length} unique addresses`,
+      at: transportLogAt(),
+    }];
+    setTransportLiveLog({
+      visible: true,
+      active: true,
+      title: "Re-geocode all placements",
+      steps: regeoSteps,
+      progressPct: 15,
+      subtitle: `Calling geocoder · ${transportLogTime()}`,
+    });
     geocodeCacheRef.current.clear();
     try { localStorage.removeItem(GEOCODE_CACHE_KEY); } catch { /* ignore */ }
     toast({ title: "Re-geocoding placements", description: `Checking ${addresses.length} address${addresses.length === 1 ? "" : "es"}…` });
 
     try {
-      const results = await geocodeBatch(addresses, 6, () => {});
+      const results = await geocodeBatch(addresses, 6, (index) => {
+        if (index % 5 !== 0 && index !== addresses.length - 1) return;
+        regeoSteps = upsertTransportOpStep(regeoSteps, {
+          id: "regeo-run",
+          label: "Re-geocoding all placements",
+          status: "running",
+          detail: `${index + 1} / ${addresses.length} addresses`,
+          at: transportLogAt(),
+        });
+        setTransportLiveLog((prev) => prev && {
+          ...prev,
+          steps: [...regeoSteps],
+          progressPct: 15 + Math.round(((index + 1) / addresses.length) * 80),
+          subtitle: `Still running — last update ${transportLogTime()}`,
+        });
+      });
       const resolved = new Map<string, { lat: number; lng: number }>();
       let failed = 0;
       addresses.forEach((address, i) => {
@@ -2613,11 +3047,42 @@ export default function Transport() {
         return next;
       });
 
+      regeoSteps = upsertTransportOpStep(regeoSteps, {
+        id: "regeo-run",
+        label: "Re-geocoding all placements",
+        status: failed > 0 ? "error" : "done",
+        detail: `${moved} pins moved · ${addresses.length - failed} matched${failed ? ` · ${failed} failed` : ""}`,
+        at: transportLogAt(),
+      });
+      setTransportLiveLog({
+        visible: true,
+        active: false,
+        title: "Re-geocode all placements",
+        steps: regeoSteps,
+        progressPct: 100,
+        subtitle: `Finished ${transportLogTime()}`,
+      });
+
       toast({
         title: "Re-geocode complete",
         description: `${moved} pin${moved === 1 ? "" : "s"} repositioned · ${addresses.length - failed} matched${failed ? ` · ${failed} could not be geocoded` : ""}.`,
       });
     } catch (e: any) {
+      regeoSteps = upsertTransportOpStep(regeoSteps, {
+        id: "regeo-run",
+        label: "Re-geocoding all placements",
+        status: "error",
+        detail: e?.message || String(e),
+        at: transportLogAt(),
+      });
+      setTransportLiveLog({
+        visible: true,
+        active: false,
+        title: "Re-geocode all placements",
+        steps: regeoSteps,
+        progressPct: 100,
+        subtitle: `Failed ${transportLogTime()}`,
+      });
       toast({ title: "Re-geocode failed", description: e?.message || String(e), variant: "destructive" });
     } finally {
       setRegeocoding(false);
@@ -3264,59 +3729,97 @@ export default function Transport() {
       return;
     }
 
-    if (reportName === "Attendance") {
-      if (enrollmentWeekForReport == null) {
+    if (reportName === "Bus Bubble Sheet" || reportName === "Group Bubble Sheet") {
+      let calendar = enrollmentWeekCalendar;
+      let week = attendanceEnrollmentWeek(calendar, overrideDate, attendanceWeekOverride);
+      if (week == null && companyId) {
+        calendar = await loadEnrollmentWeekCalendar(supabase, companyId, currentSeason);
+        setEnrollmentWeekCalendar(calendar);
+        groupLoadedKeyRef.current = `${companyId}:${currentSeason}`;
+        week = attendanceEnrollmentWeek(calendar, overrideDate, attendanceWeekOverride);
+      }
+      if (week == null) {
         toast({
           title: "Enrollment week required",
-          description: "Set enrollment week calendar dates before printing attendance sheets.",
+          description: "Set enrollment week calendar dates on Group Bubble Sheets before printing attendance sheets.",
           variant: "destructive",
         });
         return;
       }
-      const sheetRoutes = displayRoutes
-        .map((r) => ({
-          bus: r.bus,
-          routeName: r.name,
-          campers: ridersOnRoute(
-            r.id,
-            getEffectiveCore(r.id),
-            parentTransportCampers,
-            {
+      const weekRow = getEnrollmentWeekRow(calendar, week);
+      const weekLabel = formatEnrollmentWeekLabel(week, calendar);
+
+      if (reportName === "Group Bubble Sheet") {
+        const rosterForWeek = groupRoster.filter((c) =>
+          camperEnrolledInWeek(c.enrolledWeeks, c.session, week),
+        );
+        const groupMap = new Map<string, GroupRosterCamper[]>();
+        for (const camper of rosterForWeek) {
+          const list = groupMap.get(camper.groupName) ?? [];
+          list.push(camper);
+          groupMap.set(camper.groupName, list);
+        }
+        const groups = Array.from(groupMap.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([groupName, campers]) => ({
+            groupName,
+            campers: campers.map((c) => ({ name: c.name, detail: groupName })),
+          }));
+        const built = buildGroupBubbleSheetPdf({
+          companyName: currentCompany?.name ?? "Day Camp",
+          enrollmentWeek: week,
+          weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : undefined,
+          weekDays: enrollmentWeekDayColumns(weekRow),
+          groups,
+        });
+        if (!built) {
+          toast({ title: "No campers to print", variant: "destructive" });
+        } else {
+          openReportPreview({
+            title: "Group Attendance Bubble Sheet",
+            description: `${weekLabel} · enrolled campers only`,
+            kind: "pdf",
+            blob: built.blob,
+            filename: built.filename,
+          });
+        }
+        return;
+      }
+
+      const busRoutesForRun = (period: "am" | "pm") => {
+        const excluded = excludedCamperSet(transportExceptions, period);
+        return routeMeta
+          .map((route) => {
+            const core = consolidateRouteStopsByAddress(
+              applyRouteOverrides(coreStops[route.id] || [], route.id, todayOverrides, excluded),
+            );
+            const campers = ridersOnRoute(route.id, core, [], {
               runDate: overrideDate,
-              runPeriod: timeOfDay,
-              enrollmentWeek: enrollmentWeekForReport,
+              runPeriod: period,
+              enrollmentWeek: week,
               enrollmentLookup: camperEnrollmentLookup,
-            },
-          ).map((c) => ({
-            name: c.name,
-            detail: c.stopName,
-          })),
-        }))
-        .filter((r) => r.campers.length > 0);
-      const groups = groupRosterByGroup.map(([groupName, campers]) => ({
-        groupName,
-        campers: campers.map((c) => ({ name: c.name, detail: groupName })),
-      }));
-      const weekRow =
-        enrollmentWeekForReport != null
-          ? getEnrollmentWeekRow(enrollmentWeekCalendar, enrollmentWeekForReport)
-          : null;
-      const built = buildCombinedAttendanceBubbleSheetPdf({
+            })
+              .filter((c) => camperEnrolledInWeekByLookup(camperEnrollmentLookup, c.name, week))
+              .map((c) => ({ name: c.name, detail: c.stopName }));
+            return { bus: route.bus, routeName: route.name, campers };
+          })
+          .filter((route) => route.campers.length > 0);
+      };
+
+      const built = buildDayBusBubbleSheetPdf({
         companyName: currentCompany?.name ?? "Day Camp",
         date: overrideDate,
-        runPeriod: timeOfDay,
-        enrollmentWeek: enrollmentWeekForReport ?? undefined,
+        enrollmentWeek: week,
         weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : undefined,
-        weekDays: enrollmentWeekDayColumns(weekRow),
-        busRoutes: sheetRoutes,
-        groups,
+        amRoutes: busRoutesForRun("am"),
+        pmRoutes: busRoutesForRun("pm"),
       });
       if (!built) {
         toast({ title: "No campers to print", variant: "destructive" });
       } else {
         openReportPreview({
-          title: "Day Camp Attendance Bubble Sheet",
-          description: `Week ${enrollmentWeekForReport} · bus (weekly AM/PM) + group`,
+          title: "Bus Bubble Sheet",
+          description: `${overrideDate} · AM and PM · exceptions removed per run · ${weekLabel}`,
           kind: "pdf",
           blob: built.blob,
           filename: built.filename,
@@ -3507,8 +4010,30 @@ export default function Transport() {
   const parentTransportCountForWeek = parentTransportForWeek.length;
   const totalCamperCount = assignedCamperCount + unplottedForWeek.length + parentTransportNoBusForWeek.length;
 
+  const transportLiveLogPanel =
+    transportLiveLog?.visible && !mapFullscreen ? (
+      <OperationLivePanel
+        title={transportLiveLog.title}
+        subtitle={transportLiveLog.subtitle}
+        steps={transportLiveLog.steps}
+        active={transportLiveLog.active}
+        progressPct={transportLiveLog.progressPct}
+        onDismiss={
+          transportLiveLog.active
+            ? undefined
+            : () => setTransportLiveLog(null)
+        }
+        className="shadow-lg bg-background/95 backdrop-blur-sm"
+      />
+    ) : null;
+
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 min-w-0">
+      {transportLiveLogPanel && activeTransportTab !== "map" ? (
+        <div className="fixed bottom-4 left-4 z-40 w-[min(100vw-2rem,22rem)] sm:left-6">
+          {transportLiveLogPanel}
+        </div>
+      ) : null}
       <div className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
@@ -3663,9 +4188,19 @@ export default function Transport() {
           </Button>
           <Button
             variant="outline"
+            className="gap-2 border-emerald-600/50 bg-emerald-50 text-emerald-950 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-100"
+            onClick={() => void handleFixAddressesFromEnrollment()}
+            disabled={fixingAddresses || regeocoding}
+            title="Replace wrong route pins with home_address from CampMinder enrollment, then geocode"
+          >
+            <MapPin className={`h-4 w-4 ${fixingAddresses ? "animate-pulse" : ""}`} />
+            {fixingAddresses ? "Fixing addresses…" : "Fix Addresses from CampMinder"}
+          </Button>
+          <Button
+            variant="outline"
             className="gap-2"
             onClick={handleRegeocodeAll}
-            disabled={regeocoding}
+            disabled={regeocoding || fixingAddresses}
             title="Re-run every camper and stop address through the latest geocoder"
           >
             <MapPin className={`h-4 w-4 ${regeocoding ? "animate-pulse" : ""}`} />
@@ -3990,63 +4525,136 @@ export default function Transport() {
             </div>
           )}
 
-          <div className="grid gap-4 lg:grid-cols-[minmax(300px,380px),1fr] lg:items-start">
-            {/* Route sidebar — full map height, scroll bus list; stop lists scroll inside each card */}
-            <div className={`flex flex-col min-h-0 ${MAP_PANEL_HEIGHT[mapHeight]}`}>
-              <div className="shrink-0 flex items-center justify-between gap-2 mb-2 px-0.5">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  {timeOfDay === "am" ? "AM Routes (→ Camp)" : "PM Routes (Camp →)"}
-                </p>
-                <div className="flex items-center gap-1">
-                  <Button
+          <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(340px,420px),1fr] lg:items-stretch">
+            {/* Route sidebar — fixed height; wheel anywhere on list column scrolls bus cards */}
+            <div
+              className={`flex min-h-0 max-h-full flex-col overflow-hidden ${MAP_PANEL_HEIGHT[mapHeight]} lg:sticky lg:top-4`}
+            >
+              <div className="relative shrink-0 mb-2">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={busSidebarSearch}
+                  onChange={(e) => setBusSidebarSearch(e.target.value)}
+                  placeholder="Find camper or address (e.g. Corn, Wood Lane)…"
+                  className="h-9 pl-8 pr-8 text-xs"
+                />
+                {busSidebarSearch.trim() ? (
+                  <button
                     type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 px-2 text-[10px] gap-1"
-                    onClick={hideAllRoutes}
-                    title="Hide all routes on the map"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground"
+                    onClick={() => setBusSidebarSearch("")}
+                    title="Clear search"
                   >
-                    <EyeOff className="h-3 w-3" />
-                    Hide all
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 px-2 text-[10px] gap-1"
-                    onClick={showAllRoutes}
-                    disabled={visibleRoutes.length === routeMeta.length}
-                    title="Show every route on the map"
-                  >
-                    <Eye className="h-3 w-3" />
-                    Show all
-                  </Button>
-                </div>
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
               </div>
-              {visibleRoutes.length === 0 ? (
-                <p className="shrink-0 text-[10px] text-amber-700 dark:text-amber-300 mb-2 px-0.5">
-                  Map hidden — click buses to add routes, or use Show all.
-                </p>
-              ) : visibleRoutes.length === routeMeta.length ? (
-                <p className="shrink-0 text-[10px] text-muted-foreground mb-2 px-0.5">
-                  All buses on map — click a card to focus one bus, or Hide all.
-                </p>
-              ) : visibleRoutes.length === 1 ? (
-                <p className="shrink-0 text-[10px] text-muted-foreground mb-2 px-0.5">
-                  Showing {displayRoutes.find((r) => r.id === visibleRoutes[0])?.bus ?? "1 bus"} — click another bus to add it to the map.
-                </p>
-              ) : (
-                <p className="shrink-0 text-[10px] text-muted-foreground mb-2 px-0.5">
-                  {visibleRoutes.length} buses on map — click a card to add or remove.
+              {busSidebarSearch.trim() && sidebarCamperHits.length > 0 && (
+                <div className="shrink-0 mb-2 space-y-1 rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">
+                    On a bus ({sidebarCamperHits.length})
+                  </p>
+                  {sidebarCamperHits.slice(0, 6).map((hit) => (
+                    <button
+                      key={`${hit.routeId}-${hit.camperName}-${hit.address}`}
+                      type="button"
+                      className="block w-full rounded-md px-2 py-1.5 text-left text-[11px] hover:bg-background/80"
+                      onClick={() => focusSidebarRoute(hit.routeId)}
+                    >
+                      <span className="font-semibold text-foreground">{hit.camperName}</span>
+                      <span className="text-muted-foreground">
+                        {" · "}
+                        {hit.bus}
+                        {hit.routeName && hit.routeName !== hit.bus ? ` (${hit.routeName})` : ""}
+                      </span>
+                      <span className="block truncate text-[10px] text-muted-foreground">{hit.address}</span>
+                    </button>
+                  ))}
+                  {sidebarCamperHits.length > 6 ? (
+                    <p className="text-[10px] text-muted-foreground px-2">
+                      +{sidebarCamperHits.length - 6} more — narrow your search
+                    </p>
+                  ) : null}
+                </div>
+              )}
+              {busSidebarSearch.trim() && sidebarCamperHits.length === 0 && sidebarUnplottedHits.length > 0 && (
+                <div className="shrink-0 mb-2 rounded-lg border border-violet-500/30 bg-violet-500/5 px-2.5 py-2 text-[11px]">
+                  <p className="font-semibold text-violet-800 dark:text-violet-200">Not on a route — unplotted</p>
+                  {sidebarUnplottedHits.map((c) => (
+                    <p key={c.id} className="mt-1 text-muted-foreground">
+                      <span className="font-medium text-foreground">{c.name}</span>
+                      {c.address ? ` · ${c.address}` : ""}
+                    </p>
+                  ))}
+                </div>
+              )}
+              {busSidebarSearch.trim() && sidebarCamperHits.length === 0 && sidebarUnplottedHits.length === 0 && (
+                <p className="shrink-0 mb-2 text-[11px] text-amber-800 dark:text-amber-200 px-0.5">
+                  No match on routes or unplotted — try <strong>Corn</strong> (CampMinder spelling), not Korn.
                 </p>
               )}
-              <p className="shrink-0 text-[10px] text-muted-foreground mb-2 px-0.5 flex items-center gap-1">
-                <Pin className="h-3 w-3 shrink-0 opacity-70" />
-                Pin icon is on the right of each stop — lock pickups, then tap ✨ Optimize.
-              </p>
-              <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
-              {displayRoutes.map(r => {
+              <div
+                ref={busListScrollRef}
+                className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain scroll-smooth touch-pan-y"
+                onWheel={handleBusListWheel}
+              >
+              <div className="sticky top-0 z-10 shrink-0 space-y-2 bg-background/95 pb-2 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80">
+                <div className="flex items-center justify-between gap-2 px-0.5 pt-0.5">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    {timeOfDay === "am" ? "AM Routes (→ Camp)" : "PM Routes (Camp →)"}
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-[10px] gap-1"
+                      onClick={hideAllRoutes}
+                      title="Hide all routes on the map"
+                    >
+                      <EyeOff className="h-3 w-3" />
+                      Hide all
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-[10px] gap-1"
+                      onClick={showAllRoutes}
+                      disabled={visibleRoutes.length === routeMeta.length}
+                      title="Show every route on the map"
+                    >
+                      <Eye className="h-3 w-3" />
+                      Show all
+                    </Button>
+                  </div>
+                </div>
+                {visibleRoutes.length === 0 ? (
+                  <p className="text-[10px] text-amber-700 dark:text-amber-300 px-0.5">
+                    Map hidden — click buses to add routes, or use Show all.
+                  </p>
+                ) : visibleRoutes.length === routeMeta.length ? (
+                  <p className="text-[10px] text-muted-foreground px-0.5">
+                    All buses on map — click a card to focus one bus, or Hide all.
+                  </p>
+                ) : visibleRoutes.length === 1 ? (
+                  <p className="text-[10px] text-muted-foreground px-0.5">
+                    Showing {displayRoutes.find((r) => r.id === visibleRoutes[0])?.bus ?? "1 bus"} — click another bus to add it to the map.
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground px-0.5">
+                    {visibleRoutes.length} buses on map — click a card to add or remove.
+                  </p>
+                )}
+                <p className="text-[10px] text-muted-foreground px-0.5 flex items-center gap-1">
+                  <Pin className="h-3 w-3 shrink-0 opacity-70" />
+                  Scroll here to move through buses · pin stops before ✨ Optimize
+                </p>
+              </div>
+              <div className="min-h-0 flex-1 space-y-2 pr-1 pb-2">
+              {sidebarRoutesToRender.map(r => {
                 const isVisible = visibleRoutes.includes(r.id);
+                const isFocused = focusedSidebarRouteId === r.id;
                 const core = coreStops[r.id] || [];
                 const ptOnRoute = parentTransportByRoute.get(r.id) ?? [];
                 const ptActiveToday = ptOnRoute.filter((c) =>
@@ -4055,8 +4663,13 @@ export default function Transport() {
                 return (
                   <Card
                     key={r.id}
+                    id={`transport-bus-card-${r.id}`}
                     className={`cursor-pointer transition-all shrink-0 ${
-                      isVisible ? "ring-2 ring-primary/40 shadow-md" : "opacity-50 hover:opacity-70"
+                      isFocused
+                        ? "ring-2 ring-primary shadow-md"
+                        : isVisible
+                          ? "ring-2 ring-primary/30"
+                          : "opacity-50 hover:opacity-70"
                     }`}
                     onClick={() => selectRouteOnMap(r.id)}
                   >
@@ -4146,7 +4759,12 @@ export default function Transport() {
                       </div>
                       {isVisible && (r.stops.length > 0 || ptOnRoute.length > 0) && (
                         <div
-                          className="mt-2 pl-6 border-l-2 space-y-1.5 max-h-[220px] overflow-y-auto overscroll-y-contain pr-1"
+                          data-stop-list-scroll
+                          className={`mt-2 pl-6 border-l-2 space-y-1.5 overflow-y-auto overscroll-y-contain pr-1 ${
+                            isFocused || visibleRoutes.length <= 1
+                              ? "max-h-[min(40vh,420px)]"
+                              : "max-h-[120px]"
+                          }`}
                           style={{ borderColor: r.color + "40" }}
                           onClick={(e) => e.stopPropagation()}
                         >
@@ -4198,19 +4816,28 @@ export default function Transport() {
                                   </span>
                                   <div className="min-w-0 flex-1 leading-snug">
                                     <p
-                                      className={`truncate ${
+                                      className={
                                         isCamp
-                                          ? "font-medium text-foreground"
+                                          ? "truncate font-medium text-foreground"
                                           : stopLines.isOpenStop && stopLines.camperNames.length === 0
-                                            ? "text-muted-foreground"
-                                            : "font-medium text-foreground"
-                                      }`}
+                                            ? "truncate text-muted-foreground"
+                                            : stopLines.camperNames.length > 1
+                                              ? "font-medium text-foreground leading-tight break-words [overflow-wrap:anywhere]"
+                                              : "truncate font-medium text-foreground"
+                                      }
                                     >
                                       {stopLines.title}
                                     </p>
+                                    {stopLines.camperNames.length > 1 && !stopLines.isOpenStop ? (
+                                      <p className="text-[9px] text-muted-foreground/90 mt-0.5">
+                                        {stopLines.camperNames.length} campers · same stop
+                                      </p>
+                                    ) : null}
                                     {stopLines.subtitle ? (
                                       <p
-                                        className={`truncate ${
+                                        className={`${
+                                          stopLines.camperNames.length > 1 ? "break-words" : "truncate"
+                                        } ${
                                           stopLines.isOpenStop
                                             ? "text-amber-700 dark:text-amber-400 italic"
                                             : "text-muted-foreground"
@@ -4291,11 +4918,17 @@ export default function Transport() {
                 );
               })}
               </div>
+              </div>
             </div>
 
             {/* Map */}
-            <Card className="relative overflow-visible shadow-sm">
-              <div className="absolute top-3 right-3 z-[1000] flex items-center gap-1.5 rounded-lg border border-border/50 bg-background/95 p-1 shadow-md backdrop-blur-sm">
+            <Card className="relative isolate overflow-visible shadow-sm">
+              {transportLiveLogPanel ? (
+                <div className="absolute bottom-3 left-3 z-[1002] w-[min(calc(100%-5.5rem),22rem)] pointer-events-auto">
+                  {transportLiveLogPanel}
+                </div>
+              ) : null}
+              <div className="absolute top-3 right-3 z-[1003] flex items-center gap-1.5 rounded-lg border border-border/50 bg-background/95 p-1 shadow-md backdrop-blur-sm pointer-events-auto">
                 <select
                   value={mapHeight}
                   onChange={(e) => setMapHeight(e.target.value as "sm" | "md" | "lg" | "xl")}
@@ -4383,6 +5016,23 @@ export default function Transport() {
                   </div>
                 </div>
                 <div className="relative min-h-0 flex-1 bg-muted/15">
+                  {transportLiveLog?.visible ? (
+                    <div className="absolute bottom-3 left-3 z-[60] w-[min(calc(100%-1.5rem),22rem)] pointer-events-auto">
+                      <OperationLivePanel
+                        title={transportLiveLog.title}
+                        subtitle={transportLiveLog.subtitle}
+                        steps={transportLiveLog.steps}
+                        active={transportLiveLog.active}
+                        progressPct={transportLiveLog.progressPct}
+                        onDismiss={
+                          transportLiveLog.active
+                            ? undefined
+                            : () => setTransportLiveLog(null)
+                        }
+                        className="shadow-lg bg-background/95 backdrop-blur-sm"
+                      />
+                    </div>
+                  ) : null}
                   <TransportRouteMap
                     routes={displayedRoutes}
                     allRoutes={routes}
@@ -4767,8 +5417,40 @@ export default function Transport() {
             {overrideDate === todayDateString() && (
               <Badge variant="secondary" className="text-[10px]">Today</Badge>
             )}
+            {configuredEnrollmentWeekRows(enrollmentWeekCalendar).length > 0 ? (
+              <div className="flex items-center gap-2">
+                <Label htmlFor="attendance-enrollment-week" className="text-xs text-muted-foreground whitespace-nowrap">
+                  Attendance week
+                </Label>
+                <Select
+                  value={enrollmentWeekForReport != null ? String(enrollmentWeekForReport) : undefined}
+                  onValueChange={(v) => setAttendanceWeekOverride(parseInt(v, 10))}
+                >
+                  <SelectTrigger id="attendance-enrollment-week" className="h-8 w-[min(280px,70vw)] text-xs">
+                    <SelectValue placeholder="Week" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {configuredEnrollmentWeekRows(enrollmentWeekCalendar).map((row) => (
+                      <SelectItem key={row.weekNumber} value={String(row.weekNumber)}>
+                        {formatEnrollmentWeekLabel(row.weekNumber, enrollmentWeekCalendar)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <span className="text-[10px] text-destructive">
+                Enrollment weeks are not set.{" "}
+                <Link to="/day-camp/group-bubble-sheets" className="underline">
+                  Set them on Group Bubble Sheets
+                </Link>
+              </span>
+            )}
             <span className="text-[10px] text-muted-foreground">
               Same date as Map / Attendance · manual edits are per season ({currentSeason})
+              {reportDateOutsideEnrollmentWeeks
+                ? " · report date is outside camp weeks, so these sheets use the week selected here"
+                : ""}
             </span>
           </div>
           <Card className="mb-4 border-primary/20 bg-primary/5">
@@ -4780,7 +5462,7 @@ export default function Transport() {
                   <Link to="/day-camp/bus-check-ins" className="text-primary underline-offset-2 hover:underline">
                     Bus Check-ins
                   </Link>
-                  . Weekly bubble sheet below is optional paper backup.
+                  . Bus Bubble Sheet lists who is actually on each bus today. Group Bubble Sheet lists everyone enrolled that week.
                 </p>
                 {busAttendanceSummary && busAttendanceSummary.totalBuses > 0 ? (
                   <p className="text-[11px] text-foreground/80">

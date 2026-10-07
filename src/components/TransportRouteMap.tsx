@@ -197,7 +197,8 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
 
   useEffect(() => {
     if (!mapRef.current || leafletMapRef.current) return;
-    const map = L.map(mapRef.current, { zoomControl: true, scrollWheelZoom: true, fadeAnimation: false });
+    const map = L.map(mapRef.current, { zoomControl: false, scrollWheelZoom: true, fadeAnimation: false });
+    L.control.zoom({ position: "bottomright" }).addTo(map);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);

@@ -202,6 +202,45 @@ export type RouteStopListLines = {
   camperNames: string[];
 };
 
+function riderFirstToken(given: string): string {
+  const t = given.trim().split(/\s+/).filter(Boolean);
+  return t[0] ?? given.trim();
+}
+
+/** Split display name into given name(s) and family name (last token). */
+export function parseRiderNameParts(full: string): { given: string; family: string } {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return { given: full.trim(), family: "" };
+  return { given: parts.slice(0, -1).join(" "), family: parts[parts.length - 1]! };
+}
+
+/** Siblings / same last name — "Caleb & Julian Wissner-Goldman" instead of a long comma list. */
+export function formatHouseholdStopTitle(names: string[]): string {
+  const trimmed = names.map((n) => n.trim()).filter(Boolean);
+  if (trimmed.length === 0) return "";
+  if (trimmed.length === 1) return trimmed[0]!;
+
+  const parts = trimmed.map(parseRiderNameParts);
+  const familyKeys = [...new Set(parts.map((p) => p.family.toLowerCase()).filter(Boolean))];
+
+  if (familyKeys.length === 1 && familyKeys[0]) {
+    const family = parts.find((p) => p.family.toLowerCase() === familyKeys[0])!.family;
+    const firsts = parts.map((p) => riderFirstToken(p.given || p.family));
+    if (firsts.length === 2) return `${firsts[0]} & ${firsts[1]} ${family}`;
+    if (firsts.length > 2) {
+      return `${firsts[0]}, ${firsts[1]} +${firsts.length - 2} ${family}`;
+    }
+  }
+
+  if (trimmed.length === 2) {
+    const a = riderFirstToken(parts[0]!.given || trimmed[0]!);
+    const b = riderFirstToken(parts[1]!.given || trimmed[1]!);
+    return `${a} & ${b}`;
+  }
+
+  return `${riderFirstToken(parts[0]!.given || trimmed[0]!)} +${trimmed.length - 1}`;
+}
+
 /** Two-line route stop label: camper name(s) + street address. */
 export function routeStopListLines(
   stop: { name: string; address: string; passengers?: number; camperNames?: string[] },

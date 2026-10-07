@@ -4,6 +4,7 @@ import {
   applyGeocodeResultsToTransportBoard,
   buildMappoint2026AddressHints,
   collectTransportAddressesNeedingGeocode,
+  fixBoardAddressesFromEnrollment,
 } from "@/lib/transportRoster";
 import { CAMP_LOCATION } from "@/lib/transportStopTimes";
 
@@ -87,5 +88,57 @@ describe("transport board geocoding helpers", () => {
     expect(applied.updatedCount).toBe(1);
     expect(applied.unplotted[0]?.lat).toBe(40.88);
     expect(applied.unplotted[0]?.lng).toBe(-73.64);
+  });
+});
+
+describe("fixBoardAddressesFromEnrollment", () => {
+  it("splits shared stops when riders have different CampMinder addresses", () => {
+    const fixed = fixBoardAddressesFromEnrollment({
+      enrolled: [
+        {
+          id: "1",
+          personId: null,
+          name: "Amelia Flores",
+          age: 10,
+          session: null,
+          grade: null,
+          groupName: null,
+          homeAddress: "61 Locust Avenue, Sea Cliff, NY 11579",
+        },
+        {
+          id: "2",
+          personId: null,
+          name: "August Meile",
+          age: 10,
+          session: null,
+          grade: null,
+          groupName: null,
+          homeAddress: "9 Central Drive, Glen Head, NY 11545",
+        },
+      ],
+      coreStops: {
+        1: [
+          {
+            name: "Amelia Flores +1",
+            address: "9 Central Drive, Glen Head, NY 11545",
+            lat: 40.1,
+            lng: -73.6,
+            pickupTime: "8:00",
+            passengers: 2,
+            camperNames: ["Amelia Flores", "August Meile"],
+          },
+        ],
+      },
+      unplottedCampers: [],
+    });
+
+    expect(fixed.splitStopCount).toBe(1);
+    expect(fixed.fixedStopCount).toBe(1);
+    const stops = fixed.coreStops[1] ?? [];
+    expect(stops).toHaveLength(2);
+    const amelia = stops.find((s) => s.camperNames?.includes("Amelia Flores"));
+    const august = stops.find((s) => s.camperNames?.includes("August Meile"));
+    expect(amelia?.address).toContain("61 Locust");
+    expect(august?.address).toContain("9 Central Drive");
   });
 });

@@ -25,6 +25,10 @@ import {
   loadRouteReferenceImport,
   normCamperNameKey,
 } from "@/lib/routeReferenceWarehouse";
+import {
+  consolidateRouteStopsByAddress,
+  riderNamesFromStop,
+} from "@/lib/transportRouteStops";
 
 export type TransportEnrolledCamper = {
   id: string;
@@ -355,6 +359,173 @@ export function applyGeocodeResultsToTransportBoard(
   };
 }
 
+const normAddressCompareKey = (address: string) =>
+  address.trim().toLowerCase().replace(/\s+/g, " ");
+
+function stopLabelForRiders(names: string[]): string {
+  if (names.length === 0) return "";
+  if (names.length === 1) return names[0];
+  return `${names[0]} +${names.length - 1}`;
+}
+
+function buildRouteStopForRiders(
+  template: TransportRouteStop,
+  names: string[],
+  address: string,
+): TransportRouteStop {
+  const addressChanged =
+    normAddressCompareKey(address) !== normAddressCompareKey(template.address || "");
+  const bundled = resolveBundledGeocodeResult(address);
+  let lat = template.lat;
+  let lng = template.lng;
+  if (addressChanged) {
+    lat = bundled?.lat ?? 0;
+    lng = bundled?.lng ?? 0;
+  } else if (!isValidRouteCoordinate(lat, lng) && bundled) {
+    lat = bundled.lat;
+    lng = bundled.lng;
+  }
+
+  if (names.length === 0) {
+    return {
+      ...template,
+      address,
+      lat,
+      lng,
+    };
+  }
+
+  return {
+    ...template,
+    address,
+    lat,
+    lng,
+    camperNames: names,
+    passengers: names.length,
+    name: stopLabelForRiders(names),
+  };
+}
+
+/** Split shared stops when riders have different CampMinder home addresses. */
+function fixRouteStopAddressesFromEnrollment(
+  stop: TransportRouteStop,
+  addressByName: Map<string, string>,
+): { stops: TransportRouteStop[]; fixedStopCount: number; splitFromOne: boolean } {
+  const names = riderNamesFromStop(stop);
+  if (names.length === 0) {
+    return { stops: [stop], fixedStopCount: 0, splitFromOne: false };
+  }
+
+  const stopKey = normAddressCompareKey(stop.address || "");
+  const byAddress = new Map<string, { address: string; names: string[] }>();
+  const noEnrollment: string[] = [];
+
+  for (const rawName of names) {
+    const correct = addressByName.get(normName(rawName));
+    if (!correct) {
+      noEnrollment.push(rawName);
+      continue;
+    }
+    const key = normAddressCompareKey(correct);
+    const bucket = byAddress.get(key);
+    if (bucket) bucket.names.push(rawName);
+    else byAddress.set(key, { address: correct, names: [rawName] });
+  }
+
+  if (byAddress.size === 0) {
+    return { stops: [stop], fixedStopCount: 0, splitFromOne: false };
+  }
+
+  if (byAddress.size === 1 && noEnrollment.length === 0 && names.length === 1) {
+    const only = [...byAddress.values()][0];
+    if (normAddressCompareKey(only.address) === stopKey) {
+      return { stops: [stop], fixedStopCount: 0, splitFromOne: false };
+    }
+    return {
+      stops: [buildRouteStopForRiders(stop, only.names, only.address)],
+      fixedStopCount: 1,
+      splitFromOne: false,
+    };
+  }
+
+  const out: TransportRouteStop[] = [];
+  let fixedStopCount = 0;
+  for (const { address, names: groupNames } of byAddress.values()) {
+    if (normAddressCompareKey(address) !== stopKey) fixedStopCount += groupNames.length;
+    out.push(buildRouteStopForRiders(stop, groupNames, address));
+  }
+  if (noEnrollment.length > 0) {
+    out.push(buildRouteStopForRiders(stop, noEnrollment, stop.address || ""));
+  }
+
+  const splitFromOne = out.length > 1;
+  if (splitFromOne && fixedStopCount === 0) {
+    fixedStopCount = names.filter((n) => {
+      const correct = addressByName.get(normName(n));
+      return correct && normAddressCompareKey(correct) !== stopKey;
+    }).length;
+  }
+
+  return { stops: out, fixedStopCount, splitFromOne };
+}
+
+/** Replace stale route/unplotted addresses with children.home_address (CampMinder). */
+export function fixBoardAddressesFromEnrollment(options: {
+  enrolled: TransportEnrolledCamper[];
+  coreStops: Record<number, TransportRouteStop[]>;
+  unplottedCampers: TransportUnplottedCamper[];
+}): {
+  coreStops: Record<number, TransportRouteStop[]>;
+  unplottedCampers: TransportUnplottedCamper[];
+  fixedStopCount: number;
+  fixedUnplottedCount: number;
+  splitStopCount: number;
+} {
+  const addressByName = new Map<string, string>();
+  for (const camper of options.enrolled) {
+    const address = camper.homeAddress?.trim();
+    if (address) addressByName.set(normName(camper.name), address);
+  }
+
+  let fixedStopCount = 0;
+  let splitStopCount = 0;
+  const coreStops: Record<number, TransportRouteStop[]> = {};
+  for (const [routeId, stops] of Object.entries(options.coreStops)) {
+    const expanded: TransportRouteStop[] = [];
+    for (const stop of stops ?? []) {
+      const fixed = fixRouteStopAddressesFromEnrollment(stop, addressByName);
+      fixedStopCount += fixed.fixedStopCount;
+      if (fixed.splitFromOne) splitStopCount += 1;
+      expanded.push(...fixed.stops);
+    }
+    coreStops[Number(routeId)] = consolidateRouteStopsByAddress(expanded);
+  }
+
+  let fixedUnplottedCount = 0;
+  const unplottedCampers = options.unplottedCampers.map((camper) => {
+    const correct = addressByName.get(normName(camper.name));
+    if (!correct || normAddressCompareKey(correct) === normAddressCompareKey(camper.address || "")) {
+      return camper;
+    }
+    fixedUnplottedCount += 1;
+    const bundled = resolveBundledGeocodeResult(correct);
+    return {
+      ...camper,
+      address: correct,
+      lat: bundled?.lat ?? 0,
+      lng: bundled?.lng ?? 0,
+    };
+  });
+
+  return {
+    coreStops,
+    unplottedCampers,
+    fixedStopCount,
+    fixedUnplottedCount,
+    splitStopCount,
+  };
+}
+
 /** Names currently assigned to any route stop. */
 export function camperNamesOnBoard(coreStops: Record<number, TransportRouteStop[]>): Set<string> {
   const names = new Set<string>();
@@ -455,7 +626,7 @@ export function buildUnplottedFromEnrollment(options: {
     const hint = addressHints?.get(key);
     const syncedAddress = child.homeAddress?.trim() || "";
     if (kept) {
-      const address = kept.address?.trim() || syncedAddress || hint?.address || "";
+      const address = syncedAddress || kept.address?.trim() || hint?.address || "";
       const bundled = address ? resolveBundledGeocodeResult(address) : null;
       out.push({
         ...kept,

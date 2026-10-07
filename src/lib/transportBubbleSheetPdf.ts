@@ -19,6 +19,9 @@ export type WeekDayColumn = {
 const DAILY_SHEET_INSTRUCTION =
   "Mark one bubble per camper: Present (P) or Absent (A). Use when digital attendance is unavailable.";
 
+const DAY_BUS_INSTRUCTION =
+  "AM lists who rides the bus this morning. PM lists who rides this afternoon. A same-day pickup or other exception is left off that run only.";
+
 const WEEKLY_BUS_INSTRUCTION =
   "Mark Present (P) for each AM and PM run this week. One row per camper — siblings each get their own row.";
 
@@ -649,6 +652,62 @@ export function downloadBusBubbleSheetsPdf(options: {
   if (!built) return false;
   triggerBlobDownload(built.blob, built.filename);
   return true;
+}
+
+export function buildDayBusBubbleSheetPdf(options: {
+  companyName: string;
+  date: string;
+  enrollmentWeek?: number;
+  weekDateRange?: string;
+  amRoutes: {
+    bus: string;
+    routeName: string;
+    campers: BubbleSheetCamper[];
+  }[];
+  pmRoutes: {
+    bus: string;
+    routeName: string;
+    campers: BubbleSheetCamper[];
+  }[];
+}): TransportReportPdf | null {
+  const toSections = (
+    routes: { bus: string; routeName: string; campers: BubbleSheetCamper[] }[],
+    periodLabel: string,
+  ): BubbleSheetSection[] =>
+    routes
+      .filter((r) => r.campers.length > 0)
+      .map((r) => ({
+        title: `${periodLabel} · ${r.bus} · ${r.routeName}`,
+        subtitle: `${r.campers.length} on the bus`,
+        campers: r.campers,
+      }));
+
+  const amSections = toSections(options.amRoutes, "AM");
+  const pmSections = toSections(options.pmRoutes, "PM");
+  if (!amSections.length && !pmSections.length) return null;
+
+  const metaLines = [`Date: ${options.date}`];
+  if (options.enrollmentWeek != null) metaLines.push(`Enrollment week: ${options.enrollmentWeek}`);
+  if (options.weekDateRange) metaLines.push(`Week dates: ${options.weekDateRange}`);
+
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
+  renderBubbleDocument(
+    doc,
+    options.companyName,
+    "Bus Bubble Sheet",
+    metaLines,
+    [
+      { layout: "daily", sections: amSections, detailColumnLabel: "Stop" },
+      { layout: "daily", sections: pmSections, detailColumnLabel: "Stop" },
+    ],
+    DAY_BUS_INSTRUCTION,
+  );
+
+  const safeDate = options.date.replace(/[^0-9-]/g, "");
+  return {
+    blob: doc.output("blob"),
+    filename: `bus-bubble-sheet-${safeDate}.pdf`,
+  };
 }
 
 export function buildGroupBubbleSheetPdf(options: {
