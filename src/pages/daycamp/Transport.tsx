@@ -4294,7 +4294,7 @@ export default function Transport() {
             </div>
 
             {/* Map */}
-            <Card className="overflow-hidden relative">
+            <Card className="relative overflow-visible">
               <div className="absolute top-2 right-2 z-[1000] flex gap-1">
                 <select
                   value={mapHeight}
@@ -4317,7 +4317,7 @@ export default function Transport() {
                   <Maximize2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
-              <div className={`${MAP_PANEL_HEIGHT[mapHeight]} w-full relative`}>
+              <div className={`${MAP_PANEL_HEIGHT[mapHeight]} w-full relative [&_.leaflet-container]:rounded-lg`}>
                 {(boardLoading || companyLoading || authLoading) && (
                   <div className="absolute inset-0 z-[1001] flex items-center justify-center bg-background/60 backdrop-blur-[1px] text-sm text-muted-foreground">
                     Loading saved board…

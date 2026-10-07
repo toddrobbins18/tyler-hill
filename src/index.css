@@ -410,3 +410,17 @@ All colors MUST be HSL.
 .leaflet-top,
 .leaflet-bottom { z-index: 1 !important; }
 .leaflet-control { z-index: 2 !important; }
+/* Popups must sit above map tiles/controls and must not be clipped by parent overflow */
+.leaflet-popup-pane { z-index: 900 !important; }
+.leaflet-tooltip-pane { z-index: 850 !important; }
+.leaflet-popup-content-wrapper {
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+}
+.leaflet-popup-content {
+  margin: 12px 14px;
+  line-height: 1.4;
+}
+.leaflet-popup-tip-container {
+  z-index: 900;
+}

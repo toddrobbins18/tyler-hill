@@ -444,7 +444,7 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
               <p style="margin:6px 0 0;font-weight:600;color:${route.color};">🚌 ${route.name} (${route.bus})</p>
               ${moveOptions}${removeBtn}
             </div>
-          `, { maxWidth: 280, autoPan: false, autoClose: false })
+          `, { maxWidth: 300, autoPan: true, autoPanPadding: [24, 24], autoClose: false, closeOnClick: false, className: "transport-stop-popup" })
           .on("click", (e) => {
             L.DomEvent.stopPropagation(e);
             setSelectedRouteId(route.id);
@@ -501,7 +501,7 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
             ${detailsBlock}
             ${assignDropdown}
           </div>
-        `, { maxWidth: 300, autoPan: false, autoClose: false })
+        `, { maxWidth: 320, autoPan: true, autoPanPadding: [24, 24], autoClose: false, closeOnClick: false, className: "transport-camper-popup" })
         .addTo(layerGroup);
     });
 
