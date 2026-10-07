@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Upload, FileJson, AlertCircle, CheckCircle2, RefreshCw, Clock, Building2, XCircle, Mail, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,9 @@ import { format } from "date-fns";
 import { DEFAULT_SEASON } from "@/lib/seasonConstants";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { isNorthShoreDayCamp } from "@/lib/camps";
+import OperationLivePanel from "@/components/admin/OperationLivePanel";
+import { useSyncJobMonitor } from "@/hooks/useSyncJobMonitor";
+import { syncJobTitle, type OperationStep } from "@/lib/operationLiveLog";
 
 interface ImportResults {
   campersImported: number;
@@ -44,7 +47,15 @@ export default function CampDataImporter() {
   // CampMinder sync state
   const [companies, setCompanies] = useState<CompanyWithCampMinder[]>([]);
   const [syncingCompanyId, setSyncingCompanyId] = useState<string | null>(null);
+  const [trackedSync, setTrackedSync] = useState<{ jobId: string; companyName: string } | null>(null);
+  const [dismissedSyncJobId, setDismissedSyncJobId] = useState<string | null>(null);
+  const syncFinishedRef = useRef(false);
   const [backfillingSlug, setBackfillingSlug] = useState<string | null>(null);
+  const [backfillOperation, setBackfillOperation] = useState<{ companyName: string; steps: OperationStep[] } | null>(
+    null,
+  );
+  const [dismissedBackfill, setDismissedBackfill] = useState(false);
+  const syncMonitor = useSyncJobMonitor(trackedSync?.jobId ?? null);
   
   const [syncResults, setSyncResults] = useState<Record<string, CampMinderSyncResult>>({});
   const [loadingCompanies, setLoadingCompanies] = useState(true);
@@ -63,6 +74,19 @@ export default function CampDataImporter() {
   useEffect(() => {
     fetchCompanies();
   }, [isSuperAdmin, currentCompany]);
+
+  useEffect(() => {
+    if (!trackedSync || !syncMonitor.isDone || syncFinishedRef.current) return;
+    syncFinishedRef.current = true;
+    setSyncingCompanyId(null);
+    void fetchCompanies();
+
+    if (syncMonitor.job?.status?.toLowerCase() === "completed") {
+      toast.success(`CampMinder sync finished for ${trackedSync.companyName}`);
+    } else {
+      toast.error(syncMonitor.error ?? syncMonitor.job?.error_message ?? `Sync failed for ${trackedSync.companyName}`);
+    }
+  }, [syncMonitor.isDone, syncMonitor.job, syncMonitor.error, trackedSync]);
 
   const fetchCompanies = async () => {
     setLoadingCompanies(true);
@@ -91,14 +115,31 @@ export default function CampDataImporter() {
 
   const handleGuardianEmailBackfill = async (companySlug: string, companyName: string) => {
     setBackfillingSlug(companySlug);
+    setDismissedBackfill(false);
     const seasons = ["2027", "2026"];
     let hadAuthFailure = false;
     let totalUpdated = 0;
+
+    const updateBackfillSteps = (steps: OperationStep[]) => {
+      setBackfillOperation({ companyName, steps });
+    };
+
+    updateBackfillSteps([{ id: "connect", label: "Connecting to CampMinder", status: "running" }]);
 
     try {
       for (const season of seasons) {
         let remaining = 1;
         let runs = 0;
+
+        updateBackfillSteps([
+          { id: "connect", label: "Connecting to CampMinder", status: "done" },
+          {
+            id: `season-${season}`,
+            label: `Fetching parent emails · season ${season}`,
+            status: "running",
+            detail: `${totalUpdated} updated so far`,
+          },
+        ]);
 
         while (remaining > 0 && runs < 40) {
           runs++;
@@ -112,8 +153,27 @@ export default function CampDataImporter() {
           remaining = row.remaining ?? remaining;
           totalUpdated += row.updated ?? 0;
 
+          updateBackfillSteps([
+            { id: "connect", label: "Connecting to CampMinder", status: "done" },
+            {
+              id: `season-${season}`,
+              label: `Fetching parent emails · season ${season}`,
+              status: "running",
+              detail: `${totalUpdated} updated · ${remaining} remaining`,
+            },
+          ]);
+
           if (row.reason?.includes("Auth failed")) {
             hadAuthFailure = true;
+            updateBackfillSteps([
+              { id: "connect", label: "Connecting to CampMinder", status: "done" },
+              {
+                id: `season-${season}`,
+                label: `Fetching parent emails · season ${season}`,
+                status: "error",
+                detail: "CampMinder auth failed — wait 30s and try again",
+              },
+            ]);
             toast.error(`${season}: CampMinder auth failed — wait 30s and click Parent emails again.`);
             break;
           }
@@ -122,13 +182,29 @@ export default function CampDataImporter() {
         }
       }
 
-      if (hadAuthFailure) {
-        toast.message(`${totalUpdated} parent emails saved. Click Parent emails again to continue.`, { duration: 6000 });
-      } else {
+      if (!hadAuthFailure) {
+        updateBackfillSteps([
+          { id: "connect", label: "Connecting to CampMinder", status: "done" },
+          { id: "2027", label: "Season 2027 parent emails", status: "done" },
+          { id: "2026", label: "Season 2026 parent emails", status: "done" },
+          {
+            id: "done",
+            label: "Parent email backfill complete",
+            status: "done",
+            detail: `${totalUpdated} emails updated`,
+          },
+        ]);
         toast.success(`Parent email backfill done (${totalUpdated} updated).`);
+      } else {
+        toast.message(`${totalUpdated} parent emails saved. Click Parent emails again to continue.`, { duration: 6000 });
       }
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Backfill failed");
+      const message = error instanceof Error ? error.message : "Backfill failed";
+      updateBackfillSteps([
+        { id: "connect", label: "Connecting to CampMinder", status: "done" },
+        { id: "error", label: "Backfill failed", status: "error", detail: message },
+      ]);
+      toast.error(message);
     } finally {
       setBackfillingSlug(null);
     }
@@ -141,6 +217,8 @@ export default function CampDataImporter() {
   ) => {
     setSyncingCompanyId(companyId);
     setSyncResults(prev => ({ ...prev, [companyId]: {} }));
+    syncFinishedRef.current = false;
+    setDismissedSyncJobId(null);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -149,7 +227,7 @@ export default function CampDataImporter() {
       }
 
       const syncLabel = syncType === 'full' ? 'full' : `${syncType}-only`;
-      toast.info(`${syncLabel} CampMinder sync queued for ${companyName}. Check sync_jobs in Supabase for progress.`);
+      toast.info(`${syncLabel} CampMinder sync started for ${companyName}`);
 
       const syncSeason = currentSeason || DEFAULT_SEASON;
       const response = await supabase.functions.invoke('sync-campminder', {
@@ -170,26 +248,30 @@ export default function CampDataImporter() {
         throw new Error(result.error || 'Sync failed');
       }
 
-      // Extract results for this company
       const companyResults = result.results?.[0] || {};
-      setSyncResults(prev => ({
-        ...prev,
-        [companyId]: {
-          campers: companyResults.campers,
-          staff: companyResults.staff,
-          divisions: companyResults.divisions,
-          sessions: companyResults.sessions,
-        }
-      }));
+      const jobId = companyResults.job_id as string | undefined;
 
-      // Refresh companies to get updated last_sync timestamp
-      await fetchCompanies();
-      toast.success(`${syncLabel} CampMinder sync job started for ${companyName}.`);
+      if (jobId) {
+        setTrackedSync({ jobId, companyName });
+      } else {
+        setSyncResults(prev => ({
+          ...prev,
+          [companyId]: {
+            campers: companyResults.campers,
+            staff: companyResults.staff,
+            divisions: companyResults.divisions,
+            sessions: companyResults.sessions,
+          },
+        }));
+        setSyncingCompanyId(null);
+        await fetchCompanies();
+        toast.success(`${syncLabel} CampMinder sync completed for ${companyName}.`);
+      }
     } catch (error: any) {
       console.error("Sync error:", error);
       toast.error(`Sync failed for ${companyName}: ${error.message}`);
-    } finally {
       setSyncingCompanyId(null);
+      setTrackedSync(null);
     }
   };
 
@@ -333,6 +415,27 @@ export default function CampDataImporter() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {trackedSync && trackedSync.jobId !== dismissedSyncJobId && syncMonitor.steps.length > 0 ? (
+            <OperationLivePanel
+              title={syncJobTitle(syncMonitor.job)}
+              subtitle={`Live progress · ${trackedSync.companyName}`}
+              steps={syncMonitor.steps}
+              active={syncMonitor.isLive}
+              onDismiss={() => {
+                setDismissedSyncJobId(trackedSync.jobId);
+                if (syncMonitor.isDone) setTrackedSync(null);
+              }}
+            />
+          ) : null}
+          {backfillOperation && !dismissedBackfill ? (
+            <OperationLivePanel
+              title="Parent email backfill"
+              subtitle={backfillOperation.companyName}
+              steps={backfillOperation.steps}
+              active={backfillingSlug !== null}
+              onDismiss={() => setDismissedBackfill(true)}
+            />
+          ) : null}
           {loadingCompanies ? (
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>

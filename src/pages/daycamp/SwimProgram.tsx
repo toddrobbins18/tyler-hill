@@ -41,6 +41,8 @@ import {
 import { sendSwimProgressEmail } from "@/lib/swimProgressApi";
 import { buildSwimProgressPdf } from "@/lib/swimProgressPdf";
 import { swimProgressEmailSupported } from "@/lib/swimProgressSkills";
+import OperationLivePanel from "@/components/admin/OperationLivePanel";
+import type { OperationStep } from "@/lib/operationLiveLog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -564,6 +566,7 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
   const [levelGroupFilter, setLevelGroupFilter] = useState("all");
   const [levelDataFilter, setLevelDataFilter] = useState<LevelDataFilter>("all");
   const [progressEmailSendingId, setProgressEmailSendingId] = useState<string | null>(null);
+  const [emailOperation, setEmailOperation] = useState<{ title: string; steps: OperationStep[] } | null>(null);
   const [historySeasonFilter, setHistorySeasonFilter] = useState("all");
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<SwimImportProgress | null>(null);
@@ -802,13 +805,33 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
     if (!currentCompany?.id || progressEmailSendingId) return;
     if (levelReportView === "all" || !swimProgressEmailSupported(levelReportView)) return;
 
+    const setSteps = (steps: OperationStep[]) => {
+      setEmailOperation({ title: `Swim progress email · ${record.name}`, steps });
+    };
+
     setProgressEmailSendingId(record.id);
+    setSteps([
+      { id: "load", label: "Loading camper swim data", status: "done" },
+      { id: "pdf", label: "Building skills chart PDF", status: "running" },
+    ]);
+
     try {
       const pdf = await buildSwimProgressPdf({
         levelId: levelReportView,
         levels: record,
         childName: record.name,
       });
+
+      setSteps([
+        { id: "load", label: "Loading camper swim data", status: "done" },
+        {
+          id: "pdf",
+          label: "Building skills chart PDF",
+          status: pdf.ready ? "done" : "error",
+          detail: pdf.ready ? pdf.filename : pdf.reason,
+        },
+        { id: "send", label: "Sending email via Microsoft 365", status: "running" },
+      ]);
 
       const result = await sendSwimProgressEmail({
         companyId: currentCompany.id,
@@ -819,9 +842,39 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
         pdfFilename: pdf.ready ? pdf.filename : undefined,
       });
       if (!result.success) {
+        setSteps([
+          { id: "load", label: "Loading camper swim data", status: "done" },
+          {
+            id: "pdf",
+            label: "Building skills chart PDF",
+            status: pdf.ready ? "done" : "error",
+            detail: pdf.ready ? pdf.filename : pdf.reason,
+          },
+          { id: "send", label: "Sending email via Microsoft 365", status: "error", detail: result.error },
+        ]);
         toast({ title: "Email not sent", description: result.error, variant: "destructive" });
         return;
       }
+      setSteps([
+        { id: "load", label: "Loading camper swim data", status: "done" },
+        {
+          id: "pdf",
+          label: "Building skills chart PDF",
+          status: pdf.ready ? "done" : "error",
+          detail: pdf.ready ? pdf.filename : pdf.reason,
+        },
+        {
+          id: "send",
+          label: "Sending email via Microsoft 365",
+          status: "done",
+          detail: result.recipient ?? undefined,
+        },
+        {
+          id: "done",
+          label: result.pdfAttached ? "Email sent with PDF attached" : "Email sent",
+          status: "done",
+        },
+      ]);
       toast({
         title: "Progress email sent",
         description: result.pdfAttached
@@ -829,9 +882,14 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
           : `Sent to ${result.recipient}${pdf.ready ? "" : ` (chart PDF skipped: ${pdf.reason})`}.`,
       });
     } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setSteps([
+        { id: "load", label: "Loading camper swim data", status: "done" },
+        { id: "error", label: "Send failed", status: "error", detail: message },
+      ]);
       toast({
         title: "Email not sent",
-        description: err instanceof Error ? err.message : "Unknown error",
+        description: message,
         variant: "destructive",
       });
     } finally {
@@ -1412,7 +1470,16 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
           </Card>
         </TabsContent>
 
-        <TabsContent value="levels" className="mt-4">
+        <TabsContent value="levels" className="mt-4 space-y-4">
+          {emailOperation ? (
+            <OperationLivePanel
+              title={emailOperation.title}
+              subtitle="Live progress for parent progress email"
+              steps={emailOperation.steps}
+              active={progressEmailSendingId !== null}
+              onDismiss={() => setEmailOperation(null)}
+            />
+          ) : null}
           <Card>
             <CardHeader className="pb-3 space-y-3">
               <CardTitle className="text-base flex flex-wrap items-center justify-between gap-2">

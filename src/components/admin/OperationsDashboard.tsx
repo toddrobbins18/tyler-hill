@@ -43,6 +43,9 @@ import {
   isLiveSyncJob,
   isStaleSyncJob,
 } from "@/lib/operationsDashboard";
+import OperationLivePanel from "@/components/admin/OperationLivePanel";
+import { useSyncJobMonitor } from "@/hooks/useSyncJobMonitor";
+import { syncJobTitle } from "@/lib/operationLiveLog";
 
 type CompanyOpsMeta = {
   campminder_sync_enabled: boolean | null;
@@ -151,6 +154,12 @@ export default function OperationsDashboard() {
   const [emailLogs, setEmailLogs] = useState<EmailLogRow[]>([]);
   const [senders, setSenders] = useState<Map<string, SenderProfile>>(new Map());
   const [snapshot, setSnapshot] = useState<DataSnapshot | null>(null);
+  const [dismissedSyncJobId, setDismissedSyncJobId] = useState<string | null>(null);
+
+  const liveSyncJob = useMemo(() => syncJobs.find(isLiveSyncJob), [syncJobs]);
+  const staleSyncJob = useMemo(() => syncJobs.find(isStaleSyncJob), [syncJobs]);
+  const monitoredSyncJobId = liveSyncJob?.id ?? staleSyncJob?.id ?? null;
+  const syncLiveMonitor = useSyncJobMonitor(monitoredSyncJobId);
 
   const load = useCallback(async () => {
     if (!currentCompany?.id) {
@@ -263,13 +272,17 @@ export default function OperationsDashboard() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (syncLiveMonitor.isDone && monitoredSyncJobId) {
+      void load();
+    }
+  }, [syncLiveMonitor.isDone, monitoredSyncJobId, load]);
+
   const emailsLast7Days = useMemo(() => {
     const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
     return emailLogs.filter((e) => e.sent_at && new Date(e.sent_at).getTime() >= cutoff).length;
   }, [emailLogs]);
 
-  const liveSyncJob = syncJobs.find(isLiveSyncJob);
-  const staleSyncJob = syncJobs.find(isStaleSyncJob);
   const failedJobs = syncJobs.filter((j) => j.error_message);
   const emailCoveragePct =
     snapshot && snapshot.children > 0
@@ -379,6 +392,24 @@ export default function OperationsDashboard() {
               </div>
             </CardContent>
           </Card>
+        </motion.div>
+      ) : null}
+
+      {monitoredSyncJobId &&
+      monitoredSyncJobId !== dismissedSyncJobId &&
+      syncLiveMonitor.steps.length > 0 ? (
+        <motion.div {...fadeUp} transition={{ delay: 0.02 }}>
+          <OperationLivePanel
+            title={syncJobTitle(syncLiveMonitor.job)}
+            subtitle={
+              liveSyncJob
+                ? "Live auto-sync or manual sync in progress"
+                : "Last known steps before this sync stalled"
+            }
+            steps={syncLiveMonitor.steps}
+            active={syncLiveMonitor.isLive}
+            onDismiss={() => setDismissedSyncJobId(monitoredSyncJobId)}
+          />
         </motion.div>
       ) : null}
 
