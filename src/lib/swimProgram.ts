@@ -226,11 +226,45 @@ export function normalizeBraceletColor(raw: unknown): BraceletColor | "" {
   return "";
 }
 
+export function isBlankDivisionLeader(value?: string | null): boolean {
+  const s = value?.trim();
+  return !s || s === "—" || s === "-";
+}
+
+/** Match a roster / saved name to the closest Airtable division-leader option. */
+export function matchDivisionLeaderOption(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "";
+  const exact = DIVISION_LEADER_OPTIONS.find((opt) => opt.toLowerCase() === trimmed.toLowerCase());
+  if (exact) return exact;
+  const firstToken = trimmed.split(/\s+/)[0]?.toLowerCase() ?? "";
+  const byFirst = DIVISION_LEADER_OPTIONS.find(
+    (opt) => opt.toLowerCase() === firstToken || opt.toLowerCase().startsWith(firstToken),
+  );
+  if (byFirst) return byFirst;
+  const partial = DIVISION_LEADER_OPTIONS.find(
+    (opt) =>
+      trimmed.toLowerCase().includes(opt.toLowerCase())
+      || opt.toLowerCase().includes(trimmed.toLowerCase()),
+  );
+  return partial ?? trimmed;
+}
+
 export function normalizeDivisionLeader(raw: unknown): string {
   const s = String(raw ?? "").trim();
-  if (!s || s === "—") return "";
-  const match = DIVISION_LEADER_OPTIONS.find((opt) => opt.toLowerCase() === s.toLowerCase());
-  return match ?? s;
+  if (isBlankDivisionLeader(s)) return "";
+  return matchDivisionLeaderOption(s);
+}
+
+export function resolveDivisionLeaderFromRoster(child: RosterChild): string {
+  const rosterName = child.leader?.name?.trim();
+  if (!rosterName) return "—";
+  return matchDivisionLeaderOption(rosterName);
+}
+
+export function resolveStoredDivisionLeader(saved: string | undefined, child: RosterChild): string {
+  if (!isBlankDivisionLeader(saved)) return matchDivisionLeaderOption(saved!);
+  return resolveDivisionLeaderFromRoster(child);
 }
 
 export function mergeSwimTestNoteOptions(extra: string[]): string[] {
@@ -350,7 +384,7 @@ function braceletFromJson(child: RosterChild, raw: Record<string, unknown>): Bra
   return {
     ...base,
     group: importedGroup || base.group,
-    divisionLeader: normalizeDivisionLeader(raw.divisionLeader) || base.divisionLeader,
+    divisionLeader: resolveStoredDivisionLeader(String(raw.divisionLeader ?? ""), child),
     currentBracelet: normalizeBraceletColor(color),
     generalNote: String(raw.generalNote ?? raw.noteField ?? "").trim(),
     proctor1: String(raw.proctor1 ?? "").trim(),
@@ -461,9 +495,7 @@ export function mergeBracelets(
       name: child.name,
       personId: child.person_id,
       group: resolveDisplayGroup(rosterGroup(child), prev?.group),
-      divisionLeader: prev?.divisionLeader?.trim()
-        ? prev.divisionLeader
-        : rosterDivisionLeader(child),
+      divisionLeader: resolveStoredDivisionLeader(prev?.divisionLeader, child),
     };
     return prev ? { ...prev, ...rosterFields } : braceletFromChild(child);
   });
@@ -716,6 +748,46 @@ export async function fetchSwimHistoryReport(
 }
 
 /** Distinct seasons with campers (for season selector). */
+/** Division leader names for swim bracelet dropdowns — Airtable list + staff + saved data. */
+export async function fetchSwimDivisionLeaderOptions(
+  supabase: SupabaseClient,
+  companyId: string,
+  season: string,
+): Promise<string[]> {
+  const [{ data: staffRows }, { data: swimRows }] = await Promise.all([
+    supabase
+      .from("staff")
+      .select("name, role")
+      .eq("company_id", companyId)
+      .eq("season", season)
+      .neq("status", "inactive")
+      .order("name"),
+    supabase
+      .from("swim_program_records")
+      .select("bracelet")
+      .eq("company_id", companyId)
+      .eq("season", season),
+  ]);
+
+  const options: string[] = [...DIVISION_LEADER_OPTIONS];
+  for (const row of staffRows ?? []) {
+    const name = String(row.name ?? "").trim();
+    if (!name) continue;
+    options.push(name);
+    const role = String(row.role ?? "").toLowerCase();
+    if (role.includes("division") || role.includes("leader")) {
+      options.push(matchDivisionLeaderOption(name));
+    }
+  }
+  for (const row of swimRows ?? []) {
+    const bracelet = row.bracelet as Record<string, unknown> | null;
+    const leader = String(bracelet?.divisionLeader ?? "").trim();
+    if (leader) options.push(leader);
+  }
+
+  return mergeDivisionLeaderOptions(options);
+}
+
 /** Proctor initials / names for bracelet test dropdowns — staff roster + saved swim data. */
 export async function fetchSwimProctorOptions(
   supabase: SupabaseClient,
@@ -851,6 +923,37 @@ export async function saveSwimBracelet(
     { onConflict: "company_id,child_id,season" },
   );
   if (error) throw error;
+}
+
+/** Assign the same division leader to many campers (batch upsert). */
+export async function saveSwimBraceletsBulk(
+  supabase: SupabaseClient,
+  companyId: string,
+  season: string,
+  records: BraceletRecord[],
+): Promise<void> {
+  if (!records.length) return;
+  const existingByChild = await loadExistingSwimRowsForSeason(supabase, companyId, season);
+  const payloads = records.map((record) => {
+    const existing = existingByChild.get(record.id);
+    return {
+      company_id: companyId,
+      child_id: record.id,
+      season,
+      person_id: record.personId,
+      bracelet: braceletToJson(record),
+      levels: existing?.levels ?? {},
+      source: existing?.source ?? "manual",
+    };
+  });
+
+  for (let i = 0; i < payloads.length; i += SWIM_IMPORT_BATCH_SIZE) {
+    const batch = payloads.slice(i, i + SWIM_IMPORT_BATCH_SIZE);
+    const { error } = await supabase
+      .from("swim_program_records")
+      .upsert(batch, { onConflict: "company_id,child_id,season" });
+    if (error) throw error;
+  }
 }
 
 export async function saveSwimLevel(

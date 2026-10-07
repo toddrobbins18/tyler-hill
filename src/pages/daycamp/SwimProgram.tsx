@@ -7,13 +7,16 @@ import { useSeasonContext } from "@/contexts/SeasonContext";
 import {
   BRACELETS,
   DATE_FMT,
-  DIVISION_LEADER_OPTIONS,
   SWIM_LEVEL_REPORT_VIEWS,
+  fetchSwimDivisionLeaderOptions,
   fetchSwimProctorOptions,
+  isBlankDivisionLeader,
+  matchDivisionLeaderOption,
   mergeDivisionLeaderOptions,
   mergeProctorOptions,
   mergeSwimTestNoteOptions,
   normalizeSwimTestNote,
+  saveSwimBraceletsBulk,
   swimLevelColumnVisible,
   type BraceletColor,
   type SwimLevelReportView,
@@ -267,17 +270,23 @@ function DateEdit({ value, onChange }: { value: string; onChange: (v: string) =>
 function DivisionLeaderSelect({
   value,
   onChange,
+  options: baseOptions,
 }: {
   value: string;
   onChange: (v: string) => void;
+  options: string[];
 }) {
-  const options = useMemo(() => mergeDivisionLeaderOptions(value ? [value] : []), [value]);
+  const options = useMemo(
+    () => mergeDivisionLeaderOptions([...baseOptions, ...(value ? [value] : [])]),
+    [baseOptions, value],
+  );
+  const displayValue = isBlankDivisionLeader(value) ? "" : matchDivisionLeaderOption(value);
   return (
     <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
+      value={displayValue}
+      onChange={(e) => onChange(e.target.value ? matchDivisionLeaderOption(e.target.value) : "")}
       onClick={(e) => e.stopPropagation()}
-      className={cn(editableSelect, value && "bg-primary/10 text-primary border-primary/30")}
+      className={cn(editableSelect, "min-w-[110px]", displayValue && "bg-primary/10 text-primary border-primary/30")}
     >
       <option value="">—</option>
       {options.map((leader) => (
@@ -537,6 +546,9 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
   const [selectedLevelId, setSelectedLevelId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(defaultTab);
   const [proctorOptions, setProctorOptions] = useState<string[]>([]);
+  const [divisionLeaderOptions, setDivisionLeaderOptions] = useState<string[]>([]);
+  const [bulkDivisionLeader, setBulkDivisionLeader] = useState("");
+  const [bulkAssigningLeaders, setBulkAssigningLeaders] = useState(false);
   const [levelReportView, setLevelReportView] = useState<SwimLevelReportView>("red-cross-1");
   const [tablePageSize, setTablePageSize] = useState(DEFAULT_SWIM_PAGE_SIZE);
   const [braceletPage, setBraceletPage] = useState(1);
@@ -598,8 +610,12 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
         );
         setBraceletData(mergeBracelets(bracelets, children));
         setLevelData(mergeLevels(levels, children));
-        const proctors = await fetchSwimProctorOptions(supabase, currentCompany.id, currentSeason);
+        const [proctors, divisionLeaders] = await Promise.all([
+          fetchSwimProctorOptions(supabase, currentCompany.id, currentSeason),
+          fetchSwimDivisionLeaderOptions(supabase, currentCompany.id, currentSeason),
+        ]);
         setProctorOptions(proctors);
+        setDivisionLeaderOptions(divisionLeaders);
       } catch (err) {
         console.error("[SwimProgram] load error:", err);
         if (showLoading) {
@@ -718,6 +734,31 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
       if (record) scheduleBraceletSave(record);
       return next;
     });
+  };
+
+  const assignDivisionLeaderBulk = async (leader: string, targets: BraceletRecord[]) => {
+    if (!currentCompany?.id || !leader.trim() || !targets.length) return;
+    const normalizedLeader = matchDivisionLeaderOption(leader);
+    setBulkAssigningLeaders(true);
+    try {
+      const targetIds = new Set(targets.map((b) => b.id));
+      const updated = braceletData.map((b) =>
+        targetIds.has(b.id) ? { ...b, divisionLeader: normalizedLeader } : b,
+      );
+      const toSave = updated.filter((b) => targetIds.has(b.id));
+      setBraceletData(updated);
+      await saveSwimBraceletsBulk(supabase, currentCompany.id, currentSeason, toSave);
+      toast({
+        title: "Division leaders assigned",
+        description: `${normalizedLeader} → ${toSave.length} camper${toSave.length === 1 ? "" : "s"}`,
+      });
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Bulk assign failed", variant: "destructive" });
+      await syncSwimData({ showLoading: false });
+    } finally {
+      setBulkAssigningLeaders(false);
+    }
   };
 
   const updateLevel = (id: string, patch: Partial<LevelRecord> | ((r: LevelRecord) => Partial<LevelRecord>)) => {
@@ -1122,6 +1163,38 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                     { value: "unassigned", label: "No bracelet yet" },
                   ]}
                 />
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Assign division leader
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={bulkDivisionLeader}
+                      onChange={(e) => setBulkDivisionLeader(e.target.value)}
+                      className={cn(editableSelect, "min-w-[130px]")}
+                    >
+                      <option value="">Select leader…</option>
+                      {divisionLeaderOptions.map((leader) => (
+                        <option key={leader} value={leader}>
+                          {leader}
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="h-7 text-xs whitespace-nowrap"
+                      disabled={!bulkDivisionLeader || bulkAssigningLeaders || sortedBracelets.length === 0}
+                      onClick={() => void assignDivisionLeaderBulk(bulkDivisionLeader, sortedBracelets)}
+                    >
+                      {bulkAssigningLeaders ? (
+                        <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                      ) : null}
+                      Apply to filtered ({sortedBracelets.length})
+                    </Button>
+                  </div>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-0 overflow-x-auto">
@@ -1156,7 +1229,8 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                       </TableCell>
                       <TableCell>
                         <DivisionLeaderSelect
-                          value={b.divisionLeader === "—" ? "" : b.divisionLeader}
+                          value={b.divisionLeader}
+                          options={divisionLeaderOptions}
                           onChange={(v) => updateBracelet(b.id, { divisionLeader: v || "—" })}
                         />
                       </TableCell>

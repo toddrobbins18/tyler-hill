@@ -6,6 +6,9 @@ import {
   normalizePassStatus,
   normalizeSwimTestNote,
   normalizeDivisionLeader,
+  isBlankDivisionLeader,
+  matchDivisionLeaderOption,
+  resolveStoredDivisionLeader,
   normalizeSkillStatus,
   parseSwimProgramCsv,
   swimLevelColumnVisible,
@@ -93,6 +96,11 @@ describe("swimProgram", () => {
     expect(normalizeBraceletColor("purple")).toBe("");
     expect(normalizeDivisionLeader("alyssa")).toBe("Alyssa");
     expect(normalizeDivisionLeader("CARLOTA")).toBe("CARLOTA");
+    expect(isBlankDivisionLeader("—")).toBe(true);
+    expect(matchDivisionLeaderOption("Alyssa Smith")).toBe("Alyssa");
+    expect(
+      resolveStoredDivisionLeader("", { ...child, leader: { name: "Jess Cohen" } }),
+    ).toBe("Jess Cohen");
   });
 
   it("filters level report columns by Red Cross view", () => {
