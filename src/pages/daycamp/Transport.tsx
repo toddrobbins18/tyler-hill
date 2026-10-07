@@ -4294,12 +4294,12 @@ export default function Transport() {
             </div>
 
             {/* Map */}
-            <Card className="relative overflow-visible">
-              <div className="absolute top-2 right-2 z-[1000] flex gap-1">
+            <Card className="relative overflow-visible shadow-sm">
+              <div className="absolute top-3 right-3 z-[1000] flex items-center gap-1.5 rounded-lg border border-border/50 bg-background/95 p-1 shadow-md backdrop-blur-sm">
                 <select
                   value={mapHeight}
                   onChange={(e) => setMapHeight(e.target.value as "sm" | "md" | "lg" | "xl")}
-                  className="h-8 rounded-md border border-border/60 bg-background/90 backdrop-blur px-2 text-xs"
+                  className="h-8 rounded-md border-0 bg-transparent px-2 text-xs font-medium focus:outline-none focus:ring-0"
                   title="Map height"
                 >
                   <option value="sm">Small</option>
@@ -4307,17 +4307,19 @@ export default function Transport() {
                   <option value="lg">Large</option>
                   <option value="xl">X-Large</option>
                 </select>
+                <div className="h-5 w-px bg-border/60" />
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  className="h-8 px-2 bg-background/90 backdrop-blur"
+                  className="h-8 gap-1.5 px-2.5 text-xs font-medium hover:bg-muted/80"
                   onClick={() => setMapFullscreen(true)}
                   title="Expand to fullscreen"
                 >
                   <Maximize2 className="h-3.5 w-3.5" />
+                  Fullscreen
                 </Button>
               </div>
-              <div className={`${MAP_PANEL_HEIGHT[mapHeight]} w-full relative [&_.leaflet-container]:rounded-lg`}>
+              <div className={`${MAP_PANEL_HEIGHT[mapHeight]} w-full relative rounded-lg [&_.leaflet-container]:rounded-lg`}>
                 {(boardLoading || companyLoading || authLoading) && (
                   <div className="absolute inset-0 z-[1001] flex items-center justify-center bg-background/60 backdrop-blur-[1px] text-sm text-muted-foreground">
                     Loading saved board…
@@ -4338,24 +4340,66 @@ export default function Transport() {
 
             {/* Fullscreen map dialog */}
             <Dialog open={mapFullscreen} onOpenChange={setMapFullscreen}>
-              <DialogContent className="max-w-[98vw] w-[98vw] h-[96vh] p-0 overflow-hidden flex flex-col">
-                <DialogHeader className="px-4 py-2 border-b border-border/40 flex-row items-center justify-between space-y-0">
-                  <DialogTitle className="text-sm">Transport map — fullscreen</DialogTitle>
-                  <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => setMapFullscreen(false)}>
-                    <Minimize2 className="h-3.5 w-3.5 mr-1" /> Exit
-                  </Button>
-                </DialogHeader>
-                <div className="flex-1 min-h-0">
+              <DialogContent
+                className="!flex fixed inset-3 z-50 h-[calc(100vh-1.5rem)] w-[calc(100vw-1.5rem)] max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-xl border border-border/60 p-0 shadow-2xl sm:rounded-xl [&>button.absolute]:hidden"
+              >
+                <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border/50 bg-gradient-to-r from-muted/50 via-background to-background px-4 py-3 sm:px-5">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/15">
+                      <MapIcon className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="min-w-0">
+                      <DialogTitle className="text-base font-semibold leading-tight sm:text-lg">
+                        Transport route map
+                      </DialogTitle>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground sm:text-sm">
+                        {currentCompany?.name ?? "Camp"}
+                        {" · "}
+                        {currentSeason} season
+                        {" · "}
+                        {timeOfDay === "am" ? "AM pickup → camp" : "PM dropoff ← camp"}
+                        {" · "}
+                        {overrideDate}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Badge variant="secondary" className="hidden h-7 px-2.5 text-xs font-medium sm:inline-flex">
+                      {displayedRoutes.length} bus{displayedRoutes.length === 1 ? "" : "es"}
+                    </Badge>
+                    <Badge variant="outline" className="hidden h-7 px-2.5 text-xs font-medium md:inline-flex">
+                      {unplottedForWeek.length} unplotted
+                    </Badge>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 gap-1.5 bg-background/80 px-3 shadow-sm"
+                      onClick={() => setMapFullscreen(false)}
+                    >
+                      <Minimize2 className="h-4 w-4" />
+                      <span className="hidden sm:inline">Exit fullscreen</span>
+                      <span className="sm:hidden">Exit</span>
+                    </Button>
+                  </div>
+                </div>
+                <div className="relative min-h-0 flex-1 bg-muted/15">
                   <TransportRouteMap
                     routes={displayedRoutes}
                     allRoutes={routes}
                     campAddress={CAMP_LOCATION.address}
-                    layoutReady={!boardLoading && !companyLoading && !authLoading}
+                    layoutReady={!boardLoading && !companyLoading && !authLoading && mapFullscreen}
                     onMoveStop={handleMoveStop}
                     onRemoveStop={handleRemoveStop}
                     unplottedCampers={unplottedForWeek}
                     onAssignCamper={handleAssignCamperToRoute}
                   />
+                </div>
+                <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border/50 bg-muted/30 px-4 py-2 text-[11px] text-muted-foreground sm:px-5 sm:text-xs">
+                  <span>Click a numbered stop for camper details, pickup time, and route actions.</span>
+                  <span className="hidden shrink-0 items-center gap-1.5 sm:flex">
+                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#8b5cf6]" />
+                    Purple = unassigned camper
+                  </span>
                 </div>
               </DialogContent>
             </Dialog>

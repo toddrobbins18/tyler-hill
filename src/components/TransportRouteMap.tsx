@@ -433,18 +433,22 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
           icon: createStopIcon(route.color, stopNumber, 1, emptyStop),
         })
           .bindPopup(`
-            <div style="min-width:220px;max-width:260px;font-size:12px;color:#1f2937;line-height:1.4;">
-              <p style="margin:0 0 4px;font-size:10px;font-weight:700;color:${route.color};text-transform:uppercase;letter-spacing:0.5px;">${stopLabel}</p>
-              <p style="font-weight:700;font-size:14px;margin:0 0 4px;">${title}</p>
+            <div style="min-width:240px;max-width:300px;font-family:system-ui,-apple-system,sans-serif;font-size:12px;color:#1f2937;line-height:1.45;">
+              <div style="margin:-2px -2px 10px;padding:8px 10px;border-radius:8px;background:${route.color}14;border:1px solid ${route.color}33;">
+                <p style="margin:0 0 2px;font-size:10px;font-weight:700;color:${route.color};text-transform:uppercase;letter-spacing:0.06em;">${stopLabel}</p>
+                <p style="font-weight:700;font-size:15px;margin:0;line-height:1.25;color:#111827;">${title}</p>
+              </div>
               ${namesList}
-              <p style="margin:2px 0;">📍 ${stop.address}</p>
-              <p style="margin:2px 0;">🕐 ${stop.pickupTime}</p>
-              <p style="margin:2px 0;">👥 ${emptyStop ? 0 : names.length} ${emptyStop ? "kids (open stop)" : names.length === 1 ? "kid" : "kids"}</p>
+              <div style="display:grid;gap:6px;margin-bottom:10px;">
+                <p style="margin:0;display:flex;gap:6px;align-items:flex-start;"><span style="opacity:0.7;">📍</span><span>${stop.address}</span></p>
+                <p style="margin:0;display:flex;gap:6px;align-items:center;"><span style="opacity:0.7;">🕐</span><span>${stop.pickupTime || "—"}</span></p>
+                <p style="margin:0;display:flex;gap:6px;align-items:center;"><span style="opacity:0.7;">👥</span><span>${emptyStop ? 0 : names.length} ${emptyStop ? "kids (open stop)" : names.length === 1 ? "kid" : "kids"}</span></p>
+              </div>
               ${pendingList}
-              <p style="margin:6px 0 0;font-weight:600;color:${route.color};">🚌 ${route.name} (${route.bus})</p>
+              <p style="margin:0 0 10px;padding:8px 10px;border-radius:8px;background:#f9fafb;font-size:11px;font-weight:600;color:${route.color};">🚌 ${route.name} · ${route.bus}</p>
               ${moveOptions}${removeBtn}
             </div>
-          `, { maxWidth: 300, autoPan: true, autoPanPadding: [24, 24], autoClose: false, closeOnClick: false, className: "transport-stop-popup" })
+          `, { maxWidth: 320, autoPan: true, autoPanPadding: [32, 32], autoClose: false, closeOnClick: false, className: "transport-stop-popup" })
           .on("click", (e) => {
             L.DomEvent.stopPropagation(e);
             setSelectedRouteId(route.id);
