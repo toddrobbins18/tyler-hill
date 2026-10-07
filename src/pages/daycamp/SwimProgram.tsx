@@ -38,6 +38,9 @@ import {
   skillStatusLabel,
   swimProgramCsvTemplate,
 } from "@/lib/swimProgram";
+import { sendSwimProgressEmail } from "@/lib/swimProgressApi";
+import { buildSwimProgressPdf } from "@/lib/swimProgressPdf";
+import { swimProgressEmailSupported } from "@/lib/swimProgressSkills";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -141,6 +144,7 @@ function levelRecordHasData(record: LevelRecord): boolean {
     record.goldfish.some((s) => s !== "—") ||
     record.minnow.some((s) => s !== "—") ||
     record.tadpole.some((s) => s !== "—") ||
+    record.exitSkills.some((s) => s !== "—") ||
     [record.goldfishLevel, record.minnowLevel, record.tadpoleLevel, record.redCross, record.redCross2, record.redCross3, record.redCross4, record.frog].some(
       (s) => s !== "—",
     )
@@ -559,6 +563,7 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
   const [braceletAssignmentFilter, setBraceletAssignmentFilter] = useState<BraceletAssignmentFilter>("all");
   const [levelGroupFilter, setLevelGroupFilter] = useState("all");
   const [levelDataFilter, setLevelDataFilter] = useState<LevelDataFilter>("all");
+  const [progressEmailSendingId, setProgressEmailSendingId] = useState<string | null>(null);
   const [historySeasonFilter, setHistorySeasonFilter] = useState("all");
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<SwimImportProgress | null>(null);
@@ -774,13 +779,64 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
     });
   };
 
-  const updateSkill = (id: string, group: "goldfish" | "minnow" | "tadpole", idx: number, value: SkillStatus) => {
+  const updateSkill = (
+    id: string,
+    group: "goldfish" | "minnow" | "tadpole" | "exit",
+    idx: number,
+    value: SkillStatus,
+  ) => {
     updateLevel(id, (r) => {
+      if (group === "exit") {
+        const next = [...r.exitSkills];
+        next[idx] = value;
+        return { exitSkills: next };
+      }
       const next = [...r[group]];
       next[idx] = value;
       const levelKey = `${group}Level` as "goldfishLevel" | "minnowLevel" | "tadpoleLevel";
       return { [group]: next, [levelKey]: levelFromSkills(next) } as Partial<LevelRecord>;
     });
+  };
+
+  const handleSendProgressEmail = async (record: LevelRecord) => {
+    if (!currentCompany?.id || progressEmailSendingId) return;
+    if (levelReportView === "all" || !swimProgressEmailSupported(levelReportView)) return;
+
+    setProgressEmailSendingId(record.id);
+    try {
+      const pdf = await buildSwimProgressPdf({
+        levelId: levelReportView,
+        levels: record,
+        childName: record.name,
+      });
+
+      const result = await sendSwimProgressEmail({
+        companyId: currentCompany.id,
+        childId: record.id,
+        season: currentSeason,
+        levelId: levelReportView,
+        pdfBase64: pdf.ready ? pdf.base64 : undefined,
+        pdfFilename: pdf.ready ? pdf.filename : undefined,
+      });
+      if (!result.success) {
+        toast({ title: "Email not sent", description: result.error, variant: "destructive" });
+        return;
+      }
+      toast({
+        title: "Progress email sent",
+        description: result.pdfAttached
+          ? `Sent to ${result.recipient} with skills chart attached.`
+          : `Sent to ${result.recipient}${pdf.ready ? "" : ` (chart PDF skipped: ${pdf.reason})`}.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Email not sent",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setProgressEmailSendingId(null);
+    }
   };
 
   const handleCsvImport = async (file: File) => {
@@ -1391,6 +1447,12 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                   ]}
                 />
               </div>
+              {levelReportView !== "all" && swimProgressEmailSupported(levelReportView) ? (
+                <p className="text-xs text-muted-foreground">
+                  Send Progress Email goes to the parent on file with Achieved / Working Toward skills in the body, plus the
+                  NSDC skills chart PDF with green checkmarks on mastered skills.
+                </p>
+              ) : null}
             </CardHeader>
             <CardContent className="p-0 overflow-x-auto">
               <Table>
@@ -1413,6 +1475,18 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                     {swimLevelColumnVisible(levelReportView, "goldfishLevel") ? (
                       <SortableHeader label="Goldfish Level" sortKey="goldfishLevel" currentSort={levelSort} onSort={requestLevelSort} />
                     ) : null}
+                    {[0, 1].map(
+                      (i) =>
+                        swimLevelColumnVisible(levelReportView, `exit-${i}`) && (
+                          <SortableHeader
+                            key={`exit${i}`}
+                            label={`Exit ${i + 1}`}
+                            sortKey={`exitSkills.${i}`}
+                            currentSort={levelSort}
+                            onSort={requestLevelSort}
+                          />
+                        ),
+                    )}
                     {[1, 2, 3, 4, 5, 6].map(
                       (n) =>
                         swimLevelColumnVisible(levelReportView, `minnow-${n - 1}`) && (
@@ -1461,6 +1535,9 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                     {swimLevelColumnVisible(levelReportView, "lastModified") ? (
                       <SortableHeader label="Last Modified" sortKey="lastModified" currentSort={levelSort} onSort={requestLevelSort} />
                     ) : null}
+                    {levelReportView !== "all" && swimProgressEmailSupported(levelReportView) ? (
+                      <TableCell className="font-semibold whitespace-nowrap">Progress Email</TableCell>
+                    ) : null}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1485,6 +1562,14 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                           <LevelSelect value={r.goldfishLevel} onChange={(v) => updateLevel(r.id, { goldfishLevel: v })} />
                         </TableCell>
                       ) : null}
+                      {r.exitSkills.map(
+                        (s, i) =>
+                          swimLevelColumnVisible(levelReportView, `exit-${i}`) && (
+                            <TableCell key={`exit${i}`}>
+                              <SkillToggle value={s} onChange={(v) => updateSkill(r.id, "exit", i, v)} />
+                            </TableCell>
+                          ),
+                      )}
                       {r.minnow.map(
                         (s, i) =>
                           swimLevelColumnVisible(levelReportView, `minnow-${i}`) && (
@@ -1538,6 +1623,27 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                       ) : null}
                       {swimLevelColumnVisible(levelReportView, "lastModified") ? (
                         <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{r.lastModified}</TableCell>
+                      ) : null}
+                      {levelReportView !== "all" && swimProgressEmailSupported(levelReportView) ? (
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            disabled={progressEmailSendingId === r.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleSendProgressEmail(r);
+                            }}
+                          >
+                            {progressEmailSendingId === r.id ? (
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            ) : (
+                              <Mail className="h-3 w-3 mr-1" />
+                            )}
+                            Send
+                          </Button>
+                        </TableCell>
                       ) : null}
                     </TableRow>
                   ))}
@@ -1708,6 +1814,22 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                     </div>
                   </div>
                 ))}
+                <div className="rounded-lg border bg-card/50 p-3">
+                  <h4 className="text-sm font-semibold mb-2">Exit Skills</h4>
+                  <div className="space-y-2">
+                    {selectedLevel.exitSkills.map((s, i) => (
+                      <div key={i} className="flex items-start justify-between gap-3 rounded bg-muted/30 px-2 py-1.5 text-xs">
+                        <span className="text-muted-foreground leading-snug">
+                          Exit {i + 1}
+                          {i === 0
+                            ? " — Enter independently, bob 5 times, exit safely"
+                            : " — Front glide, back float 5 sec, recover"}
+                        </span>
+                        <SkillCell status={s} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
                   <AlertCircle className="h-3 w-3" /> Last modified {selectedLevel.lastModified}
                 </p>

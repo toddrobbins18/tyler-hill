@@ -8,6 +8,9 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["src/lib/__tests__/transport*.test.ts"],
+    include: [
+      "src/lib/__tests__/transport*.test.ts",
+      "src/lib/__tests__/swimProgress*.test.ts",
+    ],
   },
 });

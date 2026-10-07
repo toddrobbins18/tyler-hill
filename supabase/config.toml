@@ -87,6 +87,9 @@ verify_jwt = false
 [functions.send-parent-template-email]
 verify_jwt = true
 
+[functions.send-swim-progress-email]
+verify_jwt = true
+
 [functions.send-appointment-notification]
 verify_jwt = false
 

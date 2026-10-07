@@ -65,8 +65,12 @@ export interface LevelRecord {
   redCross3: LevelStatus;
   redCross4: LevelStatus;
   frog: LevelStatus;
+  /** Red Cross 1 exit skills (2 required assessments). */
+  exitSkills: SkillStatus[];
   lastModified: string;
 }
+
+export const EXIT_SKILL_COUNT = 2;
 
 export interface SwimSeasonHistory {
   season: string;
@@ -152,7 +156,15 @@ export const SWIM_LEVEL_REPORT_VIEWS: { value: SwimLevelReportView; label: strin
 ];
 
 const SWIM_LEVEL_VIEW_COLUMNS: Record<Exclude<SwimLevelReportView, "all">, Set<string>> = {
-  "red-cross-1": new Set(["goldfish-0", "goldfish-1", "goldfish-2", "goldfish-3", "goldfishLevel"]),
+  "red-cross-1": new Set([
+    "goldfish-0",
+    "goldfish-1",
+    "goldfish-2",
+    "goldfish-3",
+    "goldfishLevel",
+    "exit-0",
+    "exit-1",
+  ]),
   "red-cross-2": new Set([
     "minnow-0",
     "minnow-1",
@@ -292,6 +304,7 @@ export const CAMPERS_PAGE_SIZE = 1000;
 
 const emptySkills4 = (): SkillStatus[] => ["—", "—", "—", "—"];
 const emptySkills6 = (): SkillStatus[] => ["—", "—", "—", "—", "—", "—"];
+const emptyExitSkills = (): SkillStatus[] => Array.from({ length: EXIT_SKILL_COUNT }, () => "—" as SkillStatus);
 
 export function normalizeSkillStatus(raw: unknown): SkillStatus {
   const s = String(raw ?? "").trim();
@@ -380,6 +393,7 @@ export function levelFromChild(child: RosterChild): LevelRecord {
     redCross3: "—",
     redCross4: "—",
     frog: "—",
+    exitSkills: emptyExitSkills(),
     lastModified: "—",
   };
 }
@@ -445,6 +459,7 @@ function levelFromJson(child: RosterChild, raw: Record<string, unknown>, updated
     redCross3: normalizeLevelStatus(raw.redCross3),
     redCross4: normalizeLevelStatus(raw.redCross4),
     frog: normalizeLevelStatus(raw.frog),
+    exitSkills: parseSkillArray(raw.exitSkills, EXIT_SKILL_COUNT),
     lastModified: updatedAt ? formatSwimTimestamp(updatedAt) : String(raw.lastModified ?? "—"),
   };
 }
@@ -488,6 +503,7 @@ export function levelToJson(record: LevelRecord): Record<string, unknown> {
     redCross3: record.redCross3,
     redCross4: record.redCross4,
     frog: record.frog,
+    exitSkills: record.exitSkills,
   };
 }
 
@@ -1175,6 +1191,23 @@ const SKILL_HEADER_MAP: Record<string, { group: "goldfish" | "minnow" | "tadpole
   tadpole_1c4: { group: "tadpole", index: 3 },
 };
 
+const EXIT_SKILL_HEADER_MAP: Record<string, number> = {
+  exit_skill_1: 0,
+  exit_skill_2: 1,
+  exit_skills_1: 0,
+  exit_skills_2: 1,
+  exit1: 0,
+  exit2: 1,
+};
+
+function resolveExitSkillHeader(h: string): number | null {
+  const n = normHeader(h);
+  if (n in EXIT_SKILL_HEADER_MAP) return EXIT_SKILL_HEADER_MAP[n]!;
+  const m = n.match(/^exit(?:_skill)?s?[_ ]?([12])$/);
+  if (m) return Number(m[1]) - 1;
+  return null;
+}
+
 const LEVEL_HEADER_MAP: Partial<Record<string, keyof LevelRecord>> = {
   goldfish_level: "goldfishLevel",
   minnow_level: "minnowLevel",
@@ -1309,6 +1342,7 @@ export function parseSwimProgramCsv(
     const goldfish = emptySkills4();
     const minnow = emptySkills6();
     const tadpole = emptySkills4();
+    const exitSkills = emptyExitSkills();
     const levelFields: Partial<LevelRecord> = {};
     let hasSkill = false;
     let hasLevelField = false;
@@ -1321,6 +1355,14 @@ export function parseSwimProgramCsv(
         if (skillMap.group === "goldfish") goldfish[skillMap.index] = val;
         if (skillMap.group === "minnow") minnow[skillMap.index] = val;
         if (skillMap.group === "tadpole") tadpole[skillMap.index] = val;
+        return;
+      }
+
+      const exitIdx = resolveExitSkillHeader(h);
+      if (exitIdx !== null && exitIdx >= 0 && exitIdx < EXIT_SKILL_COUNT) {
+        const val = normalizeSkillStatus(cols[idx]);
+        if (val !== "—") hasSkill = true;
+        exitSkills[exitIdx] = val;
         return;
       }
 
@@ -1351,6 +1393,7 @@ export function parseSwimProgramCsv(
         redCross3: levelFields.redCross3 ?? "—",
         redCross4: levelFields.redCross4 ?? "—",
         frog: levelFields.frog ?? "—",
+        exitSkills,
         ...(csvGroup ? { group: csvGroup } : {}),
       };
     }

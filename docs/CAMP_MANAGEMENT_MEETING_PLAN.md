@@ -71,7 +71,7 @@ Speaker labels in the original transcript (Speaker 1 / Speaker 2) are organizati
 | 4 | **CampMinder sync performance** (N API calls, empty roster flash) | Medium | **Not done / partial** | Known issue; batch/cache strategy needed. |
 | 5 | **Messaging module** | **Very high** | **In progress** | `Messages.tsx` exists; Todd called this “very important.” |
 | 6 | **Swim bracelet Airtable options in Nest** | Medium | **Done** | Division leaders, bracelets, proctors, test notes, Note Field, bulk assign (`swimProgram.ts`, `SwimProgram.tsx`). |
-| 7 | **Swim level parent emails** — level-specific sheet + skill checkmarks in attachment | Medium | **Not done** | Levels tracked in Nest; email automation + PDF/sheet with checkmarks not built. |
+| 7 | **Swim level parent emails** — level-specific sheet + skill checkmarks in attachment | Medium | **In progress** | RC1 done: email, PDF checkmarks, exit skills A/W in Nest + email + PDF. RC2+ charts still pending. |
 | 8 | **Parent portal — Todd’s redesign** | Medium | **Partial** | Review/implement latest Todd design; dev liked direction. |
 | 9 | **North Shore dashboard background image** | Low | **Not done** | Waiting on image from Todd. |
 | 10 | **Admin ops logs** (sync, email, data) | Medium | **Partial** | `Admin.tsx`, `AuditLog`, `email_logs` table exist; not a full Todd-style operations dashboard. |
@@ -95,7 +95,7 @@ Speaker labels in the original transcript (Speaker 1 / Speaker 2) are organizati
 | Historical route learning | `src/lib/historicalRouteLearning.ts`, `src/lib/transportRoster.ts` |
 | Transport UI | `src/pages/daycamp/Transport.tsx` |
 | Swim bracelets | `src/lib/swimProgram.ts`, `src/pages/daycamp/SwimProgram.tsx` |
-| Swim levels / reports | `SwimProgram.tsx` (level report views), no email+checkmark flow yet |
+| Swim levels / reports | `SwimProgram.tsx`, `src/lib/swimProgressSkills.ts`, `swimProgressEmail.ts`, `send-swim-progress-email` edge function |
 | Messaging | `src/pages/Messages.tsx` |
 | Parent portal | `src/pages/ParentPortal.tsx`, `ParentAuth.tsx`, `src/lib/parentPortalTheme.ts` |
 | Admin / logs | `src/pages/Admin.tsx`, `src/components/admin/AuditLog.tsx`, `email_logs` in Supabase types |
@@ -119,6 +119,9 @@ Speaker labels in the original transcript (Speaker 1 / Speaker 2) are organizati
 |------|--------|
 | 2026-10-07 | Initial doc from Camp Management Meeting transcript + codebase status check. Swim bracelet Airtable options marked done. Transport map routing sync fixes in progress (separate session). |
 | 2026-10-07 | Swim Bracelets: added 4th & 5th test columns (proctor, date, note) to match Airtable Swim Bracelets 2026. |
+| 2026-10-07 | Swim progress email foundation: RC1 skill catalog, HTML email builder, Send button on Level Report, edge function (PDF attachment phase 2). |
+| 2026-10-07 | RC1 skills chart added (`public/swim-charts/red-cross-1.jpg`); PDF checkmarks on Achieved skills attached to parent email. |
+| 2026-10-07 | RC1 exit skills (2) added to Level Report UI, save/load, email body, and PDF checkmarks. |
 
 ---
 
