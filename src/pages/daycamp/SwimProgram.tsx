@@ -1215,6 +1215,12 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                     <SortableHeader label="3rd Proctor" sortKey="proctor3" currentSort={braceletSort} onSort={requestBraceletSort} />
                     <SortableHeader label="3rd Date" sortKey="date3" currentSort={braceletSort} onSort={requestBraceletSort} />
                     <SortableHeader label="3rd Note" sortKey="note3" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader label="4th Proctor" sortKey="proctor4" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader label="4th Date" sortKey="date4" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader label="4th Note" sortKey="note4" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader label="5th Proctor" sortKey="proctor5" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader label="5th Date" sortKey="date5" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader label="5th Note" sortKey="note5" currentSort={braceletSort} onSort={requestBraceletSort} />
                     <SortableHeader label="Email" sortKey="emailSent" currentSort={braceletSort} onSort={requestBraceletSort} />
                   </TableRow>
                 </TableHeader>
@@ -1282,6 +1288,32 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                       </TableCell>
                       <TableCell>
                         <TestNoteSelect value={b.note3} onChange={(v) => updateBracelet(b.id, { note3: v })} />
+                      </TableCell>
+                      <TableCell>
+                        <ProctorSelect
+                          value={b.proctor4}
+                          options={proctorOptions}
+                          onChange={(v) => updateBracelet(b.id, { proctor4: v })}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <DateEdit value={b.date4} onChange={(v) => updateBracelet(b.id, { date4: v })} />
+                      </TableCell>
+                      <TableCell>
+                        <TestNoteSelect value={b.note4} onChange={(v) => updateBracelet(b.id, { note4: v })} />
+                      </TableCell>
+                      <TableCell>
+                        <ProctorSelect
+                          value={b.proctor5}
+                          options={proctorOptions}
+                          onChange={(v) => updateBracelet(b.id, { proctor5: v })}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <DateEdit value={b.date5} onChange={(v) => updateBracelet(b.id, { date5: v })} />
+                      </TableCell>
+                      <TableCell>
+                        <TestNoteSelect value={b.note5} onChange={(v) => updateBracelet(b.id, { note5: v })} />
                       </TableCell>
                       <TableCell>
                         {b.emailSent ? (

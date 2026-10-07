@@ -40,6 +40,12 @@ export interface BraceletRecord {
   proctor3: string;
   date3: string;
   note3: string;
+  proctor4: string;
+  date4: string;
+  note4: string;
+  proctor5: string;
+  date5: string;
+  note5: string;
   emailSent: boolean;
 }
 
@@ -103,7 +109,7 @@ export const DIVISION_LEADER_OPTIONS = [
   "Ricki",
 ] as const;
 
-/** Airtable Swim Bracelets 2026 — test note options (1st / 2nd / 3rd Note). */
+/** Airtable Swim Bracelets 2026 — test note options (1st–5th Note). */
 export const SWIM_TEST_NOTE_OPTIONS = [
   "Backfloat form needs work",
   "Backfloat needs endurance",
@@ -344,6 +350,12 @@ export function braceletFromChild(child: RosterChild): BraceletRecord {
     proctor3: "",
     date3: "",
     note3: "",
+    proctor4: "",
+    date4: "",
+    note4: "",
+    proctor5: "",
+    date5: "",
+    note5: "",
     emailSent: false,
   };
 }
@@ -396,6 +408,12 @@ function braceletFromJson(child: RosterChild, raw: Record<string, unknown>): Bra
     proctor3: String(raw.proctor3 ?? "").trim(),
     date3: String(raw.date3 ?? ""),
     note3: normalizeSwimTestNote(raw.note3) || String(raw.note3 ?? "").trim(),
+    proctor4: String(raw.proctor4 ?? raw["4th_test_proctor"] ?? "").trim(),
+    date4: String(raw.date4 ?? raw["4th_testing_date"] ?? ""),
+    note4: normalizeSwimTestNote(raw.note4 ?? raw["4th_note"]) || String(raw.note4 ?? raw["4th_note"] ?? "").trim(),
+    proctor5: String(raw.proctor5 ?? raw["5th_test_proctor"] ?? "").trim(),
+    date5: String(raw.date5 ?? raw["5th_testing_date"] ?? ""),
+    note5: normalizeSwimTestNote(raw.note5 ?? raw["5th_note"]) || String(raw.note5 ?? raw["5th_note"] ?? "").trim(),
     emailSent: Boolean(raw.emailSent),
   };
 }
@@ -446,6 +464,12 @@ export function braceletToJson(record: BraceletRecord): Record<string, unknown> 
     proctor3: record.proctor3,
     date3: record.date3,
     note3: record.note3,
+    proctor4: record.proctor4,
+    date4: record.date4,
+    note4: record.note4,
+    proctor5: record.proctor5,
+    date5: record.date5,
+    note5: record.note5,
     emailSent: record.emailSent,
   };
 }
@@ -820,7 +844,7 @@ export async function fetchSwimProctorOptions(
   for (const row of swimRows ?? []) {
     const bracelet = row.bracelet as Record<string, unknown> | null;
     if (!bracelet || typeof bracelet !== "object") continue;
-    for (const key of ["proctor1", "proctor2", "proctor3"] as const) {
+    for (const key of ["proctor1", "proctor2", "proctor3", "proctor4", "proctor5"] as const) {
       const val = String(bracelet[key] ?? "").trim();
       if (val) options.push(val);
     }
