@@ -16,6 +16,18 @@ export function attendanceRecordKey(routeId: number, camperName: string): string
   return `${routeId}|${camperName.trim().toLowerCase()}`;
 }
 
+export function parseAttendanceRecordKey(
+  key: string,
+): { routeId: number; camperNameLower: string } | null {
+  const idx = key.indexOf("|");
+  if (idx <= 0) return null;
+  const routeId = Number(key.slice(0, idx));
+  if (!Number.isFinite(routeId)) return null;
+  const camperNameLower = key.slice(idx + 1).trim();
+  if (!camperNameLower) return null;
+  return { routeId, camperNameLower };
+}
+
 export function busSubmissionKey(routeId: number): string {
   return String(routeId);
 }

@@ -16,6 +16,7 @@ import {
   todayDateString,
   type TransportRunPeriod,
 } from "@/lib/transportDailyOverrides";
+import { loadBusAttendance } from "@/lib/transportBusAttendance";
 import {
   buildApprovedChangeSheetRows,
   changeSheetRowsToCsv,
@@ -32,6 +33,9 @@ export default function TransportChangeSheets() {
   const [selectedRouteIds, setSelectedRouteIds] = useState<number[]>([]);
   const [routeMeta, setRouteMeta] = useState<TransportRouteMeta[]>([]);
   const [coreStops, setCoreStops] = useState<Record<number, TransportRouteStop[]>>({});
+  const [parentTransportCampers, setParentTransportCampers] = useState<
+    { routeId: number | null; name: string }[]
+  >([]);
   const [rows, setRows] = useState<TransportChangeSheetRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -52,6 +56,7 @@ export default function TransportChangeSheets() {
     if (!data?.data || typeof data.data !== "object") {
       setRouteMeta([]);
       setCoreStops({});
+      setParentTransportCampers([]);
       return;
     }
     const normalized = await normalizeTransportBoardForSeason(
@@ -72,6 +77,12 @@ export default function TransportChangeSheets() {
       stops[Number(k)] = v as TransportRouteStop[];
     }
     setCoreStops(stops);
+    setParentTransportCampers(
+      (normalized.parentTransportCampers ?? []).map((c) => ({
+        routeId: c.routeId ?? null,
+        name: c.name,
+      })),
+    );
   }, [currentCompany?.id, currentSeason]);
 
   const loadSheet = useCallback(async () => {
@@ -82,9 +93,10 @@ export default function TransportChangeSheets() {
         setRows([]);
         return;
       }
-      const [exceptions, manual] = await Promise.all([
+      const [exceptions, manual, attendance] = await Promise.all([
         fetchTransportExceptions(supabase, currentCompany.id, sheetDate),
         loadManualOverrides(supabase, currentCompany.id, currentSeason, sheetDate),
+        loadBusAttendance(supabase, currentCompany.id, currentSeason, sheetDate, runPeriod),
       ]);
       const built = buildApprovedChangeSheetRows({
         overrideDate: sheetDate,
@@ -94,12 +106,23 @@ export default function TransportChangeSheets() {
         routeMeta,
         coreStops,
         selectedRouteIds,
+        busAttendance: attendance.records,
+        parentTransportCampers,
       });
       setRows(built.filter((r) => !r.camper.startsWith("(No transport")));
     } finally {
       setLoading(false);
     }
-  }, [coreStops, currentCompany?.id, currentSeason, routeMeta, runPeriod, selectedRouteIds, sheetDate]);
+  }, [
+    coreStops,
+    currentCompany?.id,
+    currentSeason,
+    parentTransportCampers,
+    routeMeta,
+    runPeriod,
+    selectedRouteIds,
+    sheetDate,
+  ]);
 
   useEffect(() => {
     void loadBoard();
@@ -156,7 +179,8 @@ export default function TransportChangeSheets() {
           <div>
             <h1 className="text-2xl font-bold">Change Sheets</h1>
             <p className="text-sm text-muted-foreground">
-              Approved daily changes for drivers — season {currentSeason}
+              Approved daily changes for drivers — includes Bus Attendance absences for the selected run · season{" "}
+              {currentSeason}
             </p>
           </div>
         </div>
