@@ -762,7 +762,13 @@ Deno.serve(async (req) => {
 
       const data = result.data;
       const route = data.routes?.[0] || data.features?.[0]?.properties;
-      const geometry = data.features?.[0]?.geometry?.coordinates?.map(([lng, lat]: [number, number]) => [lat, lng]) ?? [];
+      let geometry: [number, number][] = [];
+      const featureCoords = data.features?.[0]?.geometry?.coordinates;
+      if (Array.isArray(featureCoords) && featureCoords.length > 1) {
+        geometry = featureCoords.map(([lng, lat]: [number, number]) => [lat, lng]);
+      } else if (Array.isArray(data.routes?.[0]?.geometry?.coordinates) && data.routes[0].geometry.coordinates.length > 1) {
+        geometry = data.routes[0].geometry.coordinates.map(([lng, lat]: [number, number]) => [lat, lng]);
+      }
       const segments = route?.segments || [];
       const legDurationsSec = segments.map((seg: { duration?: number }) => seg.duration ?? 0);
 

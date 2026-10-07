@@ -1806,7 +1806,10 @@ export default function Transport() {
     timeOfDay,
   ]);
 
-  const displayedRoutes = displayRoutes.filter((r) => visibleRoutes.includes(r.id));
+  const displayedRoutes = useMemo(
+    () => displayRoutes.filter((r) => visibleRoutes.includes(r.id)),
+    [displayRoutes, visibleRoutes],
+  );
 
   const unplottedForWeek = useMemo(
     () => filterUnplottedForWeek(unplottedCampers, activeRouteEnrollmentWeek, camperEnrollmentLookup),
