@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildApprovedChangeSheetRows,
   buildBusAttendanceAbsentRows,
+  groupChangeSheetRowsByBus,
+  sortChangeSheetRowsByBus,
 } from "@/lib/transportChangeSheets";
 import { attendanceRecordKey } from "@/lib/transportBusAttendance";
 import type { TransportException } from "@/lib/transportDailyOverrides";
@@ -111,5 +113,43 @@ describe("transportChangeSheets", () => {
 
     expect(rows.filter((r) => r.camper === "Jamie Smith")).toHaveLength(1);
     expect(rows.find((r) => r.camper === "Jamie Smith")?.source).toBe("Parent absence");
+  });
+
+  it("sorts and groups master sheet rows by bus", () => {
+    const rows = sortChangeSheetRowsByBus(
+      [
+        {
+          date: "2027-07-07",
+          run: "AM",
+          camper: "Alex Lee",
+          source: "Bus attendance",
+          description: "Marked absent on bus",
+          status: "saved",
+          route: "Route West",
+          bus: "Bus 7",
+          stop: "Lee house",
+          notes: "",
+        },
+        {
+          date: "2027-07-07",
+          run: "AM",
+          camper: "Jamie Smith",
+          source: "Bus attendance",
+          description: "Marked absent on bus",
+          status: "saved",
+          route: "Route East",
+          bus: "Bus 3",
+          stop: "Smith house",
+          notes: "",
+        },
+      ],
+      routeMeta,
+    );
+
+    expect(rows.map((r) => r.bus)).toEqual(["Bus 3", "Bus 7"]);
+
+    const groups = groupChangeSheetRowsByBus(rows, routeMeta);
+    expect(groups.map((g) => g.bus)).toEqual(["Bus 3", "Bus 7"]);
+    expect(groups[0]?.rows).toHaveLength(1);
   });
 });

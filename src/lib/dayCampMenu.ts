@@ -94,7 +94,7 @@ export function getDayCampPocItems(): DayCampMenuItem[] {
     { title: "Bus Attendance", url: "/day-camp/bus-attendance", icon: ClipboardList, menuId: "bus-attendance" },
     { title: "Bus Check-ins", url: "/day-camp/bus-check-ins", icon: Clock, menuId: "bus-check-ins" },
     { title: "Group Bubble Sheets", url: "/day-camp/group-bubble-sheets", icon: Users, menuId: "group-bubble-sheets" },
-    { title: "Change Sheets", url: "/day-camp/change-sheets", icon: FileText, menuId: "change-sheets" },
+    { title: "Master Change Sheet", url: "/day-camp/change-sheets", icon: FileText, menuId: "change-sheets" },
     { title: "Pending Changes", url: "/day-camp/pending-transport-changes", icon: Clock, menuId: "pending-transport-changes" },
     { title: "Office Changes", url: "/day-camp/office-changes", icon: ClipboardEdit, menuId: "office-changes" },
     { title: "Swim Program", url: "/day-camp/swim", icon: Waves, menuId: "swim" },

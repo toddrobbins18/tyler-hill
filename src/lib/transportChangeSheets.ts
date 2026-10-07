@@ -7,6 +7,7 @@ import type {
 } from "./transportDailyOverrides";
 import { buildTransportExceptionsReportRows } from "./transportDailyOverrides";
 import {
+  compareBusLabels,
   parseAttendanceRecordKey,
   type BusAttendanceMap,
 } from "./transportBusAttendance";
@@ -279,6 +280,51 @@ export function buildPendingChangeSheetRows(options: {
   return dataRows.filter((row) =>
     rowMatchesSelectedRoutes(row, selectedRouteIds, routeMeta, coreStops),
   );
+}
+
+export function sortChangeSheetRowsByBus(
+  rows: TransportChangeSheetRow[],
+  routeMeta: TransportRouteMeta[],
+): TransportChangeSheetRow[] {
+  const busOrder = new Map(
+    [...routeMeta]
+      .sort((a, b) => compareBusLabels(a.bus, b.bus))
+      .map((r, index) => [r.bus, index]),
+  );
+  return [...rows].sort((a, b) => {
+    const busA = busOrder.get(a.bus) ?? 999;
+    const busB = busOrder.get(b.bus) ?? 999;
+    if (busA !== busB) return busA - busB;
+    return a.camper.localeCompare(b.camper, undefined, { sensitivity: "base" });
+  });
+}
+
+export type ChangeSheetBusGroup = {
+  bus: string;
+  routeName: string;
+  rows: TransportChangeSheetRow[];
+};
+
+export function groupChangeSheetRowsByBus(
+  rows: TransportChangeSheetRow[],
+  routeMeta: TransportRouteMeta[],
+): ChangeSheetBusGroup[] {
+  const sorted = sortChangeSheetRowsByBus(rows, routeMeta);
+  const metaByBus = new Map(routeMeta.map((r) => [r.bus, r]));
+  const groups = new Map<string, TransportChangeSheetRow[]>();
+
+  for (const row of sorted) {
+    const key = row.bus.trim() || "Unassigned";
+    const list = groups.get(key) ?? [];
+    list.push(row);
+    groups.set(key, list);
+  }
+
+  return [...groups.entries()].map(([bus, groupRows]) => ({
+    bus,
+    routeName: groupRows[0]?.route || metaByBus.get(bus)?.name || "",
+    rows: groupRows,
+  }));
 }
 
 export function changeSheetRowsToCsv(rows: TransportChangeSheetRow[]): string {

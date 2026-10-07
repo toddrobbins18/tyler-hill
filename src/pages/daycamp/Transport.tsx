@@ -503,6 +503,7 @@ const persistBoardCache = (companyId: string, season: string, payload: BoardPayl
 };
 
 const dayCampReports = [
+  { name: "Master Change Sheet", desc: "All buses or pick specific buses — absences, changes, and attendance", href: "/day-camp/change-sheets" },
   { name: "Transport Exceptions", desc: "Absences, swim, office changes, and manual route edits for this date" },
   { name: "Attendance", desc: "Weekly bubble sheet — AM & PM Mon–Fri (paper backup)" },
   { name: "Digital Attendance Log", desc: "Export Present/Absent saved in Bus Attendance for this date & run" },
@@ -4739,14 +4740,25 @@ export default function Transport() {
             </CardContent>
           </Card>
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {dayCampReports.map((r) => (
-              <Card key={r.name} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleGenerateReport(r.name)}>
-                <CardContent className="p-4">
-                  <p className="text-sm font-medium text-primary">{r.name}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{r.desc}</p>
-                </CardContent>
-              </Card>
-            ))}
+            {dayCampReports.map((r) =>
+              "href" in r && r.href ? (
+                <Card key={r.name} className="cursor-pointer hover:shadow-md transition-shadow" asChild>
+                  <Link to={r.href}>
+                    <CardContent className="p-4">
+                      <p className="text-sm font-medium text-primary">{r.name}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{r.desc}</p>
+                    </CardContent>
+                  </Link>
+                </Card>
+              ) : (
+                <Card key={r.name} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleGenerateReport(r.name)}>
+                  <CardContent className="p-4">
+                    <p className="text-sm font-medium text-primary">{r.name}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{r.desc}</p>
+                  </CardContent>
+                </Card>
+              ),
+            )}
           </div>
         </TabsContent>
       </Tabs>

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Share2 } from "lucide-react";
+import { FileText, Printer, Share2 } from "lucide-react";
 import {
   fetchTransportExceptions,
   loadManualOverrides,
@@ -20,10 +20,14 @@ import { loadBusAttendance } from "@/lib/transportBusAttendance";
 import {
   buildApprovedChangeSheetRows,
   changeSheetRowsToCsv,
+  groupChangeSheetRowsByBus,
+  sortChangeSheetRowsByBus,
   type TransportChangeSheetRow,
 } from "@/lib/transportChangeSheets";
 import { normalizeTransportBoardForSeason, type TransportRouteMeta, type TransportRouteStop } from "@/lib/transportRoster";
 import { ROUTE_COLORS } from "@/lib/transportRunBoard";
+
+type RouteWithColor = TransportRouteMeta & { color: string };
 
 export default function TransportChangeSheets() {
   const { currentCompany } = useCompany();
@@ -31,7 +35,7 @@ export default function TransportChangeSheets() {
   const [sheetDate, setSheetDate] = useState(todayDateString());
   const [runPeriod, setRunPeriod] = useState<TransportRunPeriod>("am");
   const [selectedRouteIds, setSelectedRouteIds] = useState<number[]>([]);
-  const [routeMeta, setRouteMeta] = useState<TransportRouteMeta[]>([]);
+  const [routeMeta, setRouteMeta] = useState<RouteWithColor[]>([]);
   const [coreStops, setCoreStops] = useState<Record<number, TransportRouteStop[]>>({});
   const [parentTransportCampers, setParentTransportCampers] = useState<
     { routeId: number | null; name: string }[]
@@ -109,7 +113,8 @@ export default function TransportChangeSheets() {
         busAttendance: attendance.records,
         parentTransportCampers,
       });
-      setRows(built.filter((r) => !r.camper.startsWith("(No transport")));
+      const filtered = built.filter((r) => !r.camper.startsWith("(No transport"));
+      setRows(sortChangeSheetRowsByBus(filtered, routeMeta));
     } finally {
       setLoading(false);
     }
@@ -133,20 +138,32 @@ export default function TransportChangeSheets() {
     else if (!currentCompany?.id) setLoading(false);
   }, [coreStops, currentCompany?.id, loadSheet, routeMeta.length]);
 
+  const allBusesSelected =
+    routeMeta.length > 0 && selectedRouteIds.length === routeMeta.length;
+
   const routeLabel = useMemo(() => {
     if (!selectedRouteIds.length) return "No buses selected";
-    if (selectedRouteIds.length === routeMeta.length) return "All buses";
+    if (allBusesSelected) return "Master sheet — all buses";
     if (selectedRouteIds.length === 1) {
       const r = routeMeta.find((x) => x.id === selectedRouteIds[0]);
       return r ? `${r.bus} · ${r.name}` : "1 bus";
     }
-    return `${selectedRouteIds.length} buses`;
-  }, [routeMeta, selectedRouteIds]);
+    return `${selectedRouteIds.length} buses selected`;
+  }, [allBusesSelected, routeMeta, selectedRouteIds]);
+
+  const groupedRows = useMemo(
+    () => groupChangeSheetRowsByBus(rows, routeMeta),
+    [rows, routeMeta],
+  );
 
   const toggleRoute = (routeId: number) => {
     setSelectedRouteIds((prev) =>
       prev.includes(routeId) ? prev.filter((id) => id !== routeId) : [...prev, routeId],
     );
+  };
+
+  const selectAllBuses = () => {
+    setSelectedRouteIds(routeMeta.map((r) => r.id));
   };
 
   const downloadCsv = () => {
@@ -156,43 +173,49 @@ export default function TransportChangeSheets() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    const busSuffix =
-      selectedRouteIds.length === routeMeta.length
-        ? "all"
-        : routeMeta
-            .filter((r) => selectedRouteIds.includes(r.id))
-            .map((r) => r.bus.replace(/\s+/g, "-"))
-            .join("-");
-    a.download = `transport-change-sheet-${sheetDate}-${runPeriod}-${busSuffix}.csv`;
+    const busSuffix = allBusesSelected
+      ? "master-all-buses"
+      : routeMeta
+          .filter((r) => selectedRouteIds.includes(r.id))
+          .map((r) => r.bus.replace(/\s+/g, "-"))
+          .join("-");
+    a.download = `master-change-sheet-${sheetDate}-${runPeriod}-${busSuffix}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
-    <div className="space-y-6">
-      <FrontOfficeBackLink />
+    <div className="space-y-6 print:space-y-4">
+      <div className="no-print">
+        <FrontOfficeBackLink />
+      </div>
+
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary print:hidden">
             <FileText className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">Change Sheets</h1>
-            <p className="text-sm text-muted-foreground">
-              Approved daily changes for drivers — includes Bus Attendance absences for the selected run · season{" "}
+            <h1 className="text-2xl font-bold">Master Change Sheet</h1>
+            <p className="text-sm text-muted-foreground print:text-foreground">
+              Daily transport changes for drivers — select all buses or pick specific buses · season{" "}
               {currentSeason}
             </p>
           </div>
         </div>
-        <Button variant="outline" asChild>
+        <Button variant="outline" asChild className="no-print">
           <Link to="/day-camp/pending-transport-changes">Pending changes →</Link>
         </Button>
       </div>
 
-      <Card>
+      <Card className="no-print">
         <CardHeader>
-          <CardTitle className="text-base">Filters</CardTitle>
-          <CardDescription>Pick a date, run, and bus numbers to download.</CardDescription>
+          <CardTitle className="text-base">Date &amp; run</CardTitle>
+          <CardDescription>Choose the day and AM/PM run for this change sheet.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
           <Input type="date" value={sheetDate} onChange={(e) => setSheetDate(e.target.value)} className="w-auto" />
@@ -208,71 +231,120 @@ export default function TransportChangeSheets() {
               </Button>
             ))}
           </div>
-          <Button size="sm" variant="outline" onClick={() => setSelectedRouteIds(routeMeta.map((r) => r.id))}>
-            Select all
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setSelectedRouteIds([])}>
-            Clear
-          </Button>
-          <Button size="sm" onClick={downloadCsv} disabled={!rows.length || !selectedRouteIds.length}>
-            <Share2 className="mr-2 h-4 w-4" />
-            Download CSV
-          </Button>
         </CardContent>
       </Card>
 
-      <div className="flex flex-wrap gap-x-4 gap-y-2">
-        {routeMeta.map((r) => {
-          const checked = selectedRouteIds.includes(r.id);
-          return (
-            <label
-              key={r.id}
-              className="flex items-center gap-2 cursor-pointer text-sm"
-              style={{ borderLeftColor: r.color, borderLeftWidth: 3, paddingLeft: 8 }}
-            >
-              <Checkbox checked={checked} onCheckedChange={() => toggleRoute(r.id)} />
-              <span className="font-medium">{r.bus}</span>
-              <span className="text-xs text-muted-foreground truncate max-w-[140px]">{r.name}</span>
-            </label>
-          );
-        })}
+      <Card className="no-print">
+        <CardHeader>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Select buses</CardTitle>
+              <CardDescription>
+                Check one or more buses, or use Select all for the full master sheet.
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant={allBusesSelected ? "default" : "outline"} onClick={selectAllBuses}>
+                Select all buses
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setSelectedRouteIds([])}>
+                Clear selection
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            {routeMeta.map((r) => {
+              const checked = selectedRouteIds.includes(r.id);
+              return (
+                <label
+                  key={r.id}
+                  className="flex items-center gap-2 cursor-pointer text-sm rounded-md border px-3 py-2 hover:bg-muted/40"
+                  style={{ borderLeftColor: r.color, borderLeftWidth: 3 }}
+                >
+                  <Checkbox checked={checked} onCheckedChange={() => toggleRoute(r.id)} />
+                  <span className="font-medium">{r.bus}</span>
+                  <span className="text-xs text-muted-foreground truncate max-w-[160px]">{r.name}</span>
+                </label>
+              );
+            })}
+          </div>
+          {!routeMeta.length ? (
+            <p className="text-sm text-muted-foreground">No buses configured for this season.</p>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-2 border-t pt-4">
+            <Button size="sm" onClick={downloadCsv} disabled={!rows.length || !selectedRouteIds.length}>
+              <Share2 className="mr-2 h-4 w-4" />
+              Download CSV
+            </Button>
+            <Button size="sm" variant="outline" onClick={handlePrint} disabled={!rows.length || !selectedRouteIds.length}>
+              <Printer className="mr-2 h-4 w-4" />
+              Print
+            </Button>
+            {allBusesSelected ? (
+              <Badge variant="secondary" className="bg-primary/10 text-primary">
+                Master — all buses
+              </Badge>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="hidden print:block text-sm text-muted-foreground">
+        {sheetDate} · {runPeriod.toUpperCase()} · {routeLabel} · {rows.length} change{rows.length === 1 ? "" : "s"}
       </div>
 
-      <p className="text-sm text-muted-foreground">
+      <p className="text-sm text-muted-foreground no-print">
         {routeLabel} · {rows.length} approved change{rows.length === 1 ? "" : "s"}
       </p>
 
-      <Card>
-        <CardContent className="pt-6">
+      <Card className="print:border-0 print:shadow-none">
+        <CardContent className="pt-6 print:pt-0">
           {loading ? (
-            <div className="flex justify-center py-8">
+            <div className="flex justify-center py-8 no-print">
               <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
             </div>
+          ) : !selectedRouteIds.length ? (
+            <p className="text-sm text-muted-foreground no-print">
+              Select at least one bus to view the change sheet.
+            </p>
           ) : rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No approved changes for this date and filter. Pending items are on the Pending Changes page.
             </p>
           ) : (
-            <div className="space-y-3">
-              {rows.map((row, i) => (
-                <div key={`${row.camper}-${i}`} className="rounded-lg border p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold">{row.camper}</span>
-                    <Badge variant="secondary" className="bg-green-100 text-green-800">
-                      Approved
+            <div className="space-y-6">
+              {groupedRows.map((group) => (
+                <section key={group.bus} className="space-y-3 break-inside-avoid">
+                  <div className="flex items-center gap-2 border-b pb-2">
+                    <h2 className="text-base font-semibold">{group.bus}</h2>
+                    {group.routeName ? (
+                      <span className="text-sm text-muted-foreground">{group.routeName}</span>
+                    ) : null}
+                    <Badge variant="outline" className="ml-auto text-[10px] no-print">
+                      {group.rows.length} change{group.rows.length === 1 ? "" : "s"}
                     </Badge>
                   </div>
-                  <p className="text-xs font-medium text-primary">{row.source}</p>
-                  <p className="text-sm">{row.description}</p>
-                  {row.bus ? (
-                    <p className="text-xs text-muted-foreground">
-                      {row.bus}
-                      {row.route ? ` · ${row.route}` : ""}
-                      {row.stop ? ` · ${row.stop}` : ""}
-                    </p>
-                  ) : null}
-                  {row.notes ? <p className="text-xs italic">{row.notes}</p> : null}
-                </div>
+                  <div className="space-y-3">
+                    {group.rows.map((row, i) => (
+                      <div key={`${group.bus}-${row.camper}-${i}`} className="rounded-lg border p-3 print:p-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold">{row.camper}</span>
+                          <Badge variant="secondary" className="bg-green-100 text-green-800 no-print">
+                            Approved
+                          </Badge>
+                        </div>
+                        <p className="text-xs font-medium text-primary">{row.source}</p>
+                        <p className="text-sm">{row.description}</p>
+                        {row.stop ? (
+                          <p className="text-xs text-muted-foreground">{row.stop}</p>
+                        ) : null}
+                        {row.notes ? <p className="text-xs italic">{row.notes}</p> : null}
+                      </div>
+                    ))}
+                  </div>
+                </section>
               ))}
             </div>
           )}

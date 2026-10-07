@@ -35,8 +35,8 @@ const DAY_CAMP_MODULES: Record<string, { title: string; description: string }> =
     description: "Schedule changes that notify transportation when entered.",
   },
   "change-sheets": {
-    title: "Change Sheets",
-    description: "Approved daily transport changes — filter by date and route.",
+    title: "Master Change Sheet",
+    description: "All buses or pick specific buses — daily approved transport changes.",
   },
   "pending-transport-changes": {
     title: "Pending Changes",
