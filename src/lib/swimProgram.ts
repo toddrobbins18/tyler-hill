@@ -2,7 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { compareByLastName } from "@/lib/nameSortUtils";
 import { filterActiveRoster } from "@/lib/rosterStatus";
 
-export type BraceletColor = "Red" | "Orange" | "Yellow" | "Green" | "Blue";
+export type BraceletColor =
+  | "Non Swimmer/Beginner"
+  | "Red"
+  | "Orange"
+  | "Yellow"
+  | "Green"
+  | "Blue";
 /** A = Achieved, W = Working towards (sheet notation) */
 export type SkillStatus = "A" | "W" | "—";
 export type LevelStatus = "Complete" | "Incomplete" | "—";
@@ -23,6 +29,8 @@ export interface BraceletRecord {
   group: string;
   divisionLeader: string;
   currentBracelet: BraceletColor | "";
+  /** Airtable "Note Field" — freeform camper note. */
+  generalNote: string;
   proctor1: string;
   date1: string;
   note1: string;
@@ -62,9 +70,58 @@ export interface SwimSeasonHistory {
   levels: LevelRecord | null;
 }
 
+/** Airtable Swim Bracelets 2026 — 3rd Test Proctor options. */
+export const SWIM_PROCTOR_OPTIONS = ["VS", "JT", "MF", "BNO", "RB", "Ellie"] as const;
+
 /** Fallback initials when roster proctors have not been loaded yet. */
-export const PROCTORS = ["MF", "JT", "VS", "KL", "AR"];
-export const BRACELETS: BraceletColor[] = ["Red", "Orange", "Yellow", "Green", "Blue"];
+export const PROCTORS = [...SWIM_PROCTOR_OPTIONS];
+
+/** Airtable Swim Bracelets 2026 — Current Bracelet single-select. */
+export const BRACELETS: BraceletColor[] = [
+  "Non Swimmer/Beginner",
+  "Red",
+  "Orange",
+  "Yellow",
+  "Green",
+  "Blue",
+];
+
+/** Airtable Swim Bracelets 2026 — Division Leader single-select. */
+export const DIVISION_LEADER_OPTIONS = [
+  "Alyssa",
+  "Aubrey",
+  "Jess Cohen",
+  "CANDRA",
+  "CARLOTA",
+  "JAMIE",
+  "LAUREN M",
+  "ALLIE O",
+  "LINDSAY G",
+  "LISA C",
+  "Jess",
+  "Sara O",
+  "Ricki",
+] as const;
+
+/** Airtable Swim Bracelets 2026 — test note options (1st / 2nd / 3rd Note). */
+export const SWIM_TEST_NOTE_OPTIONS = [
+  "Backfloat form needs work",
+  "Backfloat needs endurance",
+  "Lap swimming form needs work",
+  "Needed Assist",
+  "Needs endurance to do 2nd lap",
+  "No Backfloat",
+  "No Tread",
+  "PASSED",
+  "Refused",
+  "Tread form needs work",
+  "Tread needs endurance",
+  "ZZZ Stamina Needs Work",
+] as const;
+
+export type SwimTestNote = (typeof SWIM_TEST_NOTE_OPTIONS)[number];
+
+/** @deprecated Use SWIM_TEST_NOTE_OPTIONS — kept for legacy imports. */
 export const PASS_OPTIONS = ["Passed", "Did Not Pass", "Retest"] as const;
 export type PassStatus = (typeof PASS_OPTIONS)[number];
 
@@ -139,11 +196,23 @@ export function mergeProctorOptions(base: string[], extra: string[]): string[] {
   return [...seen.values()].sort((a, b) => a.localeCompare(b));
 }
 
-export function normalizePassStatus(raw: unknown): PassStatus | "" {
+export function normalizeSwimTestNote(raw: unknown): SwimTestNote | "" {
   const s = String(raw ?? "").trim();
   if (!s) return "";
-  if (s === "Passed" || /^passed$/i.test(s)) return "Passed";
-  if (s === "Did Not Pass" || /^did not pass$/i.test(s) || /^fail(ed)?$/i.test(s)) return "Did Not Pass";
+  const exact = SWIM_TEST_NOTE_OPTIONS.find((opt) => opt.toLowerCase() === s.toLowerCase());
+  if (exact) return exact;
+  if (/^passed$/i.test(s)) return "PASSED";
+  if (/^did not pass$/i.test(s) || /^fail(ed)?$/i.test(s)) return "Refused";
+  if (/^retest$/i.test(s)) return "";
+  return "";
+}
+
+/** @deprecated Use normalizeSwimTestNote */
+export function normalizePassStatus(raw: unknown): PassStatus | "" {
+  const note = normalizeSwimTestNote(raw);
+  if (note === "PASSED") return "Passed";
+  if (note === "Refused") return "Did Not Pass";
+  const s = String(raw ?? "").trim();
   if (s === "Retest" || /^retest$/i.test(s)) return "Retest";
   return "";
 }
@@ -152,9 +221,27 @@ export function normalizeBraceletColor(raw: unknown): BraceletColor | "" {
   const s = String(raw ?? "").trim();
   if (!s) return "";
   const match = BRACELETS.find((c) => c.toLowerCase() === s.toLowerCase());
-  return match ?? "";
+  if (match) return match;
+  if (/^non\s*swimmer/i.test(s) || /^beginner$/i.test(s)) return "Non Swimmer/Beginner";
+  return "";
 }
 
+export function normalizeDivisionLeader(raw: unknown): string {
+  const s = String(raw ?? "").trim();
+  if (!s || s === "—") return "";
+  const match = DIVISION_LEADER_OPTIONS.find((opt) => opt.toLowerCase() === s.toLowerCase());
+  return match ?? s;
+}
+
+export function mergeSwimTestNoteOptions(extra: string[]): string[] {
+  return mergeProctorOptions([...SWIM_TEST_NOTE_OPTIONS], extra);
+}
+
+export function mergeDivisionLeaderOptions(extra: string[]): string[] {
+  return mergeProctorOptions([...DIVISION_LEADER_OPTIONS], extra);
+}
+
+/** @deprecated Use mergeSwimTestNoteOptions */
 export function mergePassOptions(extra: string[]): string[] {
   return mergeProctorOptions([...PASS_OPTIONS], extra);
 }
@@ -213,6 +300,7 @@ export function braceletFromChild(child: RosterChild): BraceletRecord {
     group: rosterGroup(child),
     divisionLeader: rosterDivisionLeader(child),
     currentBracelet: "",
+    generalNote: "",
     proctor1: "",
     date1: "",
     note1: "",
@@ -262,16 +350,18 @@ function braceletFromJson(child: RosterChild, raw: Record<string, unknown>): Bra
   return {
     ...base,
     group: importedGroup || base.group,
+    divisionLeader: normalizeDivisionLeader(raw.divisionLeader) || base.divisionLeader,
     currentBracelet: normalizeBraceletColor(color),
+    generalNote: String(raw.generalNote ?? raw.noteField ?? "").trim(),
     proctor1: String(raw.proctor1 ?? "").trim(),
     date1: String(raw.date1 ?? ""),
-    note1: normalizePassStatus(raw.note1) || String(raw.note1 ?? "").trim(),
+    note1: normalizeSwimTestNote(raw.note1) || String(raw.note1 ?? "").trim(),
     proctor2: String(raw.proctor2 ?? "").trim(),
     date2: String(raw.date2 ?? ""),
-    note2: normalizePassStatus(raw.note2) || String(raw.note2 ?? "").trim(),
+    note2: normalizeSwimTestNote(raw.note2) || String(raw.note2 ?? "").trim(),
     proctor3: String(raw.proctor3 ?? "").trim(),
     date3: String(raw.date3 ?? ""),
-    note3: normalizePassStatus(raw.note3) || String(raw.note3 ?? "").trim(),
+    note3: normalizeSwimTestNote(raw.note3) || String(raw.note3 ?? "").trim(),
     emailSent: Boolean(raw.emailSent),
   };
 }
@@ -310,7 +400,9 @@ function levelFromJson(child: RosterChild, raw: Record<string, unknown>, updated
 export function braceletToJson(record: BraceletRecord): Record<string, unknown> {
   return {
     group: record.group !== "—" ? record.group : "",
+    divisionLeader: record.divisionLeader !== "—" ? record.divisionLeader : "",
     currentBracelet: record.currentBracelet,
+    generalNote: record.generalNote,
     proctor1: record.proctor1,
     date1: record.date1,
     note1: record.note1,
@@ -369,7 +461,9 @@ export function mergeBracelets(
       name: child.name,
       personId: child.person_id,
       group: resolveDisplayGroup(rosterGroup(child), prev?.group),
-      divisionLeader: rosterDivisionLeader(child),
+      divisionLeader: prev?.divisionLeader?.trim()
+        ? prev.divisionLeader
+        : rosterDivisionLeader(child),
     };
     return prev ? { ...prev, ...rosterFields } : braceletFromChild(child);
   });
@@ -643,7 +737,7 @@ export async function fetchSwimProctorOptions(
       .eq("season", season),
   ]);
 
-  const options: string[] = [...PROCTORS];
+  const options: string[] = [...SWIM_PROCTOR_OPTIONS];
   for (const row of staffRows ?? []) {
     const name = String(row.name ?? "").trim();
     if (!name) continue;

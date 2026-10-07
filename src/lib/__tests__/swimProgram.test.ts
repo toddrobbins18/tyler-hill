@@ -4,6 +4,8 @@ import {
   levelFromSkills,
   normalizeBraceletColor,
   normalizePassStatus,
+  normalizeSwimTestNote,
+  normalizeDivisionLeader,
   normalizeSkillStatus,
   parseSwimProgramCsv,
   swimLevelColumnVisible,
@@ -82,10 +84,15 @@ describe("swimProgram", () => {
   });
 
   it("normalizes legacy pass and bracelet values", () => {
+    expect(normalizeSwimTestNote("PASSED")).toBe("PASSED");
+    expect(normalizeSwimTestNote("No Backfloat")).toBe("No Backfloat");
     expect(normalizePassStatus("PASSED")).toBe("Passed");
     expect(normalizePassStatus("did not pass")).toBe("Did Not Pass");
     expect(normalizeBraceletColor("orange")).toBe("Orange");
+    expect(normalizeBraceletColor("Non Swimmer/Beginner")).toBe("Non Swimmer/Beginner");
     expect(normalizeBraceletColor("purple")).toBe("");
+    expect(normalizeDivisionLeader("alyssa")).toBe("Alyssa");
+    expect(normalizeDivisionLeader("CARLOTA")).toBe("CARLOTA");
   });
 
   it("filters level report columns by Red Cross view", () => {

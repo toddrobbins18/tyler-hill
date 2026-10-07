@@ -7,12 +7,13 @@ import { useSeasonContext } from "@/contexts/SeasonContext";
 import {
   BRACELETS,
   DATE_FMT,
-  PASS_OPTIONS,
+  DIVISION_LEADER_OPTIONS,
   SWIM_LEVEL_REPORT_VIEWS,
   fetchSwimProctorOptions,
-  mergePassOptions,
+  mergeDivisionLeaderOptions,
   mergeProctorOptions,
-  normalizePassStatus,
+  mergeSwimTestNoteOptions,
+  normalizeSwimTestNote,
   swimLevelColumnVisible,
   type BraceletColor,
   type SwimLevelReportView,
@@ -144,6 +145,7 @@ function levelRecordHasData(record: LevelRecord): boolean {
 }
 
 const BRACELET_STYLES: Record<BraceletColor, string> = {
+  "Non Swimmer/Beginner": "bg-violet-500/15 text-violet-200 border-violet-500/35",
   Red: "bg-red-500/20 text-red-300 border-red-500/40",
   Orange: "bg-orange-500/20 text-orange-300 border-orange-500/40",
   Yellow: "bg-yellow-500/20 text-yellow-200 border-yellow-500/40",
@@ -262,14 +264,39 @@ function DateEdit({ value, onChange }: { value: string; onChange: (v: string) =>
   );
 }
 
-function PassSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const normalized = normalizePassStatus(value) || value;
-  const options = useMemo(() => mergePassOptions(value ? [value] : []), [value]);
-  const isPass = normalized === "Passed";
-  const isFail = normalized === "Did Not Pass";
+function DivisionLeaderSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const options = useMemo(() => mergeDivisionLeaderOptions(value ? [value] : []), [value]);
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onClick={(e) => e.stopPropagation()}
+      className={cn(editableSelect, value && "bg-primary/10 text-primary border-primary/30")}
+    >
+      <option value="">—</option>
+      {options.map((leader) => (
+        <option key={leader} value={leader} className="bg-background text-foreground">
+          {leader}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function TestNoteSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const normalized = normalizeSwimTestNote(value) || value;
+  const options = useMemo(() => mergeSwimTestNoteOptions(value ? [value] : []), [value]);
+  const isPass = normalized === "PASSED";
+  const isRefused = normalized === "Refused";
   const styles = isPass
     ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-    : isFail
+    : isRefused
       ? "bg-red-500/15 text-red-300 border-red-500/30"
       : normalized
         ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
@@ -279,12 +306,12 @@ function PassSelect({ value, onChange }: { value: string; onChange: (v: string) 
       value={normalized}
       onChange={(e) => onChange(e.target.value)}
       onClick={(e) => e.stopPropagation()}
-      className={cn(editableSelect, styles)}
+      className={cn(editableSelect, "min-w-[140px] max-w-[200px]", styles)}
     >
       <option value="">—</option>
-      {options.map((p) => (
-        <option key={p} value={p} className="bg-background text-foreground">
-          {p}
+      {options.map((note) => (
+        <option key={note} value={note} className="bg-background text-foreground">
+          {note}
         </option>
       ))}
     </select>
@@ -1105,13 +1132,16 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                     <SortableHeader label="Group" sortKey="group" currentSort={braceletSort} onSort={requestBraceletSort} />
                     <SortableHeader label="Division Leader" sortKey="divisionLeader" currentSort={braceletSort} onSort={requestBraceletSort} />
                     <SortableHeader label="Current Bracelet" sortKey="currentBracelet" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader label="Note Field" sortKey="generalNote" currentSort={braceletSort} onSort={requestBraceletSort} />
                     <SortableHeader label="1st Proctor" sortKey="proctor1" currentSort={braceletSort} onSort={requestBraceletSort} />
                     <SortableHeader label="1st Date" sortKey="date1" currentSort={braceletSort} onSort={requestBraceletSort} />
                     <SortableHeader label="1st Note" sortKey="note1" currentSort={braceletSort} onSort={requestBraceletSort} />
                     <SortableHeader label="2nd Proctor" sortKey="proctor2" currentSort={braceletSort} onSort={requestBraceletSort} />
                     <SortableHeader label="2nd Date" sortKey="date2" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader label="2nd Note" sortKey="note2" currentSort={braceletSort} onSort={requestBraceletSort} />
                     <SortableHeader label="3rd Proctor" sortKey="proctor3" currentSort={braceletSort} onSort={requestBraceletSort} />
                     <SortableHeader label="3rd Date" sortKey="date3" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader label="3rd Note" sortKey="note3" currentSort={braceletSort} onSort={requestBraceletSort} />
                     <SortableHeader label="Email" sortKey="emailSent" currentSort={braceletSort} onSort={requestBraceletSort} />
                   </TableRow>
                 </TableHeader>
@@ -1125,12 +1155,20 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                         {b.group}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">
-                          {b.divisionLeader.split(" ")[0]}
-                        </Badge>
+                        <DivisionLeaderSelect
+                          value={b.divisionLeader === "—" ? "" : b.divisionLeader}
+                          onChange={(v) => updateBracelet(b.id, { divisionLeader: v || "—" })}
+                        />
                       </TableCell>
                       <TableCell>
                         <BraceletSelect value={b.currentBracelet} onChange={(v) => updateBracelet(b.id, { currentBracelet: v })} />
+                      </TableCell>
+                      <TableCell>
+                        <TextEdit
+                          value={b.generalNote}
+                          placeholder="Note"
+                          onChange={(v) => updateBracelet(b.id, { generalNote: v })}
+                        />
                       </TableCell>
                       <TableCell>
                         <ProctorSelect
@@ -1143,7 +1181,7 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                         <DateEdit value={b.date1} onChange={(v) => updateBracelet(b.id, { date1: v })} />
                       </TableCell>
                       <TableCell>
-                        <PassSelect value={b.note1} onChange={(v) => updateBracelet(b.id, { note1: v })} />
+                        <TestNoteSelect value={b.note1} onChange={(v) => updateBracelet(b.id, { note1: v })} />
                       </TableCell>
                       <TableCell>
                         <ProctorSelect
@@ -1156,6 +1194,9 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                         <DateEdit value={b.date2} onChange={(v) => updateBracelet(b.id, { date2: v })} />
                       </TableCell>
                       <TableCell>
+                        <TestNoteSelect value={b.note2} onChange={(v) => updateBracelet(b.id, { note2: v })} />
+                      </TableCell>
+                      <TableCell>
                         <ProctorSelect
                           value={b.proctor3}
                           options={proctorOptions}
@@ -1164,6 +1205,9 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                       </TableCell>
                       <TableCell>
                         <DateEdit value={b.date3} onChange={(v) => updateBracelet(b.id, { date3: v })} />
+                      </TableCell>
+                      <TableCell>
+                        <TestNoteSelect value={b.note3} onChange={(v) => updateBracelet(b.id, { note3: v })} />
                       </TableCell>
                       <TableCell>
                         {b.emailSent ? (
