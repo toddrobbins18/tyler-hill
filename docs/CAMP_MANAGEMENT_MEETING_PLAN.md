@@ -74,7 +74,7 @@ Speaker labels in the original transcript (Speaker 1 / Speaker 2) are organizati
 | 7 | **Swim level parent emails** — level-specific sheet + skill checkmarks in attachment | Medium | **In progress** | RC1 done: email, PDF checkmarks, exit skills A/W in Nest + email + PDF. RC2+ charts still pending. |
 | 8 | **Parent portal — Todd’s redesign** | Medium | **Partial** | Review/implement latest Todd design; dev liked direction. |
 | 9 | **North Shore dashboard background image** | Low | **Not done** | Waiting on image from Todd. |
-| 10 | **Admin ops logs** (sync, email, data) | Medium | **Partial** | `Admin.tsx`, `AuditLog`, `email_logs` table exist; not a full Todd-style operations dashboard. |
+| 10 | **Admin ops logs** (sync, email, data) | Medium | **In progress** | Admin → **Operations** tab: CampMinder sync jobs, email send log, M365 status, season data counts. |
 | 11 | **Other two camps’ routes → system learns** | Future | **Not done** | After NS 2026 dataset is solid. |
 | 12 | **Correct Airtable access — Swim Bracelets 2026** | — | **Done (meeting)** | Todd resent access during call. |
 
@@ -98,7 +98,7 @@ Speaker labels in the original transcript (Speaker 1 / Speaker 2) are organizati
 | Swim levels / reports | `SwimProgram.tsx`, `src/lib/swimProgressSkills.ts`, `swimProgressEmail.ts`, `send-swim-progress-email` edge function |
 | Messaging | `src/pages/Messages.tsx` |
 | Parent portal | `src/pages/ParentPortal.tsx`, `ParentAuth.tsx`, `src/lib/parentPortalTheme.ts` |
-| Admin / logs | `src/pages/Admin.tsx`, `src/components/admin/AuditLog.tsx`, `email_logs` in Supabase types |
+| Admin / logs | `src/pages/Admin.tsx`, `src/components/admin/OperationsDashboard.tsx`, `AuditLog.tsx`, `sync_jobs`, `email_logs` |
 | Profile / camp photos | `src/components/ProfilePhotoUpload.tsx`, `profile-photos` storage bucket |
 
 ---
@@ -122,6 +122,7 @@ Speaker labels in the original transcript (Speaker 1 / Speaker 2) are organizati
 | 2026-10-07 | Swim progress email foundation: RC1 skill catalog, HTML email builder, Send button on Level Report, edge function (PDF attachment phase 2). |
 | 2026-10-07 | RC1 skills chart added (`public/swim-charts/red-cross-1.jpg`); PDF checkmarks on Achieved skills attached to parent email. |
 | 2026-10-07 | RC1 exit skills (2) added to Level Report UI, save/load, email body, and PDF checkmarks. |
+| 2026-10-07 | Admin Operations tab v1: sync job history, email logs, email config status, season data snapshot. |
 
 ---
 

@@ -1,4 +1,7 @@
-import { Shield, Users, Database, FileText, Tag, Mail, Building2, Upload, Download } from "lucide-react";
+import { useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Shield, Users, Database, FileText, Tag, Mail, Building2, Upload, Download, Activity } from "lucide-react";
+import OperationsDashboard from "@/components/admin/OperationsDashboard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -14,9 +17,40 @@ import CompanyManagement from "@/pages/admin/CompanyManagement";
 import CampDataImporter from "@/components/admin/CampDataImporter";
 import DataExporter from "@/components/admin/DataExporter";
 
+const ADMIN_TABS = [
+  "operations",
+  "users",
+  "tags",
+  "email",
+  "email-config",
+  "companies",
+  "data",
+  "import",
+  "export",
+  "history",
+] as const;
+
+type AdminTab = (typeof ADMIN_TABS)[number];
+
 export default function Admin() {
   const { isSuperAdmin } = usePermissions();
   const { currentCompany } = useCompany();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const activeTab = useMemo(() => {
+    const tab = searchParams.get("tab");
+    if (tab && ADMIN_TABS.includes(tab as AdminTab)) return tab as AdminTab;
+    return "operations";
+  }, [searchParams]);
+
+  const setActiveTab = (tab: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (tab === "operations") next.delete("tab");
+      else next.set("tab", tab);
+      return next;
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -50,8 +84,12 @@ export default function Admin() {
         </Card>
       )}
 
-      <Tabs defaultValue="users" className="space-y-6">
-        <TabsList className={`grid w-full ${isSuperAdmin ? 'grid-cols-9' : 'grid-cols-6'} lg:w-auto`}>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList className={`grid w-full ${isSuperAdmin ? 'grid-cols-10' : 'grid-cols-7'} lg:w-auto`}>
+          <TabsTrigger value="operations" className="gap-2">
+            <Activity className="h-4 w-4" />
+            Operations
+          </TabsTrigger>
           <TabsTrigger value="users" className="gap-2">
             <Users className="h-4 w-4" />
             User Management
@@ -95,6 +133,10 @@ export default function Admin() {
             Edit History
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="operations" className="space-y-6">
+          <OperationsDashboard />
+        </TabsContent>
 
         <TabsContent value="users" className="space-y-6">
           <UserRoleManagement />
