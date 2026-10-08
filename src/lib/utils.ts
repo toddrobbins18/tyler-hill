@@ -39,6 +39,21 @@ export function formatTime24Hour(time12: string): string {
   return `${hour.toString().padStart(2, '0')}:${minutes}`;
 }
 
+/** YYYY-MM-DD from Postgres DATE or timestamp strings (avoids UTC shift in pickers). */
+export function calendarDateOnly(value: string | null | undefined): string {
+  if (!value) return "";
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(String(value).trim());
+  return match?.[1] ?? String(value).trim().slice(0, 10);
+}
+
+/** Calendar YYYY-MM-DD in local time — never use toISOString() for date-only fields. */
+export function dateToLocalYmd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 /**
  * Parse a date string (YYYY-MM-DD) into a Date object without timezone shifting.
  * This prevents the common issue where dates are interpreted as UTC and shift 
@@ -49,7 +64,7 @@ export function formatTime24Hour(time12: string): string {
  */
 export function parseLocalDate(dateString: string): Date {
   if (!dateString) return new Date();
-  return new Date(dateString + 'T00:00:00');
+  return new Date(calendarDateOnly(dateString) + "T00:00:00");
 }
 
 /**

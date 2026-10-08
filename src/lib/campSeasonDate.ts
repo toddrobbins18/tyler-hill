@@ -1,4 +1,5 @@
 import { CAMP_TIMEZONE } from "@/lib/parentPortalCutoff";
+import { parseLocalDate } from "@/lib/utils";
 
 type CampTimezoneParts = {
   year: number;
@@ -35,22 +36,19 @@ export function campTimezoneParts(now = new Date()): CampTimezoneParts {
   };
 }
 
-/** Same month/day/time as now, but year from the selected camp season (staff UI). */
+function campYmdFromParts(parts: CampTimezoneParts, year: number): string {
+  const month = String(parts.month).padStart(2, "0");
+  const day = String(parts.day).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** Camp calendar day in the selected season year — local midnight (picker-safe). */
 export function campDateInSeason(season: string, now = new Date()): Date {
   const seasonYear = Number.parseInt(season, 10);
   if (!Number.isFinite(seasonYear)) return now;
 
   const parts = campTimezoneParts(now);
-  if (parts.year === seasonYear) return now;
-
-  return new Date(
-    seasonYear,
-    parts.month - 1,
-    parts.day,
-    parts.hour,
-    parts.minute,
-    parts.second,
-  );
+  return parseLocalDate(campYmdFromParts(parts, seasonYear));
 }
 
 /** Default Master Calendar month for day camps (June 1 of the selected season). */

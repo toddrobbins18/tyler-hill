@@ -21,6 +21,7 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { clearExistingMenuItemsForKeys } from "@/lib/csvRosterSync";
 import { CalendarZoomWrapper } from "@/components/CalendarZoomWrapper";
 import { Checkbox } from "@/components/ui/checkbox";
+import { calendarDateOnly, dateToLocalYmd, formatLocalDate, parseLocalDate } from "@/lib/utils";
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -105,7 +106,12 @@ export default function Menu() {
       toast({ title: "Error fetching menu items", variant: "destructive" });
       return;
     }
-    setMenuItems(data || []);
+    setMenuItems(
+      (data || []).map((item) => ({
+        ...item,
+        date: calendarDateOnly(item.date),
+      })),
+    );
     setLoading(false);
   };
 
@@ -166,7 +172,7 @@ export default function Menu() {
   const handleEdit = (item: any) => {
     setEditingItem(item);
     setFormData({
-      date: item.date,
+      date: calendarDateOnly(item.date),
       meal_type: item.meal_type,
       items: item.items,
       allergens: item.allergens || "",
@@ -193,13 +199,18 @@ export default function Menu() {
     fetchMenuItems();
   };
 
-  const calendarEvents = menuItems.map(item => ({
-    id: item.id,
-    title: `${formatMealTypeLabel(item.meal_type)}: ${item.items.substring(0, 30)}...`,
-    start: new Date(item.date + 'T00:00:00'),
-    end: new Date(item.date + 'T23:59:59'),
-    resource: item,
-  }));
+  const calendarEvents = menuItems.map(item => {
+    const day = parseLocalDate(item.date);
+    const end = new Date(day);
+    end.setHours(23, 59, 59, 999);
+    return {
+      id: item.id,
+      title: `${formatMealTypeLabel(item.meal_type)}: ${item.items.substring(0, 30)}...`,
+      start: day,
+      end,
+      resource: item,
+    };
+  });
 
   const groupedByDate = menuItems.reduce((acc, item) => {
     if (!acc[item.date]) acc[item.date] = [];
@@ -207,7 +218,9 @@ export default function Menu() {
     return acc;
   }, {} as Record<string, any[]>);
 
-  const sortedDates = Object.keys(groupedByDate).sort((a, b) => new Date(b + 'T00:00:00').getTime() - new Date(a + 'T00:00:00').getTime());
+  const sortedDates = Object.keys(groupedByDate).sort(
+    (a, b) => parseLocalDate(b).getTime() - parseLocalDate(a).getTime(),
+  );
 
   return (
     <div className="space-y-8">
@@ -363,7 +376,7 @@ export default function Menu() {
                   onNavigate={setCurrentDate}
                   onSelectEvent={(event) => handleEdit(event.resource)}
                   onSelectSlot={(slotInfo) => {
-                    setFormData({ ...formData, date: format(slotInfo.start, 'yyyy-MM-dd') });
+                    setFormData({ ...formData, date: dateToLocalYmd(slotInfo.start) });
                     setDialogOpen(true);
                   }}
                   selectable
@@ -381,7 +394,7 @@ export default function Menu() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Utensils className="h-5 w-5" />
-                    {new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    {formatLocalDate(date, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
