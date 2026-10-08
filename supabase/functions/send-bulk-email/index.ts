@@ -244,6 +244,7 @@ const handler = async (req: Request): Promise<Response> => {
         content: message,
         read: false,
         notification_type: 'notification',
+        company_id: senderProfile.company_id,
         created_at: batchAt
       }));
 

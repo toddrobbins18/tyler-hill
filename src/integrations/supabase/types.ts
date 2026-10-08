@@ -1567,6 +1567,10 @@ export type Database = {
           created_at: string
           group_id: string
           id: string
+          media_file_name: string | null
+          media_mime: string | null
+          media_storage_path: string | null
+          message_kind: string
           parent_message_id: string | null
           sender_id: string
         }
@@ -1575,6 +1579,10 @@ export type Database = {
           created_at?: string
           group_id: string
           id?: string
+          media_file_name?: string | null
+          media_mime?: string | null
+          media_storage_path?: string | null
+          message_kind?: string
           parent_message_id?: string | null
           sender_id: string
         }
@@ -1583,6 +1591,10 @@ export type Database = {
           created_at?: string
           group_id?: string
           id?: string
+          media_file_name?: string | null
+          media_mime?: string | null
+          media_storage_path?: string | null
+          message_kind?: string
           parent_message_id?: string | null
           sender_id?: string
         }
@@ -2170,38 +2182,56 @@ export type Database = {
       }
       messages: {
         Row: {
+          company_id: string | null
           content: string
           created_at: string | null
           group_id: string | null
           id: string
+          media_file_name: string | null
+          media_mime: string | null
+          media_storage_path: string | null
+          message_kind: string
           notification_type: string | null
           parent_message_id: string | null
           read: boolean | null
           recipient_id: string | null
+          sender_display_name: string | null
           sender_id: string | null
           subject: string
         }
         Insert: {
+          company_id?: string | null
           content: string
           created_at?: string | null
           group_id?: string | null
           id?: string
+          media_file_name?: string | null
+          media_mime?: string | null
+          media_storage_path?: string | null
+          message_kind?: string
           notification_type?: string | null
           parent_message_id?: string | null
           read?: boolean | null
           recipient_id?: string | null
+          sender_display_name?: string | null
           sender_id?: string | null
           subject: string
         }
         Update: {
+          company_id?: string | null
           content?: string
           created_at?: string | null
           group_id?: string | null
           id?: string
+          media_file_name?: string | null
+          media_mime?: string | null
+          media_storage_path?: string | null
+          message_kind?: string
           notification_type?: string | null
           parent_message_id?: string | null
           read?: boolean | null
           recipient_id?: string | null
+          sender_display_name?: string | null
           sender_id?: string | null
           subject?: string
         }

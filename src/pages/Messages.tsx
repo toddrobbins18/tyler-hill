@@ -17,6 +17,12 @@ import InlineThread from "@/components/messages/InlineThread";
 import { notificationsDebug } from "@/lib/notificationDebug";
 import { fetchMessageProfileLabels, inboxFromDisplayName } from "@/lib/messageProfiles";
 import { messageContentPreview } from "@/lib/messageContentUtils";
+import { messageMediaEnabledForCamp, messagePreviewLabel } from "@/lib/messageMedia";
+import {
+  filterMessagesForCampInbox,
+  sandboxInboxUsesTrainingFilter,
+} from "@/lib/messageInboxFilters";
+import { NestSandboxStaffTestAccountsCard } from "@/components/messages/NestSandboxStaffTestAccountsCard";
 
 interface TagGroup {
   tag: string;
@@ -47,9 +53,11 @@ interface Message {
   recipient_name?: string;
   reply_count?: number;
   latest_reply_content?: string;
+  latest_reply_kind?: string | null;
   latest_reply_sender?: string;
   latest_reply_at?: string;
   notification_type?: string | null;
+  message_kind?: string | null;
 }
 
 const TAG_LABELS: Record<string, string> = {
@@ -190,6 +198,14 @@ export default function Messages() {
     };
   }, [currentCompany?.id]);
 
+  useEffect(() => {
+    if (!selectedMessage) return;
+    const pool = viewMode === "sent" ? sentMessages : receivedMessages;
+    if (!pool.some((m) => m.id === selectedMessage.id)) {
+      setSelectedMessage(null);
+    }
+  }, [currentCompany?.id, receivedMessages, sentMessages, selectedMessage, viewMode]);
+
   const fetchMessages = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -243,22 +259,24 @@ export default function Messages() {
             (m.sender_id && labelFromCache(cache, m.sender_id)) || m.sender_display_name?.trim() || undefined,
           reply_count: count || 0,
           latest_reply_content: latestReply?.content,
+          latest_reply_kind: latestReply?.message_kind,
           latest_reply_sender: latestReplyName,
           latest_reply_at: latestReply?.created_at,
         };
       });
 
       const enriched = await Promise.all(enrichedPromises);
-      const unread = enriched.filter((m) => !m.read).length;
+      const visible = filterMessagesForCampInbox(enriched, currentCompany);
+      const unread = visible.filter((m) => !m.read).length;
       notificationsDebug("Inbox refetched", {
         userId: user.id,
-        total: enriched.length,
+        total: visible.length,
         unread,
-        newest: enriched[0]
-          ? { id: enriched[0].id, subject: enriched[0].subject, read: enriched[0].read }
+        newest: visible[0]
+          ? { id: visible[0].id, subject: visible[0].subject, read: visible[0].read }
           : null,
       });
-      setReceivedMessages(enriched);
+      setReceivedMessages(visible);
       setUnreadCount(unread);
     }
   };
@@ -285,8 +303,9 @@ export default function Messages() {
         ...m,
         recipient_name: m.recipient_id ? (labelFromCache(cache, m.recipient_id) || "Unknown") : undefined,
       }));
-      notificationsDebug("Sent list refetched", { userId: user.id, count: enriched.length });
-      setSentMessages(enriched);
+      const visible = filterMessagesForCampInbox(enriched, currentCompany);
+      notificationsDebug("Sent list refetched", { userId: user.id, count: visible.length });
+      setSentMessages(visible);
     }
   };
 
@@ -534,9 +553,19 @@ export default function Messages() {
   };
 
   const activeMessages = viewMode === 'sent' ? sentMessages : receivedMessages;
+  const sandboxMessageMedia = messageMediaEnabledForCamp(currentCompany?.slug);
 
   return (
     <div className="space-y-6">
+      {sandboxInboxUsesTrainingFilter(currentCompany?.slug) ? (
+        <p className="text-sm rounded-md border border-dashed bg-muted/40 px-3 py-2 text-muted-foreground">
+          Training sandbox shows only messages sent while in this camp (tagged with its company).
+          Older test mail and other camps&apos; notices are hidden.
+          {sandboxMessageMedia
+            ? " Thread replies and group chat can attach photos and videos."
+            : ""}
+        </p>
+      ) : null}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground mb-2 flex items-center gap-2">
@@ -642,14 +671,25 @@ export default function Messages() {
                                 To: {msg.recipient_name || "Unknown"}
                               </p>
                             )}
-                            {msg.latest_reply_content ? (
+                            {msg.latest_reply_content != null || msg.latest_reply_kind ? (
                               <p className="text-sm text-muted-foreground truncate">
                                 <span className="font-medium">{msg.latest_reply_sender}:</span>{" "}
-                                {msg.latest_reply_content.substring(0, 80)}...
+                                {messageContentPreview(
+                                  messagePreviewLabel(
+                                    msg.latest_reply_kind,
+                                    msg.latest_reply_content ?? "",
+                                  ),
+                                  80,
+                                  msg.latest_reply_kind,
+                                )}
                               </p>
                             ) : (
                               <p className="text-sm text-muted-foreground truncate">
-                                {messageContentPreview(msg.content, 100)}
+                                {messageContentPreview(
+                                  messagePreviewLabel(msg.message_kind, msg.content),
+                                  100,
+                                  msg.message_kind,
+                                )}
                               </p>
                             )}
                             <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
@@ -673,6 +713,7 @@ export default function Messages() {
               message={selectedMessage}
               viewMode={viewMode as 'inbox' | 'sent'}
               campCompanyId={currentCompany?.id}
+              campCompanySlug={currentCompany?.slug}
               onNavigateToGroup={(groupId) => {
                 setActiveGroupId(groupId);
                 setViewMode('groups');
@@ -698,6 +739,9 @@ export default function Messages() {
       {viewMode === 'compose' && (
         <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
           <div className="space-y-4">
+            {sandboxInboxUsesTrainingFilter(currentCompany?.slug) ? (
+              <NestSandboxStaffTestAccountsCard />
+            ) : null}
             <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
               <div className="flex items-start gap-3">
                 <Bell className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />

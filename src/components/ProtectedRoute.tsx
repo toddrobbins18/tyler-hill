@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { Shield } from "lucide-react";
+import { isNestSandboxCompany } from "@/lib/camps";
+import { isSandboxDemoStaffEmail } from "@/lib/nestSandboxStaffDemo";
 
 // Map route paths to their menu item names for permission checks
 const routeToMenuMap: Record<string, string> = {
@@ -23,7 +25,7 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   const [approvalChecked, setApprovalChecked] = useState(false);
   
   const { user, loading: authLoading, hasPagePermission, isSuperAdmin } = useAuth();
-  const { loading: companyLoading, currentCompany } = useCompany();
+  const { loading: companyLoading, currentCompany, sandboxMode } = useCompany();
 
   // Extract page name from path
   const menuItem = useMemo(() => {
@@ -38,11 +40,18 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   }, [location.pathname]);
 
   // Calculate page access synchronously from preloaded permissions
+  const sandboxTrainingAccess = useMemo(() => {
+    if (!currentCompany || !isNestSandboxCompany(currentCompany.slug)) return false;
+    if (sandboxMode || isSandboxDemoStaffEmail(user?.email)) return true;
+    return false;
+  }, [currentCompany, sandboxMode, user?.email]);
+
   const hasPageAccess = useMemo(() => {
     if (!currentCompany) return true; // Still loading, assume access
     if (isSuperAdmin) return true;
+    if (sandboxTrainingAccess) return true;
     return hasPagePermission(currentCompany.id, menuItem);
-  }, [currentCompany?.id, menuItem, isSuperAdmin, hasPagePermission]);
+  }, [currentCompany, menuItem, isSuperAdmin, hasPagePermission, sandboxTrainingAccess]);
 
   // Check auth and redirect if needed
   useEffect(() => {

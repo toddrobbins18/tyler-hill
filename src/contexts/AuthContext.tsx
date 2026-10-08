@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { User } from '@supabase/supabase-js';
 import { resolvePermissionDivisionIds } from '@/lib/divisionFilterUtils';
 import { hasMenuPermissionWithAliases } from '@/lib/dayCampPermissionAliases';
+import { isSandboxDemoStaffEmail } from '@/lib/nestSandboxStaffDemo';
 
 export type AppRole = 'admin' | 'staff' | 'division_leader' | 'specialist' | 'viewer' | 'super_admin' | 'health_center';
 
@@ -182,6 +183,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Super admins have access to everything
     if (isSuperAdmin) return true;
 
+    // Nest sandbox demo staff — training logins (not production camps)
+    if (isSandboxDemoStaffEmail(user?.email)) {
+      const blocked = new Set(['admin', 'role-permissions', 'company-management']);
+      if (blocked.has(menuItem)) return false;
+      return true;
+    }
+
     const perms = allPermissions[companyId];
     if (hasMenuPermissionWithAliases(perms, menuItem)) return true;
 
@@ -200,7 +208,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     return false;
-  }, [isSuperAdmin, allPermissions]);
+  }, [isSuperAdmin, allPermissions, user?.email]);
 
   return (
     <AuthContext.Provider

@@ -10,7 +10,8 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "seed:route-reference-2026": "node scripts/seed_route_reference_2026.mjs"
+    "seed:route-reference-2026": "node scripts/seed_route_reference_2026.mjs",
+    "sandbox:create-staff-test-users": "node scripts/create_nest_sandbox_test_staff.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

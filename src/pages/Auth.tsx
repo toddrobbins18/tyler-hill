@@ -5,6 +5,9 @@ import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { DEFAULT_SEASON } from "@/lib/seasonConstants";
+import { isNestSandboxCompany } from "@/lib/camps";
+import { isSandboxDemoStaffEmail } from "@/lib/nestSandboxStaffDemo";
+import { setNestSandboxModeActive } from "@/lib/nestSandboxMode";
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -73,7 +76,7 @@ export default function Auth() {
     try {
       const { data: profile, error } = await supabase
         .from('profiles')
-        .select('approved, company_id')
+        .select('approved, company_id, companies(slug)')
         .eq('id', userId)
         .single();
 
@@ -104,6 +107,13 @@ export default function Auth() {
         sessionStorage.setItem('nest_login_defaults', '1');
         localStorage.setItem('currentSeason', DEFAULT_SEASON);
       }
+
+      const profileSlug = (profile?.companies as { slug?: string } | null)?.slug;
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (isSandboxDemoStaffEmail(authUser?.email) || isNestSandboxCompany(profileSlug)) {
+        setNestSandboxModeActive(true);
+      }
+
       navigate("/");
     } catch (error) {
       console.error('Error checking user company:', error);

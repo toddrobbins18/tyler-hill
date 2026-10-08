@@ -8,6 +8,15 @@ import { Users, Send, ArrowLeft, MessageSquare, Reply, Trash2 } from "lucide-rea
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
+import { useCompany } from "@/contexts/CompanyContext";
+import { MessageContent } from "@/components/messages/MessageContent";
+import { MessageMediaComposer } from "@/components/messages/MessageMediaComposer";
+import {
+  messageMediaEnabledForCamp,
+  messagePreviewLabel,
+  sendGroupMessageMedia,
+} from "@/lib/messageMedia";
+import { toast } from "sonner";
 
 interface GroupMessage {
   id: string;
@@ -17,6 +26,9 @@ interface GroupMessage {
   parent_message_id: string | null;
   created_at: string;
   sender_name?: string;
+  message_kind?: string | null;
+  media_storage_path?: string | null;
+  media_mime?: string | null;
 }
 
 interface GroupInfo {
@@ -35,11 +47,14 @@ interface GroupChatViewProps {
 }
 
 export default function GroupChatView({ groupId, onBack, onDeleted }: GroupChatViewProps) {
+  const { currentCompany } = useCompany();
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [groupInfo, setGroupInfo] = useState<GroupInfo | null>(null);
   const [newMessage, setNewMessage] = useState("");
   const [replyTo, setReplyTo] = useState<GroupMessage | null>(null);
   const [sending, setSending] = useState(false);
+  const [mediaUploading, setMediaUploading] = useState(false);
+  const [mediaProgress, setMediaProgress] = useState(0);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [profileCache, setProfileCache] = useState<Record<string, string>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -139,6 +154,63 @@ export default function GroupChatView({ groupId, onBack, onDeleted }: GroupChatV
     setMessages(enriched);
   };
 
+  const mediaEnabled =
+    !!currentCompany?.id && messageMediaEnabledForCamp(currentCompany.slug);
+
+  const notifyGroupMembers = async (preview: string) => {
+    if (!groupInfo || !currentUserId) return;
+    const otherMembers = groupInfo.members.filter((m) => m.user_id !== currentUserId);
+    const senderName =
+      groupInfo.members.find((m) => m.user_id === currentUserId)?.full_name || "Someone";
+    const clipped =
+      preview.length > 100 ? `${preview.substring(0, 100)}...` : preview;
+
+    if (otherMembers.length === 0) return;
+
+    const notifications = otherMembers.map((member) => ({
+      sender_id: currentUserId,
+      recipient_id: member.user_id,
+      subject: `New message in ${groupInfo.name}`,
+      content: `${senderName}: ${clipped}`,
+      read: false,
+      group_id: groupId,
+      company_id: currentCompany?.id ?? null,
+    }));
+
+    await supabase.from("messages").insert(notifications);
+  };
+
+  const handleSendMedia = async (file: File) => {
+    if (!currentUserId || !currentCompany?.id || mediaUploading) return;
+
+    setMediaUploading(true);
+    setMediaProgress(0);
+    try {
+      const { error, preview } = await sendGroupMessageMedia(supabase, {
+        companyId: currentCompany.id,
+        groupId,
+        senderId: currentUserId,
+        parentMessageId: replyTo?.id || null,
+        caption: newMessage,
+        file,
+        onProgress: setMediaProgress,
+      });
+
+      if (error) {
+        toast.error(error);
+        return;
+      }
+
+      await notifyGroupMembers(preview);
+      setNewMessage("");
+      setReplyTo(null);
+      await fetchMessages();
+    } finally {
+      setMediaUploading(false);
+      setMediaProgress(0);
+    }
+  };
+
   const handleSend = async () => {
     if (!newMessage.trim() || !currentUserId) return;
 
@@ -157,25 +229,7 @@ export default function GroupChatView({ groupId, onBack, onDeleted }: GroupChatV
 
       if (error) throw error;
 
-      // Send inbox notifications to all other group members
-      if (groupInfo) {
-        const otherMembers = groupInfo.members.filter(m => m.user_id !== currentUserId);
-        const senderName = groupInfo.members.find(m => m.user_id === currentUserId)?.full_name || "Someone";
-        const preview = messageContent.length > 100 ? messageContent.substring(0, 100) + "..." : messageContent;
-
-        if (otherMembers.length > 0) {
-          const notifications = otherMembers.map(member => ({
-            sender_id: currentUserId,
-            recipient_id: member.user_id,
-            subject: `New message in ${groupInfo.name}`,
-            content: `${senderName}: ${preview}`,
-            read: false,
-            group_id: groupId,
-          }));
-
-          await supabase.from("messages").insert(notifications);
-        }
-      }
+      await notifyGroupMembers(messageContent);
 
       setNewMessage("");
       setReplyTo(null);
@@ -285,7 +339,14 @@ export default function GroupChatView({ groupId, onBack, onDeleted }: GroupChatV
                           {msg.sender_name}
                         </p>
                       )}
-                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                      <MessageContent
+                        content={msg.content}
+                        messageKind={msg.message_kind}
+                        mediaStoragePath={msg.media_storage_path}
+                        mediaMime={msg.media_mime}
+                        senderId={msg.sender_id}
+                        className="text-sm"
+                      />
                       <div className="flex items-center justify-between mt-1 gap-4">
                         <p className={`text-xs ${isMe ? 'opacity-70' : 'text-muted-foreground'}`}>
                           {format(new Date(msg.created_at), 'h:mm a')}
@@ -320,7 +381,14 @@ export default function GroupChatView({ groupId, onBack, onDeleted }: GroupChatV
                                   {reply.sender_name}
                                 </p>
                               )}
-                              <p className="text-sm whitespace-pre-wrap">{reply.content}</p>
+                              <MessageContent
+                                content={reply.content}
+                                messageKind={reply.message_kind}
+                                mediaStoragePath={reply.media_storage_path}
+                                mediaMime={reply.media_mime}
+                                senderId={reply.sender_id}
+                                className="text-sm"
+                              />
                               <p className={`text-xs mt-0.5 ${isReplyMe ? 'opacity-70' : 'text-muted-foreground'}`}>
                                 {format(new Date(reply.created_at), 'h:mm a')}
                               </p>
@@ -342,7 +410,8 @@ export default function GroupChatView({ groupId, onBack, onDeleted }: GroupChatV
         <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 border-t rounded-t-md">
           <Reply className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm text-muted-foreground truncate flex-1">
-            Replying to {replyTo.sender_name}: {replyTo.content.substring(0, 50)}...
+            Replying to {replyTo.sender_name}:{" "}
+            {messagePreviewLabel(replyTo.message_kind, replyTo.content).substring(0, 50)}...
           </span>
           <Button variant="ghost" size="sm" className="h-6 px-2" onClick={() => setReplyTo(null)}>
             ✕
@@ -351,18 +420,34 @@ export default function GroupChatView({ groupId, onBack, onDeleted }: GroupChatV
       )}
 
       {/* Input */}
-      <div className="flex gap-2 pt-3 border-t">
-        <Textarea
-          placeholder="Type a message..."
-          rows={1}
-          className="min-h-[40px] resize-none"
-          value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-          onKeyDown={handleKeyDown}
-        />
-        <Button onClick={handleSend} disabled={sending || !newMessage.trim()} size="icon" className="shrink-0">
-          <Send className="h-4 w-4" />
-        </Button>
+      <div className="flex flex-col gap-2 pt-3 border-t">
+        {mediaEnabled ? (
+          <MessageMediaComposer
+            disabled={sending}
+            uploading={mediaUploading}
+            uploadProgress={mediaProgress}
+            onPick={handleSendMedia}
+          />
+        ) : null}
+        <div className="flex gap-2">
+          <Textarea
+            placeholder={mediaEnabled ? "Type a message or caption…" : "Type a message..."}
+            rows={1}
+            className="min-h-[40px] resize-none"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={mediaUploading}
+          />
+          <Button
+            onClick={handleSend}
+            disabled={sending || mediaUploading || !newMessage.trim()}
+            size="icon"
+            className="shrink-0"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </div>
   );

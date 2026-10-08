@@ -23,10 +23,16 @@ export function sanitizeMessageHtml(html: string): string {
   });
 }
 
-export function messageContentPreview(content: string, maxLen = 100): string {
-  const text = looksLikeHtml(content)
+export function messageContentPreview(
+  content: string,
+  maxLen = 100,
+  kind?: string | null,
+): string {
+  let text = looksLikeHtml(content)
     ? content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
     : content.trim();
+  if (kind === "image" && !text) text = "Photo";
+  if (kind === "video" && !text) text = "Video";
   if (text.length <= maxLen) return text;
   return `${text.substring(0, maxLen)}...`;
 }

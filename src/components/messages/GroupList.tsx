@@ -7,9 +7,11 @@ import { Separator } from "@/components/ui/separator";
 import { Users, Plus, MessageSquare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
+import { isNestSandboxCompany } from "@/lib/camps";
 import { format } from "date-fns";
 import CreateGroupDialog from "./CreateGroupDialog";
 import GroupChatView from "./GroupChatView";
+import { messagePreviewLabel } from "@/lib/messageMedia";
 
 interface GroupSummary {
   id: string;
@@ -55,11 +57,17 @@ export default function GroupList({ selectedGroupId, onSelectGroup }: GroupListP
 
     const groupIds = memberships.map(m => m.group_id);
 
-    const { data: groupsData } = await supabase
+    let groupsQuery = supabase
       .from("message_groups")
-      .select("id, name, description")
+      .select("id, name, description, company_id")
       .in("id", groupIds)
       .order("updated_at", { ascending: false });
+
+    if (isNestSandboxCompany(currentCompany?.slug) && currentCompany?.id) {
+      groupsQuery = groupsQuery.eq("company_id", currentCompany.id);
+    }
+
+    const { data: groupsData } = await groupsQuery;
 
     if (!groupsData) {
       setLoading(false);
@@ -76,7 +84,7 @@ export default function GroupList({ selectedGroupId, onSelectGroup }: GroupListP
 
       const { data: lastMsg } = await supabase
         .from("group_messages")
-        .select("content, created_at, sender_id")
+        .select("content, created_at, sender_id, message_kind")
         .eq("group_id", group.id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -97,7 +105,9 @@ export default function GroupList({ selectedGroupId, onSelectGroup }: GroupListP
         name: group.name,
         description: group.description,
         member_count: count || 0,
-        last_message: lastMsg?.content,
+        last_message: lastMsg
+          ? messagePreviewLabel(lastMsg.message_kind, lastMsg.content)
+          : undefined,
         last_message_at: lastMsg?.created_at,
         last_sender_name: lastSenderName,
       });

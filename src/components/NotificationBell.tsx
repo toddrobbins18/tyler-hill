@@ -14,16 +14,19 @@ import { formatDistanceToNow } from "date-fns";
 import { notificationsDebug } from "@/lib/notificationDebug";
 import { useCompany } from "@/contexts/CompanyContext";
 import { fetchMessageProfileLabels } from "@/lib/messageProfiles";
+import { filterMessagesForCampInbox } from "@/lib/messageInboxFilters";
 
 interface InboxMessage {
   id: string;
   subject: string;
   content: string;
-  sender_id: string;
+  sender_id: string | null;
   created_at: string;
   read: boolean;
   notification_type: string | null;
   group_id: string | null;
+  company_id?: string | null;
+  sender_display_name?: string | null;
   sender_name?: string;
 }
 
@@ -65,9 +68,11 @@ export function NotificationBell() {
   const fetchUnread = useCallback(async () => {
     if (!user) return;
 
-    const { count, error } = await supabase
+    const { data, error } = await supabase
       .from("messages")
-      .select("*", { count: "exact", head: true })
+      .select(
+        "id, read, notification_type, subject, sender_id, sender_display_name, company_id, group_id",
+      )
       .eq("recipient_id", user.id)
       .eq("read", false);
 
@@ -76,30 +81,34 @@ export function NotificationBell() {
       return;
     }
 
-    const next = count ?? 0;
+    const visible = filterMessagesForCampInbox(data ?? [], currentCompany);
+    const next = visible.length;
     notificationsDebug("Bell: unread count refetched", { userId: user.id, unreadCount: next });
     setUnreadCount(next);
-  }, [user]);
+  }, [user, currentCompany]);
 
   const fetchRecent = useCallback(async () => {
     if (!user) return;
 
     const { data } = await supabase
       .from("messages")
-      .select("id, subject, content, sender_id, created_at, read, notification_type, group_id")
+      .select(
+        "id, subject, content, sender_id, created_at, read, notification_type, group_id, company_id, sender_display_name",
+      )
       .eq("recipient_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(8);
+      .limit(40);
 
     if (data) {
-      const senderIds = [...new Set(data.map((m) => m.sender_id).filter(Boolean))] as string[];
+      const filtered = filterMessagesForCampInbox(data, currentCompany).slice(0, 8);
+      const senderIds = [...new Set(filtered.map((m) => m.sender_id).filter(Boolean))] as string[];
       let profileMap = new Map<string, string>();
 
       if (senderIds.length > 0) {
         profileMap = await fetchMessageProfileLabels(senderIds, currentCompany?.id);
       }
 
-      const rows = data.map((m) => ({
+      const rows = filtered.map((m) => ({
         ...m,
         sender_name: m.sender_id
           ? profileMap.get(m.sender_id) || "Unknown sender"
@@ -114,7 +123,7 @@ export function NotificationBell() {
       });
       setRecentMessages(rows);
     }
-  }, [user, currentCompany?.id]);
+  }, [user, currentCompany]);
 
   useEffect(() => {
     if (!user?.id) return;

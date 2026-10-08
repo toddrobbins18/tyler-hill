@@ -1,4 +1,5 @@
-import { CAMP_SLUG } from "@/lib/camps";
+import { CAMP_SLUG, isNestSandboxCompany } from "@/lib/camps";
+import { isSandboxDemoStaffEmail } from "@/lib/nestSandboxStaffDemo";
 
 export const NEST_SANDBOX_MODE_KEY = "nest_sandbox_mode";
 export const NEST_SANDBOX_RETURN_COMPANY_KEY = "nest_sandbox_return_company_id";
@@ -28,4 +29,21 @@ export function stashReturnCompanyId(companyId: string): void {
 export function readReturnCompanyId(): string | null {
   if (typeof window === "undefined") return null;
   return sessionStorage.getItem(NEST_SANDBOX_RETURN_COMPANY_KEY);
+}
+
+/** Training staff: land in sandbox on login (no main-portal / North Shore default). */
+export function shouldAutoActivateSandboxOnLogin(options: {
+  email?: string | null;
+  profileCompanySlug?: string | null;
+  allowedCompanySlugs: string[];
+}): boolean {
+  if (isSandboxDemoStaffEmail(options.email)) return true;
+  if (isNestSandboxCompany(options.profileCompanySlug)) return true;
+  if (
+    options.allowedCompanySlugs.length === 1 &&
+    isNestSandboxCompany(options.allowedCompanySlugs[0])
+  ) {
+    return true;
+  }
+  return false;
 }

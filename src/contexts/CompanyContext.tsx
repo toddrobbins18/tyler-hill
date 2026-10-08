@@ -10,6 +10,7 @@ import {
   readReturnCompanyId,
   SANDBOX_COMPANY_SLUG,
   setNestSandboxModeActive,
+  shouldAutoActivateSandboxOnLogin,
   stashReturnCompanyId,
 } from '@/lib/nestSandboxMode';
 
@@ -166,6 +167,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     companies: Company[],
     profile: { company_id?: string | null; companies?: unknown } | null,
     applyLoginDefaults: boolean,
+    userEmail?: string | null,
   ): Company | null => {
     if (!companies.length) {
       if (profile?.companies && !Array.isArray(profile.companies)) {
@@ -174,12 +176,33 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       return null;
     }
 
-    if (isNestSandboxModeActive()) {
+    const profileSlug =
+      profile?.companies && !Array.isArray(profile.companies)
+        ? (profile.companies as Company).slug
+        : null;
+
+    const autoSandbox = shouldAutoActivateSandboxOnLogin({
+      email: userEmail,
+      profileCompanySlug: profileSlug,
+      allowedCompanySlugs: companies.map((c) => c.slug),
+    });
+
+    if (isNestSandboxModeActive() || autoSandbox) {
       const sandbox = companies.find((c) => c.slug === SANDBOX_COMPANY_SLUG);
-      if (sandbox) return sandbox;
+      if (sandbox) {
+        if (autoSandbox) setNestSandboxModeActive(true);
+        return sandbox;
+      }
     }
 
     if (applyLoginDefaults) {
+      if (profile?.company_id) {
+        const home = companies.find((c) => c.id === profile.company_id);
+        if (home && isNestSandboxCompany(home.slug)) {
+          setNestSandboxModeActive(true);
+          return home;
+        }
+      }
       return companies.find((c) => c.slug === DEFAULT_COMPANY_SLUG) ?? companies[0] ?? null;
     }
 
@@ -285,7 +308,12 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      const targetCompany = pickTargetCompany(companies, profile, applyLoginDefaults);
+      const targetCompany = pickTargetCompany(
+        companies,
+        profile,
+        applyLoginDefaults,
+        user.email,
+      );
       applyTargetCompany(targetCompany);
       setSandboxMode(isNestSandboxModeActive());
       hasInitializedRef.current = true;

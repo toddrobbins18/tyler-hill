@@ -8,7 +8,13 @@ import { Send, Users, Reply } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { fetchMessageProfileLabels, inboxFromDisplayName } from "@/lib/messageProfiles";
-import MessageBody from "@/components/messages/MessageBody";
+import { MessageContent } from "@/components/messages/MessageContent";
+import { MessageMediaComposer } from "@/components/messages/MessageMediaComposer";
+import {
+  messageMediaEnabledForCamp,
+  sendDirectMessageMedia,
+} from "@/lib/messageMedia";
+import { toast } from "sonner";
 
 interface ThreadMessage {
   id: string;
@@ -24,6 +30,9 @@ interface ThreadMessage {
   sender_name?: string;
   recipient_name?: string;
   notification_type?: string | null;
+  message_kind?: string | null;
+  media_storage_path?: string | null;
+  media_mime?: string | null;
 }
 
 interface InlineThreadProps {
@@ -31,13 +40,22 @@ interface InlineThreadProps {
   viewMode: 'inbox' | 'sent';
   /** Current camp — used with RPC so reply thread resolves sender names under RLS. */
   campCompanyId?: string;
+  campCompanySlug?: string | null;
   onNavigateToGroup?: (groupId: string) => void;
 }
 
-export default function InlineThread({ message, viewMode, campCompanyId, onNavigateToGroup }: InlineThreadProps) {
+export default function InlineThread({
+  message,
+  viewMode,
+  campCompanyId,
+  campCompanySlug,
+  onNavigateToGroup,
+}: InlineThreadProps) {
   const [replies, setReplies] = useState<ThreadMessage[]>([]);
   const [newReply, setNewReply] = useState("");
   const [sending, setSending] = useState(false);
+  const [mediaUploading, setMediaUploading] = useState(false);
+  const [mediaProgress, setMediaProgress] = useState(0);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [profileCache, setProfileCache] = useState<Record<string, string>>({});
 
@@ -106,6 +124,51 @@ export default function InlineThread({ message, viewMode, campCompanyId, onNavig
     })));
   };
 
+  const mediaEnabled =
+    !!campCompanyId && messageMediaEnabledForCamp(campCompanySlug);
+
+  const handleSendMedia = async (file: File) => {
+    if (!currentUserId || !campCompanyId || mediaUploading) return;
+
+    const recipientId =
+      currentUserId === message.sender_id ? message.recipient_id : message.sender_id;
+
+    setMediaUploading(true);
+    setMediaProgress(0);
+    try {
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", currentUserId)
+        .maybeSingle();
+      const senderDisplayName =
+        prof?.full_name?.trim() || prof?.email?.split("@")[0] || null;
+
+      const { error } = await sendDirectMessageMedia(supabase, {
+        companyId: campCompanyId,
+        senderId: currentUserId,
+        recipientId,
+        subject: `Re: ${message.subject.replace(/^Re: /, "")}`,
+        parentMessageId: message.id,
+        threadScopeId: message.id,
+        caption: newReply,
+        file,
+        senderDisplayName,
+        onProgress: setMediaProgress,
+      });
+
+      if (error) {
+        toast.error(error);
+        return;
+      }
+      setNewReply("");
+      await fetchReplies();
+    } finally {
+      setMediaUploading(false);
+      setMediaProgress(0);
+    }
+  };
+
   const handleSendReply = async () => {
     if (!newReply.trim() || !currentUserId) return;
 
@@ -134,6 +197,7 @@ export default function InlineThread({ message, viewMode, campCompanyId, onNavig
           notification_type: 'message',
           read: false,
           sender_display_name: senderDisplayName,
+          ...(campCompanyId ? { company_id: campCompanyId } : {}),
         });
 
       if (error) throw error;
@@ -189,8 +253,11 @@ export default function InlineThread({ message, viewMode, campCompanyId, onNavig
         <ScrollArea className="flex-1">
           {/* Original message */}
           <div className="p-3 bg-muted rounded-lg mb-4">
-            <MessageBody
+            <MessageContent
               content={message.content}
+              messageKind={message.message_kind}
+              mediaStoragePath={message.media_storage_path}
+              mediaMime={message.media_mime}
               senderId={message.sender_id}
               notificationType={message.notification_type}
             />
@@ -222,7 +289,15 @@ export default function InlineThread({ message, viewMode, campCompanyId, onNavig
                       {!isMe && (
                         <p className="text-xs font-semibold mb-1 opacity-80">{reply.sender_name}</p>
                       )}
-                      <p className="text-sm whitespace-pre-wrap">{reply.content}</p>
+                      <MessageContent
+                        content={reply.content}
+                        messageKind={reply.message_kind}
+                        mediaStoragePath={reply.media_storage_path}
+                        mediaMime={reply.media_mime}
+                        senderId={reply.sender_id}
+                        notificationType={reply.notification_type}
+                        className="text-sm"
+                      />
                       <p className={`text-xs mt-1 ${isMe ? 'opacity-70' : 'text-muted-foreground'}`}>
                         {format(new Date(reply.created_at), 'MMM d, h:mm a')}
                       </p>
@@ -236,18 +311,41 @@ export default function InlineThread({ message, viewMode, campCompanyId, onNavig
 
         {/* Reply input - only show if there's a sender to reply to */}
         {message.sender_id && (
-          <div className="flex gap-2 pt-3 border-t mt-3">
-            <Textarea
-              placeholder="Type a reply..."
-              rows={1}
-              className="min-h-[40px] resize-none"
-              value={newReply}
-              onChange={(e) => setNewReply(e.target.value)}
-              onKeyDown={handleKeyDown}
-            />
-            <Button onClick={handleSendReply} disabled={sending || !newReply.trim()} size="icon" className="shrink-0">
-              <Send className="h-4 w-4" />
-            </Button>
+          <div className="flex flex-col gap-2 pt-3 border-t mt-3">
+            {mediaEnabled ? (
+              <MessageMediaComposer
+                disabled={sending}
+                uploading={mediaUploading}
+                uploadProgress={mediaProgress}
+                onPick={handleSendMedia}
+                onCancelUpload={
+                  mediaUploading
+                    ? () => {
+                        toast.message("Upload in progress — wait for it to finish or refresh to reset.");
+                      }
+                    : undefined
+                }
+              />
+            ) : null}
+            <div className="flex gap-2">
+              <Textarea
+                placeholder={mediaEnabled ? "Type a reply or caption…" : "Type a reply..."}
+                rows={1}
+                className="min-h-[40px] resize-none"
+                value={newReply}
+                onChange={(e) => setNewReply(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={mediaUploading}
+              />
+              <Button
+                onClick={handleSendReply}
+                disabled={sending || mediaUploading || !newReply.trim()}
+                size="icon"
+                className="shrink-0"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         )}
       </CardContent>
