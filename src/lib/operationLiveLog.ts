@@ -28,7 +28,21 @@ export function formatSyncProgressDetail(job: SyncJobRow): string | undefined {
   const counts = job.total_counts ?? {};
   const parts: string[] = [];
 
-  const numericKeys = ["total", "campers", "staff", "divisions", "bunks", "imported", "updated"];
+  const numericKeys = [
+    "total",
+    "campers",
+    "staff",
+    "divisions",
+    "bunks",
+    "imported",
+    "updated",
+    "enrolledCampers",
+    "addressesWritten",
+    "addresses_written",
+    "sessions_updated",
+    "person_fetch_done",
+    "person_fetch_total",
+  ];
   for (const key of numericKeys) {
     const val = progress[key] ?? counts[key];
     if (val != null && val !== "") parts.push(`${key}: ${val}`);

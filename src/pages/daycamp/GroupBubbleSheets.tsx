@@ -217,7 +217,7 @@ export default function GroupBubbleSheets() {
           <Users className="h-6 w-6" /> Group Bubble Sheets
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Print team attendance sheets filtered by enrollment week — only campers enrolled that week appear.
+          Print team attendance sheets filtered by enrollment week — one Present bubble per camper (reuse daily).
         </p>
       </div>
 

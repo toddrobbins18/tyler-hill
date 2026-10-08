@@ -1,4 +1,9 @@
 import { format, parseISO } from "date-fns";
+import {
+  camperScheduledForBusRun,
+  getCamperBusRunMode,
+  type CamperBusRunSchedules,
+} from "@/lib/transportCamperBusRun";
 import { camperEnrolledInWeekByLookup, type CamperEnrollmentInfo } from "@/lib/transportWeekView";
 import { attendanceRecordKey, campersOnRoute } from "@/lib/transportBusAttendance";
 import type { TransportRouteStop } from "@/lib/transportRoster";
@@ -148,12 +153,20 @@ export function ridersOnRoute(
     runPeriod: "am" | "pm";
     enrollmentWeek?: number | null;
     enrollmentLookup?: Map<string, CamperEnrollmentInfo>;
+    busRunSchedules?: CamperBusRunSchedules;
   },
 ): RouteRider[] {
-  const busRiders = campersOnRoute(routeId, coreStops).map((r) => ({
-    ...r,
-    isParentTransport: false,
-  }));
+  const busRiders = campersOnRoute(routeId, coreStops)
+    .filter((r) =>
+      camperScheduledForBusRun(
+        getCamperBusRunMode(options.busRunSchedules, r.name),
+        options.runPeriod,
+      ),
+    )
+    .map((r) => ({
+      ...r,
+      isParentTransport: false,
+    }));
 
   const ptRiders = parentTransportRidersForRoute(routeId, parentTransport, options);
 

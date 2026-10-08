@@ -26,7 +26,9 @@ import {
 } from "@/lib/transportBusAttendance";
 import { campersOnRouteForWeek, weekContextForNumber } from "@/lib/transportBusRunContext";
 import { formatEnrollmentWeekLabel } from "@/lib/enrollmentWeekCalendar";
-import { buildBusBubbleSheetsPdf } from "@/lib/transportBubbleSheetPdf";
+import { buildBusBubbleSheetRoutes } from "@/lib/transportCamperBusRun";
+import { buildDayBusBubbleSheetPdf } from "@/lib/transportBubbleSheetPdf";
+import { consolidateRouteStopsByAddress } from "@/lib/transportRouteStops";
 import { getEffectiveCoreStops } from "@/lib/transportRunBoard";
 import { TransportReportPreviewDialog, type TransportReportPreview } from "@/components/TransportReportPreviewDialog";
 import { FrontOfficeBackLink } from "@/components/daycamp/FrontOfficeBackLink";
@@ -108,6 +110,7 @@ export default function BusAttendance() {
           runDate,
           runPeriod: timeOfDay,
           parentTransportCampers: board.parentTransportCampers,
+          busRunSchedules: board.camperBusRunSchedules,
         },
       );
     },
@@ -258,20 +261,27 @@ export default function BusAttendance() {
       return;
     }
 
-    const sheetRoutes = selectedRoutes.map((r) => ({
-      bus: r.bus,
-      routeName: r.name,
-      campers: campersForRoute(r.id).map((c) => ({
-        name: c.name,
-        detail: c.stopName,
+    const sheetRoutes = buildBusBubbleSheetRoutes({
+      routes: selectedRoutes.map((route) => ({
+        id: route.id,
+        bus: route.bus,
+        routeName: route.name,
       })),
-    }));
+      baseCoreByRoute: (routeId) =>
+        consolidateRouteStopsByAddress(board.coreStops[routeId] ?? []),
+      coreForRun: (routeId, period) => getEffectiveCoreStops(board, routeId, period),
+      schedules: board.camperBusRunSchedules,
+      runDate,
+      parentTransportCampers: board.parentTransportCampers,
+      enrollmentWeek: activeWeek,
+      enrollmentLookup: enrollmentCtx.enrollmentLookup,
+    });
 
-    const built = buildBusBubbleSheetsPdf({
+    const built = buildDayBusBubbleSheetPdf({
       companyName: currentCompany?.name ?? "Day Camp",
+      date: runDate,
       enrollmentWeek: activeWeek,
       weekDateRange: activeWeekContext.weekDateRange ?? undefined,
-      weekDays: activeWeekContext.weekDays,
       routes: sheetRoutes,
     });
     if (!built) {
@@ -284,13 +294,23 @@ export default function BusAttendance() {
         : selectedRoutes.map((r) => r.bus).join(", ");
     setReportPreview({
       open: true,
-      title: "Bus Attendance Bubble Sheet (Weekly AM & PM)",
-      description: `${activeWeekContext.weekLabel} · ${busLabel}`,
+      title: "Bus Bubble Sheet",
+      description: `${runDate} · AM & PM (X = not on that run) · ${busLabel}`,
       kind: "pdf",
       blob: built.blob,
       filename: built.filename,
     });
-  }, [board, selectedRoutes, activeWeek, activeWeekContext, campersForRoute, routes.length, toast, currentCompany?.name]);
+  }, [
+    board,
+    selectedRoutes,
+    activeWeek,
+    activeWeekContext,
+    enrollmentCtx,
+    runDate,
+    routes.length,
+    toast,
+    currentCompany?.name,
+  ]);
 
   const submittedCount = routes.filter((r) => isRouteBusSubmitted(r.id, busSubmissions)).length;
   const weekNote = activeWeekContext?.weekLabel ?? null;

@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { Upload, FileJson, AlertCircle, CheckCircle2, RefreshCw, Clock, Building2, XCircle, Mail, MapPin } from "lucide-react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { Upload, FileJson, AlertCircle, CheckCircle2, RefreshCw, Clock, Building2, XCircle, Mail, MapPin, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -40,22 +40,52 @@ interface CompanyWithCampMinder {
   campminder_last_sync_at: string | null;
 }
 
+type CampMinderSyncLivePanel = {
+  visible: boolean;
+  companyName: string;
+  syncType: string;
+  jobId: string | null;
+  overlaySteps: OperationStep[] | null;
+};
+
+type CampMinderSyncKind = "full" | "staff" | "campers" | "addresses" | "enrollment_weeks";
+
 export default function CampDataImporter() {
   const { currentCompany, isSuperAdmin } = useCompany();
   const { currentSeason } = useSeasonContext();
   
   // CampMinder sync state
   const [companies, setCompanies] = useState<CompanyWithCampMinder[]>([]);
-  const [syncingCompanyId, setSyncingCompanyId] = useState<string | null>(null);
-  const [trackedSync, setTrackedSync] = useState<{ jobId: string; companyName: string } | null>(null);
-  const [dismissedSyncJobId, setDismissedSyncJobId] = useState<string | null>(null);
+  const [activeSync, setActiveSync] = useState<{ companyId: string; kind: CampMinderSyncKind } | null>(null);
+  const syncBusy = activeSync !== null;
+  const isSyncButtonActive = (companyId: string, kind: CampMinderSyncKind) =>
+    activeSync?.companyId === companyId && activeSync?.kind === kind;
+  const [syncLivePanel, setSyncLivePanel] = useState<CampMinderSyncLivePanel | null>(null);
   const syncFinishedRef = useRef(false);
   const [backfillingSlug, setBackfillingSlug] = useState<string | null>(null);
   const [backfillOperation, setBackfillOperation] = useState<{ companyName: string; steps: OperationStep[] } | null>(
     null,
   );
   const [dismissedBackfill, setDismissedBackfill] = useState(false);
-  const syncMonitor = useSyncJobMonitor(trackedSync?.jobId ?? null);
+  const syncMonitor = useSyncJobMonitor(syncLivePanel?.jobId ?? null);
+
+  const syncLiveSteps = useMemo((): OperationStep[] => {
+    if (!syncLivePanel?.visible) return [];
+    if (syncLivePanel.jobId && syncMonitor.steps.length > 0) return syncMonitor.steps;
+    if (syncLivePanel.overlaySteps?.length) return syncLivePanel.overlaySteps;
+    return [
+      {
+        id: "kickoff",
+        label: `Starting ${syncLivePanel.syncType}…`,
+        status: "running",
+      },
+    ];
+  }, [syncLivePanel, syncMonitor.steps]);
+
+  const syncLiveActive =
+    syncBusy ||
+    syncMonitor.isLive ||
+    (syncLivePanel?.overlaySteps?.some((s) => s.status === "running") ?? false);
   
   const [syncResults, setSyncResults] = useState<Record<string, CampMinderSyncResult>>({});
   const [loadingCompanies, setLoadingCompanies] = useState(true);
@@ -76,17 +106,21 @@ export default function CampDataImporter() {
   }, [isSuperAdmin, currentCompany]);
 
   useEffect(() => {
-    if (!trackedSync || !syncMonitor.isDone || syncFinishedRef.current) return;
+    if (!syncLivePanel?.jobId || !syncMonitor.isDone || syncFinishedRef.current) return;
     syncFinishedRef.current = true;
-    setSyncingCompanyId(null);
+    setActiveSync(null);
     void fetchCompanies();
 
     if (syncMonitor.job?.status?.toLowerCase() === "completed") {
-      toast.success(`CampMinder sync finished for ${trackedSync.companyName}`);
+      toast.success(`CampMinder sync finished for ${syncLivePanel.companyName}`);
     } else {
-      toast.error(syncMonitor.error ?? syncMonitor.job?.error_message ?? `Sync failed for ${trackedSync.companyName}`);
+      toast.error(
+        syncMonitor.error ??
+          syncMonitor.job?.error_message ??
+          `Sync failed for ${syncLivePanel.companyName}`,
+      );
     }
-  }, [syncMonitor.isDone, syncMonitor.job, syncMonitor.error, trackedSync]);
+  }, [syncMonitor.isDone, syncMonitor.job, syncMonitor.error, syncLivePanel?.jobId, syncLivePanel?.companyName]);
 
   const fetchCompanies = async () => {
     setLoadingCompanies(true);
@@ -213,12 +247,20 @@ export default function CampDataImporter() {
   const handleCampMinderSync = async (
     companyId: string,
     companyName: string,
-    syncType: 'full' | 'staff' | 'campers' | 'addresses' = 'full',
+    syncType: CampMinderSyncKind = 'full',
   ) => {
-    setSyncingCompanyId(companyId);
+    setActiveSync({ companyId, kind: syncType });
     setSyncResults(prev => ({ ...prev, [companyId]: {} }));
     syncFinishedRef.current = false;
-    setDismissedSyncJobId(null);
+
+    const syncLabel = syncType === 'full' ? 'full sync' : `${syncType.replace(/_/g, ' ')} sync`;
+    setSyncLivePanel({
+      visible: true,
+      companyName,
+      syncType: syncLabel,
+      jobId: null,
+      overlaySteps: [{ id: "connect", label: "Connecting to CampMinder…", status: "running" }],
+    });
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -226,8 +268,16 @@ export default function CampDataImporter() {
         throw new Error("Not authenticated");
       }
 
-      const syncLabel = syncType === 'full' ? 'full' : `${syncType}-only`;
-      toast.info(`${syncLabel} CampMinder sync started for ${companyName}`);
+      toast.info(`${syncLabel} started for ${companyName}`);
+
+      setSyncLivePanel((prev) =>
+        prev
+          ? {
+              ...prev,
+              overlaySteps: [{ id: "queue", label: "Queueing sync job…", status: "running" }],
+            }
+          : prev,
+      );
 
       const syncSeason = currentSeason || DEFAULT_SEASON;
       const response = await supabase.functions.invoke('sync-campminder', {
@@ -248,12 +298,43 @@ export default function CampDataImporter() {
         throw new Error(result.error || 'Sync failed');
       }
 
-      const companyResults = result.results?.[0] || {};
+      const companyResults =
+        (result.results as Array<{ company_id?: string; job_id?: string; status?: string; message?: string }> | undefined)?.find(
+          (row) => row.company_id === companyId,
+        ) ?? result.results?.[0] ?? {};
       const jobId = companyResults.job_id as string | undefined;
+      const resultStatus = String(companyResults.status ?? "").toLowerCase();
+
+      if (resultStatus === "skipped") {
+        const detail = companyResults.message ?? "Another sync of this type is already running.";
+        setSyncLivePanel({
+          visible: true,
+          companyName,
+          syncType: syncLabel,
+          jobId: null,
+          overlaySteps: [{ id: "skipped", label: "Sync skipped", status: "error", detail }],
+        });
+        setActiveSync(null);
+        toast.warning(detail);
+        return;
+      }
 
       if (jobId) {
-        setTrackedSync({ jobId, companyName });
+        setSyncLivePanel({
+          visible: true,
+          companyName,
+          syncType: syncLabel,
+          jobId,
+          overlaySteps: [{ id: "live", label: "Sync running — live updates below…", status: "running" }],
+        });
       } else {
+        setSyncLivePanel({
+          visible: true,
+          companyName,
+          syncType: syncLabel,
+          jobId: null,
+          overlaySteps: [{ id: "done", label: "Sync finished", status: "done", detail: companyResults.message }],
+        });
         setSyncResults(prev => ({
           ...prev,
           [companyId]: {
@@ -263,15 +344,22 @@ export default function CampDataImporter() {
             sessions: companyResults.sessions,
           },
         }));
-        setSyncingCompanyId(null);
+        setActiveSync(null);
         await fetchCompanies();
-        toast.success(`${syncLabel} CampMinder sync completed for ${companyName}.`);
+        toast.success(`${syncLabel} completed for ${companyName}.`);
       }
     } catch (error: any) {
       console.error("Sync error:", error);
-      toast.error(`Sync failed for ${companyName}: ${error.message}`);
-      setSyncingCompanyId(null);
-      setTrackedSync(null);
+      const message = error.message ?? "Sync failed";
+      toast.error(`Sync failed for ${companyName}: ${message}`);
+      setActiveSync(null);
+      setSyncLivePanel({
+        visible: true,
+        companyName,
+        syncType: syncLabel,
+        jobId: null,
+        overlaySteps: [{ id: "error", label: "Sync failed", status: "error", detail: message }],
+      });
     }
   };
 
@@ -400,8 +488,29 @@ export default function CampDataImporter() {
     );
   };
 
+  const campMinderLiveLogPanel =
+    syncLivePanel?.visible && syncLiveSteps.length > 0 ? (
+      <OperationLivePanel
+        title={syncMonitor.job ? syncJobTitle(syncMonitor.job) : `CampMinder · ${syncLivePanel.syncType}`}
+        subtitle={`Live progress · ${syncLivePanel.companyName}`}
+        steps={syncLiveSteps}
+        active={syncLiveActive}
+        onDismiss={
+          syncLiveActive
+            ? undefined
+            : () => setSyncLivePanel(null)
+        }
+        className="shadow-lg bg-background/95 backdrop-blur-sm"
+      />
+    ) : null;
+
   return (
     <div className="space-y-6">
+      {campMinderLiveLogPanel ? (
+        <div className="fixed bottom-4 left-4 z-50 w-[min(100vw-2rem,22rem)] sm:left-6 pointer-events-auto">
+          {campMinderLiveLogPanel}
+        </div>
+      ) : null}
       {/* CampMinder Sync Section */}
       <Card>
         <CardHeader>
@@ -411,22 +520,10 @@ export default function CampDataImporter() {
           </CardTitle>
           <CardDescription>
             Sync campers, staff, divisions, and sessions from CampMinder for season {currentSeason || DEFAULT_SEASON}.
-            Automatic sync runs twice daily Eastern: campers at <strong>6 AM / 6 PM</strong>, staff at <strong>7 AM / 7 PM</strong>, Owl Pay financials at <strong>8 AM / 8 PM</strong>.
+            Automatic sync (Eastern): addresses <strong>4 AM</strong>, enrollment weeks <strong>5 AM</strong>, campers <strong>6 AM / 6 PM</strong>, staff <strong>7 AM / 7 PM</strong>, Owl Pay <strong>8 AM / 8 PM</strong>.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {trackedSync && trackedSync.jobId !== dismissedSyncJobId && syncMonitor.steps.length > 0 ? (
-            <OperationLivePanel
-              title={syncJobTitle(syncMonitor.job)}
-              subtitle={`Live progress · ${trackedSync.companyName}`}
-              steps={syncMonitor.steps}
-              active={syncMonitor.isLive}
-              onDismiss={() => {
-                setDismissedSyncJobId(trackedSync.jobId);
-                if (syncMonitor.isDone) setTrackedSync(null);
-              }}
-            />
-          ) : null}
           {backfillOperation && !dismissedBackfill ? (
             <OperationLivePanel
               title="Parent email backfill"
@@ -478,12 +575,12 @@ export default function CampDataImporter() {
                       )}
                       <Button
                         onClick={() => handleCampMinderSync(company.id, company.name, 'campers')}
-                        disabled={!company.campminder_sync_enabled || syncingCompanyId !== null}
+                        disabled={!company.campminder_sync_enabled || syncBusy}
                         size="sm"
                         variant="outline"
                         title="Sync only enrolled campers (use for large rosters like Tyler Hill)"
                       >
-                        {syncingCompanyId === company.id ? (
+                        {isSyncButtonActive(company.id, "campers") ? (
                           <>
                             <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                             Syncing...
@@ -494,12 +591,12 @@ export default function CampDataImporter() {
                       </Button>
                       <Button
                         onClick={() => handleCampMinderSync(company.id, company.name, 'staff')}
-                        disabled={!company.campminder_sync_enabled || syncingCompanyId !== null}
+                        disabled={!company.campminder_sync_enabled || syncBusy}
                         size="sm"
                         variant="outline"
                         title="Sync only staff members (faster)"
                       >
-                        {syncingCompanyId === company.id ? (
+                        {isSyncButtonActive(company.id, "staff") ? (
                           <>
                             <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                             Syncing...
@@ -510,10 +607,10 @@ export default function CampDataImporter() {
                       </Button>
                       <Button
                         onClick={() => handleCampMinderSync(company.id, company.name, 'full')}
-                        disabled={!company.campminder_sync_enabled || syncingCompanyId !== null}
+                        disabled={!company.campminder_sync_enabled || syncBusy}
                         size="sm"
                       >
-                        {syncingCompanyId === company.id ? (
+                        {isSyncButtonActive(company.id, "full") ? (
                           <>
                             <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                             Syncing...
@@ -529,12 +626,12 @@ export default function CampDataImporter() {
                         <>
                           <Button
                             onClick={() => handleCampMinderSync(company.id, company.name, 'addresses')}
-                            disabled={!company.campminder_sync_enabled || backfillingSlug !== null || syncingCompanyId !== null}
+                            disabled={!company.campminder_sync_enabled || backfillingSlug !== null || syncBusy}
                             size="sm"
                             variant="secondary"
                             title="Fetch household addresses from CampMinder for Transport"
                           >
-                            {syncingCompanyId === company.id ? (
+                            {isSyncButtonActive(company.id, "addresses") ? (
                               <>
                                 <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                                 Syncing…
@@ -547,8 +644,27 @@ export default function CampDataImporter() {
                             )}
                           </Button>
                           <Button
+                            onClick={() => handleCampMinderSync(company.id, company.name, 'enrollment_weeks')}
+                            disabled={!company.campminder_sync_enabled || backfillingSlug !== null || syncBusy}
+                            size="sm"
+                            variant="secondary"
+                            title="Refresh session labels and enrolled_weeks from CampMinder (bubble sheets)"
+                          >
+                            {isSyncButtonActive(company.id, "enrollment_weeks") ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                Syncing…
+                              </>
+                            ) : (
+                              <>
+                                <CalendarDays className="h-4 w-4 mr-2" />
+                                Weeks
+                              </>
+                            )}
+                          </Button>
+                          <Button
                             onClick={() => handleGuardianEmailBackfill(company.slug, company.name)}
-                            disabled={!company.campminder_sync_enabled || backfillingSlug !== null || syncingCompanyId !== null}
+                            disabled={!company.campminder_sync_enabled || backfillingSlug !== null || syncBusy}
                             size="sm"
                             variant="secondary"
                             title="Fetch parent emails from CampMinder (2027 + 2026)"
@@ -796,7 +912,7 @@ export default function CampDataImporter() {
         <AlertDescription>
           <p className="font-medium mb-2">Important Notes:</p>
           <ul className="text-sm list-disc list-inside space-y-1">
-            <li>CampMinder sync runs automatically twice daily Eastern: campers at 6 AM/PM, staff at 7 AM/PM, Owl Pay financials at 8 AM/PM</li>
+            <li>CampMinder sync (Eastern): addresses 4 AM, enrollment weeks 5 AM, campers 6 AM/PM, staff 7 AM/PM, Owl Pay 8 AM/PM</li>
             <li>The import process uses person_id to link historical data across seasons</li>
             <li>When a camper returns in future seasons with the same person_id, all their historical awards will be visible</li>
             <li>Duplicate person_ids within the same season will be skipped</li>

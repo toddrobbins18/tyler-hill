@@ -3,6 +3,10 @@ import jsPDF from "jspdf";
 export type BubbleSheetCamper = {
   name: string;
   detail?: string;
+  /** When false, AM bubble is crossed out (not on the morning bus). Default: scheduled. */
+  ridesAm?: boolean;
+  /** When false, PM bubble is crossed out (not on the afternoon bus). Default: scheduled. */
+  ridesPm?: boolean;
 };
 
 export type BubbleSheetSection = {
@@ -20,13 +24,16 @@ const DAILY_SHEET_INSTRUCTION =
   "Mark one bubble per camper: Present (P) or Absent (A). Use when digital attendance is unavailable.";
 
 const DAY_BUS_INSTRUCTION =
-  "AM lists who rides the bus this morning. PM lists who rides this afternoon. A same-day pickup or other exception is left off that run only.";
+  "One row per camper. Mark Present (P) in AM and/or PM. An X means they are not on the bus for that run (AM-only, PM-only, or a same-day exception).";
 
 const WEEKLY_BUS_INSTRUCTION =
   "Mark Present (P) for each AM and PM run this week. One row per camper — siblings each get their own row.";
 
 const WEEKLY_GROUP_INSTRUCTION =
-  "Mark Present (P) in the bubble for each weekday the camper attends. Five bubbles per row — one per day.";
+  "Mark Present (P) once per camper. Reuse this sheet each day — one bubble per row.";
+
+const GROUP_PRESENT_INSTRUCTION =
+  "Mark Present (P) in the bubble when the camper is at camp. One bubble per camper — reuse daily.";
 
 const COMBINED_SHEET_INSTRUCTION =
   "Bus sections: mark Present (P) or Absent (A) for today. Group sections: mark Present (P) for each weekday.";
@@ -304,6 +311,25 @@ function drawBubble(doc: jsPDF, cx: number, cy: number, label: "P" | "A") {
   doc.setFont("helvetica", "normal");
 }
 
+/** Present bubble to mark, or crossed out when the camper is not scheduled for that run. */
+function drawPresentOrCrossedBubble(doc: jsPDF, cx: number, cy: number, scheduled: boolean) {
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.5);
+  doc.circle(cx, cy, 2.8, "S");
+  if (!scheduled) {
+    const r = 2.15;
+    doc.setLineWidth(0.45);
+    doc.line(cx - r, cy - r, cx + r, cy + r);
+    doc.line(cx - r, cy + r, cx + r, cy - r);
+    doc.setLineWidth(0.5);
+    return;
+  }
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6.5);
+  doc.text("P", cx, cy + 0.7, { align: "center" });
+  doc.setFont("helvetica", "normal");
+}
+
 function drawTableRow(
   doc: jsPDF,
   layout: SheetLayout,
@@ -406,9 +432,21 @@ function drawWeeklyTableRow(
   doc.text(camper.name.slice(0, 36), layout.textName, textY);
 
   const bubbleCy = rowTop + ROW_HEIGHT / 2;
+  const amPmPair =
+    weekDays.length === 2 &&
+    weekDays[0]?.label === "AM" &&
+    weekDays[1]?.label === "PM";
+
   weekDays.forEach((_, dayIndex) => {
     const cx = layout.dayColumnCenters[dayIndex];
-    if (cx) drawBubble(doc, cx, bubbleCy, "P");
+    if (!cx) return;
+    if (amPmPair) {
+      const scheduled =
+        dayIndex === 0 ? camper.ridesAm === true : camper.ridesPm === true;
+      drawPresentOrCrossedBubble(doc, cx, bubbleCy, scheduled);
+    } else {
+      drawPresentOrCrossedBubble(doc, cx, bubbleCy, true);
+    }
   });
 }
 
@@ -654,37 +692,28 @@ export function downloadBusBubbleSheetsPdf(options: {
   return true;
 }
 
+const BUS_AM_PM_COLUMNS: WeekDayColumn[] = [{ label: "AM" }, { label: "PM" }];
+
 export function buildDayBusBubbleSheetPdf(options: {
   companyName: string;
   date: string;
   enrollmentWeek?: number;
   weekDateRange?: string;
-  amRoutes: {
-    bus: string;
-    routeName: string;
-    campers: BubbleSheetCamper[];
-  }[];
-  pmRoutes: {
+  routes: {
     bus: string;
     routeName: string;
     campers: BubbleSheetCamper[];
   }[];
 }): TransportReportPdf | null {
-  const toSections = (
-    routes: { bus: string; routeName: string; campers: BubbleSheetCamper[] }[],
-    periodLabel: string,
-  ): BubbleSheetSection[] =>
-    routes
-      .filter((r) => r.campers.length > 0)
-      .map((r) => ({
-        title: `${periodLabel} · ${r.bus} · ${r.routeName}`,
-        subtitle: `${r.campers.length} on the bus`,
-        campers: r.campers,
-      }));
+  const sections = options.routes
+    .filter((r) => r.campers.length > 0)
+    .map((r) => ({
+      title: `${r.bus} · ${r.routeName}`,
+      subtitle: `${r.campers.length} campers · mark AM and PM`,
+      campers: r.campers,
+    }));
 
-  const amSections = toSections(options.amRoutes, "AM");
-  const pmSections = toSections(options.pmRoutes, "PM");
-  if (!amSections.length && !pmSections.length) return null;
+  if (!sections.length) return null;
 
   const metaLines = [`Date: ${options.date}`];
   if (options.enrollmentWeek != null) metaLines.push(`Enrollment week: ${options.enrollmentWeek}`);
@@ -696,10 +725,7 @@ export function buildDayBusBubbleSheetPdf(options: {
     options.companyName,
     "Bus Bubble Sheet",
     metaLines,
-    [
-      { layout: "daily", sections: amSections, detailColumnLabel: "Stop" },
-      { layout: "daily", sections: pmSections, detailColumnLabel: "Stop" },
-    ],
+    [{ layout: "weekly", sections, weekDays: BUS_AM_PM_COLUMNS }],
     DAY_BUS_INSTRUCTION,
   );
 
@@ -739,7 +765,8 @@ export function buildGroupBubbleSheetPdf(options: {
     options.companyName,
     "Group Attendance Bubble Sheet",
     metaLines,
-    [{ layout: "weekly", sections, weekDays: options.weekDays }],
+    [{ layout: "weekly", sections, weekDays: [{ label: "Present" }] }],
+    GROUP_PRESENT_INSTRUCTION,
   );
 
   return {

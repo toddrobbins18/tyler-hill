@@ -1606,6 +1606,149 @@ async function performAddressOnlySync(
   );
 }
 
+/** Update children.session + enrolled_weeks from CampMinder session attendee rows. */
+async function syncSessionEnrollmentToChildren(
+  supabase: any,
+  companyId: string,
+  season: string,
+  enrolledAttendees: any[],
+  sessions: any[],
+): Promise<number> {
+  const sessionNameMap = new Map<number, string>();
+  for (const session of sessions) {
+    sessionNameMap.set(session.ID, session.Name);
+  }
+
+  const sessionUpdates: Array<{ person_id: string; session: string; enrolled_weeks: number[] }> = [];
+  for (const attendee of enrolledAttendees) {
+    const sessionPrograms = attendee.SessionProgramStatus || [];
+    const enrolledSessions = sessionPrograms
+      .filter((s: { StatusID?: number }) => s.StatusID === 2)
+      .map((s: { SessionID?: number }) => sessionNameMap.get(s.SessionID!) || `Session ${s.SessionID}`)
+      .join(', ');
+
+    if (enrolledSessions) {
+      sessionUpdates.push({
+        person_id: String(attendee.PersonID),
+        session: enrolledSessions,
+        enrolled_weeks: parseEnrolledWeeksFromSession(enrolledSessions),
+      });
+    }
+  }
+
+  const BATCH_SIZE = 50;
+  for (let i = 0; i < sessionUpdates.length; i += BATCH_SIZE) {
+    const batch = sessionUpdates.slice(i, i + BATCH_SIZE);
+
+    await Promise.all(
+      batch.map((update) =>
+        supabase
+          .from('children')
+          .update({
+            session: update.session,
+            enrolled_weeks: update.enrolled_weeks?.length ? update.enrolled_weeks : null,
+          })
+          .eq('company_id', companyId)
+          .eq('person_id', update.person_id)
+          .eq('season', season),
+      ),
+    );
+
+    if ((i + BATCH_SIZE) % 200 === 0 || i + BATCH_SIZE >= sessionUpdates.length) {
+      console.log(
+        `[Enrollment weeks] Updated sessions: ${Math.min(i + BATCH_SIZE, sessionUpdates.length)}/${sessionUpdates.length}`,
+      );
+    }
+  }
+
+  return sessionUpdates.length;
+}
+
+/** Fast path: session attendees → children.session / enrolled_weeks only (no person fetch). */
+async function performEnrollmentWeeksOnlySync(
+  supabase: any,
+  jobId: string,
+  companyId: string,
+  token: string,
+  subscriptionKey: string,
+  clientId: string,
+  season: string,
+): Promise<void> {
+  console.log(`\n--- ENROLLMENT-WEEKS-ONLY SYNC for company ${companyId} season ${season} ---`);
+
+  await updateSyncJob(supabase, jobId, {
+    progress: { step: 'Fetching enrolled session attendees', syncType: 'enrollment_weeks', season },
+  });
+
+  const enrolledFetch = await fetchEnrolledSessionAttendees(token, subscriptionKey, clientId, season);
+  const enrolledAttendees = enrolledFetch.attendees;
+  console.log(`[Enrollment weeks] ${enrolledAttendees.length} enrolled campers for season ${season}`);
+
+  await updateSyncJob(supabase, jobId, {
+    progress: {
+      step: 'Fetching session names',
+      syncType: 'enrollment_weeks',
+      enrolledCampers: enrolledFetch.stats.uniqueEnrolled,
+      season,
+    },
+  });
+
+  const sessions = await fetchAllPaginated(CM_SESSIONS_URL, token, subscriptionKey, {
+    clientid: clientId,
+    seasonid: season,
+  });
+  console.log(`[Enrollment weeks] ${sessions.length} sessions for name lookup`);
+
+  await updateSyncJob(supabase, jobId, {
+    progress: {
+      step: 'Writing session and enrolled_weeks',
+      syncType: 'enrollment_weeks',
+      enrolledCampers: enrolledAttendees.length,
+      sessions: sessions.length,
+      season,
+    },
+  });
+
+  let updatedCount = 0;
+  try {
+    updatedCount = await syncSessionEnrollmentToChildren(
+      supabase,
+      companyId,
+      season,
+      enrolledAttendees,
+      sessions,
+    );
+    console.log(`[Enrollment weeks] Updated session info for ${updatedCount} campers`);
+  } catch (error) {
+    console.error('[Enrollment weeks] Error syncing sessions:', error);
+    throw error;
+  }
+
+  const { error: lastSyncErr } = await supabase
+    .from('companies')
+    .update({ campminder_last_sync_at: new Date().toISOString() })
+    .eq('id', companyId);
+  if (lastSyncErr) {
+    console.error('[Companies] Failed to update campminder_last_sync_at:', lastSyncErr);
+  }
+
+  await updateSyncJob(supabase, jobId, {
+    status: 'completed',
+    completed_at: new Date().toISOString(),
+    progress: {
+      step: 'Completed',
+      syncType: 'enrollment_weeks',
+      enrolledCampers: enrolledAttendees.length,
+      sessions_updated: updatedCount,
+      season,
+    },
+    total_counts: {
+      enrolled_campers: enrolledAttendees.length,
+      sessions_updated: updatedCount,
+    },
+  });
+}
+
 async function performFullSync(
   supabase: any,
   jobId: string,
@@ -1761,6 +1904,22 @@ async function performFullSync(
       );
       console.log('\n========================================');
       console.log(`Address-only sync completed for company ${companyId}`);
+      console.log('========================================\n');
+      return;
+    }
+
+    if (syncType === 'enrollment_weeks') {
+      await performEnrollmentWeeksOnlySync(
+        supabase,
+        jobId,
+        companyId,
+        token,
+        subscriptionKey,
+        clientId,
+        season,
+      );
+      console.log('\n========================================');
+      console.log(`Enrollment-weeks-only sync completed for company ${companyId}`);
       console.log('========================================\n');
       return;
     }
@@ -3291,54 +3450,14 @@ async function performFullSync(
     });
 
     try {
-      const sessionNameMap = new Map<number, string>();
-      for (const session of sessions) {
-        sessionNameMap.set(session.ID, session.Name);
-      }
-
-      const sessionUpdates: any[] = [];
-      for (const attendee of enrolledAttendees) {
-        const sessionPrograms = attendee.SessionProgramStatus || [];
-        const enrolledSessions = sessionPrograms
-          .filter((s: any) => s.StatusID === 2)
-          .map((s: any) => sessionNameMap.get(s.SessionID) || `Session ${s.SessionID}`)
-          .join(', ');
-        
-        if (enrolledSessions) {
-          sessionUpdates.push({
-            person_id: String(attendee.PersonID),
-            session: enrolledSessions,
-            enrolled_weeks: parseEnrolledWeeksFromSession(enrolledSessions),
-          });
-        }
-      }
-
-      // Use parallel batch updates for efficiency (avoid timeout with 500+ campers)
-      const BATCH_SIZE = 50;
-      for (let i = 0; i < sessionUpdates.length; i += BATCH_SIZE) {
-        const batch = sessionUpdates.slice(i, i + BATCH_SIZE);
-        
-        // Execute batch updates in parallel
-        await Promise.all(
-          batch.map(update => 
-            supabase
-              .from('children')
-              .update({
-                session: update.session,
-                enrolled_weeks: update.enrolled_weeks?.length ? update.enrolled_weeks : null,
-              })
-              .eq('company_id', companyId)
-              .eq('person_id', update.person_id)
-              .eq('season', season)
-          )
-        );
-        
-        if ((i + BATCH_SIZE) % 200 === 0 || i + BATCH_SIZE >= sessionUpdates.length) {
-          console.log(`Updated sessions: ${Math.min(i + BATCH_SIZE, sessionUpdates.length)}/${sessionUpdates.length}`);
-        }
-      }
-      
-      console.log(`Updated session info for ${sessionUpdates.length} campers`);
+      const sessionUpdatesCount = await syncSessionEnrollmentToChildren(
+        supabase,
+        companyId,
+        season,
+        enrolledAttendees,
+        sessions,
+      );
+      console.log(`Updated session info for ${sessionUpdatesCount} campers`);
     } catch (error) {
       console.error('Error syncing sessions:', error);
     }
@@ -3693,8 +3812,8 @@ serve(async (req: Request) => {
     ? body.season_id
     : DEFAULT_SYNC_SEASON;
     
-    // sync_type can be: 'campers', 'staff', 'financials', 'addresses', or 'full' (default).
-    // Cron schedule (Eastern): campers 6/18, staff 7/19, financials 8/20.
+    // sync_type: campers, staff, financials, addresses, enrollment_weeks, or full (default).
+    // Cron (Eastern): addresses 4, enrollment_weeks 5, campers 6/18, staff 7/19, financials 8/20.
     const effectiveSyncType = sync_type || 'full';
     
     console.log('Sync request received:', { company_id, season_id, incremental, sync_type: effectiveSyncType });

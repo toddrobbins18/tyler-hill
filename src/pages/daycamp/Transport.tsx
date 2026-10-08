@@ -62,6 +62,16 @@ import {
   buildGroupBubbleSheetPdf,
 } from "@/lib/transportBubbleSheetPdf";
 import {
+  buildBusBubbleSheetRoutes,
+  CAMPER_BUS_RUN_MODE_LABELS,
+  CAMPER_BUS_RUN_MODE_OPTIONS,
+  getCamperBusRunMode,
+  normCamperBusRunKey,
+  type CamperBusRunMode,
+  type CamperBusRunSchedules,
+} from "@/lib/transportCamperBusRun";
+import { campersOnRoute } from "@/lib/transportBusAttendance";
+import {
   attendanceEnrollmentWeek,
   camperEnrolledInWeek,
   enrollmentWeekForDate,
@@ -472,6 +482,8 @@ type BoardPayload = {
   routeMeta: typeof initialRouteMeta;
   unplottedCampers: UnplottedCamper[];
   parentTransportCampers?: ParentTransportCamper[];
+  /** Per-camper AM/PM bus (mini day, AM-only, PM-only). Key: normalized camper name. */
+  camperBusRunSchedules?: CamperBusRunSchedules;
   settings?: TransportBoardSettings;
   routesConfigured?: boolean;
   routesSeason?: string;
@@ -536,7 +548,7 @@ const persistBoardCache = (companyId: string, season: string, payload: BoardPayl
 const dayCampReports = [
   { name: "Master Change Sheet", desc: "All buses or pick specific buses — absences, changes, and attendance", href: "/day-camp/change-sheets" },
   { name: "Transport Exceptions", desc: "Absences, swim, office changes, and manual route edits for this date" },
-  { name: "Bus Bubble Sheet", desc: "Who is on each bus today — AM and PM. A same-day pickup is left off the afternoon bus only" },
+  { name: "Bus Bubble Sheet", desc: "Per bus: AM & PM bubbles per camper. X = not on that run (mini day, PM-only, or today’s exception)" },
   { name: "Group Bubble Sheet", desc: "Everyone enrolled in the group this week. Exceptions are never removed" },
   { name: "Digital Attendance Log", desc: "Export Present/Absent saved in Bus Attendance for this date & run" },
   { name: "Bus Report", desc: "Day camp bus assignments" },
@@ -585,6 +597,9 @@ export default function Transport() {
     () => (currentSeason === "2026" ? initialUnplottedCampers : []),
   );
   const [parentTransportCampers, setParentTransportCampers] = useState<ParentTransportCamper[]>([]);
+  const [camperBusRunSchedules, setCamperBusRunSchedules] = useState<CamperBusRunSchedules>({});
+  const [busRunScheduleOpen, setBusRunScheduleOpen] = useState(false);
+  const [busRunScheduleSearch, setBusRunScheduleSearch] = useState("");
   const [addParentTransportOpen, setAddParentTransportOpen] = useState(false);
   const [newParentTransport, setNewParentTransport] = useState<{
     childId: string;
@@ -747,6 +762,7 @@ export default function Transport() {
     routeMeta: [] as typeof initialRouteMeta,
     unplottedCampers: [] as UnplottedCamper[],
     parentTransportCampers: [] as ParentTransportCamper[],
+    camperBusRunSchedules: {} as CamperBusRunSchedules,
     boardSettings: DEFAULT_TRANSPORT_BOARD_SETTINGS,
     routesConfigured: false,
     routesSource: undefined as TransportRoutesSource | undefined,
@@ -759,6 +775,7 @@ export default function Transport() {
     routeMeta,
     unplottedCampers,
     parentTransportCampers,
+    camperBusRunSchedules,
     boardSettings,
     routesConfigured,
     routesSource,
@@ -777,6 +794,7 @@ export default function Transport() {
       routeMeta,
       unplottedCampers,
       parentTransportCampers,
+      camperBusRunSchedules,
       settings: boardSettings,
       routesConfigured,
       routesSeason: routesConfigured ? currentSeason : undefined,
@@ -790,7 +808,7 @@ export default function Transport() {
       consolidatedCore[Number(routeId)] = sanitizeRouteStops(stops ?? []);
     }
     return { ...draft, coreStops: consolidatedCore };
-  }, [coreStops, routeMeta, unplottedCampers, parentTransportCampers, boardSettings, routesConfigured, routesSource, routesDraftMode, routesConfirmed, currentSeason]);
+  }, [coreStops, routeMeta, unplottedCampers, parentTransportCampers, camperBusRunSchedules, boardSettings, routesConfigured, routesSource, routesDraftMode, routesConfirmed, currentSeason]);
 
   const markRoutesConfigured = useCallback((source: TransportRoutesSource = "manual") => {
     setRoutesConfigured(true);
@@ -870,6 +888,7 @@ export default function Transport() {
     const complete: BoardPayload = {
       ...payload,
       parentTransportCampers: payload.parentTransportCampers ?? ref.parentTransportCampers,
+      camperBusRunSchedules: payload.camperBusRunSchedules ?? ref.camperBusRunSchedules,
       settings: payload.settings ?? ref.boardSettings,
       routesDraftMode: payload.routesDraftMode ?? ref.routesDraftMode,
       routesConfirmed: payload.routesConfirmed ?? ref.routesConfirmed,
@@ -953,6 +972,7 @@ export default function Transport() {
     });
     setUnplottedCampers(scrubbed.unplottedCampers);
     setParentTransportCampers(scrubbed.parentTransportCampers ?? []);
+    setCamperBusRunSchedules(scrubbed.camperBusRunSchedules ?? {});
     setBoardSettings(normalizeTransportBoardSettings(scrubbed.settings));
     setRoutesConfigured(scrubbed.routesConfigured === true);
     setRoutesSource(scrubbed.routesSource);
@@ -1217,7 +1237,7 @@ export default function Transport() {
       });
     }, debounceMs);
     return () => clearTimeout(handle);
-  }, [coreStops, routeMeta, unplottedCampers, parentTransportCampers, boardSettings, routesConfigured, routesSource, routesDraftMode, routesConfirmed, persistLoaded, companyId, currentSeason, persistBoard, buildBoardPayload]);
+  }, [coreStops, routeMeta, unplottedCampers, parentTransportCampers, camperBusRunSchedules, boardSettings, routesConfigured, routesSource, routesDraftMode, routesConfirmed, persistLoaded, companyId, currentSeason, persistBoard, buildBoardPayload]);
 
   // Flush unsaved board state when leaving the page (debounced save may not have fired yet).
   useEffect(() => {
@@ -1808,10 +1828,12 @@ export default function Transport() {
         runPeriod: timeOfDay,
         enrollmentWeek: activeRouteEnrollmentWeek,
         enrollmentLookup: camperEnrollmentLookup,
+        busRunSchedules: camperBusRunSchedules,
       }),
     [
       getEffectiveCore,
       parentTransportCampers,
+      camperBusRunSchedules,
       overrideDate,
       timeOfDay,
       activeRouteEnrollmentWeek,
@@ -1970,6 +1992,44 @@ export default function Transport() {
     () => parentTransportForWeek.filter((c) => !isParentTransportBusAssigned(c)),
     [parentTransportForWeek],
   );
+
+  const busRunScheduleEntries = useMemo(() => {
+    const seen = new Set<string>();
+    const rows: { name: string; bus: string; stopName: string }[] = [];
+    for (const route of routeMeta) {
+      for (const camper of campersOnRoute(route.id, coreStops[route.id] || [])) {
+        const key = normCamperBusRunKey(camper.name);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        rows.push({ name: camper.name, bus: route.bus, stopName: camper.stopName });
+      }
+    }
+    return rows.sort((a, b) => a.name.localeCompare(b.name));
+  }, [routeMeta, coreStops]);
+
+  const filteredBusRunScheduleEntries = useMemo(() => {
+    const q = busRunScheduleSearch.trim().toLowerCase();
+    if (!q) return busRunScheduleEntries;
+    return busRunScheduleEntries.filter(
+      (row) =>
+        row.name.toLowerCase().includes(q)
+        || row.bus.toLowerCase().includes(q)
+        || row.stopName.toLowerCase().includes(q),
+    );
+  }, [busRunScheduleEntries, busRunScheduleSearch]);
+
+  const setCamperBusRunMode = useCallback((name: string, mode: CamperBusRunMode) => {
+    const key = normCamperBusRunKey(name);
+    setCamperBusRunSchedules((prev) => {
+      if (mode === "both") {
+        if (!prev[key]) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return { ...prev, [key]: mode };
+    });
+  }, []);
 
   const rosterChildOptions = useMemo(
     () => groupRoster.map((c) => ({ id: c.id, name: c.name, guardian_email: null })),
@@ -3786,40 +3846,47 @@ export default function Transport() {
         return;
       }
 
-      const busRoutesForRun = (period: "am" | "pm") => {
-        const excluded = excludedCamperSet(transportExceptions, period);
-        return routeMeta
-          .map((route) => {
-            const core = consolidateRouteStopsByAddress(
-              applyRouteOverrides(coreStops[route.id] || [], route.id, todayOverrides, excluded),
-            );
-            const campers = ridersOnRoute(route.id, core, [], {
-              runDate: overrideDate,
-              runPeriod: period,
-              enrollmentWeek: week,
-              enrollmentLookup: camperEnrollmentLookup,
-            })
-              .filter((c) => camperEnrolledInWeekByLookup(camperEnrollmentLookup, c.name, week))
-              .map((c) => ({ name: c.name, detail: c.stopName }));
-            return { bus: route.bus, routeName: route.name, campers };
-          })
-          .filter((route) => route.campers.length > 0);
-      };
+      const coreForRun = (routeId: number, period: "am" | "pm") =>
+        consolidateRouteStopsByAddress(
+          applyRouteOverrides(
+            coreStops[routeId] || [],
+            routeId,
+            todayOverrides,
+            excludedCamperSet(transportExceptions, period),
+          ),
+        );
+
+      const mergedBusRoutes = buildBusBubbleSheetRoutes({
+        routes: routeMeta.map((route) => ({
+          id: route.id,
+          bus: route.bus,
+          routeName: route.name,
+        })),
+        baseCoreByRoute: (routeId) =>
+          consolidateRouteStopsByAddress(coreStops[routeId] || []),
+        coreForRun,
+        schedules: camperBusRunSchedules,
+        runDate: overrideDate,
+        parentTransportCampers,
+        enrollmentWeek: week,
+        enrollmentLookup: camperEnrollmentLookup,
+        includeCamper: (name) =>
+          camperEnrolledInWeekByLookup(camperEnrollmentLookup, name, week),
+      });
 
       const built = buildDayBusBubbleSheetPdf({
         companyName: currentCompany?.name ?? "Day Camp",
         date: overrideDate,
         enrollmentWeek: week,
         weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : undefined,
-        amRoutes: busRoutesForRun("am"),
-        pmRoutes: busRoutesForRun("pm"),
+        routes: mergedBusRoutes,
       });
       if (!built) {
         toast({ title: "No campers to print", variant: "destructive" });
       } else {
         openReportPreview({
           title: "Bus Bubble Sheet",
-          description: `${overrideDate} · AM and PM · exceptions removed per run · ${weekLabel}`,
+          description: `${overrideDate} · AM & PM per camper (X = not on that run) · ${weekLabel}`,
           kind: "pdf",
           blob: built.blob,
           filename: built.filename,
@@ -4450,6 +4517,21 @@ export default function Transport() {
                 Geocoding addresses…
               </Badge>
             )}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="gap-1.5 text-xs"
+              onClick={() => setBusRunScheduleOpen(true)}
+            >
+              <Clock className="h-3.5 w-3.5" />
+              AM/PM bus schedule
+              {Object.keys(camperBusRunSchedules).length > 0 ? (
+                <Badge variant="secondary" className="text-[9px] px-1.5 ml-0.5">
+                  {Object.keys(camperBusRunSchedules).length}
+                </Badge>
+              ) : null}
+            </Button>
             <div className="ml-auto flex items-center gap-2">
               <Button
                 size="sm"
@@ -5896,6 +5978,75 @@ export default function Transport() {
               <Sparkles className="h-3.5 w-3.5" />
               Apply Optimization
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={busRunScheduleOpen} onOpenChange={setBusRunScheduleOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>AM/PM bus schedule</DialogTitle>
+            <DialogDescription>
+              Set mini day (AM bus only), PM-only, or full day per camper on their assigned bus. Bus bubble sheets show an X on runs they do not use.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 min-h-0 flex-1 flex flex-col">
+            <Input
+              placeholder="Search camper, bus, or stop…"
+              value={busRunScheduleSearch}
+              onChange={(e) => setBusRunScheduleSearch(e.target.value)}
+              className="h-9"
+            />
+            {busRunScheduleEntries.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No campers on bus routes yet.</p>
+            ) : (
+              <div className="border rounded-lg overflow-auto flex-1 min-h-[200px]">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/50 sticky top-0">
+                    <tr>
+                      <th className="text-left font-medium p-2">Camper</th>
+                      <th className="text-left font-medium p-2">Bus</th>
+                      <th className="text-left font-medium p-2 hidden sm:table-cell">Stop</th>
+                      <th className="text-left font-medium p-2">Bus runs</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredBusRunScheduleEntries.map((row) => (
+                      <tr key={row.name} className="border-t border-border/50">
+                        <td className="p-2 font-medium">{row.name}</td>
+                        <td className="p-2 text-muted-foreground">{row.bus}</td>
+                        <td className="p-2 text-muted-foreground hidden sm:table-cell truncate max-w-[140px]">
+                          {row.stopName}
+                        </td>
+                        <td className="p-2">
+                          <Select
+                            value={getCamperBusRunMode(camperBusRunSchedules, row.name)}
+                            onValueChange={(v) => setCamperBusRunMode(row.name, v as CamperBusRunMode)}
+                          >
+                            <SelectTrigger className="h-8 text-xs w-[min(100%,220px)]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {CAMPER_BUS_RUN_MODE_OPTIONS.map((mode) => (
+                                <SelectItem key={mode} value={mode} className="text-xs">
+                                  {CAMPER_BUS_RUN_MODE_LABELS[mode]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {filteredBusRunScheduleEntries.length === 0 && busRunScheduleEntries.length > 0 ? (
+              <p className="text-sm text-muted-foreground">No campers match your search.</p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBusRunScheduleOpen(false)}>Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { compareBusLabels } from "@/lib/transportBusAttendance";
 import { CAMP_TIMEZONE } from "@/lib/parentPortalCutoff";
 
 export type BusCheckinRecord = {
@@ -6,6 +7,9 @@ export type BusCheckinRecord = {
   arrivedBy?: string | null;
   departedAt?: string | null;
   departedBy?: string | null;
+  needsGas?: boolean;
+  needsGasAt?: string | null;
+  needsGasBy?: string | null;
 };
 
 export type BusCheckinMap = Record<string, BusCheckinRecord>;
@@ -29,6 +33,9 @@ export function parseBusCheckinMap(raw: unknown): BusCheckinMap {
       arrivedBy: typeof row.arrivedBy === "string" ? row.arrivedBy : null,
       departedAt: typeof row.departedAt === "string" ? row.departedAt : null,
       departedBy: typeof row.departedBy === "string" ? row.departedBy : null,
+      needsGas: row.needsGas === true,
+      needsGasAt: typeof row.needsGasAt === "string" ? row.needsGasAt : null,
+      needsGasBy: typeof row.needsGasBy === "string" ? row.needsGasBy : null,
     };
   }
   return map;
@@ -111,4 +118,61 @@ export function formatCheckinTime(iso: string | null | undefined): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(d);
+}
+
+export type BusArrivalReportRow = {
+  bus: string;
+  routeName: string;
+  arrivedAt: string | null;
+  departedAt: string | null;
+  needsGas: boolean;
+  needsGasAt: string | null;
+};
+
+export function buildBusArrivalReportRows(
+  routes: { id: number; bus: string; name: string }[],
+  checkins: BusCheckinMap,
+): BusArrivalReportRow[] {
+  return [...routes]
+    .sort((a, b) => compareBusLabels(a.bus, b.bus))
+    .map((route) => {
+      const rec = checkins[busCheckinKey(route.id)];
+      return {
+        bus: route.bus,
+        routeName: route.name,
+        arrivedAt: rec?.arrivedAt ?? null,
+        departedAt: rec?.departedAt ?? null,
+        needsGas: rec?.needsGas === true,
+        needsGasAt: rec?.needsGasAt ?? null,
+      };
+    });
+}
+
+export function buildBusArrivalReportCsvRows(
+  routes: { id: number; bus: string; name: string }[],
+  checkins: BusCheckinMap,
+  options: { date: string; runPeriod: "am" | "pm" },
+): (string | number)[][] {
+  const rows = buildBusArrivalReportRows(routes, checkins);
+  const header = [
+    "Date",
+    "Run",
+    "Bus",
+    "Route",
+    "Arrived",
+    "Ready to depart",
+    "Needs gas",
+    "Needs gas at",
+  ];
+  const data = rows.map((row) => [
+    options.date,
+    options.runPeriod.toUpperCase(),
+    row.bus,
+    row.routeName,
+    row.arrivedAt ? formatCheckinTime(row.arrivedAt) : "",
+    row.departedAt ? formatCheckinTime(row.departedAt) : "",
+    row.needsGas ? "Yes" : "",
+    row.needsGasAt ? formatCheckinTime(row.needsGasAt) : "",
+  ]);
+  return [header, ...data];
 }

@@ -5,6 +5,7 @@ import {
   camperEnrolledInWeekByLookup,
   type CamperEnrollmentInfo,
 } from "@/lib/transportWeekView";
+import type { CamperBusRunSchedules } from "@/lib/transportCamperBusRun";
 import { ridersOnRoute } from "@/lib/transportParentTransport";
 import type { ParentTransportCamper } from "@/lib/transportParentTransport";
 import { loadGroupRoster } from "@/lib/transportGroupAttendance";
@@ -89,6 +90,7 @@ export function campersOnRouteForWeek(
     runDate?: string;
     runPeriod?: "am" | "pm";
     parentTransportCampers?: ParentTransportCamper[];
+    busRunSchedules?: CamperBusRunSchedules;
   },
 ) {
   const runDate = options?.runDate ?? new Date().toISOString().slice(0, 10);
@@ -98,6 +100,7 @@ export function campersOnRouteForWeek(
     runPeriod,
     enrollmentWeek,
     enrollmentLookup,
+    busRunSchedules: options?.busRunSchedules,
   });
 }
 

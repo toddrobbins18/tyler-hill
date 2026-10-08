@@ -10,6 +10,7 @@ import {
   type TransportRouteStop,
 } from "@/lib/transportDailyOverrides";
 import { compareBusLabels } from "@/lib/transportBusAttendance";
+import type { CamperBusRunSchedules } from "@/lib/transportCamperBusRun";
 import { countParentTransportOnRoute, type ParentTransportCamper } from "@/lib/transportParentTransport";
 import { normalizeTransportBoardForSeason } from "@/lib/transportRoster";
 
@@ -37,6 +38,7 @@ export type TransportRunBoard = {
   routeMeta: TransportRouteMeta[];
   coreStops: Record<number, TransportRouteStop[]>;
   parentTransportCampers: ParentTransportCamper[];
+  camperBusRunSchedules: CamperBusRunSchedules;
   todayOverrides: TransportManualOverrides;
   transportExceptions: TransportException[];
 };
@@ -61,6 +63,7 @@ export async function loadTransportRunBoard(
   let routeMeta: TransportRouteMeta[] = [];
   let coreStops: Record<number, TransportRouteStop[]> = {};
   let parentTransportCampers: ParentTransportCamper[] = [];
+  let camperBusRunSchedules: CamperBusRunSchedules = {};
 
   if (boardRow?.data && typeof boardRow.data === "object") {
     const saved = boardRow.data as {
@@ -68,6 +71,7 @@ export async function loadTransportRunBoard(
       coreStops?: Record<number, TransportRouteStop[]>;
       unplottedCampers?: unknown[];
       parentTransportCampers?: ParentTransportCamper[];
+      camperBusRunSchedules?: CamperBusRunSchedules;
       routesConfigured?: boolean;
       routesSeason?: string;
       routesSource?: "mappoint2026" | "manual";
@@ -96,12 +100,17 @@ export async function loadTransportRunBoard(
     routeMeta = normalized.routeMeta;
     coreStops = normalized.coreStops;
     parentTransportCampers = normalized.parentTransportCampers ?? [];
+    camperBusRunSchedules =
+      saved.camperBusRunSchedules && typeof saved.camperBusRunSchedules === "object"
+        ? saved.camperBusRunSchedules
+        : {};
   }
 
   return {
     routeMeta,
     coreStops,
     parentTransportCampers,
+    camperBusRunSchedules,
     todayOverrides: manual ?? emptyManualOverrides(),
     transportExceptions: exceptions,
   };
