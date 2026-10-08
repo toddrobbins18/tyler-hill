@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { campTodayString } from "@/lib/campSeasonDate";
 import {
   campDateFromTimestamp,
   campYmdToUtcEndIso,
@@ -87,7 +88,7 @@ export const emptyManualOverrides = (): TransportManualOverrides => ({
   added: {},
 });
 
-export const todayDateString = () => new Date().toISOString().slice(0, 10);
+export const todayDateString = () => campTodayString();
 
 const normName = (name: string) => name.trim().toLowerCase();
 

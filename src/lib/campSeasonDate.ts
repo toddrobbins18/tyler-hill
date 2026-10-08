@@ -42,13 +42,24 @@ function campYmdFromParts(parts: CampTimezoneParts, year: number): string {
   return `${year}-${month}-${day}`;
 }
 
-/** Camp calendar day in the selected season year — local midnight (picker-safe). */
-export function campDateInSeason(season: string, now = new Date()): Date {
-  const seasonYear = Number.parseInt(season, 10);
-  if (!Number.isFinite(seasonYear)) return now;
-
+/** Real camp-timezone calendar date (America/New_York) — not shifted to sidebar season year. */
+export function campTodayDate(now = new Date()): Date {
   const parts = campTimezoneParts(now);
-  return parseLocalDate(campYmdFromParts(parts, seasonYear));
+  return parseLocalDate(campYmdFromParts(parts, parts.year));
+}
+
+/** YYYY-MM-DD for “today” queries, menu, dashboard, birthdays, transport run date, etc. */
+export function campTodayString(now = new Date()): string {
+  const parts = campTimezoneParts(now);
+  return campYmdFromParts(parts, parts.year);
+}
+
+/**
+ * Operational calendar date. Season selects roster rows (`children.season`), not the wall clock.
+ * @deprecated Prefer campTodayDate — kept for call sites that still pass season for API compatibility.
+ */
+export function campDateInSeason(_season: string, now = new Date()): Date {
+  return campTodayDate(now);
 }
 
 /** Default Master Calendar month for day camps (June 1 of the selected season). */
@@ -58,10 +69,7 @@ export function campSeasonDefaultCalendarDate(season: string): Date {
   return new Date(seasonYear, 5, 1);
 }
 
-/** YYYY-MM-DD for staff queries — aligned to selected season year. */
-export function campDateStringInSeason(season: string, now = new Date()): string {
-  const parts = campTimezoneParts(campDateInSeason(season, now));
-  const month = String(parts.month).padStart(2, "0");
-  const day = String(parts.day).padStart(2, "0");
-  return `${parts.year}-${month}-${day}`;
+/** @deprecated Prefer campTodayString — season does not change the calendar year. */
+export function campDateStringInSeason(_season: string, now = new Date()): string {
+  return campTodayString(now);
 }

@@ -16,7 +16,7 @@ import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useSeason } from "@/contexts/SeasonContext";
-import { campDateInSeason, campDateStringInSeason } from "@/lib/campSeasonDate";
+import { campSeasonDefaultCalendarDate, campTodayString } from "@/lib/campSeasonDate";
 import { useCompany } from "@/contexts/CompanyContext";
 import { clearExistingMenuItemsForKeys } from "@/lib/csvRosterSync";
 import { CalendarZoomWrapper } from "@/components/CalendarZoomWrapper";
@@ -37,14 +37,14 @@ export default function Menu() {
   const { toast } = useToast();
   const { selectedSeason } = useSeason();
   const { currentCompany } = useCompany();
-  const [currentDate, setCurrentDate] = useState(() => campDateInSeason(selectedSeason));
+  const [currentDate, setCurrentDate] = useState(() => campSeasonDefaultCalendarDate(selectedSeason));
 
   useEffect(() => {
-    setCurrentDate(campDateInSeason(selectedSeason));
+    setCurrentDate(campSeasonDefaultCalendarDate(selectedSeason));
   }, [selectedSeason]);
 
   const [formData, setFormData] = useState({
-    date: campDateStringInSeason(selectedSeason),
+    date: campTodayString(),
     meal_type: "breakfast",
     items: "",
     allergens: "",
@@ -54,7 +54,7 @@ export default function Menu() {
   const isSpecialMeal = formData.meal_type === "special_meal";
 
   const resetFormData = () => ({
-    date: campDateStringInSeason(selectedSeason),
+    date: campTodayString(),
     meal_type: "breakfast",
     items: "",
     allergens: "",
