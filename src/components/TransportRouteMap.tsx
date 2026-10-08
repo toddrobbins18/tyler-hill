@@ -145,6 +145,8 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
   const syncAllPolylinesRef = useRef<() => void>(() => {});
   const syncPolylinesScheduledRef = useRef(false);
   const visibleRoutesKey = useMemo(() => routes.map((r) => r.id).join(","), [routes]);
+  /** Last routes key we auto-fit to — avoid fitBounds on reorder/optimize (same bus set, same pins). */
+  const lastAutoFitRoutesKeyRef = useRef<string | null>(null);
 
   const roadFetchSignature = useMemo(
     () =>
@@ -517,11 +519,18 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
   useEffect(() => {
     const map = leafletMapRef.current;
     if (!map) return;
+    if (lastAutoFitRoutesKeyRef.current === visibleRoutesKey) return;
+
     if (bounds) {
       map.fitBounds(bounds, { padding: [40, 40] });
+      lastAutoFitRoutesKeyRef.current = visibleRoutesKey;
       return;
     }
-    map.setView([40.82, -73.75], 10);
+
+    if (lastAutoFitRoutesKeyRef.current === null) {
+      map.setView([40.82, -73.75], 10);
+      lastAutoFitRoutesKeyRef.current = visibleRoutesKey;
+    }
   }, [visibleRoutesKey, bounds]);
 
   useEffect(() => {

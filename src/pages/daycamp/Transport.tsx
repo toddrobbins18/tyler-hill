@@ -55,6 +55,7 @@ import {
 import SearchableChildSelect from "@/components/SearchableChildSelect";
 import {
   loadGroupRoster,
+  normCamperName,
   type GroupRosterCamper,
 } from "@/lib/transportGroupAttendance";
 import {
@@ -965,12 +966,20 @@ export default function Transport() {
     setCoreStops(scrubbed.coreStops);
     setRouteMeta(normalizedMeta);
     setVisibleRoutes((prev) => {
+      if ((source === "supabase" || source === "cache") && normalizedMeta.length > 0) {
+        mapDefaultRoutesAppliedRef.current = true;
+        return normalizedMeta.map((r) => r.id);
+      }
       const kept = prev.filter((id) => metaIdSet.has(id));
       if (!mapDefaultRoutesAppliedRef.current && normalizedMeta.length > 0) {
         mapDefaultRoutesAppliedRef.current = true;
         return normalizedMeta.map((r) => r.id);
       }
-      return kept.length > 0 ? kept : prev;
+      if (kept.length > 0) return kept;
+      if (prev.length === 0 && normalizedMeta.length > 0) {
+        return normalizedMeta.map((r) => r.id);
+      }
+      return prev;
     });
     setUnplottedCampers(scrubbed.unplottedCampers);
     setParentTransportCampers(scrubbed.parentTransportCampers ?? []);
@@ -1799,7 +1808,7 @@ export default function Transport() {
   );
 
   const seasonRosterNames = useMemo(
-    () => new Set(groupRoster.map((c) => c.name.trim().toLowerCase())),
+    () => new Set(groupRoster.map((c) => normCamperName(c.name))),
     [groupRoster],
   );
 
@@ -1849,7 +1858,10 @@ export default function Transport() {
   );
 
   const displayRoutes = useMemo(() => {
-    const seasonFiltered = applySeasonRosterToRoutes(routes, seasonRosterNames);
+    const seasonFiltered =
+      seasonRosterNames.size > 0
+        ? applySeasonRosterToRoutes(routes, seasonRosterNames)
+        : routes;
     const filtered = applyEnrollmentWeekToRoutes(
       seasonFiltered,
       activeRouteEnrollmentWeek,
@@ -4708,7 +4720,7 @@ export default function Transport() {
               )}
               <div
                 ref={busListScrollRef}
-                className="scroll-pane-polished flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain touch-pan-y snap-y snap-proximity"
+                className="scroll-pane-polished flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain touch-pan-y"
                 onWheel={handleBusListWheel}
               >
               <div className="sticky top-0 z-10 shrink-0 space-y-2 bg-background/95 pb-2 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80">
@@ -4777,7 +4789,7 @@ export default function Transport() {
                   <Card
                     key={r.id}
                     id={`transport-bus-card-${r.id}`}
-                    className={`scroll-mt-2 snap-start cursor-pointer transition-[opacity,box-shadow,transform] duration-200 ease-out shrink-0 ${
+                    className={`cursor-pointer transition-[opacity,box-shadow,transform] duration-200 ease-out shrink-0 ${
                       isFocused
                         ? "ring-2 ring-primary shadow-md"
                         : isVisible

@@ -1,6 +1,6 @@
 import { camperEnrolledInWeek } from "@/lib/enrollmentWeekCalendar";
 import { normCamperName } from "@/lib/transportGroupAttendance";
-import { CAMP_LOCATION } from "@/lib/transportStopTimes";
+import { CAMP_LOCATION, isValidRouteCoordinate } from "@/lib/transportStopTimes";
 
 export type CamperEnrollmentInfo = {
   enrolledWeeks?: number[];
@@ -122,7 +122,7 @@ export function applySeasonRosterToRoutes<T extends RouteLike>(
   return pruneRouteStopsWithNoRiders(filtered, campAddress);
 }
 
-/** Drop passenger stops with no riders after enrollment filter (keeps camp). */
+/** Drop passenger stops with no riders after filters (keeps camp + geocoded pins for routing). */
 export function pruneRouteStopsWithNoRiders<T extends RouteLike>(
   routes: T[],
   campAddress: string = CAMP_LOCATION.address,
@@ -130,7 +130,8 @@ export function pruneRouteStopsWithNoRiders<T extends RouteLike>(
   return routes.map((route) => {
     const stops = route.stops.filter((s) => {
       if (s.address === campAddress) return true;
-      return (s.passengers ?? 0) > 0 || (s.camperNames?.length ?? 0) > 0;
+      if ((s.passengers ?? 0) > 0 || (s.camperNames?.length ?? 0) > 0) return true;
+      return isValidRouteCoordinate(s.lat, s.lng);
     });
     const campers = stops
       .filter((s) => s.address !== campAddress)
