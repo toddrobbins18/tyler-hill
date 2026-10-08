@@ -84,6 +84,49 @@ function activityDivisionIds(activity: {
   return Array.from(ids);
 }
 
+export async function fetchActivitiesFieldTripsForCamper(
+  client: SupabaseClient,
+  params: { companyId: string; season?: string | null; divisionId?: string | null },
+): Promise<
+  Array<{
+    id: string;
+    title: string | null;
+    activity_type: string | null;
+    event_date: string;
+    end_date: string | null;
+    time: string | null;
+    location: string | null;
+  }>
+> {
+  let query = client
+    .from("activities_field_trips")
+    .select(`
+      id, title, activity_type, event_date, end_date, time, location, division_id, season,
+      activities_field_trips_divisions (division_id)
+    `)
+    .eq("company_id", params.companyId)
+    .order("event_date", { ascending: false });
+
+  if (params.season) {
+    query = query.eq("season", params.season);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  return (data ?? [])
+    .filter((row) => activityMatchesChildDivision(row, params.divisionId))
+    .map((row) => ({
+      id: row.id as string,
+      title: row.title as string | null,
+      activity_type: row.activity_type as string | null,
+      event_date: normalizeOutlookYmd(row.event_date as string)!,
+      end_date: normalizeOutlookYmd(row.end_date as string | null),
+      time: row.time as string | null,
+      location: row.location as string | null,
+    }));
+}
+
 export function activityMatchesChildDivision(
   activity: {
     division_id?: string | null;

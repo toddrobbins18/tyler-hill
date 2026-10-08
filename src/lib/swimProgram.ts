@@ -1212,6 +1212,54 @@ export async function fetchSwimHistoryByPerson(
   return history.sort((a, b) => b.season.localeCompare(a.season));
 }
 
+/** Swim program (bracelets/levels) when camper has no CampMinder person_id on file. */
+export async function fetchSwimHistoryByChild(
+  supabase: SupabaseClient,
+  companyId: string,
+  childId: string,
+  childName: string,
+  season: string,
+): Promise<SwimSeasonHistory[]> {
+  const { data: swimRows, error } = await supabase
+    .from("swim_program_records")
+    .select("child_id, season, bracelet, levels, updated_at")
+    .eq("company_id", companyId)
+    .eq("child_id", childId);
+
+  if (error) throw error;
+
+  const rosterChild: RosterChild = {
+    id: childId,
+    name: childName,
+    person_id: "",
+    group_name: null,
+    leader: null,
+  };
+
+  const history: SwimSeasonHistory[] = [];
+  for (const swim of swimRows ?? []) {
+    const swimSeason = String(swim.season ?? season);
+    const bracelet =
+      swim.bracelet && typeof swim.bracelet === "object"
+        ? braceletFromJson(rosterChild, swim.bracelet as Record<string, unknown>)
+        : null;
+    const levels =
+      swim.levels && typeof swim.levels === "object"
+        ? levelFromJson(rosterChild, swim.levels as Record<string, unknown>, swim.updated_at ?? undefined)
+        : null;
+    if (!swimHistoryRecordHasData(bracelet, levels)) continue;
+    history.push({
+      season: swimSeason,
+      childId,
+      childName,
+      bracelet,
+      levels,
+    });
+  }
+
+  return history.sort((a, b) => b.season.localeCompare(a.season));
+}
+
 function parseCsvLine(line: string): string[] {
   const out: string[] = [];
   let cur = "";

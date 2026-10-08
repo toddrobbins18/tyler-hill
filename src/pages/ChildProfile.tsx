@@ -31,6 +31,9 @@ import { resolveEnrolledWeeks } from "@/lib/enrolledWeeks";
 import { getCamperGradeDisplay, getDivisionDropdownLabel } from "@/lib/divisionFilterUtils";
 import EnrolledWeeksDisplay from "@/components/EnrolledWeeksDisplay";
 import CamperSwimHistoryTab from "@/components/CamperSwimHistoryTab";
+import { CamperProfileServicesSummary } from "@/components/CamperProfileServicesSummary";
+import { fetchSwimLessonsForCamper, type CamperSwimLessonRow } from "@/lib/camperProfileSwim";
+import { fetchActivitiesFieldTripsForCamper } from "@/lib/personScheduleOutlook";
 import { CamperParentContactLogTab } from "@/components/CamperParentContactLogTab";
 import {
   hasCamperContactInfo,
@@ -57,6 +60,13 @@ export default function ChildProfile() {
   const [sportsAcademy, setSportsAcademy] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [tutoringTherapy, setTutoringTherapy] = useState<any[]>([]);
+  const [swimLessons, setSwimLessons] = useState<CamperSwimLessonRow[]>([]);
+  const [swimProgramRecordCount, setSwimProgramRecordCount] = useState(0);
+  const [healthVisitCount, setHealthVisitCount] = useState(0);
+  const [divisionFieldTrips, setDivisionFieldTrips] = useState<
+    Awaited<ReturnType<typeof fetchActivitiesFieldTripsForCamper>>
+  >([]);
+  const [profileTab, setProfileTab] = useState("overview");
   const dayCampProfile = isDayCampCompany(currentCompany);
   const showAppointmentsTab = appointmentsEnabledForCompany(currentCompany);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -83,6 +93,10 @@ export default function ChildProfile() {
     setSportsAcademy([]);
     setAppointments([]);
     setTutoringTherapy([]);
+    setSwimLessons([]);
+    setSwimProgramRecordCount(0);
+    setHealthVisitCount(0);
+    setDivisionFieldTrips([]);
     setConflicts([]);
     setContactInfo(null);
     setAllergyText("");
@@ -293,6 +307,43 @@ export default function ChildProfile() {
 
       setTripAttendance(tripData || []);
 
+      const { count: healthCount } = await supabase
+        .from("health_center_admissions")
+        .select("*", { count: "exact", head: true })
+        .eq("child_id", childId)
+        .eq("company_id", loadCompanyId);
+      if (!isStale()) setHealthVisitCount(healthCount ?? 0);
+
+      if (isDayCampCompany(currentCompany)) {
+        const [lessonRows, divisionActivities, swimProgramCountRes] = await Promise.all([
+          fetchSwimLessonsForCamper(
+            supabase,
+            loadCompanyId,
+            childId,
+            childData.person_id ?? null,
+          ),
+          fetchActivitiesFieldTripsForCamper(supabase, {
+            companyId: loadCompanyId,
+            season: loadSeason,
+            divisionId: childData.division_id,
+          }),
+          supabase
+            .from("swim_program_records")
+            .select("*", { count: "exact", head: true })
+            .eq("company_id", loadCompanyId)
+            .eq("child_id", childId),
+        ]);
+        if (!isStale()) {
+          setSwimLessons(lessonRows);
+          setDivisionFieldTrips(divisionActivities);
+          setSwimProgramRecordCount(swimProgramCountRes.count ?? 0);
+        }
+      } else if (!isStale()) {
+        setSwimLessons([]);
+        setDivisionFieldTrips([]);
+        setSwimProgramRecordCount(0);
+      }
+
       if (!isDayCampCompany(currentCompany)) {
         const { data: academyData } = await supabase
           .from("sports_academy")
@@ -464,7 +515,7 @@ export default function ChildProfile() {
         </div>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-6">
+      <Tabs value={profileTab} onValueChange={setProfileTab} className="space-y-6">
         <TabsList className="flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="birthday">Birthday</TabsTrigger>
@@ -493,10 +544,15 @@ export default function ChildProfile() {
           {showAppointmentsTab && (
             <TabsTrigger value="appointments">Appointments</TabsTrigger>
           )}
-          {isDayCampCompany(currentCompany) && child?.person_id && (
+          {dayCampProfile && (
             <TabsTrigger value="swim">
               <Waves className="h-4 w-4 mr-1" />
               Swim
+              {swimLessons.length > 0 ? (
+                <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">
+                  {swimLessons.length}
+                </Badge>
+              ) : null}
             </TabsTrigger>
           )}
           {currentCompany?.slug === 'timber-lake-camp' && (
@@ -508,13 +564,26 @@ export default function ChildProfile() {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
-          {!isDayCampCompany(currentCompany) && (
-            <PersonThreeDayOutlook
-              personType="child"
-              personId={child.id}
-              companyId={currentCompany?.id || ""}
-              season={currentSeason}
-              divisionId={child.division_id}
+          <PersonThreeDayOutlook
+            personType="child"
+            personId={child.id}
+            companyId={currentCompany?.id || ""}
+            season={currentSeason}
+            divisionId={child.division_id}
+          />
+          {dayCampProfile && (
+            <CamperProfileServicesSummary
+              onNavigateTab={setProfileTab}
+              counts={{
+                swimLessons: swimLessons.length,
+                swimProgramSeasons: swimProgramRecordCount,
+                healthVisits: healthVisitCount,
+                namedFieldTrips: tripAttendance.length,
+                divisionActivities: divisionFieldTrips.length,
+                sportsEvents: sportsRoster.length,
+                incidents: incidents.length,
+                tutoring: tutoringTherapy.length,
+              }}
             />
           )}
           <div className="grid gap-6 md:grid-cols-2">
@@ -1038,15 +1107,59 @@ export default function ChildProfile() {
               )}
             </div>
 
+            {dayCampProfile && divisionFieldTrips.length > 0 && (
+              <div>
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Division activities &amp; field trips
+                </h3>
+                <div className="grid gap-4 mb-8">
+                  {divisionFieldTrips.map((activity) => (
+                    <Card key={activity.id} className="shadow-card">
+                      <CardContent className="p-6">
+                        <div className="flex items-start gap-4">
+                          <div className="p-3 rounded-xl bg-emerald-500/10">
+                            <Calendar className="h-6 w-6 text-emerald-600" />
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-lg mb-1">{activity.title || "Field trip"}</h4>
+                            <p className="text-sm text-muted-foreground mb-2">{activity.activity_type}</p>
+                            <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                              <div className="flex items-center gap-1">
+                                <Calendar className="h-4 w-4" />
+                                <span>
+                                  {new Date(activity.event_date + "T00:00:00").toLocaleDateString("en-US")}
+                                  {activity.end_date && activity.end_date !== activity.event_date
+                                    ? ` – ${new Date(activity.end_date + "T00:00:00").toLocaleDateString("en-US")}`
+                                    : ""}
+                                </span>
+                              </div>
+                              {activity.time ? <span>{activity.time}</span> : null}
+                              {activity.location ? (
+                                <div className="flex items-center gap-1">
+                                  <MapPin className="h-4 w-4" />
+                                  <span>{activity.location}</span>
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div>
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <Users className="h-5 w-5" />
-                Field Trips
+                Named field trip roster
               </h3>
               {tripAttendance.length === 0 ? (
                 <Card className="shadow-card">
                   <CardContent className="py-8 text-center text-muted-foreground">
-                    Not assigned to any field trips
+                    Not on a named trip roster
                   </CardContent>
                 </Card>
               ) : (
@@ -1402,9 +1515,15 @@ export default function ChildProfile() {
           </TabsContent>
         )}
 
-        {isDayCampCompany(currentCompany) && child?.person_id && (
+        {dayCampProfile && (
           <TabsContent value="swim">
-            <CamperSwimHistoryTab personId={child.person_id} />
+            <CamperSwimHistoryTab
+              childId={id || ""}
+              childName={child.name}
+              season={currentSeason}
+              personId={child.person_id}
+              initialLessons={swimLessons}
+            />
           </TabsContent>
         )}
 
