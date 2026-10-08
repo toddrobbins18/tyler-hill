@@ -86,10 +86,11 @@ import {
 import { DAY_CAMP_ENROLLMENT_WEEKS } from "@/lib/enrolledWeeks";
 import {
   applyEnrollmentWeekToRoutes,
+  applySeasonRosterToRoutes,
   buildCamperEnrollmentLookup,
   camperEnrolledInWeekByLookup,
-  camperHasAnyEnrollmentWeek,
   filterUnplottedForWeek,
+  filterUnplottedToSeasonRoster,
   stopRiderNames,
 } from "@/lib/transportWeekView";
 import {
@@ -670,8 +671,7 @@ export default function Transport() {
 
   const [groupRoster, setGroupRoster] = useState<GroupRosterCamper[]>([]);
   const [enrollmentWeekCalendar, setEnrollmentWeekCalendar] = useState<EnrollmentWeekCalendar>([]);
-  const [routeEnrollmentWeek, setRouteEnrollmentWeek] = useState<number | "all">(1);
-  const routeWeekInitKeyRef = useRef("");
+  const [routeEnrollmentWeek, setRouteEnrollmentWeek] = useState<number | "all">("all");
   const [attendanceWeekOverride, setAttendanceWeekOverride] = useState<number | null>(null);
   const groupLoadedKeyRef = useRef<string | null>(null);
 
@@ -1188,12 +1188,8 @@ export default function Transport() {
   }, [companyId, currentSeason]);
 
   useEffect(() => {
-    const key = `${companyId ?? ""}:${currentSeason ?? ""}`;
-    if (routeWeekInitKeyRef.current === key) return;
-    routeWeekInitKeyRef.current = key;
-    const week = attendanceEnrollmentWeek(enrollmentWeekCalendar, overrideDate, null) ?? 1;
-    setRouteEnrollmentWeek(week);
-  }, [companyId, currentSeason, enrollmentWeekCalendar, overrideDate]);
+    setRouteEnrollmentWeek("all");
+  }, [companyId, currentSeason]);
 
   useEffect(() => {
     setAttendanceWeekOverride(null);
@@ -1802,6 +1798,11 @@ export default function Transport() {
     [groupRoster],
   );
 
+  const seasonRosterNames = useMemo(
+    () => new Set(groupRoster.map((c) => c.name.trim().toLowerCase())),
+    [groupRoster],
+  );
+
   const activeRouteEnrollmentWeek =
     routeEnrollmentWeek === "all" ? null : routeEnrollmentWeek;
 
@@ -1848,8 +1849,9 @@ export default function Transport() {
   );
 
   const displayRoutes = useMemo(() => {
+    const seasonFiltered = applySeasonRosterToRoutes(routes, seasonRosterNames);
     const filtered = applyEnrollmentWeekToRoutes(
-      routes,
+      seasonFiltered,
       activeRouteEnrollmentWeek,
       camperEnrollmentLookup,
     );
@@ -1867,6 +1869,7 @@ export default function Transport() {
     });
   }, [
     routes,
+    seasonRosterNames,
     activeRouteEnrollmentWeek,
     camperEnrollmentLookup,
     parentTransportCampers,
@@ -1879,10 +1882,10 @@ export default function Transport() {
     [displayRoutes, visibleRoutes],
   );
 
-  const unplottedForWeek = useMemo(
-    () => filterUnplottedForWeek(unplottedCampers, activeRouteEnrollmentWeek, camperEnrollmentLookup),
-    [unplottedCampers, activeRouteEnrollmentWeek, camperEnrollmentLookup],
-  );
+  const unplottedForWeek = useMemo(() => {
+    const onSeasonRoster = filterUnplottedToSeasonRoster(unplottedCampers, seasonRosterNames);
+    return filterUnplottedForWeek(onSeasonRoster, activeRouteEnrollmentWeek, camperEnrollmentLookup);
+  }, [unplottedCampers, seasonRosterNames, activeRouteEnrollmentWeek, camperEnrollmentLookup]);
 
   type SidebarCamperHit = {
     routeId: number;
@@ -1992,11 +1995,7 @@ export default function Transport() {
   }, []);
 
   const parentTransportForWeek = useMemo(() => {
-    if (activeRouteEnrollmentWeek == null) {
-      return parentTransportCampers.filter((c) =>
-        camperHasAnyEnrollmentWeek(camperEnrollmentLookup, c.name, c.session),
-      );
-    }
+    if (activeRouteEnrollmentWeek == null) return parentTransportCampers;
     return parentTransportCampers.filter((c) =>
       camperEnrolledInWeekByLookup(
         camperEnrollmentLookup,

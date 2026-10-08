@@ -26,6 +26,7 @@ import { AbsenceDialog } from "./AbsenceDialog";
 import { AuthorizedPickupDialog } from "./AuthorizedPickupDialog";
 import { SwimLessonRequestDialog } from "@/components/swim/SwimLessonRequestDialog";
 import type { ParentPortalView } from "@/lib/parentPortalConstants";
+import { formatSwimLessonRejectionForParent } from "@/lib/swimLessonApproval";
 
 type SharedViewProps = {
   campName: string;
@@ -568,7 +569,9 @@ export function ParentSwimView({
                       <p className="mt-2 text-sm pp-text-muted">{lesson.notes}</p>
                     ) : null}
                     {lesson.status === "rejected" && lesson.rejection_reason ? (
-                      <p className="mt-2 text-sm text-red-600">Declined: {lesson.rejection_reason}</p>
+                      <p className="mt-2 text-sm text-red-600">
+                        Declined: {formatSwimLessonRejectionForParent(lesson.rejection_reason)}
+                      </p>
                     ) : null}
                   </div>
                   {lesson.status === "pending" ? (

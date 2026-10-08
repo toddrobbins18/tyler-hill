@@ -21,6 +21,7 @@ import { approveDismissalSwim } from "@/lib/dismissalDashboard";
 import {
   approveSwimLessonRequest,
   rejectSwimLessonRequest,
+  SWIM_LESSON_REJECTION_DEFAULT,
   SWIM_LESSON_STATUS_LABELS,
   swimLessonStatusBadgeVariant,
 } from "@/lib/swimLessonApproval";
@@ -179,7 +180,8 @@ export default function SwimLessons() {
   };
 
   const rejectRequest = async (id: string) => {
-    const reason = window.prompt("Reason for rejection (optional):") ?? "";
+    const reason = window.prompt("Reason for rejection (optional):", SWIM_LESSON_REJECTION_DEFAULT);
+    if (reason === null) return;
     const { data: userRes } = await supabase.auth.getUser();
     const { error } = await rejectSwimLessonRequest(supabase, id, reason, userRes.user?.id);
     if (error) toast.error(error.message);

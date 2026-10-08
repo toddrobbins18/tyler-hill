@@ -1,5 +1,4 @@
 import { camperEnrolledInWeek } from "@/lib/enrollmentWeekCalendar";
-import { resolveEnrolledWeeks } from "@/lib/enrolledWeeks";
 import { normCamperName } from "@/lib/transportGroupAttendance";
 import { CAMP_LOCATION } from "@/lib/transportStopTimes";
 
@@ -68,36 +67,9 @@ export function camperEnrolledInWeekByLookup(
   return false;
 }
 
-/** Camper has at least one enrollment week (session or enrolled_weeks). */
-export function camperHasAnyEnrollmentWeek(
-  lookup: Map<string, CamperEnrollmentInfo>,
-  camperName: string,
-  fallbackSession?: string | null,
-): boolean {
-  const info = lookup.get(normCamperName(camperName));
-  if (info) {
-    return resolveEnrolledWeeks(info.enrolledWeeks, info.session).length > 0;
-  }
-  if (fallbackSession != null && String(fallbackSession).trim()) {
-    return resolveEnrolledWeeks(undefined, fallbackSession).length > 0;
-  }
-  return false;
-}
-
-function filterStopRidersForView(
-  riders: string[],
-  weekNumber: number | null,
-  lookup: Map<string, CamperEnrollmentInfo>,
-): string[] {
-  if (weekNumber != null) {
-    return riders.filter((name) => camperEnrolledInWeekByLookup(lookup, name, weekNumber));
-  }
-  return riders.filter((name) => camperHasAnyEnrollmentWeek(lookup, name));
-}
-
 export function filterStopForEnrollmentWeek<T extends RouteStopLike>(
   stop: T,
-  weekNumber: number | null,
+  weekNumber: number,
   lookup: Map<string, CamperEnrollmentInfo>,
   campAddress: string = CAMP_LOCATION.address,
 ): T {
@@ -108,12 +80,46 @@ export function filterStopForEnrollmentWeek<T extends RouteStopLike>(
     return { ...stop, passengers: 0, camperNames: [] };
   }
 
-  const filtered = filterStopRidersForView(riders, weekNumber, lookup);
+  const filtered = riders.filter((name) => camperEnrolledInWeekByLookup(lookup, name, weekNumber));
   return {
     ...stop,
     camperNames: filtered,
     passengers: filtered.length,
   };
+}
+
+/** Remove riders not on the active season roster (e.g. 2026 MapPoint names on a 2027 board). */
+export function filterStopToSeasonRoster<T extends RouteStopLike>(
+  stop: T,
+  seasonRosterNames: Set<string>,
+  campAddress: string = CAMP_LOCATION.address,
+): T {
+  if (stop.address === campAddress) return stop;
+
+  const riders = stopRiderNames(stop).filter((name) => seasonRosterNames.has(normCamperName(name)));
+  const primaryLabel =
+    riders[0] ?? (stop.address.split(",")[0]?.trim() || stop.name || stop.address);
+  return {
+    ...stop,
+    name: primaryLabel,
+    camperNames: riders,
+    passengers: riders.length,
+  };
+}
+
+export function applySeasonRosterToRoutes<T extends RouteLike>(
+  routes: T[],
+  seasonRosterNames: Set<string>,
+  campAddress: string = CAMP_LOCATION.address,
+): T[] {
+  const filtered = routes.map((route) => {
+    const stops = route.stops.map((s) => filterStopToSeasonRoster(s, seasonRosterNames, campAddress));
+    const campers = stops
+      .filter((s) => s.address !== campAddress)
+      .reduce((sum, s) => sum + (s.passengers || 0), 0);
+    return { ...route, stops, campers };
+  });
+  return pruneRouteStopsWithNoRiders(filtered, campAddress);
 }
 
 /** Drop passenger stops with no riders after enrollment filter (keeps camp). */
@@ -139,6 +145,7 @@ export function applyEnrollmentWeekToRoutes<T extends RouteLike>(
   lookup: Map<string, CamperEnrollmentInfo>,
   campAddress: string = CAMP_LOCATION.address,
 ): T[] {
+  if (weekNumber == null) return routes;
   const filtered = routes.map((route) => {
     const stops = route.stops.map((s) =>
       filterStopForEnrollmentWeek(s, weekNumber, lookup, campAddress),
@@ -156,10 +163,15 @@ export function filterUnplottedForWeek<T extends { name: string; session?: strin
   weekNumber: number | null,
   lookup: Map<string, CamperEnrollmentInfo>,
 ): T[] {
-  if (weekNumber != null) {
-    return campers.filter((c) =>
-      camperEnrolledInWeekByLookup(lookup, c.name, weekNumber, c.session),
-    );
-  }
-  return campers.filter((c) => camperHasAnyEnrollmentWeek(lookup, c.name, c.session));
+  if (weekNumber == null) return campers;
+  return campers.filter((c) =>
+    camperEnrolledInWeekByLookup(lookup, c.name, weekNumber, c.session),
+  );
+}
+
+export function filterUnplottedToSeasonRoster<T extends { name: string }>(
+  campers: T[],
+  seasonRosterNames: Set<string>,
+): T[] {
+  return campers.filter((c) => seasonRosterNames.has(normCamperName(c.name)));
 }

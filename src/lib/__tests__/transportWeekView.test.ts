@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   applyEnrollmentWeekToRoutes,
+  applySeasonRosterToRoutes,
   buildCamperEnrollmentLookup,
   camperEnrolledInWeekByLookup,
   filterUnplottedForWeek,
+  filterUnplottedToSeasonRoster,
 } from "@/lib/transportWeekView";
 import { CAMP_LOCATION } from "@/lib/transportStopTimes";
 
@@ -13,8 +15,58 @@ describe("transportWeekView", () => {
     { name: "Other Week", enrolledWeeks: [5], session: null },
   ]);
 
-  it("treats unknown campers as not enrolled for a week", () => {
-    expect(camperEnrolledInWeekByLookup(lookup, "Ghost Camper", 2)).toBe(false);
+  it("removes prior-season ghost riders from map routes", () => {
+    const roster = new Set(["enrolled kid"]);
+    const routes = applySeasonRosterToRoutes(
+      [
+        {
+          id: 1,
+          name: "Bus 1",
+          bus: "1",
+          color: "#f00",
+          direction: "Inbound",
+          departure: "8:00",
+          status: "Active",
+          capacity: 40,
+          campers: 2,
+          stops: [
+            {
+              name: "Enrolled Kid",
+              address: "1 Main St",
+              lat: 40.8,
+              lng: -73.7,
+              pickupTime: "7:30",
+              passengers: 1,
+              camperNames: ["Enrolled Kid"],
+            },
+            {
+              name: "2026 Ghost",
+              address: "2 Oak Ave",
+              lat: 40.81,
+              lng: -73.71,
+              pickupTime: "7:35",
+              passengers: 1,
+              camperNames: ["2026 Ghost"],
+            },
+          ],
+        },
+      ],
+      roster,
+    );
+    expect(routes[0]?.stops).toHaveLength(1);
+    expect(routes[0]?.stops[0]?.camperNames).toEqual(["Enrolled Kid"]);
+  });
+
+  it("filters unplotted list to current season roster", () => {
+    const roster = new Set(["enrolled kid"]);
+    const out = filterUnplottedToSeasonRoster(
+      [
+        { name: "Enrolled Kid" },
+        { name: "2026 Only" },
+      ],
+      roster,
+    );
+    expect(out.map((c) => c.name)).toEqual(["Enrolled Kid"]);
   });
 
   it("removes non-enrolled riders from stops and drops empty stops from routes", () => {

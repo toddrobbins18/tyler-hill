@@ -137,17 +137,48 @@ export async function normalizeTransportBoardForSeason(
   // MapPoint 2026 priors fill gaps when CampMinder sync has no household address yet.
   const hints = await loadHistoricalAddressHints(supabase, companyId, "2026");
   const parentTransportCampers = board.parentTransportCampers ?? [];
+  const enrolledNames = new Set(enrolled.map((c) => normName(c.name)));
+  const prunedStops = pruneCoreStopsToSeasonRoster(board.coreStops, enrolledNames);
+
   const unplottedCampers = filterUnplottedExcludingParentTransport(
     buildUnplottedFromEnrollment({
       enrolled,
-      coreStops: board.coreStops,
+      coreStops: prunedStops,
       existingUnplotted: board.unplottedCampers,
       addressHints: hints,
     }),
     parentTransportCampers,
   );
 
-  return { ...board, parentTransportCampers, unplottedCampers };
+  return { ...board, coreStops: prunedStops, parentTransportCampers, unplottedCampers };
+}
+
+/** Strip prior-season / MapPoint ghost riders; keep open stops (no names). */
+export function pruneCoreStopsToSeasonRoster(
+  coreStops: Record<number, TransportRouteStop[]>,
+  enrolledNames: Set<string>,
+): Record<number, TransportRouteStop[]> {
+  const out: Record<number, TransportRouteStop[]> = {};
+  for (const [routeId, stops] of Object.entries(coreStops)) {
+    out[Number(routeId)] = (stops ?? []).map((stop) => {
+      const riders = riderNamesFromStop(stop).filter((name) => enrolledNames.has(normName(name)));
+      if (riders.length === 0) {
+        return {
+          ...stop,
+          camperNames: [],
+          passengers: 0,
+          name: stop.address.split(",")[0]?.trim() || stop.name,
+        };
+      }
+      return {
+        ...stop,
+        camperNames: riders,
+        passengers: riders.length,
+        name: riders[0] ?? stop.name,
+      };
+    });
+  }
+  return out;
 }
 
 /** Strip unconfigured routes before persisting (2027+ safety). */

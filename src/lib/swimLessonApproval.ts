@@ -17,6 +17,23 @@ export function canParentConfirmLesson(status: string | null | undefined): boole
   return status === "scheduled";
 }
 
+/** Fix common typos before save / parent-facing display. */
+export function normalizeSwimLessonRejectionReason(reason: string | null | undefined): string | null {
+  const trimmed = reason?.trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/\bavailible\b/gi, "available");
+}
+
+/** Parent portal copy for declined lessons. */
+export function formatSwimLessonRejectionForParent(reason: string | null | undefined): string {
+  const normalized = normalizeSwimLessonRejectionReason(reason);
+  if (!normalized) return "";
+  if (/^not available\.?$/i.test(normalized)) return "Not available";
+  return normalized;
+}
+
+export const SWIM_LESSON_REJECTION_DEFAULT = "Not available";
+
 export function swimLessonStatusBadgeVariant(
   status: string,
 ): "default" | "secondary" | "destructive" | "outline" {
@@ -59,7 +76,7 @@ export async function rejectSwimLessonRequest(
     .from("swim_lessons")
     .update({
       status: "rejected",
-      rejection_reason: reason?.trim() || null,
+      rejection_reason: normalizeSwimLessonRejectionReason(reason),
       parent_confirmed: false,
       parent_confirmed_at: null,
       transport_status: null,
