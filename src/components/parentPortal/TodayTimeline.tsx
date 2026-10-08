@@ -15,6 +15,7 @@ type TodayTimelineProps = {
   absences: Absence[];
   swimLessons: SwimLesson[];
   camperName: (id: string) => string;
+  className?: string;
 };
 
 type TimelineItem = {
@@ -32,6 +33,7 @@ export function TodayTimeline({
   absences,
   swimLessons,
   camperName,
+  className,
 }: TodayTimelineProps) {
   const items: TimelineItem[] = [];
 
@@ -92,7 +94,7 @@ export function TodayTimeline({
   };
 
   return (
-    <section className="pp-card overflow-hidden rounded-2xl">
+    <section className={cn("pp-card overflow-hidden rounded-2xl", className)}>
       <div className="border-b border-slate-100 px-5 py-4 md:px-6 md:py-5">
         <h2 className="pp-dashboard-section-title">Today&apos;s schedule</h2>
         <p className="mt-0.5 text-sm text-slate-500">{formatFriendlyDate(todayIso)}</p>

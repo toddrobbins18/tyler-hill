@@ -1,4 +1,5 @@
 import { Megaphone } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { formatCampDateTime } from "@/lib/campTime";
 
 export type CampAnnouncementContent = {
@@ -10,15 +11,16 @@ export type CampAnnouncementContent = {
 type CampAnnouncementProps = {
   campName: string;
   update?: CampAnnouncementContent | null;
+  className?: string;
 };
 
-export function CampAnnouncement({ campName, update }: CampAnnouncementProps) {
+export function CampAnnouncement({ campName, update, className }: CampAnnouncementProps) {
   const hasMessage = Boolean(update?.body?.trim());
   if (!hasMessage) return null;
 
   return (
     <section
-      className="pp-camp-hero relative overflow-hidden rounded-2xl p-5 md:p-6"
+      className={cn("pp-camp-hero relative overflow-hidden rounded-2xl p-5 md:p-6", className)}
       aria-label="Camp update"
     >
       <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-[hsl(var(--pp-brand)/0.08)] blur-2xl" />

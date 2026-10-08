@@ -27,6 +27,7 @@ import {
 } from "@/lib/parentPortalConstants";
 import { linkFamilyChildrenByGuardianEmail } from "@/lib/parentFamilyLink";
 import { fetchPublishedCampUpdate } from "@/lib/parentPortalCampUpdates";
+import { resolveParentPortalHeroImageUrl } from "@/lib/parentPortalTheme";
 import type { CampAnnouncementContent } from "@/components/parentPortal/CampAnnouncement";
 
 function ParentPortalSkeleton({
@@ -247,6 +248,8 @@ export default function ParentPortal() {
 
   const camperName = (id: string) => campers.find((x) => x.id === id)?.name ?? "—";
 
+  const heroImageUrl = resolveParentPortalHeroImageUrl(companySlug);
+
   const sharedProps = {
     campName: companyName,
     contactName,
@@ -258,6 +261,7 @@ export default function ParentPortal() {
     authPickups,
     swimLessons,
     campUpdate,
+    heroImageUrl,
     onSaved: loadAll,
     onNavigate: setActiveView,
     camperName,
@@ -273,6 +277,7 @@ export default function ParentPortal() {
       activeView={activeView}
       onNavigate={setActiveView}
       onSignOut={handleSignOut}
+      mainBackdropImageUrl={activeView === "home" ? heroImageUrl : null}
     >
       {activeView === "home" && <ParentHomeView {...sharedProps} />}
       {activeView === "campers" && <ParentCampersView {...sharedProps} />}

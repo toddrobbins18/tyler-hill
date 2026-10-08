@@ -1,5 +1,45 @@
 import { hexToHSL } from "@/utils/themeUtils";
 import { CAMP_SLUG } from "@/lib/camps";
+import tylerHillDashboardBg from "@/assets/image001.jpg";
+import timberLakeWestBg from "@/assets/timber-lake-west-bg.jpeg";
+import timberLakeCampHero from "@/assets/tember-camp.jpeg";
+
+/** North Shore parent portal home / login hero (same pattern as other camps' dashboard aerial). */
+export const NORTH_SHORE_PARENT_PORTAL_HERO_URL = "/parent-portal/aerial-camp-placeholder.jpg";
+
+/** Camp photo for parent portal home welcome banner and login hero — mirrors staff Dashboard backgrounds. */
+/** Frosted cards on parent home when camp aerial fills the page (matches staff Dashboard). */
+export const PP_AERIAL_GLASS_SURFACE =
+  "border-white/40 bg-white/55 shadow-lg backdrop-blur-md";
+
+export function parentPortalMainBackdropStyle(imageUrl: string): {
+  backgroundImage: string;
+  backgroundSize: string;
+  backgroundPosition: string;
+  backgroundAttachment: string;
+} {
+  return {
+    backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.4), rgba(0,0,0,0.6)), url(${imageUrl})`,
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+    backgroundAttachment: "fixed",
+  };
+}
+
+export function resolveParentPortalHeroImageUrl(companySlug?: string | null): string | null {
+  switch (companySlug) {
+    case CAMP_SLUG.NORTH_SHORE_DAY_CAMP:
+      return NORTH_SHORE_PARENT_PORTAL_HERO_URL;
+    case CAMP_SLUG.TYLER_HILL_CAMP:
+      return tylerHillDashboardBg;
+    case CAMP_SLUG.TIMBER_LAKE_CAMP:
+      return timberLakeCampHero;
+    case CAMP_SLUG.TIMBER_LAKE_WEST:
+      return timberLakeWestBg;
+    default:
+      return null;
+  }
+}
 
 /** North Shore Day Camp — matches `companies.theme_color` in Supabase. */
 export const NORTH_SHORE_THEME_COLOR = "#1565C0";

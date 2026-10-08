@@ -9,6 +9,7 @@ type QuickActionCardProps = {
   description: string;
   onClick: () => void;
   accent?: QuickActionAccent;
+  className?: string;
 };
 
 const accentStyles: Record<
@@ -43,6 +44,7 @@ export function QuickActionCard({
   description,
   onClick,
   accent = "blue",
+  className,
 }: QuickActionCardProps) {
   const style = accentStyles[accent];
 
@@ -50,7 +52,7 @@ export function QuickActionCard({
     <button
       type="button"
       onClick={onClick}
-      className={cn("pp-action-card group min-h-[8.5rem] w-full", style.hoverBorder)}
+      className={cn("pp-action-card group min-h-[8.5rem] w-full", style.hoverBorder, className)}
     >
       <div className="flex items-start justify-between gap-3">
         <div

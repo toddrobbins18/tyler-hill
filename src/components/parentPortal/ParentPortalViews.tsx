@@ -27,6 +27,8 @@ import { AuthorizedPickupDialog } from "./AuthorizedPickupDialog";
 import { SwimLessonRequestDialog } from "@/components/swim/SwimLessonRequestDialog";
 import type { ParentPortalView } from "@/lib/parentPortalConstants";
 import { formatSwimLessonRejectionForParent } from "@/lib/swimLessonApproval";
+import { PP_AERIAL_GLASS_SURFACE } from "@/lib/parentPortalTheme";
+import { cn } from "@/lib/utils";
 
 type SharedViewProps = {
   campName: string;
@@ -39,6 +41,7 @@ type SharedViewProps = {
   authPickups: AuthorizedPickup[];
   swimLessons: SwimLesson[];
   campUpdate?: CampAnnouncementContent | null;
+  heroImageUrl?: string | null;
   onSaved: () => void;
   onNavigate: (view: ParentPortalView) => void;
   camperName: (id: string) => string;
@@ -52,6 +55,7 @@ export function ParentHomeView({
   absences,
   swimLessons,
   campUpdate,
+  heroImageUrl,
   onNavigate,
 }: Pick<
   SharedViewProps,
@@ -62,24 +66,44 @@ export function ParentHomeView({
   | "absences"
   | "swimLessons"
   | "campUpdate"
+  | "heroImageUrl"
   | "onNavigate"
 >) {
   const todayIso = todayIsoDate();
+  const hasAerialBg = Boolean(heroImageUrl?.trim());
+  const glass = hasAerialBg ? PP_AERIAL_GLASS_SURFACE : undefined;
+  const sectionTitleClass = cn(
+    "pp-dashboard-section-title",
+    hasAerialBg && "text-white drop-shadow-md",
+  );
 
   return (
-    <div className="space-y-8 md:space-y-10">
-      <WelcomeHeader contactName={contactName} campName={campName} />
+    <div
+      className={cn(
+        hasAerialBg ? "min-h-[calc(100dvh-5rem)] space-y-5 lg:min-h-[calc(100dvh-4rem)]" : "space-y-8 md:space-y-10",
+      )}
+    >
+      <WelcomeHeader
+        contactName={contactName}
+        campName={campName}
+        onAerialBackground={hasAerialBg}
+      />
 
-      <CampAnnouncement campName={campName} update={campUpdate} />
+      <CampAnnouncement campName={campName} update={campUpdate} className={glass} />
 
       <section>
         <div className="mb-5 flex items-center justify-between gap-3">
-          <h2 className="pp-dashboard-section-title">My campers</h2>
+          <h2 className={sectionTitleClass}>My campers</h2>
           {campers.length > 0 ? (
             <Button
               variant="ghost"
               size="sm"
-              className="h-9 rounded-xl text-sm font-semibold text-[hsl(var(--pp-brand))] hover:bg-[hsl(var(--pp-brand-subtle))] hover:text-[hsl(var(--pp-brand-dark))]"
+              className={cn(
+                "h-9 rounded-xl text-sm font-semibold",
+                hasAerialBg
+                  ? "text-white hover:bg-white/15 hover:text-white"
+                  : "text-[hsl(var(--pp-brand))] hover:bg-[hsl(var(--pp-brand-subtle))] hover:text-[hsl(var(--pp-brand-dark))]",
+              )}
               onClick={() => onNavigate("campers")}
             >
               View all
@@ -105,6 +129,7 @@ export function ParentHomeView({
                 pickups={pickups}
                 swimLessons={swimLessons}
                 onView={() => onNavigate("campers")}
+                cardClassName={glass}
               />
             ))}
           </div>
@@ -112,7 +137,7 @@ export function ParentHomeView({
       </section>
 
       <section>
-        <h2 className="pp-dashboard-section-title mb-5">Quick actions</h2>
+        <h2 className={cn(sectionTitleClass, "mb-5")}>Quick actions</h2>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <QuickActionCard
             icon={Calendar}
@@ -120,6 +145,7 @@ export function ParentHomeView({
             description="Request a different pickup time or person for today or a future date."
             accent="blue"
             onClick={() => onNavigate("pickups")}
+            className={glass}
           />
           <QuickActionCard
             icon={Clock}
@@ -127,6 +153,7 @@ export function ParentHomeView({
             description="Let camp know if your child won't attend or will arrive late."
             accent="amber"
             onClick={() => onNavigate("absences")}
+            className={glass}
           />
           <QuickActionCard
             icon={UserCheck}
@@ -134,6 +161,7 @@ export function ParentHomeView({
             description="Manage who is approved to pick up your camper."
             accent="emerald"
             onClick={() => onNavigate("authorized")}
+            className={glass}
           />
           <QuickActionCard
             icon={Waves}
@@ -141,6 +169,7 @@ export function ParentHomeView({
             description="View scheduled lessons and confirm attendance."
             accent="cyan"
             onClick={() => onNavigate("swim")}
+            className={glass}
           />
         </div>
       </section>
@@ -151,6 +180,7 @@ export function ParentHomeView({
         absences={absences}
         swimLessons={swimLessons}
         camperName={(id) => campers.find((c) => c.id === id)?.name ?? "—"}
+        className={glass}
       />
     </div>
   );

@@ -17,6 +17,7 @@ type CamperCardProps = {
   swimLessons: SwimLesson[];
   onView?: () => void;
   className?: string;
+  cardClassName?: string;
   /** Larger layout for the home dashboard */
   variant?: "default" | "dashboard";
 };
@@ -47,6 +48,7 @@ export function CamperCard({
   swimLessons,
   onView,
   className,
+  cardClassName,
   variant = "default",
 }: CamperCardProps) {
   const isDashboard = variant === "dashboard";
@@ -75,13 +77,14 @@ export function CamperCard({
 
   const avatarSize = isDashboard ? "h-[4.5rem] w-[4.5rem] text-xl" : "h-14 w-14 text-sm";
   const padding = isDashboard ? "p-6" : "p-5";
+  const photoUrl = camper.photo_url?.trim() || null;
 
   const body = (
     <>
       <div className={cn("flex items-start gap-4", isDashboard && "gap-5")}>
-        {camper.photo_url ? (
+        {photoUrl ? (
           <img
-            src={camper.photo_url}
+            src={photoUrl}
             alt=""
             className={cn(
               "shrink-0 rounded-2xl object-cover ring-2 ring-slate-100",
@@ -166,6 +169,7 @@ export function CamperCard({
         className={cn(
           "pp-card group w-full overflow-hidden text-left transition-all duration-200",
           "hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-md active:translate-y-0",
+          cardClassName,
           className,
         )}
       >

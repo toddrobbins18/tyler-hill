@@ -11,6 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useParentCompany } from "@/hooks/useParentCompany";
 import { useParentPortalTheme } from "@/components/parentPortal/useParentPortalTheme";
 import { userIsCampStaff } from "@/lib/parentPortalConstants";
+import { resolveParentPortalHeroImageUrl } from "@/lib/parentPortalTheme";
 import { AppStoreDownloadBadge } from "@/components/parentPortal/AppStoreDownloadBadge";
 
 export default function ParentAuth() {
@@ -130,6 +131,7 @@ export default function ParentAuth() {
   }
 
   const isStaffPreview = userIsCampStaff(userRoles);
+  const heroImageUrl = resolveParentPortalHeroImageUrl(companySlug);
 
   return (
     <div ref={rootRef} className="parent-portal relative min-h-screen overflow-hidden pp-page-bg">
@@ -169,7 +171,14 @@ export default function ParentAuth() {
 
       <div className="relative mx-auto grid min-h-screen max-w-6xl items-center gap-10 px-4 py-10 lg:grid-cols-[1.05fr_0.95fr] lg:px-8">
         <section className="hidden lg:block">
-          <div className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-medium pp-text-muted shadow-sm">
+          {heroImageUrl ? (
+            <div className="overflow-hidden rounded-[1.75rem] shadow-lg ring-1 ring-[hsl(var(--pp-border))]">
+              <img src={heroImageUrl} alt="" className="aspect-[16/10] w-full object-cover" />
+            </div>
+          ) : null}
+          <div
+            className={`inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-medium pp-text-muted shadow-sm ${heroImageUrl ? "mt-8" : ""}`}
+          >
             <Sparkles className="h-3.5 w-3.5" />
             Family portal
           </div>
@@ -204,7 +213,22 @@ export default function ParentAuth() {
         </section>
 
         <section className="lg:hidden">
-          <div className="pp-hero mb-6 rounded-[1.75rem] px-6 py-7">
+          <div
+            className={
+              heroImageUrl
+                ? "relative mb-6 overflow-hidden rounded-[1.75rem] px-6 py-7 shadow-lg"
+                : "pp-hero mb-6 rounded-[1.75rem] px-6 py-7"
+            }
+            style={
+              heroImageUrl
+                ? {
+                    backgroundImage: `linear-gradient(to bottom, rgba(15, 23, 42, 0.55), rgba(15, 23, 42, 0.75)), url(${heroImageUrl})`,
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
+                  }
+                : undefined
+            }
+          >
             <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-white/90">
               <Sparkles className="h-3.5 w-3.5" />
               Family portal

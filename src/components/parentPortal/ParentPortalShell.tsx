@@ -18,6 +18,7 @@ import {
   PARENT_PORTAL_NAV,
   type ParentPortalView,
 } from "@/lib/parentPortalConstants";
+import { parentPortalMainBackdropStyle } from "@/lib/parentPortalTheme";
 import { useParentPortalTheme } from "./useParentPortalTheme";
 
 const NAV_ICONS: Record<ParentPortalView, typeof Home> = {
@@ -38,6 +39,8 @@ type ParentPortalShellProps = {
   activeView: ParentPortalView;
   onNavigate: (view: ParentPortalView) => void;
   onSignOut: () => void;
+  /** Full-bleed camp photo behind main pane (desktop: from sidebar edge to viewport right). */
+  mainBackdropImageUrl?: string | null;
   children: ReactNode;
 };
 
@@ -132,9 +135,11 @@ export function ParentPortalShell({
   activeView,
   onNavigate,
   onSignOut,
+  mainBackdropImageUrl,
   children,
 }: ParentPortalShellProps) {
   const rootRef = useParentPortalTheme(themeColor, companySlug);
+  const hasMainBackdrop = Boolean(mainBackdropImageUrl?.trim());
 
   const [moreOpen, setMoreOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -177,7 +182,15 @@ export function ParentPortalShell({
         </SheetContent>
       </Sheet>
 
-      <div className="flex min-h-screen flex-col lg:pl-[17.5rem]">
+      <div className="relative flex min-h-screen flex-col lg:pl-[17.5rem]">
+        {hasMainBackdrop ? (
+          <div
+            aria-hidden
+            className="pointer-events-none fixed inset-x-0 bottom-0 top-0 z-0 lg:left-[17.5rem]"
+            style={parentPortalMainBackdropStyle(mainBackdropImageUrl!)}
+          />
+        ) : null}
+
         {/* Mobile / tablet header */}
         <header className="pp-header-bar sticky top-0 z-20 lg:hidden">
           <div className="flex items-center justify-between gap-3 px-4 py-3">
@@ -203,7 +216,14 @@ export function ParentPortalShell({
           </div>
         </header>
 
-        <main className="relative z-10 mx-auto w-full max-w-4xl flex-1 px-4 pb-28 pt-5 md:max-w-5xl md:px-8 md:pb-10 md:pt-8 lg:max-w-6xl lg:pb-10">
+        <main
+          className={cn(
+            "relative z-10 w-full flex-1 pb-28 pt-5 md:pb-10 md:pt-8 lg:pb-10",
+            hasMainBackdrop
+              ? "max-w-none px-4 md:px-8"
+              : "mx-auto max-w-4xl px-4 md:max-w-5xl md:px-8 lg:max-w-6xl",
+          )}
+        >
           {children}
         </main>
       </div>

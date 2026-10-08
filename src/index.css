@@ -226,6 +226,19 @@ All colors MUST be HSL.
     color: hsl(var(--pp-brand));
   }
 
+  .pp-hero {
+    background: linear-gradient(
+      135deg,
+      hsl(var(--pp-brand-dark)) 0%,
+      hsl(var(--pp-brand)) 48%,
+      hsl(var(--pp-brand-hover)) 100%
+    );
+    color: white;
+    box-shadow:
+      0 20px 40px -12px hsl(var(--pp-brand-dark) / 0.45),
+      0 0 0 1px hsl(var(--pp-brand) / 0.2) inset;
+  }
+
   .pp-camp-hero {
     border-radius: 1rem;
     border: 1px solid hsl(var(--pp-brand) / 0.15);
