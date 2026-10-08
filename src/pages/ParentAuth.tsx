@@ -11,7 +11,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useParentCompany } from "@/hooks/useParentCompany";
 import { useParentPortalTheme } from "@/components/parentPortal/useParentPortalTheme";
 import { userIsCampStaff } from "@/lib/parentPortalConstants";
-import { resolveParentPortalHeroImageUrl } from "@/lib/parentPortalTheme";
+import {
+  parentPortalMainBackdropStyle,
+  PP_AERIAL_GLASS_SURFACE,
+  resolveParentPortalHeroImageUrl,
+} from "@/lib/parentPortalTheme";
+import { cn } from "@/lib/utils";
 import { AppStoreDownloadBadge } from "@/components/parentPortal/AppStoreDownloadBadge";
 
 export default function ParentAuth() {
@@ -132,9 +137,20 @@ export default function ParentAuth() {
 
   const isStaffPreview = userIsCampStaff(userRoles);
   const heroImageUrl = resolveParentPortalHeroImageUrl(companySlug);
+  const hasPhotoBg = Boolean(heroImageUrl?.trim());
 
   return (
-    <div ref={rootRef} className="parent-portal relative min-h-screen overflow-hidden pp-page-bg">
+    <div
+      ref={rootRef}
+      className={cn("parent-portal relative min-h-screen overflow-hidden", !hasPhotoBg && "pp-page-bg")}
+    >
+      {hasPhotoBg ? (
+        <div
+          aria-hidden
+          className="pointer-events-none fixed inset-0 z-0"
+          style={parentPortalMainBackdropStyle(heroImageUrl!)}
+        />
+      ) : null}
       {isStaffPreview && (
         <div className="relative z-20 border-b border-[hsl(var(--pp-brand)/0.15)] bg-white/95 px-4 py-3 shadow-sm backdrop-blur-sm">
           <div className="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -164,85 +180,136 @@ export default function ParentAuth() {
           </div>
         </div>
       )}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="pp-accent-blur-a absolute -right-20 top-0 h-72 w-72 rounded-full blur-3xl" />
-        <div className="pp-accent-blur-b absolute bottom-0 left-0 h-64 w-64 rounded-full blur-3xl" />
-      </div>
+      {!hasPhotoBg ? (
+        <div className="pointer-events-none absolute inset-0">
+          <div className="pp-accent-blur-a absolute -right-20 top-0 h-72 w-72 rounded-full blur-3xl" />
+          <div className="pp-accent-blur-b absolute bottom-0 left-0 h-64 w-64 rounded-full blur-3xl" />
+        </div>
+      ) : null}
 
-      <div className="relative mx-auto grid min-h-screen max-w-6xl items-center gap-10 px-4 py-10 lg:grid-cols-[1.05fr_0.95fr] lg:px-8">
-        <section className="hidden lg:block">
-          {heroImageUrl ? (
-            <div className="overflow-hidden rounded-[1.75rem] shadow-lg ring-1 ring-[hsl(var(--pp-border))]">
-              <img src={heroImageUrl} alt="" className="aspect-[16/10] w-full object-cover" />
-            </div>
-          ) : null}
+      <div className="relative z-10 mx-auto grid min-h-screen max-w-6xl items-center gap-10 px-4 py-10 lg:grid-cols-[1.05fr_0.95fr] lg:px-8">
+        <section className={cn("hidden lg:block", hasPhotoBg && "text-white drop-shadow-md")}>
           <div
-            className={`inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-medium pp-text-muted shadow-sm ${heroImageUrl ? "mt-8" : ""}`}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium shadow-sm",
+              hasPhotoBg
+                ? "border border-white/25 bg-white/15 text-white/95 backdrop-blur-sm"
+                : "bg-white/80 pp-text-muted",
+            )}
           >
             <Sparkles className="h-3.5 w-3.5" />
             Family portal
           </div>
-          <h1 className="mt-6 text-4xl font-semibold tracking-tight xl:text-5xl">
+          <h1
+            className={cn(
+              "mt-6 text-4xl font-semibold tracking-tight xl:text-5xl",
+              hasPhotoBg && "drop-shadow-lg",
+            )}
+          >
             Your family&apos;s home at {companyName}
           </h1>
-          <p className="pp-text-muted mt-4 max-w-lg text-base leading-relaxed">
+          <p
+            className={cn(
+              "mt-4 max-w-lg text-base leading-relaxed",
+              hasPhotoBg ? "text-white/90" : "pp-text-muted",
+            )}
+          >
             Manage pickups, report absences, update authorized adults, and confirm swim lessons — all in one
             thoughtfully designed place built for camp families.
           </p>
-          <ul className="pp-text-muted mt-8 space-y-3 text-sm">
+          <ul className={cn("mt-8 space-y-3 text-sm", hasPhotoBg ? "text-white/90" : "pp-text-muted")}>
             <li className="flex items-center gap-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[hsl(var(--pp-brand-soft))] text-[hsl(var(--pp-brand))]">✓</span>
+              <span
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-xl",
+                  hasPhotoBg
+                    ? "border border-white/30 bg-white/20 text-white"
+                    : "bg-[hsl(var(--pp-brand-soft))] text-[hsl(var(--pp-brand))]",
+                )}
+              >
+                ✓
+              </span>
               See today&apos;s schedule at a glance
             </li>
             <li className="flex items-center gap-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[hsl(var(--pp-brand-soft))] text-[hsl(var(--pp-brand))]">✓</span>
+              <span
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-xl",
+                  hasPhotoBg
+                    ? "border border-white/30 bg-white/20 text-white"
+                    : "bg-[hsl(var(--pp-brand-soft))] text-[hsl(var(--pp-brand))]",
+                )}
+              >
+                ✓
+              </span>
               Submit pickup and absence requests
             </li>
             <li className="flex items-center gap-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[hsl(var(--pp-brand-muted))] text-[hsl(var(--pp-brand-dark))]">✓</span>
+              <span
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-xl",
+                  hasPhotoBg
+                    ? "border border-white/30 bg-white/20 text-white"
+                    : "bg-[hsl(var(--pp-brand-muted))] text-[hsl(var(--pp-brand-dark))]",
+                )}
+              >
+                ✓
+              </span>
               Keep authorized pickup contacts up to date
             </li>
           </ul>
-          <div className="mt-10 border-t border-[hsl(var(--pp-border))] pt-8">
-            <p className="text-sm font-medium text-slate-700">Get The Nest on your iPhone</p>
-            <p className="mt-1 max-w-sm text-sm pp-text-muted">
+          <div
+            className={cn(
+              "mt-10 border-t pt-8",
+              hasPhotoBg ? "border-white/25" : "border-[hsl(var(--pp-border))]",
+            )}
+          >
+            <p className={cn("text-sm font-medium", hasPhotoBg ? "text-white" : "text-slate-700")}>
+              Get The Nest on your iPhone
+            </p>
+            <p className={cn("mt-1 max-w-sm text-sm", hasPhotoBg ? "text-white/85" : "pp-text-muted")}>
               Download the app for quick access to pickups, absences, and camp updates on the go.
             </p>
             <AppStoreDownloadBadge className="mt-4 inline-block" />
           </div>
         </section>
 
-        <section className="lg:hidden">
-          <div
-            className={
-              heroImageUrl
-                ? "relative mb-6 overflow-hidden rounded-[1.75rem] px-6 py-7 shadow-lg"
-                : "pp-hero mb-6 rounded-[1.75rem] px-6 py-7"
-            }
-            style={
-              heroImageUrl
-                ? {
-                    backgroundImage: `linear-gradient(to bottom, rgba(15, 23, 42, 0.55), rgba(15, 23, 42, 0.75)), url(${heroImageUrl})`,
-                    backgroundSize: "cover",
-                    backgroundPosition: "center",
-                  }
-                : undefined
-            }
-          >
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-white/90">
-              <Sparkles className="h-3.5 w-3.5" />
-              Family portal
+        <section className={cn("lg:hidden", hasPhotoBg && "text-white drop-shadow-md")}>
+          {hasPhotoBg ? (
+            <div className="mb-6">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3 py-1 text-xs font-semibold text-white/95 backdrop-blur-sm">
+                <Sparkles className="h-3.5 w-3.5" />
+                Family portal
+              </div>
+              <h1 className="mt-4 text-2xl font-bold leading-tight tracking-tight drop-shadow-lg">
+                Your family&apos;s home at {companyName}
+              </h1>
+              <p className="mt-3 text-sm leading-relaxed text-white/90">
+                Pickups, absences, authorized adults, and swim lessons — all in one place.
+              </p>
             </div>
-            <h1 className="mt-4 text-2xl font-bold leading-tight tracking-tight">
-              Your family&apos;s home at {companyName}
-            </h1>
-            <p className="mt-3 text-sm leading-relaxed text-white/85">
-              Pickups, absences, authorized adults, and swim lessons — all in one place.
-            </p>
-          </div>
+          ) : (
+            <div className="pp-hero mb-6 rounded-[1.75rem] px-6 py-7">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-white/90">
+                <Sparkles className="h-3.5 w-3.5" />
+                Family portal
+              </div>
+              <h1 className="mt-4 text-2xl font-bold leading-tight tracking-tight">
+                Your family&apos;s home at {companyName}
+              </h1>
+              <p className="mt-3 text-sm leading-relaxed text-white/85">
+                Pickups, absences, authorized adults, and swim lessons — all in one place.
+              </p>
+            </div>
+          )}
         </section>
 
-        <section className="pp-glass mx-auto w-full max-w-md rounded-[1.75rem] p-6 shadow-xl md:p-8">
+        <section
+          className={cn(
+            "mx-auto w-full max-w-md rounded-[1.75rem] p-6 shadow-xl md:p-8",
+            hasPhotoBg ? PP_AERIAL_GLASS_SURFACE : "pp-glass",
+          )}
+        >
           <div className="mb-6 flex items-center gap-3">
             <div className="pp-brand-bg flex h-12 w-12 items-center justify-center rounded-2xl">
               <Shield className="h-6 w-6" />
