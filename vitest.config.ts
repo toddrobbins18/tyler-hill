@@ -12,6 +12,7 @@ export default defineConfig({
       "src/lib/__tests__/enrollmentWeekCalendar.test.ts",
       "src/lib/__tests__/transportCamperBusRun.test.ts",
       "src/lib/__tests__/transportBusCheckins.test.ts",
+      "src/lib/__tests__/transportWeekView.test.ts",
       "src/lib/__tests__/transport*.test.ts",
       "src/lib/__tests__/swimProgress*.test.ts",
       "src/lib/__tests__/swimProgram.test.ts",

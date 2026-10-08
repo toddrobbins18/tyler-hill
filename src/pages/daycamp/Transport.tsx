@@ -88,6 +88,7 @@ import {
   applyEnrollmentWeekToRoutes,
   buildCamperEnrollmentLookup,
   camperEnrolledInWeekByLookup,
+  camperHasAnyEnrollmentWeek,
   filterUnplottedForWeek,
   stopRiderNames,
 } from "@/lib/transportWeekView";
@@ -669,7 +670,8 @@ export default function Transport() {
 
   const [groupRoster, setGroupRoster] = useState<GroupRosterCamper[]>([]);
   const [enrollmentWeekCalendar, setEnrollmentWeekCalendar] = useState<EnrollmentWeekCalendar>([]);
-  const [routeEnrollmentWeek, setRouteEnrollmentWeek] = useState<number | "all">("all");
+  const [routeEnrollmentWeek, setRouteEnrollmentWeek] = useState<number | "all">(1);
+  const routeWeekInitKeyRef = useRef("");
   const [attendanceWeekOverride, setAttendanceWeekOverride] = useState<number | null>(null);
   const groupLoadedKeyRef = useRef<string | null>(null);
 
@@ -1186,8 +1188,12 @@ export default function Transport() {
   }, [companyId, currentSeason]);
 
   useEffect(() => {
-    setRouteEnrollmentWeek("all");
-  }, [companyId, currentSeason]);
+    const key = `${companyId ?? ""}:${currentSeason ?? ""}`;
+    if (routeWeekInitKeyRef.current === key) return;
+    routeWeekInitKeyRef.current = key;
+    const week = attendanceEnrollmentWeek(enrollmentWeekCalendar, overrideDate, null) ?? 1;
+    setRouteEnrollmentWeek(week);
+  }, [companyId, currentSeason, enrollmentWeekCalendar, overrideDate]);
 
   useEffect(() => {
     setAttendanceWeekOverride(null);
@@ -1945,32 +1951,59 @@ export default function Transport() {
     });
   }, []);
 
-  /** Wheel over bus column (incl. gaps between cards) scrolls the route list, not the page/map. */
+  /** Keep wheel on the bus list (native momentum scroll); block map zoom when list cannot scroll further. */
   const handleBusListWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     const root = busListScrollRef.current;
     if (!root) return;
 
     const nested = (e.target as HTMLElement).closest("[data-stop-list-scroll]");
-    if (nested instanceof HTMLElement && root.contains(nested)) {
+    if (nested instanceof HTMLElement && root.contains(nested) && nested !== root) {
       const { scrollTop, scrollHeight, clientHeight } = nested;
       const dy = e.deltaY;
-      if (dy > 0 && scrollTop + clientHeight < scrollHeight - 1) return;
-      if (dy < 0 && scrollTop > 0) return;
+      if (dy > 0 && scrollTop + clientHeight < scrollHeight - 1) {
+        e.stopPropagation();
+        return;
+      }
+      if (dy < 0 && scrollTop > 0) {
+        e.stopPropagation();
+        return;
+      }
     }
 
-    const next = root.scrollTop + e.deltaY;
-    const max = root.scrollHeight - root.clientHeight;
-    if (max <= 0) return;
+    const { scrollTop, scrollHeight, clientHeight } = root;
+    const max = scrollHeight - clientHeight;
+    if (max <= 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
 
-    root.scrollTop = Math.max(0, Math.min(max, next));
-    e.preventDefault();
+    const dy = e.deltaY;
+    const atTop = scrollTop <= 0;
+    const atBottom = scrollTop + clientHeight >= scrollHeight - 1;
+
+    if ((dy < 0 && atTop) || (dy > 0 && atBottom)) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
     e.stopPropagation();
   }, []);
 
   const parentTransportForWeek = useMemo(() => {
-    if (activeRouteEnrollmentWeek == null) return parentTransportCampers;
+    if (activeRouteEnrollmentWeek == null) {
+      return parentTransportCampers.filter((c) =>
+        camperHasAnyEnrollmentWeek(camperEnrollmentLookup, c.name, c.session),
+      );
+    }
     return parentTransportCampers.filter((c) =>
-      camperEnrolledInWeekByLookup(camperEnrollmentLookup, c.name, activeRouteEnrollmentWeek),
+      camperEnrolledInWeekByLookup(
+        camperEnrollmentLookup,
+        c.name,
+        activeRouteEnrollmentWeek,
+        c.session,
+      ),
     );
   }, [parentTransportCampers, activeRouteEnrollmentWeek, camperEnrollmentLookup]);
 
@@ -4677,7 +4710,7 @@ export default function Transport() {
               )}
               <div
                 ref={busListScrollRef}
-                className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain scroll-smooth touch-pan-y"
+                className="scroll-pane-polished flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain touch-pan-y snap-y snap-proximity"
                 onWheel={handleBusListWheel}
               >
               <div className="sticky top-0 z-10 shrink-0 space-y-2 bg-background/95 pb-2 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80">
@@ -4733,7 +4766,7 @@ export default function Transport() {
                   Scroll here to move through buses · pin stops before ✨ Optimize
                 </p>
               </div>
-              <div className="min-h-0 flex-1 space-y-2 pr-1 pb-2">
+              <div className="min-h-0 flex-1 space-y-2.5 pr-0.5 pb-4 pt-0.5">
               {sidebarRoutesToRender.map(r => {
                 const isVisible = visibleRoutes.includes(r.id);
                 const isFocused = focusedSidebarRouteId === r.id;
@@ -4746,7 +4779,7 @@ export default function Transport() {
                   <Card
                     key={r.id}
                     id={`transport-bus-card-${r.id}`}
-                    className={`cursor-pointer transition-all shrink-0 ${
+                    className={`scroll-mt-2 snap-start cursor-pointer transition-[opacity,box-shadow,transform] duration-200 ease-out shrink-0 ${
                       isFocused
                         ? "ring-2 ring-primary shadow-md"
                         : isVisible
@@ -4842,7 +4875,7 @@ export default function Transport() {
                       {isVisible && (r.stops.length > 0 || ptOnRoute.length > 0) && (
                         <div
                           data-stop-list-scroll
-                          className={`mt-2 pl-6 border-l-2 space-y-1.5 overflow-y-auto overscroll-y-contain pr-1 ${
+                          className={`scroll-pane-polished mt-2 pl-6 border-l-2 space-y-1.5 overflow-y-auto overscroll-y-contain pr-0.5 ${
                             isFocused || visibleRoutes.length <= 1
                               ? "max-h-[min(40vh,420px)]"
                               : "max-h-[120px]"

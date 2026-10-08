@@ -1,4 +1,5 @@
 import { camperEnrolledInWeek } from "@/lib/enrollmentWeekCalendar";
+import { resolveEnrolledWeeks } from "@/lib/enrolledWeeks";
 import { normCamperName } from "@/lib/transportGroupAttendance";
 import { CAMP_LOCATION } from "@/lib/transportStopTimes";
 
@@ -61,15 +62,42 @@ export function camperEnrolledInWeekByLookup(
   if (info) {
     return camperEnrolledInWeek(info.enrolledWeeks, info.session, weekNumber);
   }
-  if (fallbackSession != null) {
+  if (fallbackSession != null && String(fallbackSession).trim()) {
     return camperEnrolledInWeek(undefined, fallbackSession, weekNumber);
   }
-  return true;
+  return false;
+}
+
+/** Camper has at least one enrollment week (session or enrolled_weeks). */
+export function camperHasAnyEnrollmentWeek(
+  lookup: Map<string, CamperEnrollmentInfo>,
+  camperName: string,
+  fallbackSession?: string | null,
+): boolean {
+  const info = lookup.get(normCamperName(camperName));
+  if (info) {
+    return resolveEnrolledWeeks(info.enrolledWeeks, info.session).length > 0;
+  }
+  if (fallbackSession != null && String(fallbackSession).trim()) {
+    return resolveEnrolledWeeks(undefined, fallbackSession).length > 0;
+  }
+  return false;
+}
+
+function filterStopRidersForView(
+  riders: string[],
+  weekNumber: number | null,
+  lookup: Map<string, CamperEnrollmentInfo>,
+): string[] {
+  if (weekNumber != null) {
+    return riders.filter((name) => camperEnrolledInWeekByLookup(lookup, name, weekNumber));
+  }
+  return riders.filter((name) => camperHasAnyEnrollmentWeek(lookup, name));
 }
 
 export function filterStopForEnrollmentWeek<T extends RouteStopLike>(
   stop: T,
-  weekNumber: number,
+  weekNumber: number | null,
   lookup: Map<string, CamperEnrollmentInfo>,
   campAddress: string = CAMP_LOCATION.address,
 ): T {
@@ -80,12 +108,29 @@ export function filterStopForEnrollmentWeek<T extends RouteStopLike>(
     return { ...stop, passengers: 0, camperNames: [] };
   }
 
-  const filtered = riders.filter((name) => camperEnrolledInWeekByLookup(lookup, name, weekNumber));
+  const filtered = filterStopRidersForView(riders, weekNumber, lookup);
   return {
     ...stop,
     camperNames: filtered,
     passengers: filtered.length,
   };
+}
+
+/** Drop passenger stops with no riders after enrollment filter (keeps camp). */
+export function pruneRouteStopsWithNoRiders<T extends RouteLike>(
+  routes: T[],
+  campAddress: string = CAMP_LOCATION.address,
+): T[] {
+  return routes.map((route) => {
+    const stops = route.stops.filter((s) => {
+      if (s.address === campAddress) return true;
+      return (s.passengers ?? 0) > 0 || (s.camperNames?.length ?? 0) > 0;
+    });
+    const campers = stops
+      .filter((s) => s.address !== campAddress)
+      .reduce((sum, s) => sum + (s.passengers || 0), 0);
+    return { ...route, stops, campers };
+  });
 }
 
 export function applyEnrollmentWeekToRoutes<T extends RouteLike>(
@@ -94,8 +139,7 @@ export function applyEnrollmentWeekToRoutes<T extends RouteLike>(
   lookup: Map<string, CamperEnrollmentInfo>,
   campAddress: string = CAMP_LOCATION.address,
 ): T[] {
-  if (weekNumber == null) return routes;
-  return routes.map((route) => {
+  const filtered = routes.map((route) => {
     const stops = route.stops.map((s) =>
       filterStopForEnrollmentWeek(s, weekNumber, lookup, campAddress),
     );
@@ -104,6 +148,7 @@ export function applyEnrollmentWeekToRoutes<T extends RouteLike>(
       .reduce((sum, s) => sum + (s.passengers || 0), 0);
     return { ...route, stops, campers };
   });
+  return pruneRouteStopsWithNoRiders(filtered, campAddress);
 }
 
 export function filterUnplottedForWeek<T extends { name: string; session?: string }>(
@@ -111,8 +156,10 @@ export function filterUnplottedForWeek<T extends { name: string; session?: strin
   weekNumber: number | null,
   lookup: Map<string, CamperEnrollmentInfo>,
 ): T[] {
-  if (weekNumber == null) return campers;
-  return campers.filter((c) =>
-    camperEnrolledInWeekByLookup(lookup, c.name, weekNumber, c.session),
-  );
+  if (weekNumber != null) {
+    return campers.filter((c) =>
+      camperEnrolledInWeekByLookup(lookup, c.name, weekNumber, c.session),
+    );
+  }
+  return campers.filter((c) => camperHasAnyEnrollmentWeek(lookup, c.name, c.session));
 }

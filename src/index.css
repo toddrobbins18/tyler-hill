@@ -435,3 +435,34 @@ All colors MUST be HSL.
 .leaflet-popup-tip-container {
   z-index: 900;
 }
+
+@layer utilities {
+  /* Smooth native scroll + thin scrollbar (Transport bus cards, stop lists). */
+  .scroll-pane-polished {
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.32) transparent;
+  }
+
+  .scroll-pane-polished::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+  }
+
+  .scroll-pane-polished::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scroll-pane-polished::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.28);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .scroll-pane-polished:hover::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.42);
+  }
+}
