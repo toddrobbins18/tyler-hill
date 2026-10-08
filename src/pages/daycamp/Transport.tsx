@@ -2695,14 +2695,13 @@ export default function Transport() {
         supabase,
         companyId!,
         currentSeason,
-        {
+        buildBoardPayload({
           coreStops: templateStops,
           routeMeta: templateMeta,
-          unplottedCampers,
           routesConfigured: true,
           routesSeason: currentSeason,
           routesSource: "mappoint2026",
-        },
+        }),
       );
 
       const fastPayload: BoardPayload = buildBoardPayload({
@@ -5332,7 +5331,7 @@ export default function Transport() {
               <CardContent className="p-8 text-center text-sm text-muted-foreground">
                 {parentTransportCampers.length === 0
                   ? "No parent transport campers yet."
-                  : "No parent transport campers for this enrollment week."}
+                  : `${parentTransportCampers.length} saved on this board, but none match the selected enrollment week. Try “All weeks” in the route week filter, or confirm enrollment weeks synced from CampMinder.`}
               </CardContent>
             </Card>
           ) : (

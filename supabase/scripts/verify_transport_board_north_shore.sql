@@ -29,7 +29,24 @@ SELECT
   (SELECT COUNT(DISTINCT bus_id) FROM stops) AS buses_with_stops,
   (SELECT COUNT(*) FROM stops) AS total_stops,
   (SELECT COALESCE(SUM((stop->>'passengers')::int), 0) FROM stops) AS total_campers_on_routes,
-  (SELECT jsonb_array_length(COALESCE(data->'unplottedCampers', '[]'::jsonb)) FROM board) AS unplotted_campers;
+  (SELECT jsonb_array_length(COALESCE(data->'unplottedCampers', '[]'::jsonb)) FROM board) AS unplotted_campers,
+  (SELECT jsonb_array_length(COALESCE(data->'parentTransportCampers', '[]'::jsonb)) FROM board) AS parent_transport_campers;
+
+-- 3b) Parent transport list (PT tab data — not deleted unless this array is empty)
+SELECT
+  t.season,
+  t.updated_at,
+  pt.elem->>'name' AS camper_name,
+  pt.elem->>'childId' AS child_id,
+  pt.elem->>'routeId' AS route_id,
+  pt.elem->>'am' AS am,
+  pt.elem->>'pm' AS pm,
+  pt.elem->'weekdays' AS weekdays,
+  pt.elem->>'notes' AS notes
+FROM public.transport_boards t
+CROSS JOIN LATERAL jsonb_array_elements(COALESCE(t.data->'parentTransportCampers', '[]'::jsonb)) pt(elem)
+WHERE t.company_id = '0d98861f-d956-4bfb-b273-851b3ae56d5c'
+ORDER BY t.season, pt.elem->>'name';
 
 -- 4) Per-bus stop counts (MapPoint working → many buses with stops > 0)
 SELECT
