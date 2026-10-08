@@ -18,6 +18,8 @@ import {
 } from "@/lib/parentPortalTheme";
 import { cn } from "@/lib/utils";
 import { AppStoreDownloadBadge } from "@/components/parentPortal/AppStoreDownloadBadge";
+import { NestSandboxParentFlowGuide } from "@/components/parentPortal/NestSandboxParentFlowGuide";
+import { isNestSandboxParentTraining } from "@/lib/nestSandboxParentDemo";
 
 export default function ParentAuth() {
   const navigate = useNavigate();
@@ -136,6 +138,7 @@ export default function ParentAuth() {
   }
 
   const isStaffPreview = userIsCampStaff(userRoles);
+  const sandboxTraining = isNestSandboxParentTraining(companySlug);
   const heroImageUrl = resolveParentPortalHeroImageUrl(companySlug);
   const hasPhotoBg = Boolean(heroImageUrl?.trim());
 
@@ -184,6 +187,16 @@ export default function ParentAuth() {
         <div className="pointer-events-none absolute inset-0">
           <div className="pp-accent-blur-a absolute -right-20 top-0 h-72 w-72 rounded-full blur-3xl" />
           <div className="pp-accent-blur-b absolute bottom-0 left-0 h-64 w-64 rounded-full blur-3xl" />
+        </div>
+      ) : null}
+
+      {sandboxTraining && companyId && companySlug ? (
+        <div className="relative z-20 mx-auto max-w-6xl px-4 pt-6 lg:px-8">
+          <NestSandboxParentFlowGuide
+            companyId={companyId}
+            companySlug={companySlug}
+            staffSignedIn={isStaffPreview}
+          />
         </div>
       ) : null}
 

@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { isDayCampCompany } from "@/lib/camps";
+import { isDayCampCompany, isNestSandboxCompany } from "@/lib/camps";
 import {
   getDayCampMainMenuItems,
   getDayCampMenuPocItemsSorted,
@@ -50,7 +50,13 @@ export function AppSidebar() {
     availableCompanies,
     switchCompany,
     loading: companyLoading,
+    sandboxMode,
   } = useCompany();
+
+  const companiesForCampSwitcher = useMemo(
+    () => availableCompanies.filter((c) => !isNestSandboxCompany(c.slug)),
+    [availableCompanies],
+  );
 
   const isDayCamp = isDayCampCompany(currentCompany);
 
@@ -98,10 +104,12 @@ export function AppSidebar() {
     return adminMenuItems.some((item) => hasPagePermission(currentCompany.id, item));
   }, [currentCompany?.id, isSuperAdmin, hasPagePermission]);
 
-  const showCampSwitcher = availableCompanies.length > 1;
+  const showCampSwitcher = !sandboxMode && companiesForCampSwitcher.length > 1;
 
   const handleLogout = async () => {
     sessionStorage.removeItem('viewing_company_id');
+    sessionStorage.removeItem('nest_sandbox_mode');
+    sessionStorage.removeItem('nest_sandbox_return_company_id');
     try {
       await supabase.auth.signOut();
       toast.success("Logged out successfully");
@@ -135,7 +143,7 @@ export function AppSidebar() {
                 <PopoverContent className="w-60 bg-popover text-popover-foreground border z-50" side="right">
                   <div className="space-y-2">
                     <p className="text-sm font-medium mb-2">Switch Company</p>
-                    {availableCompanies.map(company => (
+                    {companiesForCampSwitcher.map(company => (
                       <button
                         key={company.id}
                         onClick={() => switchCompany(company.id)}
@@ -164,7 +172,7 @@ export function AppSidebar() {
                   <SelectValue placeholder="Select company..." />
                 </SelectTrigger>
                 <SelectContent className="bg-popover text-popover-foreground border z-50">
-                  {availableCompanies.map(company => (
+                  {companiesForCampSwitcher.map(company => (
                     <SelectItem 
                       key={company.id} 
                       value={company.id}

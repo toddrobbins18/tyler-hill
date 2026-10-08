@@ -25,6 +25,7 @@ import {
   loadRouteReferenceImport,
   normCamperNameKey,
 } from "@/lib/routeReferenceWarehouse";
+import { fetchCompanySlug, isSandboxTransportSlug } from "@/lib/nestSandboxTransport";
 import {
   consolidateRouteStopsByAddress,
   riderNamesFromStop,
@@ -597,6 +598,11 @@ export async function loadHistoricalAddressHints(
   companyId: string,
   referenceSeason = "2026",
 ): Promise<Map<string, AddressHint>> {
+  const slug = await fetchCompanySlug(supabase, companyId);
+  if (isSandboxTransportSlug(slug)) {
+    return new Map();
+  }
+
   const bundled = buildMappoint2026AddressHints();
   const importRecord = await loadRouteReferenceImport(supabase, companyId, referenceSeason);
   if (!importRecord) return bundled;

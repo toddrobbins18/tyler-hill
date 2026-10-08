@@ -108,6 +108,7 @@ import {
   collectTransportAddressesNeedingGeocode,
   fixBoardAddressesFromEnrollment,
   loadEnrolledCampersForTransport,
+  loadStopsOnlyTemplateFromSeason,
   normalizeTransportBoardForSeason,
   prepareBoardForPersist,
   type TransportRoutesSource,
@@ -138,6 +139,8 @@ import {
 import { optimizeStopsFromFirstStop, optimizeStopsWithPinned } from "@/lib/transportRouteOptimize";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
+import { campminderIntegrationEnabled, isNestSandboxCompany } from "@/lib/camps";
+import { SANDBOX_TRANSPORT_BOARD_SEASON } from "@/lib/nestSandboxTransport";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link, useSearchParams } from "react-router-dom";
@@ -578,6 +581,8 @@ export default function Transport() {
   const { currentSeason } = useSeason();
   const [searchParams, setSearchParams] = useSearchParams();
   const companyId = currentCompany?.id;
+  const campMinderTransportToolsEnabled = campminderIntegrationEnabled(currentCompany);
+  const sandboxTransport = isNestSandboxCompany(currentCompany?.slug);
 
   const tabParam = searchParams.get("tab");
   const activeTransportTab: TransportTab = isTransportTab(tabParam) ? tabParam : "map";
@@ -2698,21 +2703,51 @@ export default function Transport() {
   );
 
   const handleApplyRouteTemplate = async () => {
+    if (!companyId) return;
     setApplyingTemplate(true);
     try {
-      const { coreStops: templateStops, routeMeta: templateMeta } =
-        build2026MappointRouteTemplate(ROUTE_COLORS);
+      let templateStops: BoardPayload["coreStops"];
+      let templateMeta: BoardPayload["routeMeta"];
+      let routesSource: TransportRoutesSource = "manual";
+      let templateDescription: string;
+
+      if (sandboxTransport) {
+        const fromSeed = await loadStopsOnlyTemplateFromSeason(
+          supabase,
+          companyId,
+          SANDBOX_TRANSPORT_BOARD_SEASON,
+          ROUTE_COLORS,
+        );
+        if (!fromSeed?.routeMeta.length) {
+          toast({
+            title: "Sandbox routes not seeded",
+            description:
+              "Run seed_nest_sandbox_demo_data.sql in Supabase — it loads 4 demo buses for the training camp only (not North Shore MapPoint).",
+            variant: "destructive",
+          });
+          return;
+        }
+        templateStops = fromSeed.coreStops;
+        templateMeta = fromSeed.routeMeta;
+        templateDescription = `${templateMeta.length} demo buses restored from sandbox seed (stops only). MapPoint / North Shore templates are disabled here.`;
+      } else {
+        const mappoint = build2026MappointRouteTemplate(ROUTE_COLORS);
+        templateStops = mappoint.coreStops;
+        templateMeta = mappoint.routeMeta;
+        routesSource = "mappoint2026";
+        templateDescription = `${templateMeta.length} buses loaded (stops only). Click "Place Using Prior Routes" when you want returning campers assigned.`;
+      }
 
       const normalized = await normalizeTransportBoardForSeason(
         supabase,
-        companyId!,
+        companyId,
         currentSeason,
         buildBoardPayload({
           coreStops: templateStops,
           routeMeta: templateMeta,
           routesConfigured: true,
           routesSeason: currentSeason,
-          routesSource: "mappoint2026",
+          routesSource,
         }),
       );
 
@@ -2723,7 +2758,7 @@ export default function Transport() {
         parentTransportCampers: normalized.parentTransportCampers,
         routesConfigured: true,
         routesSeason: currentSeason,
-        routesSource: "mappoint2026",
+        routesSource,
       });
 
       await persistBoard(fastPayload);
@@ -2731,8 +2766,8 @@ export default function Transport() {
       void refreshReferenceStatus();
 
       toast({
-        title: "Route template applied",
-        description: `${templateMeta.length} buses loaded (stops only). Click "Place Using Prior Routes" when you want returning campers assigned.`,
+        title: sandboxTransport ? "Sandbox demo routes restored" : "Route template applied",
+        description: templateDescription,
       });
     } catch (e: unknown) {
       toast({
@@ -2794,6 +2829,14 @@ export default function Transport() {
   // geocoder so stale/incorrect coordinates get corrected.
   const handleFixAddressesFromEnrollment = async () => {
     if (!companyId) return;
+    if (!campMinderTransportToolsEnabled) {
+      toast({
+        title: "CampMinder disabled",
+        description: "Training sandbox uses demo addresses only — not live CampMinder enrollment.",
+        variant: "destructive",
+      });
+      return;
+    }
     setFixingAddresses(true);
     let fixLogSteps: OperationStep[] = [
       {
@@ -4225,20 +4268,36 @@ export default function Transport() {
             className="gap-2"
             onClick={handleApplyRouteTemplate}
             disabled={applyingTemplate}
-            title="Load starter bus routes (stops only, no campers)"
+            title={
+              sandboxTransport
+                ? "Restore 4 demo buses from sandbox seed — never North Shore MapPoint"
+                : "Load starter bus routes (stops only, no campers)"
+            }
           >
             <LayoutTemplate className={`h-4 w-4 ${applyingTemplate ? "animate-pulse" : ""}`} />
-            {applyingTemplate ? "Applying template…" : "Apply Route Template"}
+            {applyingTemplate
+              ? "Applying template…"
+              : sandboxTransport
+                ? "Reset sandbox routes (4 buses)"
+                : "Apply Route Template"}
           </Button>
           <Button
             variant="outline"
             className="gap-2"
             onClick={handleApplyHistoricalAssignments}
             disabled={applyingHistorical || unplottedCampers.length === 0}
-            title="Place unplotted campers on buses from learned routing history"
+            title={
+              sandboxTransport
+                ? "Place demo campers using this camp's own saved routes only (no MapPoint priors)"
+                : "Place unplotted campers on buses from learned routing history"
+            }
           >
             <History className={`h-4 w-4 ${applyingHistorical ? "animate-pulse" : ""}`} />
-            {applyingHistorical ? "Placing from prior routes…" : "Place Using Prior Routes"}
+            {applyingHistorical
+              ? "Placing from prior routes…"
+              : sandboxTransport
+                ? "Place demo campers on routes"
+                : "Place Using Prior Routes"}
           </Button>
           {currentSeason !== "2026" && routesConfigured && !routesDraftMode && (
             <Button
@@ -4296,16 +4355,18 @@ export default function Transport() {
           <Button variant="outline" className="gap-2" onClick={() => setAddCamperOpen(true)}>
             <UserPlus className="h-4 w-4" /> Add Camper
           </Button>
-          <Button
-            variant="outline"
-            className="gap-2 border-emerald-600/50 bg-emerald-50 text-emerald-950 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-100"
-            onClick={() => void handleFixAddressesFromEnrollment()}
-            disabled={fixingAddresses || regeocoding}
-            title="Replace wrong route pins with home_address from CampMinder enrollment, then geocode"
-          >
-            <MapPin className={`h-4 w-4 ${fixingAddresses ? "animate-pulse" : ""}`} />
-            {fixingAddresses ? "Fixing addresses…" : "Fix Addresses from CampMinder"}
-          </Button>
+          {campMinderTransportToolsEnabled ? (
+            <Button
+              variant="outline"
+              className="gap-2 border-emerald-600/50 bg-emerald-50 text-emerald-950 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-100"
+              onClick={() => void handleFixAddressesFromEnrollment()}
+              disabled={fixingAddresses || regeocoding}
+              title="Replace wrong route pins with home_address from CampMinder enrollment, then geocode"
+            >
+              <MapPin className={`h-4 w-4 ${fixingAddresses ? "animate-pulse" : ""}`} />
+              {fixingAddresses ? "Fixing addresses…" : "Fix Addresses from CampMinder"}
+            </Button>
+          ) : null}
           <Button
             variant="outline"
             className="gap-2"

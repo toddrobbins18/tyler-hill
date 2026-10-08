@@ -4,7 +4,14 @@ import { useToast } from '@/hooks/use-toast';
 import { applyThemeColor } from '@/utils/themeUtils';
 import { useAuth } from './AuthContext';
 import { invalidateCampScopedQueries } from '@/lib/queryClient';
-import { COMPANY_BOOTSTRAP_VERSION, DEFAULT_COMPANY_SLUG } from '@/lib/camps';
+import { COMPANY_BOOTSTRAP_VERSION, DEFAULT_COMPANY_SLUG, isNestSandboxCompany } from '@/lib/camps';
+import {
+  isNestSandboxModeActive,
+  readReturnCompanyId,
+  SANDBOX_COMPANY_SLUG,
+  setNestSandboxModeActive,
+  stashReturnCompanyId,
+} from '@/lib/nestSandboxMode';
 
 const COMPANY_BOOTSTRAP_KEY = 'companyBootstrapVersion';
 /** Set on SIGNED_IN so the next load picks North Shore + 2027; not set on tab refresh. */
@@ -29,6 +36,9 @@ interface CompanyContextType {
   loading: boolean;
   isSuperAdmin: boolean;
   refetchCompanies: () => Promise<void>;
+  sandboxMode: boolean;
+  enterSandboxCamp: () => Promise<void>;
+  exitSandboxCamp: () => Promise<void>;
 }
 
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
@@ -38,6 +48,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   const [currentCompany, setCurrentCompany] = useState<Company | null>(null);
   const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sandboxMode, setSandboxMode] = useState(() => isNestSandboxModeActive());
   const { toast } = useToast();
 
   // Track if initial load has happened to prevent re-setting company on token refresh
@@ -61,6 +72,8 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       hasInitializedRef.current = false;
       sessionStorage.removeItem('viewing_company_id');
       sessionStorage.removeItem(LOGIN_DEFAULTS_KEY);
+      setNestSandboxModeActive(false);
+      setSandboxMode(false);
     }
   }, [authLoading, user?.id]);
 
@@ -82,6 +95,8 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         hasInitializedRef.current = false;
         sessionStorage.removeItem('viewing_company_id');
         sessionStorage.removeItem(LOGIN_DEFAULTS_KEY);
+        setNestSandboxModeActive(false);
+        setSandboxMode(false);
       }
     });
 
@@ -157,6 +172,11 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         return profile.companies as Company;
       }
       return null;
+    }
+
+    if (isNestSandboxModeActive()) {
+      const sandbox = companies.find((c) => c.slug === SANDBOX_COMPANY_SLUG);
+      if (sandbox) return sandbox;
     }
 
     if (applyLoginDefaults) {
@@ -267,6 +287,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
       const targetCompany = pickTargetCompany(companies, profile, applyLoginDefaults);
       applyTargetCompany(targetCompany);
+      setSandboxMode(isNestSandboxModeActive());
       hasInitializedRef.current = true;
     } catch (error) {
       console.error('Error loading company data:', error);
@@ -282,6 +303,46 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
   const refetchCompanies = async () => {
     await loadCompanyData({ force: true, refreshListOnly: true });
+  };
+
+  const enterSandboxCamp = async () => {
+    const sandbox = availableCompanies.find((c) => c.slug === SANDBOX_COMPANY_SLUG);
+    if (!sandbox) {
+      toast({
+        title: "Sandbox not set up",
+        description:
+          "Run supabase/scripts/setup_nest_sandbox_day_camp.sql in Supabase, then refresh.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (currentCompanyRef.current?.id && !isNestSandboxCompany(currentCompanyRef.current.slug)) {
+      stashReturnCompanyId(currentCompanyRef.current.id);
+    }
+    setNestSandboxModeActive(true);
+    setSandboxMode(true);
+    await switchCompany(sandbox.id);
+  };
+
+  const exitSandboxCamp = async () => {
+    const returnId = readReturnCompanyId();
+    setNestSandboxModeActive(false);
+    setSandboxMode(false);
+    const fallback =
+      availableCompanies.find((c) => c.slug === DEFAULT_COMPANY_SLUG) ??
+      availableCompanies.find((c) => !isNestSandboxCompany(c.slug)) ??
+      null;
+    const targetId =
+      returnId && availableCompanies.some((c) => c.id === returnId)
+        ? returnId
+        : fallback?.id;
+    if (targetId) {
+      await switchCompany(targetId);
+    }
+    toast({
+      title: "Left training sandbox",
+      description: fallback ? `Back to ${fallback.name}` : "Sandbox closed",
+    });
   };
 
   const switchCompany = async (companyId: string) => {
@@ -349,6 +410,9 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         loading: loading || authLoading,
         isSuperAdmin: authIsSuperAdmin,
         refetchCompanies,
+        sandboxMode,
+        enterSandboxCamp,
+        exitSandboxCamp,
       }}
     >
       {children}

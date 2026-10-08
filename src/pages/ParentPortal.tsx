@@ -29,6 +29,8 @@ import { linkFamilyChildrenByGuardianEmail } from "@/lib/parentFamilyLink";
 import { fetchPublishedCampUpdate } from "@/lib/parentPortalCampUpdates";
 import { resolveParentPortalHeroImageUrl } from "@/lib/parentPortalTheme";
 import type { CampAnnouncementContent } from "@/components/parentPortal/CampAnnouncement";
+import { ParentPortalSandboxStaffPreview } from "@/components/parentPortal/ParentPortalSandboxStaffPreview";
+import { isNestSandboxParentTraining } from "@/lib/nestSandboxParentDemo";
 
 function ParentPortalSkeleton({
   rootRef,
@@ -188,6 +190,21 @@ export default function ParentPortal() {
     const q = companySlug ? `?company=${encodeURIComponent(companySlug)}` : "";
     navigate(`/parents${q}`);
   };
+
+  const sandboxTraining = isNestSandboxParentTraining(companySlug);
+  const isCampStaff = userIsCampStaff(userRoles);
+
+  if (sandboxTraining && isCampStaff && companyId && companySlug) {
+    return (
+      <ParentPortalSandboxStaffPreview
+        companyId={companyId}
+        companySlug={companySlug}
+        companyName={companyName}
+        themeColor={themeColor}
+        onSignOut={() => void handleSignOut()}
+      />
+    );
+  }
 
   if (loading) {
     return <ParentPortalSkeleton rootRef={themeRootRef} />;

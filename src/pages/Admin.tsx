@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Shield, Users, Database, FileText, Tag, Mail, Building2, Upload, Download, Activity } from "lucide-react";
 import OperationsDashboard from "@/components/admin/OperationsDashboard";
@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCompany } from "@/contexts/CompanyContext";
+import { isNestSandboxCompany } from "@/lib/camps";
 import UserRoleManagement from "@/components/admin/UserRoleManagement";
 import DataManagement from "@/components/admin/DataManagement";
 import AuditLog from "@/components/admin/AuditLog";
@@ -32,16 +33,36 @@ const ADMIN_TABS = [
 
 type AdminTab = (typeof ADMIN_TABS)[number];
 
+const SANDBOX_BLOCKED_ADMIN_TABS: AdminTab[] = ["companies", "data", "email-config"];
+
 export default function Admin() {
   const { isSuperAdmin } = usePermissions();
-  const { currentCompany } = useCompany();
+  const { currentCompany, sandboxMode } = useCompany();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  const inTrainingSandbox =
+    sandboxMode || isNestSandboxCompany(currentCompany?.slug);
 
   const activeTab = useMemo(() => {
     const tab = searchParams.get("tab");
-    if (tab && ADMIN_TABS.includes(tab as AdminTab)) return tab as AdminTab;
-    return "operations";
-  }, [searchParams]);
+    const resolved =
+      tab && ADMIN_TABS.includes(tab as AdminTab) ? (tab as AdminTab) : "operations";
+    if (inTrainingSandbox && SANDBOX_BLOCKED_ADMIN_TABS.includes(resolved)) {
+      return "operations";
+    }
+    return resolved;
+  }, [searchParams, inTrainingSandbox]);
+
+  useEffect(() => {
+    if (!inTrainingSandbox) return;
+    if (SANDBOX_BLOCKED_ADMIN_TABS.includes(activeTab)) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("tab");
+        return next;
+      });
+    }
+  }, [inTrainingSandbox, activeTab, setSearchParams]);
 
   const setActiveTab = (tab: string) => {
     setSearchParams((prev) => {
@@ -77,7 +98,9 @@ export default function Admin() {
                 )}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                You have full administrative access across all companies
+                {inTrainingSandbox
+                  ? "Training sandbox — cross-camp settings (Companies, live email config, bulk data tools) are off. Exit sandbox on the dashboard for production admin."
+                  : "You have full administrative access across all companies"}
               </p>
             </div>
           </div>
@@ -85,7 +108,11 @@ export default function Admin() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className={`grid w-full ${isSuperAdmin ? 'grid-cols-10' : 'grid-cols-7'} lg:w-auto`}>
+        <TabsList
+          className={`grid w-full ${
+            isSuperAdmin && !inTrainingSandbox ? "grid-cols-10" : "grid-cols-7"
+          } lg:w-auto`}
+        >
           <TabsTrigger value="operations" className="gap-2">
             <Activity className="h-4 w-4" />
             Operations
@@ -102,19 +129,19 @@ export default function Admin() {
             <Mail className="h-4 w-4" />
             Email Automation
           </TabsTrigger>
-          {isSuperAdmin && (
+          {isSuperAdmin && !inTrainingSandbox && (
             <TabsTrigger value="email-config" className="gap-2">
               <Mail className="h-4 w-4" />
               Email Config
             </TabsTrigger>
           )}
-          {isSuperAdmin && (
+          {isSuperAdmin && !inTrainingSandbox && (
             <TabsTrigger value="companies" className="gap-2">
               <Building2 className="h-4 w-4" />
               Companies
             </TabsTrigger>
           )}
-          {isSuperAdmin && (
+          {isSuperAdmin && !inTrainingSandbox && (
             <TabsTrigger value="data" className="gap-2">
               <Database className="h-4 w-4" />
               Data Management
@@ -150,19 +177,19 @@ export default function Admin() {
           <AutomatedEmailConfig />
         </TabsContent>
 
-        {isSuperAdmin && (
+        {isSuperAdmin && !inTrainingSandbox && (
           <TabsContent value="email-config" className="space-y-6">
             <CompanyEmailConfig />
           </TabsContent>
         )}
 
-        {isSuperAdmin && (
+        {isSuperAdmin && !inTrainingSandbox && (
           <TabsContent value="companies" className="space-y-6">
             <CompanyManagement />
           </TabsContent>
         )}
 
-        {isSuperAdmin && (
+        {isSuperAdmin && !inTrainingSandbox && (
           <TabsContent value="data" className="space-y-6">
             <DataManagement />
           </TabsContent>

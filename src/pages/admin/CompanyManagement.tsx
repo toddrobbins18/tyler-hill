@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { useToast } from "@/hooks/use-toast";
 import { Building2, Upload, Pencil, Users, Link, Loader2, CheckCircle, XCircle } from "lucide-react";
 import { useCompany } from "@/contexts/CompanyContext";
+import { isNestSandboxCompany } from "@/lib/camps";
 import { Separator } from "@/components/ui/separator";
 
 interface Company {
@@ -49,11 +50,17 @@ export default function CompanyManagement() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   
   const { toast } = useToast();
-  const { refetchCompanies } = useCompany();
+  const { refetchCompanies, sandboxMode, currentCompany } = useCompany();
+  const inTrainingSandbox =
+    sandboxMode || isNestSandboxCompany(currentCompany?.slug);
 
   useEffect(() => {
+    if (inTrainingSandbox) {
+      setLoading(false);
+      return;
+    }
     fetchCompanies();
-  }, []);
+  }, [inTrainingSandbox]);
 
   // Reset CampMinder state when editing company changes
   useEffect(() => {
@@ -217,11 +224,17 @@ export default function CompanyManagement() {
         theme_color: editingCompany.theme_color,
         logo_url: logoUrl,
         is_active: editingCompany.is_active,
-        campminder_sync_enabled: editingCompany.campminder_sync_enabled,
+        campminder_sync_enabled: isNestSandboxCompany(editingCompany.slug)
+          ? false
+          : editingCompany.campminder_sync_enabled,
       };
 
       // If CampMinder credentials are provided, encrypt and store them
-      if (campminderApiKey && campminderSubscriptionKey) {
+      if (
+        !isNestSandboxCompany(editingCompany.slug) &&
+        campminderApiKey &&
+        campminderSubscriptionKey
+      ) {
         // Encrypt API key
         const { data: encryptedApiKey, error: apiKeyError } = await supabase
           .rpc('encrypt_secret', { secret: campminderApiKey });
@@ -336,6 +349,26 @@ export default function CompanyManagement() {
       setTestingConnection(false);
     }
   };
+
+  if (inTrainingSandbox) {
+    return (
+      <Card className="border-dashed">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Building2 className="h-5 w-5" />
+            Company Management
+          </CardTitle>
+          <CardDescription>
+            Not available in the training sandbox — no live camps or CampMinder credentials here.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          Exit sandbox from the dashboard, then open Admin → Companies to manage North Shore, Tyler Hill, and other
+          production camps.
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (loading) {
     return (
@@ -501,7 +534,7 @@ export default function CompanyManagement() {
                           <span>{companyStats[company.id]?.children || 0} children</span>
                           <span>{companyStats[company.id]?.staff || 0} staff</span>
                         </div>
-                        {company.campminder_sync_enabled && (
+                        {company.campminder_sync_enabled && !isNestSandboxCompany(company.slug) && (
                           <div className="flex items-center gap-1 mt-1 text-xs text-green-600">
                             <Link className="h-3 w-3" />
                             CampMinder Connected
@@ -596,6 +629,11 @@ export default function CompanyManagement() {
                             <Separator className="my-4" />
                             
                             {/* CampMinder Integration Section */}
+                            {isNestSandboxCompany(editingCompany?.slug) ? (
+                              <p className="text-sm text-muted-foreground rounded-md border border-dashed p-3">
+                                CampMinder is not used for the training sandbox. Use seeded demo data instead.
+                              </p>
+                            ) : (
                             <div className="space-y-4">
                               <div className="flex items-center gap-2">
                                 <Link className="h-4 w-4" />
@@ -676,6 +714,7 @@ export default function CompanyManagement() {
                                 </p>
                               )}
                             </div>
+                            )}
                             
                             <Separator className="my-4" />
                             

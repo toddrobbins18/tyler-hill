@@ -29,6 +29,7 @@ import {
   parseBirthdayCalendarParts,
 } from "@/lib/birthdayCalendar";
 import { isTimberLakeCamp, isTimberLakeWestCompany, isTylerHillCamp, isDayCampCompany, shouldShowTigerTimes } from "@/lib/camps";
+import { NestSandboxDashboardCard } from "@/components/dashboard/NestSandboxDashboardCard";
 import { formatTime12Hour } from "@/lib/utils";
 import { dedupeMenuItemsForDisplay } from "@/lib/csvRosterSync";
 import {
@@ -613,6 +614,8 @@ export default function Dashboard() {
           <p className={`text-sm font-semibold ${hasDashboardAerialBg ? "text-white" : "text-foreground"}`}>{formattedTime}</p>
         </div>
       </div>
+
+      {isDayCamp && <NestSandboxDashboardCard />}
 
       {!showTigerTimes && !isTylerHill && !isTimberLakeWest && (
         <div className={`grid gap-6 md:grid-cols-2 ${isDayCamp ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}>

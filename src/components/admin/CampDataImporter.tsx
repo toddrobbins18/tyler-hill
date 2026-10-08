@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { DEFAULT_SEASON } from "@/lib/seasonConstants";
 import { useSeasonContext } from "@/contexts/SeasonContext";
-import { isNorthShoreDayCamp } from "@/lib/camps";
+import { campminderIntegrationEnabled, isNestSandboxCompany, isNorthShoreDayCamp } from "@/lib/camps";
 import OperationLivePanel from "@/components/admin/OperationLivePanel";
 import { useSyncJobMonitor } from "@/hooks/useSyncJobMonitor";
 import { syncJobTitle, type OperationStep } from "@/lib/operationLiveLog";
@@ -138,7 +138,7 @@ export default function CampDataImporter() {
 
       const { data, error } = await query;
       if (error) throw error;
-      setCompanies(data || []);
+      setCompanies((data || []).filter((c) => !isNestSandboxCompany(c.slug)));
     } catch (error: any) {
       console.error('Error fetching companies:', error);
       toast.error('Failed to load companies');
@@ -249,6 +249,11 @@ export default function CampDataImporter() {
     companyName: string,
     syncType: CampMinderSyncKind = 'full',
   ) => {
+    const target = companies.find((c) => c.id === companyId);
+    if (target && !campminderIntegrationEnabled(target)) {
+      toast.error("CampMinder is disabled for the training sandbox.");
+      return;
+    }
     setActiveSync({ companyId, kind: syncType });
     setSyncResults(prev => ({ ...prev, [companyId]: {} }));
     syncFinishedRef.current = false;
@@ -511,7 +516,16 @@ export default function CampDataImporter() {
           {campMinderLiveLogPanel}
         </div>
       ) : null}
-      {/* CampMinder Sync Section */}
+      {/* CampMinder Sync Section — not available in training sandbox */}
+      {isNestSandboxCompany(currentCompany?.slug) ? (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Training sandbox</strong> uses dummy data only. CampMinder sync, parent-email backfill, and
+            live imports are disabled here. Exit sandbox on the dashboard to manage real camps.
+          </AlertDescription>
+        </Alert>
+      ) : (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -702,10 +716,19 @@ export default function CampDataImporter() {
           )}
         </CardContent>
       </Card>
+      )}
 
       <Separator />
 
       {/* Manual JSON Import Section */}
+      {isNestSandboxCompany(currentCompany?.slug) ? (
+        <Alert variant="default">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Manual JSON import is off in the training sandbox so live camper files are not mixed with demo data.
+          </AlertDescription>
+        </Alert>
+      ) : (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -905,6 +928,7 @@ export default function CampDataImporter() {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Important Notes */}
       <Alert>
@@ -912,11 +936,19 @@ export default function CampDataImporter() {
         <AlertDescription>
           <p className="font-medium mb-2">Important Notes:</p>
           <ul className="text-sm list-disc list-inside space-y-1">
-            <li>CampMinder sync (Eastern): addresses 4 AM, enrollment weeks 5 AM, campers 6 AM/PM, staff 7 AM/PM, Owl Pay 8 AM/PM</li>
-            <li>The import process uses person_id to link historical data across seasons</li>
-            <li>When a camper returns in future seasons with the same person_id, all their historical awards will be visible</li>
-            <li>Duplicate person_ids within the same season will be skipped</li>
-            <li>Award dates reflect the original year earned</li>
+            {!isNestSandboxCompany(currentCompany?.slug) ? (
+              <li>CampMinder sync (Eastern): addresses 4 AM, enrollment weeks 5 AM, campers 6 AM/PM, staff 7 AM/PM, Owl Pay 8 AM/PM</li>
+            ) : null}
+            {!isNestSandboxCompany(currentCompany?.slug) ? (
+              <>
+                <li>The import process uses person_id to link historical data across seasons</li>
+                <li>When a camper returns in future seasons with the same person_id, all their historical awards will be visible</li>
+                <li>Duplicate person_ids within the same season will be skipped</li>
+                <li>Award dates reflect the original year earned</li>
+              </>
+            ) : (
+              <li>Use demo campers from the sandbox seed — live JSON import stays off here.</li>
+            )}
           </ul>
         </AlertDescription>
       </Alert>

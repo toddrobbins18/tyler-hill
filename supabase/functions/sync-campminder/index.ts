@@ -3861,7 +3861,19 @@ serve(async (req: Request) => {
       owlPayConfig: OwlPayConfig;
     }> = [];
 
+    const SANDBOX_COMPANY_SLUG = 'nest-sandbox-day-camp';
+
     for (const company of companies) {
+      if (company.slug === SANDBOX_COMPANY_SLUG) {
+        console.log(`Skipping training sandbox company: ${company.name}`);
+        results.push({
+          company: company.name,
+          status: 'skipped',
+          message: 'CampMinder sync is disabled for the training sandbox',
+        });
+        continue;
+      }
+
       console.log(`Processing company: ${company.name}`);
       
       const { data: apiKeyData, error: apiKeyError } = await supabase

@@ -33,6 +33,7 @@ import {
   riderNamesFromStop,
   sanitizeRouteStops,
 } from "@/lib/transportRouteStops";
+import { fetchCompanySlug, isSandboxTransportSlug } from "@/lib/nestSandboxTransport";
 
 export const DEFAULT_REFERENCE_SEASON = "2026";
 
@@ -134,6 +135,11 @@ async function loadHistoricalPriorMap(
   companyId: string,
   historicalSeason = DEFAULT_REFERENCE_SEASON,
 ): Promise<Map<string, CamperRoutingPrior>> {
+  const slug = await fetchCompanySlug(supabase, companyId);
+  if (isSandboxTransportSlug(slug)) {
+    return buildCamperPriorMap([]);
+  }
+
   for (const source of ["mappoint", "nest"] as const) {
     const priors = await loadPriorsForSeasonSource(supabase, companyId, historicalSeason, source);
     if (priors.length > 0) {
@@ -153,6 +159,14 @@ export async function loadCamperPriorMap(
   companyId: string,
   currentSeason = DEFAULT_REFERENCE_SEASON,
 ): Promise<Map<string, CamperRoutingPrior>> {
+  const slug = await fetchCompanySlug(supabase, companyId);
+  if (isSandboxTransportSlug(slug)) {
+    const learned = filterLearnedCamperPriors(
+      await loadPriorsForSeasonSource(supabase, companyId, currentSeason, "nest"),
+    );
+    return buildCamperPriorMap(learned);
+  }
+
   const historicalSeason = DEFAULT_REFERENCE_SEASON;
   const historicalMap = await loadHistoricalPriorMap(supabase, companyId, historicalSeason);
 
@@ -175,6 +189,29 @@ export async function getReferenceDatasetStatus(
   companyId: string,
   currentSeason = DEFAULT_REFERENCE_SEASON,
 ): Promise<ReferenceDatasetStatus> {
+  const slug = await fetchCompanySlug(supabase, companyId);
+  if (isSandboxTransportSlug(slug)) {
+    const learned = filterLearnedCamperPriors(
+      await loadPriorsForSeasonSource(supabase, companyId, currentSeason, "nest"),
+    );
+    if (learned.length > 0) {
+      return {
+        referenceSeason: currentSeason,
+        loaded: true,
+        source: "nest",
+        stats: null,
+        priorCount: learned.length,
+      };
+    }
+    return {
+      referenceSeason: currentSeason,
+      loaded: false,
+      source: "nest",
+      stats: null,
+      priorCount: 0,
+    };
+  }
+
   const historicalSeason = DEFAULT_REFERENCE_SEASON;
 
   for (const source of ["mappoint", "nest"] as const) {

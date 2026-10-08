@@ -4,6 +4,8 @@ export const CAMP_SLUG = {
   TIMBER_LAKE_WEST: "timber-lake-west",
   TYLER_HILL_CAMP: "tyler-hill-camp",
   NORTH_SHORE_DAY_CAMP: "north-shore-day-camp",
+  /** Training / demo day camp — dummy data only; enter from dashboard sandbox card. */
+  NEST_SANDBOX_DAY_CAMP: "nest-sandbox-day-camp",
 } as const;
 
 /** Default camp when opening The Nest (North Shore day-camp focus). */
@@ -37,9 +39,19 @@ export function isNorthShoreDayCamp(slug: string | null | undefined): boolean {
   return slug === CAMP_SLUG.NORTH_SHORE_DAY_CAMP;
 }
 
+export function isNestSandboxCompany(slug: string | null | undefined): boolean {
+  return slug === CAMP_SLUG.NEST_SANDBOX_DAY_CAMP;
+}
+
+/** CampMinder sync, credentials, and “fix from CM” tools — never for training sandbox. */
+export function campminderIntegrationEnabled(company: CampLike): boolean {
+  if (isNestSandboxCompany(company?.slug)) return false;
+  return true;
+}
+
 /** North Shore bus-route map transport — not used by Tyler Hill, Timber Lake, or other overnight camps. */
 export function northShoreBusTransportEnabled(company: CampLike): boolean {
-  return isNorthShoreDayCamp(company?.slug);
+  return isNorthShoreDayCamp(company?.slug) || isNestSandboxCompany(company?.slug);
 }
 
 /** Day camps use CampHub-style UI (North Shore first; Hampton/Southampton later). */

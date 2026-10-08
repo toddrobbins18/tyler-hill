@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
+import { isNestSandboxCompany } from "@/lib/camps";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -302,6 +303,8 @@ export default function OperationsDashboard() {
     );
   }
 
+  const trainingSandbox = isNestSandboxCompany(currentCompany.slug);
+
   return (
     <div className="space-y-6">
       {/* Hero header */}
@@ -319,10 +322,17 @@ export default function OperationsDashboard() {
             <div>
               <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{currentCompany.name}</h2>
               <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-                Self-service view of CampMinder syncs, outbound email, and roster data — no Supabase digging required.
+                {trainingSandbox
+                  ? "Training sandbox — demo roster and email tools only. CampMinder sync is turned off."
+                  : "Self-service view of CampMinder syncs, outbound email, and roster data — no Supabase digging required."}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              {trainingSandbox ? (
+                <Badge variant="outline" className="border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300">
+                  Demo data · no CampMinder
+                </Badge>
+              ) : (
               <Badge
                 variant="outline"
                 className={cn(
@@ -353,6 +363,7 @@ export default function OperationsDashboard() {
                   </>
                 )}
               </Badge>
+              )}
               <Badge
                 variant="outline"
                 className={cn(
@@ -371,12 +382,14 @@ export default function OperationsDashboard() {
               <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
               Refresh
             </Button>
-            <Button asChild className="shadow-sm">
-              <Link to="/admin?tab=import">
-                <Upload className="h-4 w-4 mr-2" />
-                Run CampMinder Sync
-              </Link>
-            </Button>
+            {!trainingSandbox ? (
+              <Button asChild className="shadow-sm">
+                <Link to="/admin?tab=import">
+                  <Upload className="h-4 w-4 mr-2" />
+                  Run CampMinder Sync
+                </Link>
+              </Button>
+            ) : null}
           </div>
         </div>
       </motion.div>
@@ -395,7 +408,8 @@ export default function OperationsDashboard() {
         </motion.div>
       ) : null}
 
-      {monitoredSyncJobId &&
+      {!trainingSandbox &&
+      monitoredSyncJobId &&
       monitoredSyncJobId !== dismissedSyncJobId &&
       syncLiveMonitor.steps.length > 0 ? (
         <motion.div {...fadeUp} transition={{ delay: 0.02 }}>
@@ -413,7 +427,7 @@ export default function OperationsDashboard() {
         </motion.div>
       ) : null}
 
-      {staleSyncJob ? (
+      {!trainingSandbox && staleSyncJob ? (
         <motion.div {...fadeUp} transition={{ delay: 0.03 }}>
           <Card className="border-amber-500/40 bg-amber-500/5">
             <CardContent className="flex gap-3 p-4 text-sm">
@@ -440,6 +454,16 @@ export default function OperationsDashboard() {
 
       {/* Metric cards */}
       <motion.div {...fadeUp} transition={{ delay: 0.05 }} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {trainingSandbox ? (
+          <MetricCard
+            loading={loading}
+            label="Roster source"
+            value="Demo"
+            hint="CampMinder sync disabled in training sandbox"
+            icon={Database}
+            accent="bg-violet-500/15 text-violet-600 dark:text-violet-400"
+          />
+        ) : (
         <MetricCard
           loading={loading}
           label="Last CampMinder sync"
@@ -456,6 +480,7 @@ export default function OperationsDashboard() {
           icon={Database}
           accent="bg-violet-500/15 text-violet-600 dark:text-violet-400"
         />
+        )}
         <MetricCard
           loading={loading}
           label="Outbound email"
@@ -501,12 +526,14 @@ export default function OperationsDashboard() {
 
       {/* Tabbed detail panels */}
       <motion.div {...fadeUp} transition={{ delay: 0.1 }}>
-        <Tabs defaultValue="sync" className="space-y-4">
-          <TabsList className="grid w-full max-w-md grid-cols-3 h-10">
+        <Tabs defaultValue={trainingSandbox ? "data" : "sync"} className="space-y-4">
+          <TabsList className={cn("grid w-full max-w-md h-10", trainingSandbox ? "grid-cols-2" : "grid-cols-3")}>
+            {!trainingSandbox ? (
             <TabsTrigger value="sync" className="gap-1.5">
               <Database className="h-3.5 w-3.5" />
               Sync
             </TabsTrigger>
+            ) : null}
             <TabsTrigger value="emails" className="gap-1.5">
               <Inbox className="h-3.5 w-3.5" />
               Emails
@@ -517,6 +544,7 @@ export default function OperationsDashboard() {
             </TabsTrigger>
           </TabsList>
 
+          {!trainingSandbox ? (
           <TabsContent value="sync">
             <Card className="border-border/60 overflow-hidden">
               <CardHeader className="border-b bg-muted/20 pb-4">
@@ -592,6 +620,7 @@ export default function OperationsDashboard() {
               </CardContent>
             </Card>
           </TabsContent>
+          ) : null}
 
           <TabsContent value="emails">
             <Card className="border-border/60 overflow-hidden">
@@ -741,6 +770,7 @@ export default function OperationsDashboard() {
               </Card>
             </div>
 
+            {!trainingSandbox ? (
             <Card className="mt-4 border-border/60 bg-muted/10">
               <CardContent className="flex flex-wrap items-center gap-3 p-4 text-sm text-muted-foreground">
                 <Clock className="h-4 w-4 shrink-0" />
@@ -750,6 +780,7 @@ export default function OperationsDashboard() {
                 </span>
               </CardContent>
             </Card>
+            ) : null}
           </TabsContent>
         </Tabs>
       </motion.div>

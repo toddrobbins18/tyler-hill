@@ -23,6 +23,8 @@ import SearchableChildSelect from "@/components/SearchableChildSelect";
 import { approveDismissalSwim, DISMISSAL_REALTIME_TABLES } from "@/lib/dismissalDashboard";
 import { linkFamilyChildrenByGuardianEmail } from "@/lib/parentFamilyLink";
 import { CampUpdatesEditor } from "@/components/parentPortal/CampUpdatesEditor";
+import { NestSandboxParentFlowGuide } from "@/components/parentPortal/NestSandboxParentFlowGuide";
+import { isNestSandboxParentTraining } from "@/lib/nestSandboxParentDemo";
 
 const CHANGE_TYPES: Record<string, string> = {
   early_pickup: "Early Pickup",
@@ -366,6 +368,14 @@ export default function ParentPortalDashboard() {
           </p>
         </div>
       </div>
+
+      {currentCompany?.id && isNestSandboxParentTraining(currentCompany.slug) ? (
+        <NestSandboxParentFlowGuide
+          companyId={currentCompany.id}
+          companySlug={currentCompany.slug}
+          staffSignedIn
+        />
+      ) : null}
 
       {currentCompany?.id ? (
         <CampUpdatesEditor companyId={currentCompany.id} season={currentSeason} />
