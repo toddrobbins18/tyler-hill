@@ -12,7 +12,9 @@ import {
   normalizeSkillStatus,
   parseSwimProgramCsv,
   swimLevelColumnVisible,
+  swimHistoryRecordHasData,
   type RosterChild,
+  type LevelRecord,
 } from "@/lib/swimProgram";
 
 const child: RosterChild = {
@@ -108,6 +110,30 @@ describe("swimProgram", () => {
     expect(swimLevelColumnVisible("red-cross-1", "minnow-0")).toBe(false);
     expect(swimLevelColumnVisible("red-cross-3", "frog")).toBe(true);
     expect(swimLevelColumnVisible("all", "redCross4")).toBe(true);
+  });
+
+  it("includes Red Cross / Frog-only rows in prior-season history eligibility", () => {
+    const levelsOnlyRedCross: LevelRecord = {
+      id: "c1",
+      personId: "p1",
+      name: "Test",
+      group: "—",
+      goldfish: ["—", "—", "—", "—"],
+      goldfishLevel: "—",
+      minnow: ["—", "—", "—", "—", "—", "—"],
+      minnowLevel: "—",
+      tadpole: ["—", "—", "—", "—"],
+      tadpoleLevel: "—",
+      redCross: "Complete",
+      redCross2: "—",
+      redCross3: "—",
+      redCross4: "—",
+      frog: "—",
+      exitSkills: ["—", "—"],
+      lastModified: "Imported",
+    };
+    expect(swimHistoryRecordHasData(null, levelsOnlyRedCross)).toBe(true);
+    expect(swimHistoryRecordHasData(null, { ...levelsOnlyRedCross, redCross: "—", frog: "Complete" })).toBe(true);
   });
 
   it("matches PersonID across seasons when importing historical data", () => {

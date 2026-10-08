@@ -37,6 +37,7 @@ import {
   saveSwimLevel,
   skillStatusLabel,
   swimProgramCsvTemplate,
+  swimHistoryRecordHasData,
 } from "@/lib/swimProgram";
 import { sendSwimProgressEmail } from "@/lib/swimProgressApi";
 import { buildSwimProgressPdf } from "@/lib/swimProgressPdf";
@@ -142,15 +143,7 @@ type SwimImportResult = {
 };
 
 function levelRecordHasData(record: LevelRecord): boolean {
-  return (
-    record.goldfish.some((s) => s !== "—") ||
-    record.minnow.some((s) => s !== "—") ||
-    record.tadpole.some((s) => s !== "—") ||
-    record.exitSkills.some((s) => s !== "—") ||
-    [record.goldfishLevel, record.minnowLevel, record.tadpoleLevel, record.redCross, record.redCross2, record.redCross3, record.redCross4, record.frog].some(
-      (s) => s !== "—",
-    )
-  );
+  return swimHistoryRecordHasData(null, record);
 }
 
 const BRACELET_STYLES: Record<BraceletColor, string> = {
@@ -1004,6 +997,8 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
           goldfish: s.levels?.goldfish ?? [],
           minnow: s.levels?.minnow ?? [],
           tadpole: s.levels?.tadpole ?? [],
+          redCross: s.levels?.redCross ?? "—",
+          frog: s.levels?.frog ?? "—",
         })),
       ),
     [historyReport],
@@ -1236,7 +1231,14 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
         </Card>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs
+        value={activeTab}
+        onValueChange={(tab) => {
+          setActiveTab(tab);
+          if (tab === "history") void loadHistory();
+        }}
+        className="w-full"
+      >
         <TabsList>
           <TabsTrigger value="bracelets">Swim Bracelets</TabsTrigger>
           <TabsTrigger value="levels">Swim Level Report</TabsTrigger>
@@ -1773,6 +1775,8 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                         <TableCell className="font-semibold">Goldfish</TableCell>
                         <TableCell className="font-semibold">Minnow</TableCell>
                         <TableCell className="font-semibold">Tadpole</TableCell>
+                        <TableCell className="font-semibold">Red Cross 1</TableCell>
+                        <TableCell className="font-semibold">Frog</TableCell>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1802,6 +1806,8 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                               ))}
                             </div>
                           </TableCell>
+                          <TableCell>{row.redCross}</TableCell>
+                          <TableCell>{row.frog}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
