@@ -7,9 +7,50 @@ import {
   PARENT_TRANSPORT_NO_BUS_LABEL,
   parentTransportRidersForRoute,
   ridersOnRoute,
+  stripParentTransportFromCoreStops,
 } from "@/lib/transportParentTransport";
 
 describe("transportParentTransport", () => {
+  it("removes PT campers from bus route stops", () => {
+    const coreStops = stripParentTransportFromCoreStops(
+      {
+        1: [
+          {
+            name: "Andi Robbins",
+            address: "1 Main St",
+            lat: 40.88,
+            lng: -73.64,
+            pickupTime: "7:10 AM",
+            passengers: 1,
+            camperNames: ["Andi Robbins"],
+          },
+          {
+            name: "Bus Kid",
+            address: "2 Oak Ave",
+            lat: 40.89,
+            lng: -73.65,
+            pickupTime: "7:15 AM",
+            passengers: 1,
+            camperNames: ["Bus Kid"],
+          },
+        ],
+      },
+      [
+        {
+          id: 1,
+          name: "Andi Robbins",
+          routeId: null,
+          am: true,
+          pm: true,
+          weekdays: [],
+        },
+      ],
+    );
+    expect(coreStops[1]?.[0]?.camperNames).toEqual([]);
+    expect(coreStops[1]?.[0]?.passengers).toBe(0);
+    expect(coreStops[1]?.[1]?.camperNames).toEqual(["Bus Kid"]);
+  });
+
   it("filters PT campers out of unplotted list", () => {
     const filtered = filterUnplottedExcludingParentTransport(
       [{ name: "Jamie Lee" }, { name: "Alex Smith" }],

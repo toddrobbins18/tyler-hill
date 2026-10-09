@@ -47,8 +47,10 @@ import {
   parentTransportRidersForRoute,
   PARENT_TRANSPORT_WEEKDAYS,
   PARENT_TRANSPORT_STOP_LABEL,
+  applyParentTransportExclusionToRoutes,
   ridersOnRoute,
   stableParentTransportId,
+  stripParentTransportFromCoreStops,
   type ParentTransportCamper,
   type ParentTransportWeekday,
 } from "@/lib/transportParentTransport";
@@ -1881,8 +1883,12 @@ export default function Transport() {
       seasonRosterNames.size > 0
         ? applySeasonRosterToRoutes(routes, seasonRosterNames)
         : routes;
-    const filtered = applyEnrollmentWeekToRoutes(
+    const withoutPtOnStops = applyParentTransportExclusionToRoutes(
       seasonFiltered,
+      parentTransportCampers,
+    );
+    const filtered = applyEnrollmentWeekToRoutes(
+      withoutPtOnStops,
       activeRouteEnrollmentWeek,
       camperEnrollmentLookup,
     );
@@ -2545,19 +2551,19 @@ export default function Transport() {
     }
 
     const id = stableParentTransportId(child.id, Math.max(500, ...parentTransportCampers.map((c) => c.id), 0) + 1);
-    setParentTransportCampers((prev) => [
-      ...prev,
-      {
-        id,
-        childId: child.id,
-        name: child.name,
-        routeId,
-        am: newParentTransport.am,
-        pm: newParentTransport.pm,
-        weekdays: newParentTransport.weekdays,
-        notes: newParentTransport.notes.trim() || null,
-      },
-    ]);
+    const newCamper: ParentTransportCamper = {
+      id,
+      childId: child.id,
+      name: child.name,
+      routeId,
+      am: newParentTransport.am,
+      pm: newParentTransport.pm,
+      weekdays: newParentTransport.weekdays,
+      notes: newParentTransport.notes.trim() || null,
+    };
+    const nextPt = [...parentTransportCampers, newCamper];
+    setParentTransportCampers(nextPt);
+    setCoreStops((prev) => stripParentTransportFromCoreStops(prev, nextPt));
     setUnplottedCampers((prev) => prev.filter((c) => c.name.trim().toLowerCase() !== child.name.trim().toLowerCase()));
     setAddParentTransportOpen(false);
     resetNewParentTransportForm();

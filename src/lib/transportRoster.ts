@@ -8,6 +8,7 @@ import {
 import { isValidRouteCoordinate } from "@/lib/transportStopTimes";
 import {
   filterUnplottedExcludingParentTransport,
+  stripParentTransportFromCoreStops,
   type ParentTransportCamper,
 } from "@/lib/transportParentTransport";
 import {
@@ -139,7 +140,10 @@ export async function normalizeTransportBoardForSeason(
   const hints = await loadHistoricalAddressHints(supabase, companyId, "2026");
   const parentTransportCampers = board.parentTransportCampers ?? [];
   const enrolledNames = new Set(enrolled.map((c) => normName(c.name)));
-  const prunedStops = pruneCoreStopsToSeasonRoster(board.coreStops, enrolledNames);
+  const prunedStops = stripParentTransportFromCoreStops(
+    pruneCoreStopsToSeasonRoster(board.coreStops, enrolledNames),
+    parentTransportCampers,
+  );
 
   const unplottedCampers = filterUnplottedExcludingParentTransport(
     buildUnplottedFromEnrollment({

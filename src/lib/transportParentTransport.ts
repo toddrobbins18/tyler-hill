@@ -7,6 +7,9 @@ import {
 import { camperEnrolledInWeekByLookup, type CamperEnrollmentInfo } from "@/lib/transportWeekView";
 import { attendanceRecordKey, campersOnRoute } from "@/lib/transportBusAttendance";
 import type { TransportRouteStop } from "@/lib/transportRoster";
+import { riderNamesFromStop } from "@/lib/transportRouteStops";
+import { stopRiderNames, type RouteLike } from "@/lib/transportWeekView";
+import { CAMP_LOCATION } from "@/lib/transportStopTimes";
 
 export type ParentTransportWeekday = "mon" | "tue" | "wed" | "thu" | "fri";
 
@@ -113,6 +116,78 @@ export function filterUnplottedExcludingParentTransport<T extends { name: string
   const ptNames = parentTransportNamesSet(parentTransport);
   if (ptNames.size === 0) return unplotted;
   return unplotted.filter((c) => !ptNames.has(normName(c.name)));
+}
+
+function stopAfterRiderList<T extends TransportRouteStop>(stop: T, riders: string[]): T {
+  if (riders.length === 0) {
+    return {
+      ...stop,
+      camperNames: [],
+      passengers: 0,
+      name: stop.address.split(",")[0]?.trim() || stop.name,
+    };
+  }
+  if (riders.length === 1) {
+    return {
+      ...stop,
+      camperNames: riders,
+      passengers: 1,
+      name: riders[0],
+    };
+  }
+  return {
+    ...stop,
+    camperNames: riders,
+    passengers: riders.length,
+    name: `${riders[0]} +${riders.length - 1}`,
+  };
+}
+
+/** PT campers must not appear on bus route stops (map / capacity) — Car Report + optional bus tie only. */
+export function stripParentTransportFromCoreStops(
+  coreStops: Record<number, TransportRouteStop[]>,
+  parentTransport: ParentTransportCamper[],
+): Record<number, TransportRouteStop[]> {
+  const ptNames = parentTransportNamesSet(parentTransport);
+  if (ptNames.size === 0) return coreStops;
+
+  const out: Record<number, TransportRouteStop[]> = {};
+  for (const [routeId, stops] of Object.entries(coreStops)) {
+    out[Number(routeId)] = (stops ?? []).map((stop) => {
+      const riders = riderNamesFromStop(stop).filter((name) => !ptNames.has(normName(name)));
+      return stopAfterRiderList(stop, riders);
+    });
+  }
+  return out;
+}
+
+/** Live map/routes: hide PT names from built route stops before week filters. */
+export function applyParentTransportExclusionToRoutes<T extends RouteLike>(
+  routes: T[],
+  parentTransport: ParentTransportCamper[],
+  campAddress: string = CAMP_LOCATION.address,
+): T[] {
+  const ptNames = parentTransportNamesSet(parentTransport);
+  if (ptNames.size === 0) return routes;
+
+  return routes.map((route) => {
+    const stops = route.stops.map((stop) => {
+      if (stop.address === campAddress) return stop;
+      const riders = stopRiderNames(stop).filter((name) => !ptNames.has(normName(name)));
+      const primaryLabel =
+        riders[0] ?? (stop.address.split(",")[0]?.trim() || stop.name || stop.address);
+      return {
+        ...stop,
+        name: primaryLabel,
+        camperNames: riders,
+        passengers: riders.length,
+      };
+    });
+    const campers = stops
+      .filter((s) => s.address !== campAddress)
+      .reduce((sum, s) => sum + (s.passengers || 0), 0);
+    return { ...route, stops, campers };
+  });
 }
 
 export function parentTransportRidersForRoute(
