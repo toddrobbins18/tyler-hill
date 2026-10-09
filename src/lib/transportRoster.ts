@@ -154,6 +154,20 @@ export async function normalizeTransportBoardForSeason(
   return { ...board, coreStops: prunedStops, parentTransportCampers, unplottedCampers };
 }
 
+/** True when season normalize changed stored stops or unplotted (ghost riders removed). */
+export function transportBoardSeasonSyncChanged(
+  before: TransportBoardPayload,
+  after: TransportBoardPayload,
+): boolean {
+  if (JSON.stringify(before.coreStops) !== JSON.stringify(after.coreStops)) return true;
+  const unplottedKey = (p: TransportBoardPayload) =>
+    p.unplottedCampers
+      .map((c) => c.name.trim().toLowerCase())
+      .sort()
+      .join("\0");
+  return unplottedKey(before) !== unplottedKey(after);
+}
+
 /** Strip prior-season / MapPoint ghost riders; keep open stops (no names). */
 export function pruneCoreStopsToSeasonRoster(
   coreStops: Record<number, TransportRouteStop[]>,

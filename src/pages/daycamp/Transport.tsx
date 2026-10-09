@@ -111,6 +111,7 @@ import {
   loadStopsOnlyTemplateFromSeason,
   normalizeTransportBoardForSeason,
   prepareBoardForPersist,
+  transportBoardSeasonSyncChanged,
   type TransportRoutesSource,
 } from "@/lib/transportRoster";
 import {
@@ -676,6 +677,8 @@ export default function Transport() {
   );
 
   const [groupRoster, setGroupRoster] = useState<GroupRosterCamper[]>([]);
+  /** Active-season camper names from `children` — map filter source of truth (not only group roster). */
+  const [seasonEnrolledNameKeys, setSeasonEnrolledNameKeys] = useState<Set<string>>(() => new Set());
   const [enrollmentWeekCalendar, setEnrollmentWeekCalendar] = useState<EnrollmentWeekCalendar>([]);
   const [routeEnrollmentWeek, setRouteEnrollmentWeek] = useState<number | "all">("all");
   const [attendanceWeekOverride, setAttendanceWeekOverride] = useState<number | null>(null);
@@ -1012,18 +1015,25 @@ export default function Transport() {
     const fullPayload = isRemoteLoad
       ? payload
       : { ...buildBoardPayload(), ...payload };
+    const enrolled = await loadEnrolledCampersForTransport(supabase, companyId, currentSeason);
+    setSeasonEnrolledNameKeys(new Set(enrolled.map((c) => normCamperName(c.name))));
     const normalized = await normalizeTransportBoardForSeason(supabase, companyId, currentSeason, fullPayload);
     const strippedLegacyRoutes =
       currentSeason !== "2026"
       && countBoardStops(fullPayload.coreStops) > 0
       && !fullPayload.routesConfigured;
+    const rosterSyncChanged = transportBoardSeasonSyncChanged(fullPayload, normalized);
     applyBoardPayload(normalized, source);
-    if (strippedLegacyRoutes) {
+    if (strippedLegacyRoutes || rosterSyncChanged) {
       await persistBoard({
         ...normalized,
-        routesConfigured: false,
-        routesSeason: undefined,
-        routesSource: undefined,
+        ...(strippedLegacyRoutes
+          ? {
+              routesConfigured: false,
+              routesSeason: undefined,
+              routesSource: undefined,
+            }
+          : {}),
       });
     }
   }, [companyId, currentSeason, persistBoard, buildBoardPayload]);
@@ -1203,6 +1213,7 @@ export default function Transport() {
 
   useEffect(() => {
     setRouteEnrollmentWeek("all");
+    setSeasonEnrolledNameKeys(new Set());
   }, [companyId, currentSeason]);
 
   useEffect(() => {
@@ -1812,10 +1823,13 @@ export default function Transport() {
     [groupRoster],
   );
 
-  const seasonRosterNames = useMemo(
-    () => new Set(groupRoster.map((c) => normCamperName(c.name))),
-    [groupRoster],
-  );
+  const seasonRosterNames = useMemo(() => {
+    if (seasonEnrolledNameKeys.size > 0) return seasonEnrolledNameKeys;
+    if (groupRoster.length > 0) {
+      return new Set(groupRoster.map((c) => normCamperName(c.name)));
+    }
+    return new Set<string>();
+  }, [seasonEnrolledNameKeys, groupRoster]);
 
   const activeRouteEnrollmentWeek =
     routeEnrollmentWeek === "all" ? null : routeEnrollmentWeek;

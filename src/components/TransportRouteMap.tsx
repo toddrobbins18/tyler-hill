@@ -9,6 +9,7 @@ import {
   type LatLng,
 } from "@/lib/transportRouteGeometry";
 import { isValidRouteCoordinate } from "@/lib/transportStopTimes";
+import { stopRiderNames } from "@/lib/transportWeekView";
 
 interface RouteStop {
   name: string;
@@ -414,7 +415,7 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
           ? `<button onclick="window.__transportMapRemoveStop(${route.id},${stopIndex})" style="display:block;width:100%;margin-top:6px;padding:5px 8px;border:1px solid #fca5a5;border-radius:6px;background:#fef2f2;font-size:11px;cursor:pointer;color:#dc2626;font-weight:500;" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fef2f2'">✕ Unpin from route</button>` : "";
         const emptyStop = isEmptyRouteStop(stop);
         const pendingAtStop = unplottedByAddress.get(normAddr(stop.address)) ?? [];
-        const names = stop.camperNames && stop.camperNames.length > 0 ? stop.camperNames : [stop.name];
+        const names = stopRiderNames(stop);
         const title = emptyStop
           ? (pendingAtStop.length > 0
             ? `Open stop · ${pendingAtStop.length} unassigned`
