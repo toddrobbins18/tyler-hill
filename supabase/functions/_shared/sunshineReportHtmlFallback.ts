@@ -1,5 +1,6 @@
 import { NSDC_SUNSHINE_TEMPLATE_JPEG_BASE64 } from "./sunshineTemplateEmbedded.ts";
 import {
+  baselinesFor,
   fitSheetLines,
   SUNSHINE_LAYOUT as L,
   SUNSHINE_TEMPLATE_HEIGHT,
@@ -59,9 +60,9 @@ export function buildSunshineReportHtmlOverlay(params: {
     <img src="data:image/jpeg;base64,${bg}" alt="NSDC Sunshine Report" width="${SUNSHINE_TEMPLATE_WIDTH}" height="${SUNSHINE_TEMPLATE_HEIGHT}" style="position:absolute;left:0;top:0;width:${SUNSHINE_TEMPLATE_WIDTH}px;height:${SUNSHINE_TEMPLATE_HEIGHT}px;display:block;" />
     <div style="position:absolute;left:0;top:0;width:${SUNSHINE_TEMPLATE_WIDTH}px;height:${SUNSHINE_TEMPLATE_HEIGHT}px;">
       <div style="position:absolute;left:${L.camper.x}px;top:${camperTop}px;max-width:420px;font-size:${L.camper.fontSize}px;line-height:1;font-weight:700;font-family:Arial,Helvetica,sans-serif;color:#1d4ed8;">${name}</div>
-      ${linesHtml(params.activities, L.activities.x, L.activities.baselines, L.activities.maxLines, L.activities.fontSize, 268)}
-      ${linesHtml(params.sports, L.sports.x, L.sports.baselines, L.sports.maxLines, L.sports.fontSize, 268)}
-      ${linesHtml(params.lunch, L.lunch.x, L.lunch.baselines, L.lunch.maxLines, L.lunch.fontSize, 558)}
+      ${linesHtml(params.activities, L.activities.x, baselinesFor(L.activities), L.activities.maxLines, L.activities.fontSize, 268)}
+      ${linesHtml(params.sports, L.sports.x, baselinesFor(L.sports), L.sports.maxLines, L.sports.fontSize, 268)}
+      ${linesHtml(params.lunch, L.lunch.x, baselinesFor(L.lunch), L.lunch.maxLines, L.lunch.fontSize, 558)}
       ${params.bm ? `<div style="position:absolute;left:${L.bmCheck.x}px;top:${baselineToTop(L.bmCheck.baseline, L.bmCheck.fontSize)}px;font-size:${L.bmCheck.fontSize}px;font-weight:800;${TEXT}">✓</div>` : ""}
       ${params.napped ? `<div style="position:absolute;left:${L.napCheck.x}px;top:${baselineToTop(L.napCheck.baseline, L.napCheck.fontSize)}px;font-size:${L.napCheck.fontSize}px;font-weight:800;${TEXT}">✓</div>` : ""}
     </div>

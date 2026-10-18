@@ -1,4 +1,11 @@
-import { fitSheetLines, SUNSHINE_LAYOUT as L, SUNSHINE_TEMPLATE_HEIGHT, SUNSHINE_TEMPLATE_WIDTH } from "@/lib/sunshineLayout";
+import {
+  baselinesFor,
+  fitSheetLines,
+  SUNSHINE_LAYOUT as L,
+  SUNSHINE_TEMPLATE_HEIGHT,
+  SUNSHINE_TEMPLATE_WIDTH,
+  type SunshineLineBlock,
+} from "@/lib/sunshineLayout";
 
 const TEMPLATE_URL = "/images/nsdc-sunshine-report-template.jpg?v=4";
 
@@ -59,9 +66,12 @@ export async function renderSunshineReportPreviewDataUrl(input: {
   ctx.fillStyle = "#1d4ed8";
   ctx.fillText(name, L.camper.x, L.camper.baseline);
 
-  drawOnBaselines(ctx, input.activities, L.activities.x, L.activities.baselines, L.activities.maxLines, L.activities.fontSize);
-  drawOnBaselines(ctx, input.sports, L.sports.x, L.sports.baselines, L.sports.maxLines, L.sports.fontSize);
-  drawOnBaselines(ctx, input.lunch, L.lunch.x, L.lunch.baselines, L.lunch.maxLines, L.lunch.fontSize);
+  const drawBlock = (items: string[], block: SunshineLineBlock) =>
+    drawOnBaselines(ctx, items, block.x, baselinesFor(block), block.maxLines, block.fontSize);
+
+  drawBlock(input.activities, L.activities);
+  drawBlock(input.sports, L.sports);
+  drawBlock(input.lunch, L.lunch);
 
   ctx.font = `800 ${L.bmCheck.fontSize}px Arial, Helvetica, sans-serif`;
   ctx.fillStyle = "#0f172a";
