@@ -28,7 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, Check, Mail, Trash2, Upload, Download, UserPlus, FolderPlus, RefreshCw, Search } from "lucide-react";
+import { Plus, Check, Mail, Trash2, Upload, Download, UserPlus, FolderPlus, RefreshCw, Search, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { pickFirst } from "@/lib/csv";
@@ -48,6 +48,8 @@ import {
   parseAirtableSunshineRow,
   SUNSHINE_TAG_COLOR_PALETTE,
 } from "@/lib/sunshineAirtableImport";
+import { sendSunshineReports } from "@/lib/sunshineReportEmailApi";
+import { renderSunshineReportPreviewDataUrl } from "@/lib/sunshineReportPreview";
 
 type Group = { id: string; name: string; sort_order: number };
 type Camper = { id: string; full_name: string; group_id: string | null; parent_email: string | null; sort_order: number };
@@ -94,6 +96,11 @@ export default function SunshineReport() {
   const [reports, setReports] = useState<Record<string, Report>>({});
   const [loading, setLoading] = useState(true);
   const [syncingRoster, setSyncingRoster] = useState(false);
+  const [sendingEmails, setSendingEmails] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const [previewCaption, setPreviewCaption] = useState("");
   const [groupSearch, setGroupSearch] = useState("");
 
   // Dialog state
@@ -352,8 +359,41 @@ export default function SunshineReport() {
     upsertReport(camperId, { [field]: next });
   }
 
+  async function previewParentEmail() {
+    if (previewLoading) return;
+    const pool = groupCampers.filter((c) => reports[c.id]);
+    const withReport = pool.length ? pool : campers.filter((c) => reports[c.id]);
+    if (!withReport.length) {
+      toast.info("Fill in at least one camper report for this date first.");
+      return;
+    }
+    const camper = withReport[0];
+    const r = reports[camper.id];
+    setPreviewLoading(true);
+    try {
+      const dataUrl = await renderSunshineReportPreviewDataUrl({
+        camperName: camper.full_name,
+        activities: r.activities ?? [],
+        sports: r.sports ?? [],
+        lunch: r.lunch ?? [],
+        bm: r.bm ?? false,
+        napped: r.napped ?? false,
+      });
+      setPreviewImageUrl(dataUrl);
+      setPreviewCaption(
+        `NSDC Sunshine Report — ${camper.full_name}${camper.parent_email ? ` → ${camper.parent_email}` : ""}`,
+      );
+      setPreviewOpen(true);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Preview failed");
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
   async function sendEndOfDayEmails() {
-    const toSend = groupCampers.filter((c) => {
+    if (!currentCompany || sendingEmails) return;
+    const toSend = campers.filter((c) => {
       const r = reports[c.id];
       return r?.send_email && !r.email_sent_at && c.parent_email;
     });
@@ -361,16 +401,36 @@ export default function SunshineReport() {
       toast.info("No reports queued to send.");
       return;
     }
-    const now = new Date().toISOString();
-    for (const c of toSend) {
-      await supabase
-        .from("sunshine_reports")
-        .update({ email_sent_at: now })
-        .eq("camper_id", c.id)
-        .eq("report_date", date);
-      setReports((prev) => ({ ...prev, [c.id]: { ...prev[c.id], email_sent_at: now } }));
+    setSendingEmails(true);
+    try {
+      const result = await sendSunshineReports({
+        companyId: currentCompany.id,
+        reportDate: date,
+        camperIds: toSend.map((c) => c.id),
+      });
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      const now = new Date().toISOString();
+      for (const row of result.results) {
+        if (row.status !== "sent") continue;
+        setReports((prev) => ({
+          ...prev,
+          [row.camper_id]: { ...prev[row.camper_id], email_sent_at: now },
+        }));
+      }
+      const failed = result.results.filter((r) => r.status === "failed");
+      if (result.sent === 0) {
+        toast.error(failed[0]?.status === "failed" ? failed[0].error : "No emails were sent.");
+      } else if (failed.length) {
+        toast.warning(`Sent ${result.sent} report${result.sent === 1 ? "" : "s"}. ${failed.length} failed.`);
+      } else {
+        toast.success(`Sent ${result.sent} sunshine report${result.sent === 1 ? "" : "s"} to parents.`);
+      }
+    } finally {
+      setSendingEmails(false);
     }
-    toast.success(`Marked ${toSend.length} report${toSend.length === 1 ? "" : "s"} as sent to parents.`);
   }
 
   // ---- Add / delete ----
@@ -771,8 +831,11 @@ export default function SunshineReport() {
           <Button variant="outline" size="sm" onClick={() => { setNewCamper({ full_name: "", parent_email: "", group_id: activeGroupId }); setAddCamperOpen(true); }} className="gap-1.5">
             <UserPlus className="h-3.5 w-3.5" /> Add Camper
           </Button>
-          <Button onClick={sendEndOfDayEmails} className="gap-2">
-            <Mail className="h-4 w-4" /> Send to Parents
+          <Button variant="outline" onClick={previewParentEmail} disabled={previewLoading} className="gap-2">
+            <Eye className="h-4 w-4" /> {previewLoading ? "Loading…" : "Preview email"}
+          </Button>
+          <Button onClick={sendEndOfDayEmails} disabled={sendingEmails} className="gap-2">
+            <Mail className="h-4 w-4" /> {sendingEmails ? "Sending…" : "Send to Parents"}
           </Button>
         </div>
       </div>
@@ -1010,6 +1073,28 @@ export default function SunshineReport() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddGroupOpen(false)}>Cancel</Button>
             <Button onClick={handleAddGroup}>Add Group</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-[720px] max-h-[90vh] flex flex-col overflow-auto">
+          <DialogHeader>
+            <DialogTitle>Parent email preview</DialogTitle>
+            <DialogDescription>{previewCaption || "Exact Todd template with today’s fields."}</DialogDescription>
+          </DialogHeader>
+          {previewImageUrl ? (
+            <img
+              src={previewImageUrl}
+              alt="Sunshine report preview"
+              className="w-full rounded-md border bg-white"
+              style={{ maxWidth: "682px", height: "auto" }}
+            />
+          ) : null}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreviewOpen(false)}>
+              Close
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
