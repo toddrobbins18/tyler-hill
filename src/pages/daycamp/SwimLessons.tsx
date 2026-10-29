@@ -13,7 +13,8 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Waves, Plus, Trash2, CheckCircle2, Clock, Bus, Repeat, Phone, XCircle, Search } from "lucide-react";
+import { Waves, Plus, Trash2, CheckCircle2, Clock, Bus, Repeat, Phone, XCircle, Search, Mail } from "lucide-react";
+import { runSwimLessonReminders } from "@/lib/swimLessonReminderApi";
 import { SortableHeader } from "@/components/SortableHeader";
 import { useSortable } from "@/hooks/use-sortable";
 import { cn } from "@/lib/utils";
@@ -123,6 +124,28 @@ export default function SwimLessons() {
   const [search, setSearch] = useState("");
   const [parentFilter, setParentFilter] = useState<ParentFilter>("all");
   const [transportFilter, setTransportFilter] = useState<TransportFilter>("all");
+  const [reminderRunning, setReminderRunning] = useState(false);
+
+  const sendThreeDayReminders = async () => {
+    if (!currentCompany?.id || reminderRunning) return;
+    setReminderRunning(true);
+    try {
+      const result = await runSwimLessonReminders({ companyId: currentCompany.id, daysAhead: 3 });
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      const sent = result.results.filter((r) => r.status === "sent").length;
+      const preview = result.results.filter((r) => r.status === "preview").length;
+      const skipped = result.results.filter((r) => r.status === "skipped").length;
+      toast.success(
+        `Lessons on ${result.targetDay}: ${sent} sent, ${preview} preview (M365 off), ${skipped} skipped`,
+      );
+      if (sent > 0) await load();
+    } finally {
+      setReminderRunning(false);
+    }
+  };
 
   const load = async () => {
     if (!currentCompany?.id) return;
@@ -250,6 +273,10 @@ export default function SwimLessons() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" disabled={reminderRunning} onClick={() => void sendThreeDayReminders()}>
+            <Mail className="h-4 w-4 mr-2" />
+            {reminderRunning ? "Running…" : "3-day confirm emails"}
+          </Button>
           <PhoneRequestDialog campers={campers} onSaved={load} />
           <LessonDialog campers={campers} onSaved={load} />
         </div>

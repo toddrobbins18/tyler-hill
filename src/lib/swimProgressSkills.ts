@@ -100,10 +100,104 @@ export const RED_CROSS_1_PROGRESS: SwimProgressLevelDef = {
   ],
 };
 
+/** Red Cross 2 — Frog / Toad / Bullfrog (Airtable automations). */
+export const RED_CROSS_2_PROGRESS: SwimProgressLevelDef = {
+  levelId: "red-cross-2",
+  emailSubject: "Swim Progress Report",
+  chartTitle: "Red Cross Level 2",
+  chartAssetFile: "red-cross-2.png",
+  introParagraph:
+    'We use "Animal Levels" to represent the specific Red Cross level your child is working toward mastering.',
+  attachmentBlurb:
+    "We've attached a blank skills sheet for Red Cross Level 2, so you can see all the skills required to complete this level.",
+  groups: [
+    {
+      id: "frog",
+      title: "FROG LEVEL",
+      skills: [
+        { id: "F1", label: "Enter by stepping or jumping from the side" },
+        { id: "F2", label: "Exit using ladder, steps or side" },
+        { id: "F3", label: "Full submerge and hold breath, 10 seconds" },
+        { id: "F4", label: "Bobbing, 10 times" },
+        { id: "F5", label: "Open eyes under water to retrieve submerged object" },
+        { id: "F6", label: "FROG Level" },
+      ],
+    },
+    {
+      id: "toad",
+      title: "TOAD LEVEL",
+      skills: [
+        { id: "TD1", label: "Superman float with glide, 2 body lengths" },
+        { id: "TD2", label: "Recover from front float to a standing position" },
+        { id: "TD3", label: "Back float, 15 seconds" },
+        { id: "TD4", label: "Recover from back to a standing position" },
+        { id: "TD5", label: "Roll from front to back and back to front" },
+        { id: "TD6", label: "TOAD Level" },
+      ],
+    },
+    {
+      id: "bullfrog",
+      title: "BULLFROG LEVEL",
+      skills: [
+        { id: "BF1", label: "Rotary breathing with beginning arm action, 5 times" },
+        { id: "BF2", label: "Back glide, 2 body lengths" },
+        { id: "BF3", label: "Tread water, 15 seconds" },
+        { id: "BF4", label: "Combined arm and leg action on front for 5 body lengths" },
+        { id: "BF5", label: "Combined arm and leg action on back for 5 body lengths" },
+        { id: "BF6", label: "BULLFROG Level" },
+      ],
+    },
+  ],
+};
+
+/** Red Cross 4 — Wahoo / Barracuda (Airtable automations). */
+export const RED_CROSS_4_PROGRESS: SwimProgressLevelDef = {
+  levelId: "red-cross-4",
+  emailSubject: "Swim Progress Report",
+  chartTitle: "Red Cross Level 4",
+  chartAssetFile: "red-cross-4.png",
+  introParagraph:
+    'We use "Animal Levels" to represent the specific Red Cross level your child is working toward mastering.',
+  attachmentBlurb:
+    "We've attached a blank skills sheet for Red Cross Level 4, so you can see all the skills required to complete this level.",
+  groups: [
+    {
+      id: "wahoo",
+      title: "WAHOO LEVEL",
+      skills: [
+        { id: "W1", label: "Headfirst entry, compact & stride positions" },
+        { id: "W2", label: "Underwater swim for 3 to 5 body lengths" },
+        { id: "W3", label: "Front crawl for 25 yards" },
+        { id: "W4", label: "Back crawl for 15 yards" },
+        { id: "W5", label: "Elementary backstroke for 25 yards" },
+        { id: "W6", label: "Perform open turns" },
+        { id: "W7", label: "WAHOO Level" },
+      ],
+    },
+    {
+      id: "barracuda",
+      title: "BARRACUDA LEVEL",
+      skills: [
+        { id: "BR1", label: "Tread water for 2 minutes" },
+        { id: "BR2", label: "Feet first surface dive" },
+        { id: "BR3", label: "Breaststroke for 15 yards" },
+        { id: "BR4", label: "Butterfly for 15 yards" },
+        { id: "BR5", label: "Sidestroke for 15 yards" },
+        { id: "BR6", label: "Survival swimming in deep water for 1 minute" },
+        {
+          id: "BR7",
+          label: "Push off in streamline position on back and dolphin kick for 3-5 body lengths",
+        },
+        { id: "BR8", label: "BARRACUDA Level" },
+      ],
+    },
+  ],
+};
+
 /** Red Cross 3 — email body skills (Perch / Trout / Bass). Nest skill entry UI coming later. */
 export const RED_CROSS_3_PROGRESS: SwimProgressLevelDef = {
   levelId: "red-cross-3",
-  emailSubject: "Swim Progress Report — Red Cross Level 3",
+  emailSubject: "Swim Progress Report",
   chartTitle: "Red Cross Level 3",
   chartAssetFile: "red-cross-3.png",
   introParagraph:
@@ -156,7 +250,9 @@ export const RED_CROSS_3_PROGRESS: SwimProgressLevelDef = {
 
 const PROGRESS_BY_LEVEL: Partial<Record<SwimProgressReportLevel, SwimProgressLevelDef>> = {
   "red-cross-1": RED_CROSS_1_PROGRESS,
+  "red-cross-2": RED_CROSS_2_PROGRESS,
   "red-cross-3": RED_CROSS_3_PROGRESS,
+  "red-cross-4": RED_CROSS_4_PROGRESS,
 };
 
 export function getSwimProgressLevelDef(levelId: SwimProgressReportLevel): SwimProgressLevelDef | undefined {
@@ -164,7 +260,7 @@ export function getSwimProgressLevelDef(levelId: SwimProgressReportLevel): SwimP
 }
 
 export function swimProgressEmailSupported(levelId: SwimProgressReportLevel): boolean {
-  return levelId === "red-cross-1";
+  return getSwimProgressLevelDef(levelId) != null;
 }
 
 export function readNestSkillStatus(

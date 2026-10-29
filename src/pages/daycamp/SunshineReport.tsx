@@ -99,6 +99,7 @@ export default function SunshineReport() {
   const [sendingEmails, setSendingEmails] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewCamperId, setPreviewCamperId] = useState("");
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [previewCaption, setPreviewCaption] = useState("");
   const [groupSearch, setGroupSearch] = useState("");
@@ -359,31 +360,54 @@ export default function SunshineReport() {
     upsertReport(camperId, { [field]: next });
   }
 
+  const previewCamperPool = useMemo(
+    () => (groupCampers.length ? groupCampers : campers),
+    [groupCampers, campers],
+  );
+
+  async function renderPreviewForCamper(camperId: string) {
+    const camper = campers.find((c) => c.id === camperId);
+    if (!camper) return;
+    const r = reports[camperId];
+    const dataUrl = await renderSunshineReportPreviewDataUrl({
+      camperName: camper.full_name,
+      activities: r?.activities ?? [],
+      sports: r?.sports ?? [],
+      lunch: r?.lunch ?? [],
+      bm: r?.bm ?? false,
+      napped: r?.napped ?? false,
+    });
+    setPreviewImageUrl(dataUrl);
+    setPreviewCaption(
+      `NSDC Sunshine Report — ${camper.full_name}${camper.parent_email ? ` → ${camper.parent_email}` : ""}`,
+    );
+  }
+
   async function previewParentEmail() {
     if (previewLoading) return;
-    const pool = groupCampers.filter((c) => reports[c.id]);
-    const withReport = pool.length ? pool : campers.filter((c) => reports[c.id]);
-    if (!withReport.length) {
-      toast.info("Fill in at least one camper report for this date first.");
+    if (!previewCamperPool.length) {
+      toast.info("No campers in this group.");
       return;
     }
-    const camper = withReport[0];
-    const r = reports[camper.id];
+    const defaultId =
+      previewCamperPool.find((c) => reports[c.id])?.id ?? previewCamperPool[0].id;
+    setPreviewCamperId(defaultId);
+    setPreviewOpen(true);
     setPreviewLoading(true);
     try {
-      const dataUrl = await renderSunshineReportPreviewDataUrl({
-        camperName: camper.full_name,
-        activities: r.activities ?? [],
-        sports: r.sports ?? [],
-        lunch: r.lunch ?? [],
-        bm: r.bm ?? false,
-        napped: r.napped ?? false,
-      });
-      setPreviewImageUrl(dataUrl);
-      setPreviewCaption(
-        `NSDC Sunshine Report — ${camper.full_name}${camper.parent_email ? ` → ${camper.parent_email}` : ""}`,
-      );
-      setPreviewOpen(true);
+      await renderPreviewForCamper(defaultId);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Preview failed");
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  async function onPreviewCamperChange(camperId: string) {
+    setPreviewCamperId(camperId);
+    setPreviewLoading(true);
+    try {
+      await renderPreviewForCamper(camperId);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Preview failed");
     } finally {
@@ -1083,6 +1107,26 @@ export default function SunshineReport() {
             <DialogTitle>Parent email preview</DialogTitle>
             <DialogDescription>{previewCaption || "Exact Todd template with today’s fields."}</DialogDescription>
           </DialogHeader>
+          {previewCamperPool.length > 1 ? (
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">Preview for camper</label>
+              <Select value={previewCamperId} onValueChange={(v) => void onPreviewCamperChange(v)} disabled={previewLoading}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select camper" />
+                </SelectTrigger>
+                <SelectContent>
+                  {previewCamperPool.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.full_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+          {previewLoading ? (
+            <p className="text-sm text-muted-foreground">Updating preview…</p>
+          ) : null}
           {previewImageUrl ? (
             <img
               src={previewImageUrl}

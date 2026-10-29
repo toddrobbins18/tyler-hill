@@ -6,6 +6,7 @@ import {
   parseSwimLevelsJson,
   swimProgressEmailSupported,
 } from "../_shared/swimProgressReport.ts";
+import { trySendM365Email } from "../_shared/m365SendMail.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,7 +32,8 @@ serve(async (req) => {
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     if (userError || !user) throw new Error("Unauthorized");
 
-    const { company_id, child_id, season, level_id, pdf_base64, pdf_filename } = await req.json();
+    const { company_id, child_id, season, level_id, pdf_base64, pdf_filename, preview } = await req.json();
+    const forcePreview = preview === true;
     if (!company_id || !child_id || !season || !level_id) {
       throw new Error("company_id, child_id, season, and level_id are required");
     }
@@ -39,7 +41,7 @@ serve(async (req) => {
       throw new Error("Invalid level_id");
     }
     if (!swimProgressEmailSupported(level_id)) {
-      throw new Error(`Progress email for ${level_id} is not enabled yet — Red Cross 1 only for now`);
+      throw new Error(`Progress email for ${level_id} is not enabled yet — add skill template in swimProgressSkills`);
     }
 
     const { data: userRoles } = await supabase
@@ -105,87 +107,55 @@ serve(async (req) => {
     });
     if (!rendered) throw new Error("Could not build swim progress email");
 
-    const { data: emailConfig } = await supabase
-      .from("company_email_config")
-      .select("*")
-      .eq("company_id", company_id)
-      .maybeSingle();
-
-    if (!emailConfig?.is_configured || emailConfig?.is_active === false) {
-      throw new Error("Camp email is not configured. Set up Microsoft 365 in Admin → Email Config.");
-    }
-
-    const { data: decryptedSecret, error: decryptError } = await supabase.rpc("decrypt_secret", {
-      encrypted: emailConfig.m365_client_secret_encrypted,
-    });
-    if (decryptError || !decryptedSecret) {
-      throw new Error("Failed to decrypt email credentials");
-    }
-
-    const tokenResponse = await fetch(
-      `https://login.microsoftonline.com/${emailConfig.m365_tenant_id}/oauth2/v2.0/token`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          client_id: emailConfig.m365_client_id,
-          client_secret: decryptedSecret,
-          scope: "https://graph.microsoft.com/.default",
-          grant_type: "client_credentials",
-        }),
-      },
-    );
-
-    const tokenData = await tokenResponse.json();
-    if (!tokenResponse.ok || !tokenData?.access_token) {
-      throw new Error("Failed to authenticate with Microsoft 365");
-    }
-
     const pdfAttached = typeof pdf_base64 === "string" && pdf_base64.length > 0;
     const attachmentName =
       typeof pdf_filename === "string" && pdf_filename.trim()
         ? pdf_filename.trim()
         : "Swim-Skills-Chart.pdf";
 
-    const message: Record<string, unknown> = {
-      subject: rendered.subject,
-      body: { contentType: "HTML", content: rendered.html },
-      from: {
-        emailAddress: {
-          address: emailConfig.m365_sender_email,
-          name: emailConfig.m365_sender_name || campName,
-        },
-      },
-      toRecipients: [{ emailAddress: { address: parentEmail } }],
-    };
-
-    if (pdfAttached) {
-      message.attachments = [
-        {
-          "@odata.type": "#microsoft.graph.fileAttachment",
-          name: attachmentName,
-          contentType: "application/pdf",
-          contentBytes: pdf_base64,
-        },
-      ];
+    if (forcePreview) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          preview: true,
+          sent: false,
+          recipient: parentEmail,
+          subject: rendered.subject,
+          html: rendered.html,
+          pdfAttached,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+      );
     }
 
-    const sendResponse = await fetch(
-      `https://graph.microsoft.com/v1.0/users/${emailConfig.m365_sender_email}/sendMail`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${tokenData.access_token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ message }),
-      },
-    );
+    const m365 = await trySendM365Email(supabase, company_id, {
+      subject: rendered.subject,
+      html: rendered.html,
+      to: parentEmail,
+      fromName: campName,
+      attachments: pdfAttached
+        ? [{ name: attachmentName, contentType: "application/pdf", contentBytes: pdf_base64 }]
+        : undefined,
+    });
 
-    if (!sendResponse.ok) {
-      const detail = await sendResponse.text();
-      console.error("M365 send failed", detail);
-      throw new Error("Failed to send email");
+    if (!m365.configured) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          preview: true,
+          sent: false,
+          recipient: parentEmail,
+          subject: rendered.subject,
+          html: rendered.html,
+          pdfAttached,
+          message: "M365 not configured — email preview only. Configure Admin → Email to send live.",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+      );
+    }
+
+    if (!m365.sent) {
+      throw new Error(m365.error ?? "Failed to send email");
     }
 
     await supabase.from("email_logs").insert({
@@ -201,6 +171,8 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
+        preview: false,
+        sent: true,
         recipient: parentEmail,
         subject: rendered.subject,
         pdfAttached,

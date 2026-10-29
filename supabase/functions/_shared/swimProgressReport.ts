@@ -94,8 +94,150 @@ const RED_CROSS_1: SwimProgressLevelDef = {
   ],
 };
 
+const RED_CROSS_2: SwimProgressLevelDef = {
+  levelId: "red-cross-2",
+  emailSubject: "Swim Progress Report",
+  introParagraph:
+    'We use "Animal Levels" to represent the specific Red Cross level your child is working toward mastering.',
+  attachmentBlurb:
+    "We've attached a blank skills sheet for Red Cross Level 2, so you can see all the skills required to complete this level.",
+  groups: [
+    {
+      id: "frog",
+      title: "FROG LEVEL",
+      skills: [
+        { id: "F1", label: "Enter by stepping or jumping from the side" },
+        { id: "F2", label: "Exit using ladder, steps or side" },
+        { id: "F3", label: "Full submerge and hold breath, 10 seconds" },
+        { id: "F4", label: "Bobbing, 10 times" },
+        { id: "F5", label: "Open eyes under water to retrieve submerged object" },
+        { id: "F6", label: "FROG Level" },
+      ],
+    },
+    {
+      id: "toad",
+      title: "TOAD LEVEL",
+      skills: [
+        { id: "TD1", label: "Superman float with glide, 2 body lengths" },
+        { id: "TD2", label: "Recover from front float to a standing position" },
+        { id: "TD3", label: "Back float, 15 seconds" },
+        { id: "TD4", label: "Recover from back to a standing position" },
+        { id: "TD5", label: "Roll from front to back and back to front" },
+        { id: "TD6", label: "TOAD Level" },
+      ],
+    },
+    {
+      id: "bullfrog",
+      title: "BULLFROG LEVEL",
+      skills: [
+        { id: "BF1", label: "Rotary breathing with beginning arm action, 5 times" },
+        { id: "BF2", label: "Back glide, 2 body lengths" },
+        { id: "BF3", label: "Tread water, 15 seconds" },
+        { id: "BF4", label: "Combined arm and leg action on front for 5 body lengths" },
+        { id: "BF5", label: "Combined arm and leg action on back for 5 body lengths" },
+        { id: "BF6", label: "BULLFROG Level" },
+      ],
+    },
+  ],
+};
+
+const RED_CROSS_4: SwimProgressLevelDef = {
+  levelId: "red-cross-4",
+  emailSubject: "Swim Progress Report",
+  introParagraph:
+    'We use "Animal Levels" to represent the specific Red Cross level your child is working toward mastering.',
+  attachmentBlurb:
+    "We've attached a blank skills sheet for Red Cross Level 4, so you can see all the skills required to complete this level.",
+  groups: [
+    {
+      id: "wahoo",
+      title: "WAHOO LEVEL",
+      skills: [
+        { id: "W1", label: "Headfirst entry, compact & stride positions" },
+        { id: "W2", label: "Underwater swim for 3 to 5 body lengths" },
+        { id: "W3", label: "Front crawl for 25 yards" },
+        { id: "W4", label: "Back crawl for 15 yards" },
+        { id: "W5", label: "Elementary backstroke for 25 yards" },
+        { id: "W6", label: "Perform open turns" },
+        { id: "W7", label: "WAHOO Level" },
+      ],
+    },
+    {
+      id: "barracuda",
+      title: "BARRACUDA LEVEL",
+      skills: [
+        { id: "BR1", label: "Tread water for 2 minutes" },
+        { id: "BR2", label: "Feet first surface dive" },
+        { id: "BR3", label: "Breaststroke for 15 yards" },
+        { id: "BR4", label: "Butterfly for 15 yards" },
+        { id: "BR5", label: "Sidestroke for 15 yards" },
+        { id: "BR6", label: "Survival swimming in deep water for 1 minute" },
+        {
+          id: "BR7",
+          label: "Push off in streamline position on back and dolphin kick for 3-5 body lengths",
+        },
+        { id: "BR8", label: "BARRACUDA Level" },
+      ],
+    },
+  ],
+};
+
+const RED_CROSS_3: SwimProgressLevelDef = {
+  levelId: "red-cross-3",
+  emailSubject: "Swim Progress Report",
+  introParagraph:
+    'We use "Animal Levels" to represent the specific Red Cross level your child is working toward mastering (i.e. Level 2 includes Frog, Toad and Bullfrog).',
+  attachmentBlurb:
+    "We've attached a blank skills sheet for Red Cross Level 3, so you can see all the skills required to complete this level.",
+  groups: [
+    {
+      id: "perch",
+      title: "PERCH LEVEL",
+      skills: [
+        { id: "P1", label: "Jump in, recover to surface, and return to side of pool" },
+        { id: "P2", label: "Superman push off with flutter kick for 3 body lengths" },
+        { id: "P3", label: "Back float for 15 seconds" },
+        { id: "P4", label: "Tread water for 15 seconds" },
+        { id: "P5", label: "Elementary backstroke arm action" },
+        { id: "P6", label: "Bobbing while moving toward safety, 15 times" },
+        { id: "P7", label: "PERCH Level" },
+      ],
+    },
+    {
+      id: "trout",
+      title: "TROUT LEVEL",
+      skills: [
+        { id: "T1", label: "Headfirst sitting entry" },
+        { id: "T2", label: "Superman push off with dolphin kick for 3 body lengths" },
+        { id: "T3", label: "Back float for 30 seconds" },
+        { id: "T4", label: "Tread water for 30 seconds" },
+        { id: "T5", label: "Survival float on front, 30 seconds" },
+        { id: "T6", label: "Elementary backstroke leg action" },
+        { id: "T7", label: "TROUT Level" },
+      ],
+    },
+    {
+      id: "bass",
+      title: "BASS LEVEL",
+      skills: [
+        { id: "B1", label: "Headfirst kneeling entry" },
+        { id: "B2", label: "Back float for 1 minute" },
+        { id: "B3", label: "Tread water for 1 minute" },
+        { id: "B4", label: "Elementary backstroke for 15 yards" },
+        { id: "B5", label: "Front crawl with rotary breathing for 15 yards" },
+        { id: "B6", label: "Breaststroke kick for 15 yards" },
+        { id: "B7", label: "Scissor kick for 15 yards" },
+        { id: "B8", label: "BASS Level" },
+      ],
+    },
+  ],
+};
+
 const PROGRESS: Partial<Record<SwimProgressReportLevel, SwimProgressLevelDef>> = {
   "red-cross-1": RED_CROSS_1,
+  "red-cross-2": RED_CROSS_2,
+  "red-cross-3": RED_CROSS_3,
+  "red-cross-4": RED_CROSS_4,
 };
 
 export function isSwimProgressReportLevel(value: string): value is SwimProgressReportLevel {
@@ -103,7 +245,7 @@ export function isSwimProgressReportLevel(value: string): value is SwimProgressR
 }
 
 export function swimProgressEmailSupported(levelId: SwimProgressReportLevel): boolean {
-  return levelId === "red-cross-1";
+  return PROGRESS[levelId] != null;
 }
 
 function normalizeSkillStatus(raw: unknown): SkillStatus {

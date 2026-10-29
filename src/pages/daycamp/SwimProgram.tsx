@@ -40,6 +40,7 @@ import {
   swimHistoryRecordHasData,
 } from "@/lib/swimProgram";
 import { sendSwimProgressEmail } from "@/lib/swimProgressApi";
+import { sendSwimBraceletEmail } from "@/lib/swimBraceletApi";
 import { buildSwimProgressPdf } from "@/lib/swimProgressPdf";
 import { swimProgressEmailSupported } from "@/lib/swimProgressSkills";
 import OperationLivePanel from "@/components/admin/OperationLivePanel";
@@ -737,6 +738,41 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
     });
   };
 
+  const handleSendBraceletEmail = async (record: BraceletRecord) => {
+    if (!currentCompany?.id) return;
+    if (!record.divisionLeader?.trim() || isBlankDivisionLeader(record.divisionLeader)) {
+      toast({
+        title: "Assign division leader first",
+        description: "Each bracelet row needs a division leader before sending.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      const result = await sendSwimBraceletEmail({
+        companyId: currentCompany.id,
+        childId: record.id,
+        season: currentSeason,
+      });
+      if (!result.success) {
+        toast({ title: "Email not sent", description: result.error, variant: "destructive" });
+        return;
+      }
+      if (result.sent) {
+        updateBracelet(record.id, { emailSent: true });
+        toast({ title: "Email sent", description: `${result.subject} → ${result.recipient}` });
+      } else {
+        toast({
+          title: "Email preview (not sent)",
+          description: `Would email ${result.recipient}. Configure M365 in Admin → Email to send live.`,
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Email failed", variant: "destructive" });
+    }
+  };
+
   const assignDivisionLeaderBulk = async (leader: string, targets: BraceletRecord[]) => {
     if (!currentCompany?.id || !leader.trim() || !targets.length) return;
     const normalizedLeader = matchDivisionLeaderOption(leader);
@@ -858,21 +894,27 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
         },
         {
           id: "send",
-          label: "Sending email via Microsoft 365",
+          label: result.sent ? "Sending email via Microsoft 365" : "Email preview (M365 not configured)",
           status: "done",
           detail: result.recipient ?? undefined,
         },
         {
           id: "done",
-          label: result.pdfAttached ? "Email sent with PDF attached" : "Email sent",
+          label: result.sent
+            ? result.pdfAttached
+              ? "Email sent with PDF attached"
+              : "Email sent"
+            : "Preview only — configure M365 to send",
           status: "done",
         },
       ]);
       toast({
-        title: "Progress email sent",
-        description: result.pdfAttached
-          ? `Sent to ${result.recipient} with skills chart attached.`
-          : `Sent to ${result.recipient}${pdf.ready ? "" : ` (chart PDF skipped: ${pdf.reason})`}.`,
+        title: result.sent ? "Progress email sent" : "Progress email preview",
+        description: result.sent
+          ? result.pdfAttached
+            ? `Sent to ${result.recipient} with skills chart attached.`
+            : `Sent to ${result.recipient}${pdf.ready ? "" : ` (chart PDF skipped: ${pdf.reason})`}.`
+          : `Would send to ${result.recipient}. ${result.message ?? "Configure M365 in Admin → Email."}`,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
@@ -1449,8 +1491,7 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                             className="h-7 text-xs"
                             onClick={(e) => {
                               e.stopPropagation();
-                              updateBracelet(b.id, { emailSent: true });
-                              toast({ title: "Email queued", description: `Bracelet notice to ${b.name}'s family.` });
+                              void handleSendBraceletEmail(b);
                             }}
                           >
                             <Mail className="h-3 w-3 mr-1" /> Send

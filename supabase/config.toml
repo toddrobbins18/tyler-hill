@@ -90,6 +90,12 @@ verify_jwt = true
 [functions.send-swim-progress-email]
 verify_jwt = true
 
+[functions.send-swim-bracelet-email]
+verify_jwt = true
+
+[functions.process-swim-lesson-reminders]
+verify_jwt = true
+
 [functions.send-sunshine-reports]
 verify_jwt = true
 
