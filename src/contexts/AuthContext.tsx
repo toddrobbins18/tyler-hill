@@ -197,6 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (
       (menuItem === "bus-attendance" ||
         menuItem === "bus-check-ins" ||
+        menuItem === "group-attendance" ||
         menuItem === "group-bubble-sheets" ||
         menuItem === "change-sheets" ||
         menuItem === "pending-transport-changes" ||

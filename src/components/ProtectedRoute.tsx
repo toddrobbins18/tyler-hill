@@ -18,6 +18,7 @@ const routeToMenuMap: Record<string, string> = {
   'transport': 'transportation',
   'bus-attendance': 'bus-attendance',
   'bus-check-ins': 'bus-check-ins',
+  'group-attendance': 'group-attendance',
 };
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
