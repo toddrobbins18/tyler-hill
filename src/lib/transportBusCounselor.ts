@@ -12,29 +12,47 @@ export function transportBusesMatch(a: string, b: string): boolean {
   return normalizeTransportBusKey(a) === normalizeTransportBusKey(b);
 }
 
+/** Menu items bus counselors may open when navigation is locked to their assigned bus. */
+export const BUS_COUNSELOR_NAV_MENU_IDS = new Set([
+  "bus-attendance",
+  "bus-check-ins",
+]);
+
+/** Full transport board — not granted by generic "transportation" alone (Todd: counselors see one bus). */
 export function canViewAllTransportBuses(options: {
   isSuperAdmin?: boolean;
   isAdmin?: boolean;
   hasTransportAdmin?: boolean;
-  hasTransportation?: boolean;
 }): boolean {
-  return !!(
-    options.isSuperAdmin ||
-    options.isAdmin ||
-    options.hasTransportAdmin ||
-    options.hasTransportation
-  );
+  return !!(options.isSuperAdmin || options.isAdmin || options.hasTransportAdmin);
+}
+
+export function isBusCounselorNavLocked(options: {
+  canViewAll: boolean;
+  assignedBus: string | null | undefined;
+}): boolean {
+  return !options.canViewAll && !!options.assignedBus?.trim();
+}
+
+export function isBusCounselorMenuAllowed(menuId: string): boolean {
+  return BUS_COUNSELOR_NAV_MENU_IDS.has(menuId);
 }
 
 export function filterRoutesForAssignedBus<T extends { bus: string }>(
   routes: T[],
-  assignedBus: string | null | undefined,
-  canViewAll: boolean,
+  options: {
+    assignedBus: string | null | undefined;
+    canViewAll: boolean;
+    /** Transportation coordinators without an assigned bus still see all routes. */
+    hasTransportCoordinatorAccess?: boolean;
+  },
 ): T[] {
+  const { assignedBus, canViewAll, hasTransportCoordinatorAccess } = options;
   if (canViewAll) return routes;
   const bus = assignedBus?.trim();
-  if (!bus) return routes;
-  return routes.filter((r) => transportBusesMatch(r.bus, bus));
+  if (bus) return routes.filter((r) => transportBusesMatch(r.bus, bus));
+  if (hasTransportCoordinatorAccess) return routes;
+  return [];
 }
 
 export async function loadUserAssignedTransportBus(

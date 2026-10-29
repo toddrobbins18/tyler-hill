@@ -31,6 +31,7 @@ import { DayCampSidebarMenuList } from "@/components/daycamp/DayCampSidebarMenuL
 import { SidebarNavItem } from "@/components/sidebar/SidebarNavItem";
 import { isSidebarNavActive } from "@/lib/sidebarNavActive";
 import { useDayCampMenuVisibility } from "@/hooks/useDayCampMenuVisibility";
+import { useBusCounselorNavScope } from "@/hooks/useBusCounselorNavScope";
 import { parentPortalUrl } from "@/hooks/useParentCompany";
 import {
   Collapsible,
@@ -84,11 +85,15 @@ export function AppSidebar() {
     hasPagePermission,
   };
 
-  const visibleItems = useDayCampMenuVisibility(items, permissionOptions);
+  const { isNavLocked, allowMenuItem } = useBusCounselorNavScope();
+
+  const visibleItems = useDayCampMenuVisibility(items, permissionOptions).filter(
+    (item) => allowMenuItem(item.menuId),
+  );
   const visibleDayCampPocItems = useDayCampMenuVisibility(
     isDayCamp ? dayCampPocItems : [],
     permissionOptions,
-  );
+  ).filter((item) => allowMenuItem(item.menuId));
 
   const showAdministration = useMemo(() => {
     if (!currentCompany?.id) return false;

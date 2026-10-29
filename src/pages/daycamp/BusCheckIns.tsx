@@ -27,6 +27,7 @@ import {
   type BusCheckinMap,
 } from "@/lib/transportBusCheckins";
 import { FrontOfficeBackLink } from "@/components/daycamp/FrontOfficeBackLink";
+import { useBusCounselorNavScope } from "@/hooks/useBusCounselorNavScope";
 
 function downloadCsv(rows: (string | number)[][], filename: string) {
   const csv = rows
@@ -66,6 +67,7 @@ export default function BusCheckIns() {
     setRunDate(operationalDateString);
   }, [operationalDateString]);
 
+  const { isNavLocked } = useBusCounselorNavScope();
   const {
     companyId,
     currentSeason,
@@ -266,7 +268,7 @@ export default function BusCheckIns() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <FrontOfficeBackLink />
+      {!isNavLocked ? <FrontOfficeBackLink /> : null}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="page-header flex items-center gap-2">

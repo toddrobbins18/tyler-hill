@@ -6,6 +6,8 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { Shield } from "lucide-react";
 import { isNestSandboxCompany } from "@/lib/camps";
 import { isSandboxDemoStaffEmail } from "@/lib/nestSandboxStaffDemo";
+import { useBusCounselorNavScope } from "@/hooks/useBusCounselorNavScope";
+import { isBusCounselorMenuAllowed } from "@/lib/transportBusCounselor";
 
 // Map route paths to their menu item names for permission checks
 const routeToMenuMap: Record<string, string> = {
@@ -26,6 +28,7 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   
   const { user, loading: authLoading, hasPagePermission, isSuperAdmin } = useAuth();
   const { loading: companyLoading, currentCompany, sandboxMode } = useCompany();
+  const { isNavLocked, assignedLoading: busScopeLoading } = useBusCounselorNavScope();
 
   // Extract page name from path
   const menuItem = useMemo(() => {
@@ -50,8 +53,17 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     if (!currentCompany) return true; // Still loading, assume access
     if (isSuperAdmin) return true;
     if (sandboxTrainingAccess) return true;
+    if (isNavLocked && !isBusCounselorMenuAllowed(menuItem)) return false;
     return hasPagePermission(currentCompany.id, menuItem);
-  }, [currentCompany, menuItem, isSuperAdmin, hasPagePermission, sandboxTrainingAccess]);
+  }, [currentCompany, menuItem, isSuperAdmin, hasPagePermission, sandboxTrainingAccess, isNavLocked]);
+
+  useEffect(() => {
+    if (busScopeLoading || !isNavLocked) return;
+    if (hasPageAccess) return;
+    if (isBusCounselorMenuAllowed("bus-attendance") && !location.pathname.startsWith("/day-camp/bus-attendance")) {
+      navigate("/day-camp/bus-attendance", { replace: true });
+    }
+  }, [busScopeLoading, isNavLocked, hasPageAccess, location.pathname, navigate]);
 
   // Check auth and redirect if needed
   useEffect(() => {
@@ -97,7 +109,7 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   }, [navigate]);
 
   // Show loading while auth or company is loading, or approval not yet checked
-  if (authLoading || companyLoading || !approvalChecked) {
+  if (authLoading || companyLoading || !approvalChecked || busScopeLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>

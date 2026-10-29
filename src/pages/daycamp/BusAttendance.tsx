@@ -32,6 +32,7 @@ import { consolidateRouteStopsByAddress } from "@/lib/transportRouteStops";
 import { getEffectiveCoreStops } from "@/lib/transportRunBoard";
 import { TransportReportPreviewDialog, type TransportReportPreview } from "@/components/TransportReportPreviewDialog";
 import { FrontOfficeBackLink } from "@/components/daycamp/FrontOfficeBackLink";
+import { useBusCounselorNavScope } from "@/hooks/useBusCounselorNavScope";
 
 export default function BusAttendance() {
   const { toast } = useToast();
@@ -53,6 +54,7 @@ export default function BusAttendance() {
     setRunDate(operationalDateString);
   }, [operationalDateString]);
 
+  const { isNavLocked } = useBusCounselorNavScope();
   const {
     companyId,
     currentSeason,
@@ -61,6 +63,8 @@ export default function BusAttendance() {
     routes,
     enrollmentCtx,
     busScopeLabel,
+    assignedBus,
+    canViewAll,
   } = useFilteredBusRoutes(runDate, timeOfDay);
 
   const routeIdsWithRoster = useMemo(() => routes.map((r) => r.id), [routes]);
@@ -321,7 +325,7 @@ export default function BusAttendance() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <FrontOfficeBackLink />
+      {!isNavLocked ? <FrontOfficeBackLink /> : null}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="page-header flex items-center gap-2">
@@ -349,7 +353,22 @@ export default function BusAttendance() {
         </Button>
       </div>
 
-      {routes.length > 0 ? (
+      {!boardLoading && routes.length === 0 ? (
+        <Card>
+          <CardContent className="py-8 text-center space-y-2">
+            <p className="text-sm font-medium">No bus route available for your account.</p>
+            <p className="text-xs text-muted-foreground max-w-md mx-auto">
+              {assignedBus
+                ? `Your profile is set to ${assignedBus}, but no matching route was found for this date and run.`
+                : canViewAll
+                  ? "No routes on the board for this date."
+                  : "Ask an admin to set your assigned bus on your user profile (assigned_transport_bus)."}
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {routes.length > 1 ? (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Bubble sheet buses</CardTitle>
