@@ -1,17 +1,20 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isNestSandboxCompany } from "@/lib/camps";
 
 export const MESSAGE_MEDIA_BUCKET = "message-media";
 
 /** No app-side cap — size is enforced by Supabase Storage (project global + bucket settings). */
 export const MAX_MESSAGE_IMAGE_BYTES: number | null = null;
 export const MAX_MESSAGE_VIDEO_BYTES: number | null = null;
+export const MAX_MESSAGE_AUDIO_BYTES: number | null = null;
+export const MAX_MESSAGE_FILE_BYTES: number | null = null;
 
 export const MESSAGE_IMAGE_MIME_TYPES = [
   "image/jpeg",
   "image/png",
   "image/webp",
   "image/gif",
+  "image/heic",
+  "image/heif",
 ] as const;
 
 export const MESSAGE_VIDEO_MIME_TYPES = [
@@ -21,7 +24,31 @@ export const MESSAGE_VIDEO_MIME_TYPES = [
   "video/x-m4v",
 ] as const;
 
-export type MessageKind = "text" | "image" | "video";
+export const MESSAGE_AUDIO_MIME_TYPES = [
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/x-m4a",
+  "audio/wav",
+  "audio/webm",
+  "audio/ogg",
+  "audio/aac",
+] as const;
+
+export const MESSAGE_FILE_MIME_TYPES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "text/plain",
+  "text/csv",
+  "application/zip",
+  "application/x-zip-compressed",
+] as const;
+
+export type MessageKind = "text" | "image" | "video" | "audio" | "file";
 
 export type MessageMediaFields = {
   message_kind: MessageKind;
@@ -30,34 +57,87 @@ export type MessageMediaFields = {
   media_file_name: string | null;
 };
 
-export function messageMediaEnabledForCamp(slug: string | null | undefined): boolean {
-  return isNestSandboxCompany(slug);
+export function messageMediaEnabledForCamp(_slug: string | null | undefined): boolean {
+  return true;
+}
+
+const EXTENSION_KIND: { ext: string; kind: MessageKind }[] = [
+  { ext: "jpg", kind: "image" },
+  { ext: "jpeg", kind: "image" },
+  { ext: "png", kind: "image" },
+  { ext: "webp", kind: "image" },
+  { ext: "gif", kind: "image" },
+  { ext: "heic", kind: "image" },
+  { ext: "heif", kind: "image" },
+  { ext: "mp4", kind: "video" },
+  { ext: "mov", kind: "video" },
+  { ext: "webm", kind: "video" },
+  { ext: "m4v", kind: "video" },
+  { ext: "mp3", kind: "audio" },
+  { ext: "m4a", kind: "audio" },
+  { ext: "wav", kind: "audio" },
+  { ext: "ogg", kind: "audio" },
+  { ext: "aac", kind: "audio" },
+  { ext: "pdf", kind: "file" },
+  { ext: "doc", kind: "file" },
+  { ext: "docx", kind: "file" },
+  { ext: "xls", kind: "file" },
+  { ext: "xlsx", kind: "file" },
+  { ext: "ppt", kind: "file" },
+  { ext: "pptx", kind: "file" },
+  { ext: "txt", kind: "file" },
+  { ext: "csv", kind: "file" },
+  { ext: "zip", kind: "file" },
+];
+
+function kindFromFileName(fileName: string): MessageKind | null {
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  if (!ext) return null;
+  return EXTENSION_KIND.find((e) => e.ext === ext)?.kind ?? null;
 }
 
 export function classifyMessageMediaFile(file: File): MessageKind | null {
-  if (MESSAGE_IMAGE_MIME_TYPES.includes(file.type as (typeof MESSAGE_IMAGE_MIME_TYPES)[number])) {
+  const mime = file.type?.toLowerCase() ?? "";
+  if (mime.startsWith("image/")) {
+    if (MESSAGE_IMAGE_MIME_TYPES.includes(mime as (typeof MESSAGE_IMAGE_MIME_TYPES)[number])) {
+      return "image";
+    }
     return "image";
   }
-  if (MESSAGE_VIDEO_MIME_TYPES.includes(file.type as (typeof MESSAGE_VIDEO_MIME_TYPES)[number])) {
-    return "video";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
+  if (MESSAGE_FILE_MIME_TYPES.includes(mime as (typeof MESSAGE_FILE_MIME_TYPES)[number])) {
+    return "file";
   }
-  return null;
+  return kindFromFileName(file.name);
+}
+
+function maxBytesForKind(kind: MessageKind): number | null {
+  switch (kind) {
+    case "image":
+      return MAX_MESSAGE_IMAGE_BYTES;
+    case "video":
+      return MAX_MESSAGE_VIDEO_BYTES;
+    case "audio":
+      return MAX_MESSAGE_AUDIO_BYTES;
+    case "file":
+      return MAX_MESSAGE_FILE_BYTES;
+    default:
+      return null;
+  }
 }
 
 export function validateMessageMediaFile(file: File): { ok: true; kind: MessageKind } | { ok: false; error: string } {
   const kind = classifyMessageMediaFile(file);
   if (!kind) {
-    return { ok: false, error: "This file type is not supported." };
-  }
-  const max = kind === "image" ? MAX_MESSAGE_IMAGE_BYTES : MAX_MESSAGE_VIDEO_BYTES;
-  if (max != null && file.size > max) {
     return {
       ok: false,
-      error:
-        kind === "video"
-          ? "This video is too large. Please choose a smaller video."
-          : "This image is too large. Please choose a smaller photo.",
+      error: "This file type is not supported. Try a photo, video, audio clip, or common document (PDF, Word, etc.).",
     };
+  }
+  const max = maxBytesForKind(kind);
+  if (max != null && file.size > max) {
+    return { ok: false, error: "This file is too large. Please choose a smaller file." };
   }
   return { ok: true, kind };
 }
@@ -83,7 +163,7 @@ export async function uploadMessageMediaFile(
   const { error } = await supabase.storage.from(MESSAGE_MEDIA_BUCKET).upload(path, file, {
     cacheControl: "3600",
     upsert: false,
-    contentType: file.type,
+    contentType: file.type || "application/octet-stream",
   });
   onProgress?.(100);
   if (error) {
@@ -107,10 +187,34 @@ export async function createSignedMessageMediaUrl(
   return data.signedUrl;
 }
 
-export function messagePreviewLabel(kind: MessageKind | string | null | undefined, content: string): string {
+export function messagePreviewLabel(
+  kind: MessageKind | string | null | undefined,
+  content: string,
+  fileName?: string | null,
+): string {
   if (kind === "image") return content.trim() ? content.trim() : "Photo";
   if (kind === "video") return content.trim() ? content.trim() : "Video";
+  if (kind === "audio") return content.trim() ? content.trim() : "Audio";
+  if (kind === "file") {
+    const name = fileName?.trim();
+    if (content.trim()) return content.trim();
+    return name || "Attachment";
+  }
   return content;
+}
+
+export function defaultMediaMessageSubject(kind: MessageKind): string {
+  switch (kind) {
+    case "video":
+      return "Video";
+    case "audio":
+      return "Audio";
+    case "file":
+      return "Attachment";
+    case "image":
+    default:
+      return "Photo";
+  }
 }
 
 export async function sendDirectMessageMedia(
@@ -216,6 +320,16 @@ export async function sendGroupMessageMedia(
     return { error: "Could not send media message. Please try again.", preview: "" };
   }
 
-  const preview = messagePreviewLabel(validation.kind, caption);
+  const preview = messagePreviewLabel(validation.kind, caption, options.file.name);
   return { error: null, preview };
 }
+
+export const MESSAGE_ATTACHMENT_ACCEPT = [
+  ...MESSAGE_IMAGE_MIME_TYPES,
+  ...MESSAGE_VIDEO_MIME_TYPES,
+  ...MESSAGE_AUDIO_MIME_TYPES,
+  ...MESSAGE_FILE_MIME_TYPES,
+  "image/*",
+  "video/*",
+  "audio/*",
+].join(",");

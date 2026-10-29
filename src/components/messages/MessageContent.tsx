@@ -7,6 +7,7 @@ type Props = {
   messageKind?: MessageKind | string | null;
   mediaStoragePath?: string | null;
   mediaMime?: string | null;
+  mediaFileName?: string | null;
   senderId?: string | null;
   notificationType?: string | null;
   className?: string;
@@ -17,18 +18,20 @@ export function MessageContent({
   messageKind = "text",
   mediaStoragePath,
   mediaMime,
+  mediaFileName,
   senderId,
   notificationType,
   className,
 }: Props) {
   const kind = (messageKind || "text") as MessageKind;
 
-  if ((kind === "image" || kind === "video") && mediaStoragePath) {
+  if ((kind === "image" || kind === "video" || kind === "audio" || kind === "file") && mediaStoragePath) {
     return (
       <MessageMediaAttachment
         kind={kind}
         storagePath={mediaStoragePath}
         mime={mediaMime}
+        fileName={mediaFileName}
         caption={content}
         senderId={senderId}
         notificationType={notificationType}

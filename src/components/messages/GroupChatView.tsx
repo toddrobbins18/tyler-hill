@@ -29,6 +29,7 @@ interface GroupMessage {
   message_kind?: string | null;
   media_storage_path?: string | null;
   media_mime?: string | null;
+  media_file_name?: string | null;
 }
 
 interface GroupInfo {
@@ -344,6 +345,7 @@ export default function GroupChatView({ groupId, onBack, onDeleted }: GroupChatV
                         messageKind={msg.message_kind}
                         mediaStoragePath={msg.media_storage_path}
                         mediaMime={msg.media_mime}
+                        mediaFileName={msg.media_file_name}
                         senderId={msg.sender_id}
                         className="text-sm"
                       />
@@ -386,6 +388,7 @@ export default function GroupChatView({ groupId, onBack, onDeleted }: GroupChatV
                                 messageKind={reply.message_kind}
                                 mediaStoragePath={reply.media_storage_path}
                                 mediaMime={reply.media_mime}
+                                mediaFileName={reply.media_file_name}
                                 senderId={reply.sender_id}
                                 className="text-sm"
                               />

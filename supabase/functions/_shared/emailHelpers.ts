@@ -381,6 +381,7 @@ export async function sendEmailNotifications(
       read: false,
       notification_type: senderId ? 'notification' : 'automated',
       sender_display_name: senderId ? null : 'Camp notification',
+      ...(companyId ? { company_id: companyId } : {}),
     }));
 
     const BATCH_SIZE = 50;

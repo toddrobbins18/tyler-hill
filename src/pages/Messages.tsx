@@ -23,6 +23,11 @@ import {
   sandboxInboxUsesTrainingFilter,
 } from "@/lib/messageInboxFilters";
 import { NestSandboxStaffTestAccountsCard } from "@/components/messages/NestSandboxStaffTestAccountsCard";
+import { ReadReceipt } from "@/components/messages/ReadReceipt";
+import {
+  markMessageRead,
+  markThreadRepliesReadForRecipient,
+} from "@/lib/messageReadReceipts";
 
 interface TagGroup {
   tag: string;
@@ -44,6 +49,7 @@ interface Message {
   content: string;
   created_at: string;
   read: boolean;
+  read_at?: string | null;
   sender_id: string | null;
   recipient_id: string | null;
   parent_message_id?: string | null;
@@ -299,10 +305,41 @@ export default function Messages() {
 
     if (data) {
       const cache = await resolveProfileNames(data);
-      const enriched = data.map(m => ({
-        ...m,
-        recipient_name: m.recipient_id ? (labelFromCache(cache, m.recipient_id) || "Unknown") : undefined,
-      }));
+      const parentIds = data.map((m) => m.id);
+      const { data: childRows } = await supabase
+        .from("messages")
+        .select("parent_message_id, sender_id, read, read_at, created_at")
+        .in("parent_message_id", parentIds)
+        .order("created_at", { ascending: true });
+
+      const byParent = new Map<string, NonNullable<typeof childRows>>();
+      for (const c of childRows ?? []) {
+        const pid = String(c.parent_message_id ?? "");
+        if (!pid) continue;
+        const list = byParent.get(pid) ?? [];
+        list.push(c);
+        byParent.set(pid, list);
+      }
+
+      const enriched = data.map((m) => {
+        const list = byParent.get(m.id) ?? [];
+        let latestOutbound: (typeof list)[number] | undefined;
+        for (let i = list.length - 1; i >= 0; i--) {
+          if (list[i].sender_id === user.id) {
+            latestOutbound = list[i];
+            break;
+          }
+        }
+        const receipt =
+          latestOutbound != null
+            ? { read: !!latestOutbound.read, read_at: latestOutbound.read_at ?? null }
+            : { read: !!m.read, read_at: m.read_at ?? null };
+        return {
+          ...m,
+          ...receipt,
+          recipient_name: m.recipient_id ? (labelFromCache(cache, m.recipient_id) || "Unknown") : undefined,
+        };
+      });
       const visible = filterMessagesForCampInbox(enriched, currentCompany);
       notificationsDebug("Sent list refetched", { userId: user.id, count: visible.length });
       setSentMessages(visible);
@@ -310,22 +347,51 @@ export default function Messages() {
   };
 
   const markAsRead = async (messageId: string) => {
-    const { error } = await supabase
-      .from("messages")
-      .update({ read: true })
-      .eq("id", messageId);
+    const readAt = new Date().toISOString();
+    const { error } = await markMessageRead(supabase, messageId);
 
     if (!error) {
+      setSelectedMessage((prev) =>
+        prev?.id === messageId ? { ...prev, read: true, read_at: readAt } : prev,
+      );
+      setReceivedMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, read: true, read_at: readAt } : m)),
+      );
       fetchMessages();
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await markThreadRepliesReadForRecipient(supabase, messageId, user.id);
     }
   };
 
   const handleMessageClick = (msg: Message) => {
     setSelectedMessage(msg);
-    if (!msg.read && viewMode === 'inbox') {
-      markAsRead(msg.id);
+    if (viewMode === "inbox" && msg.recipient_id) {
+      if (!msg.read) {
+        markAsRead(msg.id);
+      } else {
+        void supabase.auth.getUser().then(({ data: { user } }) => {
+          if (user) {
+            void markThreadRepliesReadForRecipient(supabase, msg.id, user.id);
+          }
+        });
+      }
     }
   };
+
+  const handleRootReadChange = useCallback(
+    (messageId: string, read: boolean, read_at: string | null) => {
+      setSelectedMessage((prev) =>
+        prev?.id === messageId ? { ...prev, read, read_at } : prev,
+      );
+      setSentMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, read, read_at } : m)),
+      );
+    },
+    [],
+  );
 
   const fetchTagGroups = async () => {
     setLoading(true);
@@ -553,7 +619,7 @@ export default function Messages() {
   };
 
   const activeMessages = viewMode === 'sent' ? sentMessages : receivedMessages;
-  const sandboxMessageMedia = messageMediaEnabledForCamp(currentCompany?.slug);
+  const messageMediaEnabled = messageMediaEnabledForCamp(currentCompany?.slug);
 
   return (
     <div className="space-y-6">
@@ -561,8 +627,8 @@ export default function Messages() {
         <p className="text-sm rounded-md border border-dashed bg-muted/40 px-3 py-2 text-muted-foreground">
           Training sandbox shows only messages sent while in this camp (tagged with its company).
           Older test mail and other camps&apos; notices are hidden.
-          {sandboxMessageMedia
-            ? " Thread replies and group chat can attach photos and videos."
+          {messageMediaEnabled
+            ? " Thread replies and group chat can attach photos, videos, audio, and files."
             : ""}
         </p>
       ) : null}
@@ -696,6 +762,12 @@ export default function Messages() {
                               <Clock className="h-3 w-3" />
                               {format(new Date(msg.latest_reply_at || msg.created_at), 'MMM d, yyyy h:mm a')}
                             </p>
+                            {viewMode === "sent" && msg.sender_id && (
+                              <ReadReceipt
+                                message={msg}
+                                className="mt-1"
+                              />
+                            )}
                           </div>
                         </div>
                       </button>
@@ -709,17 +781,20 @@ export default function Messages() {
 
           {/* Message Detail - Inline Thread */}
           {selectedMessage ? (
-            <InlineThread
-              message={selectedMessage}
-              viewMode={viewMode as 'inbox' | 'sent'}
-              campCompanyId={currentCompany?.id}
-              campCompanySlug={currentCompany?.slug}
-              onNavigateToGroup={(groupId) => {
-                setActiveGroupId(groupId);
-                setViewMode('groups');
-                setSelectedMessage(null);
-              }}
-            />
+            <div className="flex h-[min(700px,calc(100vh-11rem))] min-h-[520px] flex-col overflow-hidden">
+              <InlineThread
+                message={selectedMessage}
+                viewMode={viewMode as 'inbox' | 'sent'}
+                campCompanyId={currentCompany?.id}
+                campCompanySlug={currentCompany?.slug}
+                onRootReadChange={handleRootReadChange}
+                onNavigateToGroup={(groupId) => {
+                  setActiveGroupId(groupId);
+                  setViewMode('groups');
+                  setSelectedMessage(null);
+                }}
+              />
+            </div>
           ) : (
             <Card>
               <CardHeader>

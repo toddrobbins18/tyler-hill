@@ -2194,6 +2194,7 @@ export type Database = {
           notification_type: string | null
           parent_message_id: string | null
           read: boolean | null
+          read_at: string | null
           recipient_id: string | null
           sender_display_name: string | null
           sender_id: string | null
@@ -2212,6 +2213,7 @@ export type Database = {
           notification_type?: string | null
           parent_message_id?: string | null
           read?: boolean | null
+          read_at?: string | null
           recipient_id?: string | null
           sender_display_name?: string | null
           sender_id?: string | null
@@ -2230,6 +2232,7 @@ export type Database = {
           notification_type?: string | null
           parent_message_id?: string | null
           read?: boolean | null
+          read_at?: string | null
           recipient_id?: string | null
           sender_display_name?: string | null
           sender_id?: string | null

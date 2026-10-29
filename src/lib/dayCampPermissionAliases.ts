@@ -1,8 +1,13 @@
 /** Legacy menu_item IDs from North Shore foundation → current sidebar / route IDs. */
 const MENU_PERMISSION_ALIASES: Record<string, string[]> = {
   swim: ["swim-bracelets", "swim-progress"],
-  "swim-bracelets": ["swim"],
-  "swim-progress": ["swim"],
+  "swim-bracelets": ["swim", "swim-progress"],
+  "swim-progress": ["swim", "swim-bracelets"],
+  "swim-lessons": ["swim", "swim-bracelets", "swim-progress"],
+  nurse: ["health-center"],
+  "health-center": ["nurse"],
+  "tutoring-therapy": ["appointments"],
+  appointments: ["tutoring-therapy"],
 };
 
 /**

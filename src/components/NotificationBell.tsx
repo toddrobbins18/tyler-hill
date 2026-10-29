@@ -207,7 +207,8 @@ export function NotificationBell() {
       .eq("recipient_id", user.id)
       .eq("read", false);
     setUnreadCount(0);
-    setRecentMessages((prev) => prev.map((m) => ({ ...m, read: true })));
+    const readAt = new Date().toISOString();
+    setRecentMessages((prev) => prev.map((m) => ({ ...m, read: true, read_at: readAt })));
   };
 
   if (!user) return null;

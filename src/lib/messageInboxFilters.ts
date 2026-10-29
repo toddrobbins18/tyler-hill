@@ -1,4 +1,4 @@
-import { isNestSandboxCompany } from "@/lib/camps";
+import { CAMP_SLUG, isNestSandboxCompany } from "@/lib/camps";
 
 export type InboxMessageLike = {
   subject?: string | null;
@@ -20,21 +20,62 @@ export function isAutomatedCampBulletin(row: InboxMessageLike): boolean {
   return false;
 }
 
+const BULLETIN_SUBJECT_CAMP_SLUG: { pattern: RegExp; slug: string }[] = [
+  { pattern: /tyler hill daily news/i, slug: CAMP_SLUG.TYLER_HILL_CAMP },
+  { pattern: /\bdaily wolf\b/i, slug: CAMP_SLUG.TIMBER_LAKE_WEST },
+  { pattern: /\btiger times\b/i, slug: CAMP_SLUG.TIMBER_LAKE_CAMP },
+  { pattern: /north shore day camp daily news/i, slug: CAMP_SLUG.NORTH_SHORE_DAY_CAMP },
+];
+
+/** Legacy automated rows inserted before messages.company_id existed. */
+export function inferBulletinCampSlugFromSubject(subject: string | null | undefined): string | null {
+  const text = subject?.trim() ?? "";
+  if (!text) return null;
+  for (const { pattern, slug } of BULLETIN_SUBJECT_CAMP_SLUG) {
+    if (pattern.test(text)) return slug;
+  }
+  return null;
+}
+
+export function messageVisibleInCampInbox(
+  row: InboxMessageLike,
+  company: { id?: string; slug?: string | null } | null | undefined,
+): boolean {
+  if (!company?.id) return false;
+
+  if (row.company_id) {
+    return row.company_id === company.id;
+  }
+
+  const bulletinSlug = inferBulletinCampSlugFromSubject(row.subject);
+  if (bulletinSlug) {
+    return bulletinSlug === (company.slug ?? null);
+  }
+
+  if (isAutomatedCampBulletin(row)) {
+    return false;
+  }
+
+  return true;
+}
+
 /**
  * Training sandbox: only messages explicitly tagged to this camp (clean dummy environment).
- * Legacy rows with null company_id from other camps are hidden. Live camps keep the full inbox.
+ * Live camps: hide other camps' bulletins and rows stamped with a different company_id.
  */
 export function filterMessagesForCampInbox<T extends InboxMessageLike>(
   rows: T[],
   company: { id?: string; slug?: string | null } | null | undefined,
 ): T[] {
-  if (!isNestSandboxCompany(company?.slug)) return rows;
-  if (!company?.id) return [];
+  if (isNestSandboxCompany(company?.slug)) {
+    if (!company?.id) return [];
+    return rows.filter((row) => {
+      if (isAutomatedCampBulletin(row)) return false;
+      return row.company_id === company.id;
+    });
+  }
 
-  return rows.filter((row) => {
-    if (isAutomatedCampBulletin(row)) return false;
-    return row.company_id === company.id;
-  });
+  return rows.filter((row) => messageVisibleInCampInbox(row, company));
 }
 
 export function sandboxInboxUsesTrainingFilter(slug: string | null | undefined): boolean {

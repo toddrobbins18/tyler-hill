@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Send, Users, Reply } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Send, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { fetchMessageProfileLabels, inboxFromDisplayName } from "@/lib/messageProfiles";
@@ -15,6 +15,8 @@ import {
   sendDirectMessageMedia,
 } from "@/lib/messageMedia";
 import { toast } from "sonner";
+import { ReadReceipt } from "@/components/messages/ReadReceipt";
+import { markThreadRepliesReadForRecipient } from "@/lib/messageReadReceipts";
 
 interface ThreadMessage {
   id: string;
@@ -22,6 +24,7 @@ interface ThreadMessage {
   content: string;
   created_at: string;
   read: boolean;
+  read_at?: string | null;
   sender_id: string | null;
   recipient_id: string | null;
   parent_message_id?: string | null;
@@ -33,6 +36,7 @@ interface ThreadMessage {
   message_kind?: string | null;
   media_storage_path?: string | null;
   media_mime?: string | null;
+  media_file_name?: string | null;
 }
 
 interface InlineThreadProps {
@@ -42,6 +46,7 @@ interface InlineThreadProps {
   campCompanyId?: string;
   campCompanySlug?: string | null;
   onNavigateToGroup?: (groupId: string) => void;
+  onRootReadChange?: (messageId: string, read: boolean, read_at: string | null) => void;
 }
 
 export default function InlineThread({
@@ -50,6 +55,7 @@ export default function InlineThread({
   campCompanyId,
   campCompanySlug,
   onNavigateToGroup,
+  onRootReadChange,
 }: InlineThreadProps) {
   const [replies, setReplies] = useState<ThreadMessage[]>([]);
   const [newReply, setNewReply] = useState("");
@@ -79,10 +85,43 @@ export default function InlineThread({
           }
         }
       )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages' },
+        (payload: any) => {
+          const updated = payload.new as ThreadMessage | undefined;
+          if (!updated?.id) return;
+          if (updated.id === message.id) {
+            onRootReadChange?.(message.id, !!updated.read, updated.read_at ?? null);
+          }
+          if (updated.parent_message_id === message.id) {
+            setReplies((prev) =>
+              prev.map((r) =>
+                r.id === updated.id
+                  ? { ...r, read: !!updated.read, read_at: updated.read_at ?? null }
+                  : r,
+              ),
+            );
+          }
+        },
+      )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [message.id]);
+  }, [message.id, onRootReadChange]);
+
+  const markRepliesReadIfRecipient = useCallback(async () => {
+    if (viewMode !== "inbox") return;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user || message.recipient_id !== user.id) return;
+    await markThreadRepliesReadForRecipient(supabase, message.id, user.id);
+  }, [message.id, message.recipient_id, viewMode]);
+
+  useEffect(() => {
+    void markRepliesReadIfRecipient();
+  }, [markRepliesReadIfRecipient]);
 
   const resolveNames = useCallback(async (ids: string[]) => {
     const unknownIds = ids.filter(id => id && !profileCache[id.toLowerCase()]);
@@ -122,16 +161,38 @@ export default function InlineThread({
             group_id: (m as { group_id?: string | null }).group_id,
           }),
     })));
+    await markRepliesReadIfRecipient();
   };
 
   const mediaEnabled =
     !!campCompanyId && messageMediaEnabledForCamp(campCompanySlug);
 
-  const handleSendMedia = async (file: File) => {
-    if (!currentUserId || !campCompanyId || mediaUploading) return;
+  const dmRecipientId = useMemo((): string | null => {
+    if (!currentUserId) return null;
+    if (currentUserId === message.sender_id && message.recipient_id) {
+      return message.recipient_id;
+    }
+    if (currentUserId === message.recipient_id && message.sender_id) {
+      return message.sender_id;
+    }
+    const peerFromReplies = [...replies]
+      .reverse()
+      .find((r) => r.sender_id && r.sender_id !== currentUserId);
+    if (peerFromReplies?.sender_id) return peerFromReplies.sender_id;
+    if (viewMode === "sent" && message.recipient_id) return message.recipient_id;
+    if (viewMode === "inbox" && message.recipient_id === currentUserId) {
+      const firstOther = replies.find((r) => r.sender_id && r.sender_id !== currentUserId);
+      if (firstOther?.sender_id) return firstOther.sender_id;
+    }
+    return message.recipient_id ?? message.sender_id ?? null;
+  }, [currentUserId, message, replies, viewMode]);
 
-    const recipientId =
-      currentUserId === message.sender_id ? message.recipient_id : message.sender_id;
+  const canReply = !!currentUserId && !message.group_id && !!dmRecipientId;
+
+  const handleSendMedia = async (file: File) => {
+    if (!currentUserId || !campCompanyId || mediaUploading || !dmRecipientId) return;
+
+    const recipientId = dmRecipientId;
 
     setMediaUploading(true);
     setMediaProgress(0);
@@ -170,13 +231,11 @@ export default function InlineThread({
   };
 
   const handleSendReply = async () => {
-    if (!newReply.trim() || !currentUserId) return;
+    if (!newReply.trim() || !currentUserId || !dmRecipientId) return;
 
     setSending(true);
     try {
-      const recipientId = currentUserId === message.sender_id
-        ? message.recipient_id
-        : message.sender_id;
+      const recipientId = dmRecipientId;
 
       const { data: prof } = await supabase
         .from("profiles")
@@ -216,122 +275,129 @@ export default function InlineThread({
     }
   };
 
-  return (
-    <Card className="h-full flex flex-col">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          {message.subject}
-          {message.sender_id === null && (
-            <Badge variant="secondary">Automated</Badge>
-          )}
-        </CardTitle>
-        <CardDescription className="space-y-1">
-          <span className="block">
-            {format(new Date(message.created_at), 'MMMM d, yyyy h:mm a')}
-          </span>
-          {viewMode === 'inbox' && (
-            <span className="block font-medium text-foreground">
-              From:{" "}
-              {inboxFromDisplayName({
-                sender_name: message.sender_name,
-                sender_id: message.sender_id,
-                sender_display_name: message.sender_display_name,
-                notification_type: message.notification_type,
-                subject: message.subject,
-                group_id: message.group_id,
-              })}
-            </span>
-          )}
-          {viewMode === 'sent' && (
-            <span className="block font-medium text-foreground">
-              To: {message.recipient_name || "Unknown"}
-            </span>
-          )}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex-1 flex flex-col p-4 pt-0 min-h-0">
-        <ScrollArea className="flex-1">
-          {/* Original message */}
-          <div className="p-3 bg-muted rounded-lg mb-4">
-            <MessageContent
-              content={message.content}
-              messageKind={message.message_kind}
-              mediaStoragePath={message.media_storage_path}
-              mediaMime={message.media_mime}
-              senderId={message.sender_id}
-              notificationType={message.notification_type}
-            />
-          </div>
+  const partyLabel =
+    viewMode === "inbox"
+      ? inboxFromDisplayName({
+          sender_name: message.sender_name,
+          sender_id: message.sender_id,
+          sender_display_name: message.sender_display_name,
+          notification_type: message.notification_type,
+          subject: message.subject,
+          group_id: message.group_id,
+        })
+      : message.recipient_name || "Unknown";
 
-          {/* Group link */}
+  const chatTimeline = useMemo(() => {
+    return [message, ...replies].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    );
+  }, [message, replies]);
+
+  const renderBubble = (row: ThreadMessage) => {
+    const isMe = row.sender_id === currentUserId;
+    const senderLabel =
+      row.sender_name ||
+      (row.sender_id
+        ? inboxFromDisplayName({
+            sender_id: row.sender_id,
+            sender_display_name: row.sender_display_name,
+            notification_type: row.notification_type,
+            subject: row.subject,
+          })
+        : "Unknown");
+
+    return (
+      <div key={row.id} className={`flex w-full ${isMe ? "justify-end" : "justify-start"}`}>
+        <div
+          className={`max-w-[82%] px-3 py-2 shadow-sm ${
+            isMe
+              ? "rounded-2xl rounded-tr-sm bg-secondary text-secondary-foreground"
+              : "rounded-2xl rounded-tl-sm bg-card border border-border text-foreground"
+          }`}
+        >
+          {!isMe && (
+            <p className="text-xs font-semibold text-secondary mb-1">{senderLabel}</p>
+          )}
+          <MessageContent
+            content={row.content}
+            messageKind={row.message_kind}
+            mediaStoragePath={row.media_storage_path}
+            mediaMime={row.media_mime}
+            mediaFileName={row.media_file_name}
+            senderId={row.sender_id}
+            notificationType={row.notification_type}
+            className="text-sm"
+          />
+          <div className="flex items-center justify-end gap-1 mt-1">
+            <span className={`text-[11px] ${isMe ? "text-secondary-foreground/80" : "text-muted-foreground"}`}>
+              {format(new Date(row.created_at), "h:mm a")}
+            </span>
+            {isMe ? <ReadReceipt message={row} whatsapp /> : null}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <Card className="h-full min-h-0 flex flex-col overflow-hidden border-0 shadow-md">
+      <div className="bg-primary text-primary-foreground px-4 py-3 shrink-0">
+        <div className="flex items-center gap-2">
+          <p className="font-semibold truncate">{partyLabel}</p>
+          {message.sender_id === null && (
+            <Badge variant="secondary" className="shrink-0">
+              Automated
+            </Badge>
+          )}
+        </div>
+        <p className="text-xs opacity-90 truncate mt-0.5">{message.subject}</p>
+      </div>
+
+      <CardContent className="flex-1 flex flex-col p-0 min-h-0 bg-muted/30">
+        <ScrollArea className="flex-1 min-h-0 px-3 py-4 [&>[data-radix-scroll-area-viewport]]:max-h-full">
+          <div className="space-y-2 pr-2">
+            {chatTimeline.map(renderBubble)}
+          </div>
           {message.group_id && onNavigateToGroup && (
             <Button
               variant="outline"
               size="sm"
-              className="mb-4"
+              className="mt-4 bg-white"
               onClick={() => onNavigateToGroup(message.group_id!)}
             >
               <Users className="h-4 w-4 mr-2" />
               View in Group Chat
             </Button>
           )}
-
-          {/* Replies */}
-          {replies.length > 0 && (
-            <div className="space-y-3">
-              {replies.map(reply => {
-                const isMe = reply.sender_id === currentUserId;
-                return (
-                  <div key={reply.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[80%] rounded-lg p-3 ${
-                      isMe ? 'bg-primary text-primary-foreground' : 'bg-muted'
-                    }`}>
-                      {!isMe && (
-                        <p className="text-xs font-semibold mb-1 opacity-80">{reply.sender_name}</p>
-                      )}
-                      <MessageContent
-                        content={reply.content}
-                        messageKind={reply.message_kind}
-                        mediaStoragePath={reply.media_storage_path}
-                        mediaMime={reply.media_mime}
-                        senderId={reply.sender_id}
-                        notificationType={reply.notification_type}
-                        className="text-sm"
-                      />
-                      <p className={`text-xs mt-1 ${isMe ? 'opacity-70' : 'text-muted-foreground'}`}>
-                        {format(new Date(reply.created_at), 'MMM d, h:mm a')}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </ScrollArea>
 
-        {/* Reply input - only show if there's a sender to reply to */}
-        {message.sender_id && (
-          <div className="flex flex-col gap-2 pt-3 border-t mt-3">
-            {mediaEnabled ? (
+        {canReply && (
+          <div className="shrink-0 border-t bg-background p-3 space-y-2">
+            {mediaEnabled && mediaUploading ? (
               <MessageMediaComposer
                 disabled={sending}
                 uploading={mediaUploading}
                 uploadProgress={mediaProgress}
                 onPick={handleSendMedia}
-                onCancelUpload={
-                  mediaUploading
-                    ? () => {
-                        toast.message("Upload in progress — wait for it to finish or refresh to reset.");
-                      }
-                    : undefined
-                }
+                onCancelUpload={() => {
+                  toast.message("Upload in progress — wait for it to finish or refresh to reset.");
+                }}
               />
             ) : null}
-            <div className="flex gap-2">
+            <div className="flex items-end gap-2">
+              {mediaEnabled ? (
+                <MessageMediaComposer
+                  variant="inline"
+                  disabled={sending}
+                  uploading={mediaUploading}
+                  uploadProgress={mediaProgress}
+                  onPick={handleSendMedia}
+                />
+              ) : null}
               <Textarea
-                placeholder={mediaEnabled ? "Type a reply or caption…" : "Type a reply..."}
+                placeholder={mediaEnabled ? "Message…" : "Type a reply…"}
                 rows={1}
-                className="min-h-[40px] resize-none"
+                className="min-h-[44px] flex-1 resize-none rounded-3xl bg-white border shadow-sm"
                 value={newReply}
                 onChange={(e) => setNewReply(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -341,7 +407,7 @@ export default function InlineThread({
                 onClick={handleSendReply}
                 disabled={sending || mediaUploading || !newReply.trim()}
                 size="icon"
-                className="shrink-0"
+                className="shrink-0 rounded-full h-11 w-11"
               >
                 <Send className="h-4 w-4" />
               </Button>
