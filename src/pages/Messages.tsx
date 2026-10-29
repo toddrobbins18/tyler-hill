@@ -14,6 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { format } from "date-fns";
 import GroupList from "@/components/messages/GroupList";
 import InlineThread from "@/components/messages/InlineThread";
+import { StaffParentFamiliesPanel } from "@/components/messages/StaffParentFamiliesPanel";
 import { notificationsDebug } from "@/lib/notificationDebug";
 import { fetchMessageProfileLabels, inboxFromDisplayName } from "@/lib/messageProfiles";
 import { messageContentPreview } from "@/lib/messageContentUtils";
@@ -64,6 +65,9 @@ interface Message {
   latest_reply_at?: string;
   notification_type?: string | null;
   message_kind?: string | null;
+  thread_kind?: string | null;
+  child_id?: string | null;
+  child_name?: string | null;
 }
 
 const TAG_LABELS: Record<string, string> = {
@@ -100,6 +104,18 @@ function labelFromCache(cache: Record<string, string>, id: string | null | undef
   return cache[k] ?? cache[id];
 }
 
+function isParentPortalThread(msg: Pick<Message, "thread_kind">): boolean {
+  return msg.thread_kind === "parent_division_leader";
+}
+
+/** Inbox sidebar title — parent threads show camper name, not the long system subject. */
+function inboxSidebarTitle(msg: Message): string {
+  if (isParentPortalThread(msg) && msg.child_name?.trim()) {
+    return msg.child_name.trim();
+  }
+  return msg.subject;
+}
+
 export default function Messages() {
   const [tagGroups, setTagGroups] = useState<TagGroup[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -112,15 +128,15 @@ export default function Messages() {
   const [sending, setSending] = useState(false);
 
   // Persist viewMode and groupId in sessionStorage so they survive re-mounts
-  const [viewMode, setViewModeState] = useState<'compose' | 'inbox' | 'sent' | 'groups'>(() => {
+  const [viewMode, setViewModeState] = useState<'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families'>(() => {
     const saved = sessionStorage.getItem('messages_view_mode');
-    return (saved as 'compose' | 'inbox' | 'sent' | 'groups') || 'inbox';
+    return (saved as 'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families') || 'inbox';
   });
   const [activeGroupId, setActiveGroupIdState] = useState<string | null>(() => {
     return sessionStorage.getItem('messages_active_group_id') || null;
   });
 
-  const setViewMode = (mode: 'compose' | 'inbox' | 'sent' | 'groups') => {
+  const setViewMode = (mode: 'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families') => {
     sessionStorage.setItem('messages_view_mode', mode);
     if (mode !== 'groups') {
       sessionStorage.removeItem('messages_active_group_id');
@@ -272,7 +288,21 @@ export default function Messages() {
       });
 
       const enriched = await Promise.all(enrichedPromises);
-      const visible = filterMessagesForCampInbox(enriched, currentCompany);
+      const childIds = [
+        ...new Set(enriched.map((m) => m.child_id).filter(Boolean) as string[]),
+      ];
+      let childNames = new Map<string, string>();
+      if (childIds.length > 0) {
+        const { data: kids } = await supabase.from("children").select("id, name").in("id", childIds);
+        for (const k of kids ?? []) {
+          childNames.set(k.id, k.name);
+        }
+      }
+      const withChildLabels = enriched.map((m) => ({
+        ...m,
+        child_name: m.child_id ? childNames.get(m.child_id) : undefined,
+      }));
+      const visible = filterMessagesForCampInbox(withChildLabels, currentCompany);
       const unread = visible.filter((m) => !m.read).length;
       notificationsDebug("Inbox refetched", {
         userId: user.id,
@@ -663,6 +693,13 @@ export default function Messages() {
             Groups
           </Button>
           <Button
+            variant={viewMode === 'parent_families' ? 'default' : 'outline'}
+            onClick={() => { setViewMode('parent_families'); setSelectedMessage(null); }}
+          >
+            <User className="h-4 w-4 mr-2" />
+            Families
+          </Button>
+          <Button
             variant={viewMode === 'compose' ? 'default' : 'outline'}
             onClick={() => setViewMode('compose')}
           >
@@ -680,16 +717,23 @@ export default function Messages() {
         />
       )}
 
+      {viewMode === 'parent_families' && currentCompany?.id ? (
+        <StaffParentFamiliesPanel
+          companyId={currentCompany.id}
+          companySlug={currentCompany.slug}
+        />
+      ) : null}
+
       {/* Inbox / Sent Tab */}
       {(viewMode === 'inbox' || viewMode === 'sent') && (
-        <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
-          <Card>
-            <CardHeader>
+        <div className="grid gap-6 lg:grid-cols-[minmax(300px,420px)_minmax(0,1fr)]">
+          <Card className="min-w-0">
+            <CardHeader className="pb-3">
               <CardTitle>{viewMode === 'sent' ? 'Sent Messages' : 'Notifications & Messages'}</CardTitle>
               <CardDescription>{activeMessages.length} total messages</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <ScrollArea className="h-[600px]">
+              <ScrollArea className="h-[min(700px,calc(100vh-11rem))]">
                 {activeMessages.length === 0 ? (
                   <div className="p-4 text-center text-muted-foreground">
                     {viewMode === 'sent' ? 'No sent messages yet' : 'No messages yet'}
@@ -698,77 +742,98 @@ export default function Messages() {
                   activeMessages.map((msg) => (
                     <div key={msg.id}>
                       <button
+                        type="button"
                         onClick={() => handleMessageClick(msg)}
-                        className={`w-full p-4 text-left hover:bg-muted/50 transition-colors ${
+                        className={`w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors ${
                           selectedMessage?.id === msg.id ? 'bg-muted' : ''
                         } ${viewMode === 'inbox' && !msg.read ? 'bg-primary/5 border-l-4 border-primary' : ''}`}
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <p className={`font-medium truncate ${viewMode === 'inbox' && !msg.read ? 'font-bold' : ''}`}>
-                                {msg.subject}
-                              </p>
-                              {viewMode === 'inbox' && !msg.read && (
-                                <Badge variant="default" className="h-5 px-1 text-xs">NEW</Badge>
-                              )}
-                              {(msg.reply_count ?? 0) > 0 && (
-                                <Badge variant="outline" className="h-5 px-1 text-xs flex items-center gap-0.5">
-                                  <Reply className="h-3 w-3" />
-                                  {msg.reply_count}
-                                </Badge>
-                              )}
-                            </div>
-                            {viewMode === 'inbox' && (
-                              <p className="text-xs font-medium text-primary mb-1">
-                                From:{" "}
-                                {inboxFromDisplayName({
-                                  sender_name: msg.sender_name,
-                                  sender_id: msg.sender_id,
-                                  sender_display_name: msg.sender_display_name,
-                                  notification_type: msg.notification_type,
-                                  subject: msg.subject,
-                                  group_id: msg.group_id,
-                                })}
-                              </p>
+                        <div className="min-w-0 space-y-1.5">
+                          <p
+                            className={`font-medium leading-snug line-clamp-2 break-words ${
+                              viewMode === 'inbox' && !msg.read ? 'font-bold' : ''
+                            }`}
+                            title={inboxSidebarTitle(msg)}
+                          >
+                            {inboxSidebarTitle(msg)}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {viewMode === 'inbox' && !msg.read && (
+                              <Badge variant="default" className="h-5 shrink-0 px-1.5 text-[10px]">
+                                NEW
+                              </Badge>
                             )}
-                            {viewMode === 'sent' && (
-                              <p className="text-xs font-medium text-primary mb-1">
-                                To: {msg.recipient_name || "Unknown"}
-                              </p>
+                            {(msg.reply_count ?? 0) > 0 && (
+                              <Badge
+                                variant="outline"
+                                className="h-5 shrink-0 px-1.5 text-[10px] flex items-center gap-0.5"
+                              >
+                                <Reply className="h-3 w-3 shrink-0" />
+                                {msg.reply_count}
+                              </Badge>
                             )}
-                            {msg.latest_reply_content != null || msg.latest_reply_kind ? (
-                              <p className="text-sm text-muted-foreground truncate">
-                                <span className="font-medium">{msg.latest_reply_sender}:</span>{" "}
-                                {messageContentPreview(
-                                  messagePreviewLabel(
-                                    msg.latest_reply_kind,
-                                    msg.latest_reply_content ?? "",
-                                  ),
-                                  80,
-                                  msg.latest_reply_kind,
-                                )}
-                              </p>
-                            ) : (
-                              <p className="text-sm text-muted-foreground truncate">
-                                {messageContentPreview(
-                                  messagePreviewLabel(msg.message_kind, msg.content),
-                                  100,
-                                  msg.message_kind,
-                                )}
-                              </p>
-                            )}
-                            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {format(new Date(msg.latest_reply_at || msg.created_at), 'MMM d, yyyy h:mm a')}
-                            </p>
-                            {viewMode === "sent" && msg.sender_id && (
-                              <ReadReceipt
-                                message={msg}
-                                className="mt-1"
-                              />
-                            )}
+                            {isParentPortalThread(msg) ? (
+                              <Badge
+                                variant="outline"
+                                className="h-5 shrink-0 max-w-full px-1.5 text-[10px] font-normal border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-100"
+                              >
+                                Parent portal
+                              </Badge>
+                            ) : null}
                           </div>
+                          {viewMode === 'inbox' && (
+                            <p className="text-xs font-medium text-primary truncate">
+                              From:{" "}
+                              {inboxFromDisplayName({
+                                sender_name: msg.sender_name,
+                                sender_id: msg.sender_id,
+                                sender_display_name: msg.sender_display_name,
+                                notification_type: msg.notification_type,
+                                subject: msg.subject,
+                                group_id: msg.group_id,
+                              })}
+                            </p>
+                          )}
+                          {viewMode === 'sent' && (
+                            <p className="text-xs font-medium text-primary truncate">
+                              To: {msg.recipient_name || "Unknown"}
+                            </p>
+                          )}
+                          {isParentPortalThread(msg) && msg.subject ? (
+                            <p className="text-[11px] text-muted-foreground truncate" title={msg.subject}>
+                              {msg.subject}
+                            </p>
+                          ) : null}
+                          {msg.latest_reply_content != null || msg.latest_reply_kind ? (
+                            <p className="text-sm text-muted-foreground line-clamp-2 break-words">
+                              <span className="font-medium">{msg.latest_reply_sender}:</span>{" "}
+                              {messageContentPreview(
+                                messagePreviewLabel(
+                                  msg.latest_reply_kind,
+                                  msg.latest_reply_content ?? "",
+                                ),
+                                80,
+                                msg.latest_reply_kind,
+                              )}
+                            </p>
+                          ) : (
+                            <p className="text-sm text-muted-foreground line-clamp-2 break-words">
+                              {messageContentPreview(
+                                messagePreviewLabel(msg.message_kind, msg.content),
+                                100,
+                                msg.message_kind,
+                              )}
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 pt-0.5">
+                            <Clock className="h-3 w-3 shrink-0" />
+                            <span className="truncate">
+                              {format(new Date(msg.latest_reply_at || msg.created_at), 'MMM d, yyyy h:mm a')}
+                            </span>
+                          </p>
+                          {viewMode === "sent" && msg.sender_id && (
+                            <ReadReceipt message={msg} className="mt-0.5" />
+                          )}
                         </div>
                       </button>
                       <Separator />

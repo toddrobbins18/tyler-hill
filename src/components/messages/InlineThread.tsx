@@ -17,6 +17,12 @@ import {
 import { toast } from "sonner";
 import { ReadReceipt } from "@/components/messages/ReadReceipt";
 import { markThreadRepliesReadForRecipient } from "@/lib/messageReadReceipts";
+import { PP_CHAT_BUBBLE_ME, PP_CHAT_BUBBLE_THEM } from "@/lib/parentPortalTheme";
+
+function isParentPortalThreadStarter(row: ThreadMessage): boolean {
+  const text = String(row.content ?? "").trim();
+  return text.startsWith("Parent portal thread for");
+}
 
 interface ThreadMessage {
   id: string;
@@ -37,6 +43,9 @@ interface ThreadMessage {
   media_storage_path?: string | null;
   media_mime?: string | null;
   media_file_name?: string | null;
+  child_id?: string | null;
+  family_id?: string | null;
+  thread_kind?: string | null;
 }
 
 interface InlineThreadProps {
@@ -47,6 +56,8 @@ interface InlineThreadProps {
   campCompanySlug?: string | null;
   onNavigateToGroup?: (groupId: string) => void;
   onRootReadChange?: (messageId: string, read: boolean, read_at: string | null) => void;
+  /** Parent portal: frosted glass bubbles and hide auto-generated thread root text. */
+  bubbleStyle?: "nest" | "parentGlass";
 }
 
 export default function InlineThread({
@@ -56,6 +67,7 @@ export default function InlineThread({
   campCompanySlug,
   onNavigateToGroup,
   onRootReadChange,
+  bubbleStyle = "nest",
 }: InlineThreadProps) {
   const [replies, setReplies] = useState<ThreadMessage[]>([]);
   const [newReply, setNewReply] = useState("");
@@ -216,6 +228,9 @@ export default function InlineThread({
         file,
         senderDisplayName,
         onProgress: setMediaProgress,
+        childId: message.child_id ?? null,
+        familyId: message.family_id ?? null,
+        threadKind: message.thread_kind ?? null,
       });
 
       if (error) {
@@ -257,6 +272,9 @@ export default function InlineThread({
           read: false,
           sender_display_name: senderDisplayName,
           ...(campCompanyId ? { company_id: campCompanyId } : {}),
+          ...(message.child_id ? { child_id: message.child_id } : {}),
+          ...(message.family_id ? { family_id: message.family_id } : {}),
+          ...(message.thread_kind ? { thread_kind: message.thread_kind } : {}),
         });
 
       if (error) throw error;
@@ -288,10 +306,14 @@ export default function InlineThread({
       : message.recipient_name || "Unknown";
 
   const chatTimeline = useMemo(() => {
-    return [message, ...replies].sort(
+    let rows = [message, ...replies];
+    if (bubbleStyle === "parentGlass") {
+      rows = rows.filter((r) => !(r.id === message.id && isParentPortalThreadStarter(r)));
+    }
+    return rows.sort(
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     );
-  }, [message, replies]);
+  }, [message, replies, bubbleStyle]);
 
   const renderBubble = (row: ThreadMessage) => {
     const isMe = row.sender_id === currentUserId;
@@ -306,17 +328,26 @@ export default function InlineThread({
           })
         : "Unknown");
 
+    const bubbleClass =
+      bubbleStyle === "parentGlass"
+        ? isMe
+          ? PP_CHAT_BUBBLE_ME
+          : PP_CHAT_BUBBLE_THEM
+        : isMe
+          ? "rounded-2xl rounded-tr-sm bg-secondary text-secondary-foreground"
+          : "rounded-2xl rounded-tl-sm bg-card border border-border text-foreground";
+
     return (
       <div key={row.id} className={`flex w-full ${isMe ? "justify-end" : "justify-start"}`}>
-        <div
-          className={`max-w-[82%] px-3 py-2 shadow-sm ${
-            isMe
-              ? "rounded-2xl rounded-tr-sm bg-secondary text-secondary-foreground"
-              : "rounded-2xl rounded-tl-sm bg-card border border-border text-foreground"
-          }`}
-        >
+        <div className={`max-w-[84%] px-3.5 py-2.5 ${bubbleClass}`}>
           {!isMe && (
-            <p className="text-xs font-semibold text-secondary mb-1">{senderLabel}</p>
+            <p
+              className={`text-xs font-semibold mb-1 ${
+                bubbleStyle === "parentGlass" ? "text-[hsl(var(--pp-brand-dark))]" : "text-secondary"
+              }`}
+            >
+              {senderLabel}
+            </p>
           )}
           <MessageContent
             content={row.content}
@@ -329,7 +360,15 @@ export default function InlineThread({
             className="text-sm"
           />
           <div className="flex items-center justify-end gap-1 mt-1">
-            <span className={`text-[11px] ${isMe ? "text-secondary-foreground/80" : "text-muted-foreground"}`}>
+            <span
+              className={`text-[11px] ${
+                bubbleStyle === "parentGlass"
+                  ? "text-[hsl(var(--pp-text-muted))]"
+                  : isMe
+                    ? "text-secondary-foreground/80"
+                    : "text-muted-foreground"
+              }`}
+            >
               {format(new Date(row.created_at), "h:mm a")}
             </span>
             {isMe ? <ReadReceipt message={row} whatsapp /> : null}
@@ -353,7 +392,11 @@ export default function InlineThread({
         <p className="text-xs opacity-90 truncate mt-0.5">{message.subject}</p>
       </div>
 
-      <CardContent className="flex-1 flex flex-col p-0 min-h-0 bg-muted/30">
+      <CardContent
+        className={`flex-1 flex flex-col p-0 min-h-0 ${
+          bubbleStyle === "parentGlass" ? "bg-[hsl(var(--pp-bg))]" : "bg-muted/30"
+        }`}
+      >
         <ScrollArea className="flex-1 min-h-0 px-3 py-4 [&>[data-radix-scroll-area-viewport]]:max-h-full">
           <div className="space-y-2 pr-2">
             {chatTimeline.map(renderBubble)}
@@ -372,7 +415,13 @@ export default function InlineThread({
         </ScrollArea>
 
         {canReply && (
-          <div className="shrink-0 border-t bg-background p-3 space-y-2">
+          <div
+            className={`shrink-0 border-t p-3 space-y-2 ${
+              bubbleStyle === "parentGlass"
+                ? "border-white/60 bg-white/70 backdrop-blur-md"
+                : "bg-background"
+            }`}
+          >
             {mediaEnabled && mediaUploading ? (
               <MessageMediaComposer
                 disabled={sending}
@@ -397,7 +446,11 @@ export default function InlineThread({
               <Textarea
                 placeholder={mediaEnabled ? "Message…" : "Type a reply…"}
                 rows={1}
-                className="min-h-[44px] flex-1 resize-none rounded-3xl bg-white border shadow-sm"
+                className={`min-h-[44px] flex-1 resize-none rounded-3xl border shadow-sm ${
+                  bubbleStyle === "parentGlass"
+                    ? "border-white/90 bg-white/88 backdrop-blur-sm"
+                    : "bg-white"
+                }`}
                 value={newReply}
                 onChange={(e) => setNewReply(e.target.value)}
                 onKeyDown={handleKeyDown}

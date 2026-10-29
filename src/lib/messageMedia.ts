@@ -231,6 +231,9 @@ export async function sendDirectMessageMedia(
     senderDisplayName?: string | null;
     notificationType?: string;
     onProgress?: (pct: number) => void;
+    childId?: string | null;
+    familyId?: string | null;
+    threadKind?: string | null;
   },
 ): Promise<{ error: string | null }> {
   const validation = validateMessageMediaFile(options.file);
@@ -263,6 +266,9 @@ export async function sendDirectMessageMedia(
     media_storage_path: storagePath,
     media_mime: options.file.type,
     media_file_name: options.file.name,
+    ...(options.childId ? { child_id: options.childId } : {}),
+    ...(options.familyId ? { family_id: options.familyId } : {}),
+    ...(options.threadKind ? { thread_kind: options.threadKind } : {}),
   });
 
   if (error) {

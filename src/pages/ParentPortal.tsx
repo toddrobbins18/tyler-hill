@@ -15,6 +15,7 @@ import {
   ParentPickupsView,
   ParentSwimView,
 } from "@/components/parentPortal/ParentPortalViews";
+import { ParentMessagesView } from "@/components/parentPortal/ParentMessagesView";
 import { useParentPortalTheme } from "@/components/parentPortal/useParentPortalTheme";
 import {
   type Absence,
@@ -298,6 +299,9 @@ export default function ParentPortal() {
     >
       {activeView === "home" && <ParentHomeView {...sharedProps} />}
       {activeView === "campers" && <ParentCampersView {...sharedProps} />}
+      {activeView === "messages" && (
+        <ParentMessagesView companyId={companyId} companySlug={companySlug} />
+      )}
       {activeView === "pickups" && <ParentPickupsView {...sharedProps} />}
       {activeView === "absences" && <ParentAbsencesView {...sharedProps} />}
       {activeView === "authorized" && <ParentAuthorizedView {...sharedProps} />}

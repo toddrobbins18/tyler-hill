@@ -15,6 +15,7 @@ export function userIsCampStaff(roles: string[]): boolean {
 export type ParentPortalView =
   | "home"
   | "campers"
+  | "messages"
   | "pickups"
   | "absences"
   | "authorized"
@@ -27,6 +28,7 @@ export const PARENT_PORTAL_NAV: {
 }[] = [
   { id: "home", label: "Home", mobileLabel: "Home" },
   { id: "campers", label: "My Campers", mobileLabel: "Campers" },
+  { id: "messages", label: "Messages", mobileLabel: "Messages" },
   { id: "pickups", label: "Pickups", mobileLabel: "Pickup" },
   { id: "absences", label: "Absences", mobileLabel: "Absences" },
   { id: "authorized", label: "Authorized Adults", mobileLabel: "More" },

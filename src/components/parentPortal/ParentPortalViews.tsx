@@ -1,4 +1,4 @@
-import { Calendar, CheckCircle2, Clock, Shield, Trash2, UserCheck, Users, Waves } from "lucide-react";
+import { Calendar, CheckCircle2, Clock, MessageSquare, Shield, Trash2, UserCheck, Users, Waves } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -139,6 +139,14 @@ export function ParentHomeView({
       <section>
         <h2 className={cn(sectionTitleClass, "mb-5")}>Quick actions</h2>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <QuickActionCard
+            icon={MessageSquare}
+            title="Message division leader"
+            description="Chat with your camper's division leader and view shared photos."
+            accent="blue"
+            onClick={() => onNavigate("messages")}
+            className={glass}
+          />
           <QuickActionCard
             icon={Calendar}
             title="Change pickup"

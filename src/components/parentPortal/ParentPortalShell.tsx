@@ -5,6 +5,7 @@ import {
   Home,
   LogOut,
   Menu,
+  MessageSquare,
   MoreHorizontal,
   Shield,
   UserCheck,
@@ -24,6 +25,7 @@ import { useParentPortalTheme } from "./useParentPortalTheme";
 const NAV_ICONS: Record<ParentPortalView, typeof Home> = {
   home: Home,
   campers: Users,
+  messages: MessageSquare,
   pickups: Calendar,
   absences: Clock,
   authorized: UserCheck,
@@ -146,7 +148,7 @@ export function ParentPortalShell({
   const [moreOpen, setMoreOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const mobilePrimary: ParentPortalView[] = ["home", "campers", "pickups", "absences"];
-  const mobileMoreItems: ParentPortalView[] = ["authorized", "swim"];
+  const mobileMoreItems: ParentPortalView[] = ["messages", "authorized", "swim"];
 
   const firstName = contactName?.trim().split(/\s+/)[0];
   const activeLabel = PARENT_PORTAL_NAV.find((item) => item.id === activeView)?.label ?? "Home";
