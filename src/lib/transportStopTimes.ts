@@ -202,6 +202,26 @@ export type RouteStopListLines = {
   camperNames: string[];
 };
 
+/** Open stop placeholder with no riders and no pending unassigned at this address (Todd: hide in route lists by default). */
+export const BLANK_OPEN_STOP_SUBTITLE = "Open stop · no campers assigned";
+
+export function isBlankOpenRouteStop(lines: RouteStopListLines): boolean {
+  return lines.isOpenStop && lines.camperNames.length === 0 && lines.subtitle === BLANK_OPEN_STOP_SUBTITLE;
+}
+
+export function countBlankOpenStopsOnRoute(
+  stops: { name: string; address: string; passengers?: number; camperNames?: string[] }[],
+  campAddress: string = CAMP_LOCATION.address,
+): number {
+  let count = 0;
+  for (const stop of stops) {
+    const isCamp = isCampAddress(stop.address, campAddress);
+    const lines = routeStopListLines(stop, { isCamp });
+    if (isBlankOpenRouteStop(lines)) count += 1;
+  }
+  return count;
+}
+
 function riderFirstToken(given: string): string {
   const t = given.trim().split(/\s+/).filter(Boolean);
   return t[0] ?? given.trim();
@@ -280,7 +300,7 @@ export function routeStopListLines(
 
   return {
     title: street,
-    subtitle: "Open stop · no campers assigned",
+    subtitle: BLANK_OPEN_STOP_SUBTITLE,
     isOpenStop: true,
     camperNames: [],
   };

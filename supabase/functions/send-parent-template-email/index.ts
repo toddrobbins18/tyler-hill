@@ -1,9 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import {
-  isParentEmailTemplateKey,
-  renderParentEmailTemplate,
-} from "../_shared/parentEmailTemplates.ts";
+import { isParentEmailTemplateKey } from "../_shared/parentEmailTemplates.ts";
+import { buildParentReminderEmail } from "../_shared/parentReminderEmail.ts";
+import { trySendM365Email } from "../_shared/m365SendMail.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,7 +28,7 @@ serve(async (req) => {
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     if (userError || !user) throw new Error("Unauthorized");
 
-    const { company_id, child_id, template_key } = await req.json();
+    const { company_id, child_id, template_key, preview_only, image_base64 } = await req.json();
     if (!company_id || !child_id || !template_key) {
       throw new Error("company_id, child_id, and template_key are required");
     }
@@ -75,86 +74,70 @@ serve(async (req) => {
     }
 
     const campName = (senderProfile.companies as { name?: string } | null)?.name ?? "Camp";
-    const rendered = renderParentEmailTemplate(template_key, {
+    const built = buildParentReminderEmail({
+      templateKey: template_key,
       camperName: child.name?.trim() || "your camper",
       campName,
     });
-    if (!rendered) throw new Error("Template not found");
 
-    const { data: emailConfig } = await supabase
-      .from("company_email_config")
-      .select("*")
-      .eq("company_id", company_id)
-      .maybeSingle();
-
-    if (!emailConfig?.is_configured || emailConfig?.is_active === false) {
-      throw new Error("Camp email is not configured. Set up Microsoft 365 in Admin → Email Config.");
-    }
-
-    const { data: decryptedSecret, error: decryptError } = await supabase.rpc("decrypt_secret", {
-      encrypted: emailConfig.m365_client_secret_encrypted,
-    });
-    if (decryptError || !decryptedSecret) {
-      throw new Error("Failed to decrypt email credentials");
-    }
-
-    const tokenResponse = await fetch(
-      `https://login.microsoftonline.com/${emailConfig.m365_tenant_id}/oauth2/v2.0/token`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          client_id: emailConfig.m365_client_id,
-          client_secret: decryptedSecret,
-          scope: "https://graph.microsoft.com/.default",
-          grant_type: "client_credentials",
+    if (preview_only === true) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          preview: true,
+          recipient: parentEmail,
+          subject: built.subject,
+          html: built.html,
         }),
-      },
-    );
-
-    const tokenData = await tokenResponse.json();
-    if (!tokenResponse.ok || !tokenData?.access_token) {
-      throw new Error("Failed to authenticate with Microsoft 365");
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+      );
     }
 
-    const htmlBody = rendered.body
-      .split("\n")
-      .map((line) => line.trim())
-      .join("<br>");
+    const composedBytes =
+      typeof image_base64 === "string"
+        ? image_base64.replace(/^data:image\/\w+;base64,/, "").trim()
+        : "";
 
-    const sendResponse = await fetch(
-      `https://graph.microsoft.com/v1.0/users/${emailConfig.m365_sender_email}/sendMail`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${tokenData.access_token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          message: {
-            subject: rendered.subject,
-            body: { contentType: "HTML", content: htmlBody },
-            from: {
-              emailAddress: {
-                address: emailConfig.m365_sender_email,
-                name: emailConfig.m365_sender_name || campName,
-              },
+    const attachments =
+      composedBytes.length > 0
+        ? [
+            {
+              name: built.attachmentName,
+              contentType: "image/jpeg",
+              contentBytes: composedBytes,
             },
-            toRecipients: [{ emailAddress: { address: parentEmail } }],
-          },
-        }),
-      },
-    );
+          ]
+        : undefined;
 
-    if (!sendResponse.ok) {
-      const detail = await sendResponse.text();
-      console.error("M365 send failed", detail);
-      throw new Error("Failed to send email");
+    const sendOutcome = await trySendM365Email(supabase, company_id, {
+      subject: built.subject,
+      html: built.html,
+      to: parentEmail,
+      fromName: campName,
+      attachments,
+    });
+
+    if (!sendOutcome.configured) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          sent: false,
+          preview: true,
+          recipient: parentEmail,
+          subject: built.subject,
+          message: "Camp email is not configured. Set up Microsoft 365 in Admin → Email Config.",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+      );
+    }
+
+    if (!sendOutcome.sent) {
+      throw new Error(sendOutcome.error ?? "Failed to send email");
     }
 
     await supabase.from("email_logs").insert({
       sent_by: user.id,
-      subject: rendered.subject,
+      subject: built.subject,
       recipient_count: 1,
       recipient_ids: [child_id],
       recipient_tags: [`parent_template:${template_key}`],
@@ -165,8 +148,9 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
+        sent: true,
         recipient: parentEmail,
-        subject: rendered.subject,
+        subject: built.subject,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
     );

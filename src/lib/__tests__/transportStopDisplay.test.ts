@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { routeStopListLines } from "@/lib/transportStopTimes";
+import {
+  routeStopListLines,
+  isBlankOpenRouteStop,
+  countBlankOpenStopsOnRoute,
+  BLANK_OPEN_STOP_SUBTITLE,
+} from "@/lib/transportStopTimes";
 
 describe("routeStopListLines", () => {
   it("shows camper names with street address", () => {
@@ -61,5 +66,28 @@ describe("routeStopListLines", () => {
     expect(lines.title).toBe("50 Ashwood Rd");
     expect(lines.subtitle).toContain("Open stop");
     expect(lines.isOpenStop).toBe(true);
+    expect(lines.subtitle).toBe(BLANK_OPEN_STOP_SUBTITLE);
+    expect(isBlankOpenRouteStop(lines)).toBe(true);
+  });
+
+  it("does not treat open stops with pending campers as blank", () => {
+    const lines = routeStopListLines(
+      {
+        name: "50 Ashwood Rd",
+        address: "50 Ashwood Rd, Port Washington, NY",
+        passengers: 0,
+      },
+      { isCamp: false, pendingNames: ["Alex Kottler"] },
+    );
+    expect(isBlankOpenRouteStop(lines)).toBe(false);
+  });
+
+  it("counts blank open stops on a route", () => {
+    const count = countBlankOpenStopsOnRoute([
+      { name: "A", address: "1 Main St, NY", camperNames: ["Kid"] },
+      { name: "B", address: "2 Cedar Ln, NY", passengers: 0 },
+      { name: "C", address: "85 Crescent Beach Road, Glen Cove, NY 11542" },
+    ]);
+    expect(count).toBe(1);
   });
 });

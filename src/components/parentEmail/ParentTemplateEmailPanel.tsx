@@ -17,6 +17,7 @@ import {
   PARENT_EMAIL_TEMPLATE_OPTIONS,
   type ParentEmailTemplateKey,
 } from "@/lib/parentEmailTemplates";
+import { renderParentReminderPreviewDataUrl } from "@/lib/parentReminderPreview";
 import { toast } from "sonner";
 
 type Props = {
@@ -35,11 +36,19 @@ export function ParentTemplateEmailPanel({ childId, camperName, parentEmail }: P
   const send = async () => {
     if (!pendingKey || !currentCompany?.id) return;
     setSending(true);
+    let image_base64: string | undefined;
+    try {
+      const dataUrl = await renderParentReminderPreviewDataUrl(pendingKey, camperName);
+      image_base64 = dataUrl;
+    } catch (e) {
+      console.warn("Reminder preview render failed; sending inline HTML only", e);
+    }
     const { data, error } = await supabase.functions.invoke("send-parent-template-email", {
       body: {
         company_id: currentCompany.id,
         child_id: childId,
         template_key: pendingKey,
+        image_base64,
       },
     });
     setSending(false);
@@ -47,6 +56,12 @@ export function ParentTemplateEmailPanel({ childId, camperName, parentEmail }: P
 
     if (error || !data?.success) {
       toast.error(data?.error ?? error?.message ?? "Failed to send email");
+      return;
+    }
+    if (data.sent === false) {
+      toast.message(`Preview only — would send to ${data.recipient}`, {
+        description: data.message ?? "Configure Microsoft 365 to send live.",
+      });
       return;
     }
     toast.success(`Email sent to ${data.recipient}`);

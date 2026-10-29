@@ -156,7 +156,11 @@ import {
   getRouteStopLabel,
   isValidRouteCoordinate,
   routeStopListLines,
+  isBlankOpenRouteStop,
+  countBlankOpenStopsOnRoute,
 } from "@/lib/transportStopTimes";
+
+const SHOW_BLANK_OPEN_STOPS_KEY = "transport-show-blank-open-stops";
 import {
   haversineLegMinutesFromCoords,
   routeStopCoordinateSignature,
@@ -650,6 +654,24 @@ export default function Transport() {
   const [routeLegMinutesCache, setRouteLegMinutesCache] = useState<Record<string, number[]>>(
     loadPersistedRouteLegCache,
   );
+  const [showBlankOpenStops, setShowBlankOpenStops] = useState(() => {
+    try {
+      return localStorage.getItem(SHOW_BLANK_OPEN_STOPS_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleShowBlankOpenStops = useCallback(() => {
+    setShowBlankOpenStops((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SHOW_BLANK_OPEN_STOPS_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
   const [optimizing, setOptimizing] = useState(false);
   const [applyingHistorical, setApplyingHistorical] = useState(false);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
@@ -1982,6 +2004,11 @@ export default function Transport() {
         || r.name.toLowerCase().includes(q),
     );
   }, [busSidebarSearch, displayRoutes, sidebarCamperHits]);
+
+  const hiddenBlankOpenStopCount = useMemo(
+    () => displayRoutes.reduce((sum, r) => sum + countBlankOpenStopsOnRoute(r.stops), 0),
+    [displayRoutes],
+  );
 
   const focusSidebarRoute = useCallback((routeId: number) => {
     setFocusedSidebarRouteId(routeId);
@@ -4852,10 +4879,26 @@ export default function Transport() {
                     {visibleRoutes.length} buses on map — click a card to add or remove.
                   </p>
                 )}
-                <p className="text-[10px] text-muted-foreground px-0.5 flex items-center gap-1">
-                  <Pin className="h-3 w-3 shrink-0 opacity-70" />
-                  Scroll here to move through buses · pin stops before ✨ Optimize
-                </p>
+                <div className="space-y-1 px-0.5">
+                  <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                    <Pin className="h-3 w-3 shrink-0 opacity-70" />
+                    Scroll here to move through buses · pin stops before ✨ Optimize
+                  </p>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <button
+                      type="button"
+                      onClick={toggleShowBlankOpenStops}
+                      className="text-[10px] font-medium text-primary hover:underline"
+                    >
+                      {showBlankOpenStops ? "Hide empty open stops" : "Show empty open stops"}
+                    </button>
+                    {!showBlankOpenStops && hiddenBlankOpenStopCount > 0 ? (
+                      <span className="text-[10px] text-muted-foreground">
+                        ({hiddenBlankOpenStopCount} blank {hiddenBlankOpenStopCount === 1 ? "stop" : "stops"} hidden)
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
               </div>
               <div className="min-h-0 flex-1 space-y-2.5 pr-0.5 pb-4 pt-0.5">
               {sidebarRoutesToRender.map(r => {
@@ -4866,6 +4909,7 @@ export default function Transport() {
                 const ptActiveToday = ptOnRoute.filter((c) =>
                   isParentTransportScheduledForRun(c, overrideDate, timeOfDay),
                 );
+                const blankOpenOnRoute = countBlankOpenStopsOnRoute(r.stops);
                 return (
                   <Card
                     key={r.id}
@@ -4979,6 +5023,9 @@ export default function Transport() {
                             const stopLines = routeStopListLines(stop, {
                               isCamp,
                             });
+                            if (!showBlankOpenStops && !isCamp && isBlankOpenRouteStop(stopLines)) {
+                              return null;
+                            }
                             const isDragging = reorderDrag?.routeId === r.id && reorderDrag.displayIndex === i;
                             const stopPinned = !isCamp && isStopPinnedForOptimize(r.id, stop.address);
                             return (
@@ -5084,6 +5131,19 @@ export default function Transport() {
                               </div>
                             );
                           })}
+                          {!showBlankOpenStops && blankOpenOnRoute > 0 ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleShowBlankOpenStops();
+                              }}
+                              className="text-[10px] text-primary hover:underline px-1 pt-0.5"
+                            >
+                              Show {blankOpenOnRoute} empty open{" "}
+                              {blankOpenOnRoute === 1 ? "stop" : "stops"} on this bus
+                            </button>
+                          ) : null}
                           {ptOnRoute.length > 0 ? (
                             <div className="pt-2 mt-1 border-t border-dashed border-sky-500/30 space-y-1">
                               <p className="text-[9px] font-bold uppercase tracking-wide text-sky-700 dark:text-sky-400 px-1">
@@ -6184,7 +6244,9 @@ export default function Transport() {
               {selectedRoute?.name}
             </DialogTitle>
           </DialogHeader>
-          {selectedRoute && (
+          {selectedRoute && (() => {
+            const blankOpenOnSelectedRoute = countBlankOpenStopsOnRoute(selectedRoute.stops);
+            return (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div><p className="text-xs text-muted-foreground">Bus</p><p className="text-sm font-medium">{selectedRoute.bus}</p></div>
@@ -6195,10 +6257,26 @@ export default function Transport() {
               {selectedRoute.stops.length > 0 && (
                 <div>
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Stops</p>
+                  {!showBlankOpenStops && blankOpenOnSelectedRoute > 0 ? (
+                    <p className="text-[11px] text-muted-foreground mb-2">
+                      {blankOpenOnSelectedRoute} empty open{" "}
+                      {blankOpenOnSelectedRoute === 1 ? "stop is" : "stops are"} hidden.{" "}
+                      <button
+                        type="button"
+                        className="text-primary font-medium hover:underline"
+                        onClick={toggleShowBlankOpenStops}
+                      >
+                        Show them
+                      </button>
+                    </p>
+                  ) : null}
                   <div className="space-y-2">
                     {selectedRoute.stops.map((stop, i) => {
                       const isCamp = stop.address === CAMP_LOCATION.address;
                       const stopLines = routeStopListLines(stop, { isCamp });
+                      if (!showBlankOpenStops && !isCamp && isBlankOpenRouteStop(stopLines)) {
+                        return null;
+                      }
                       const riders = stopLines.camperNames;
                       const isHousehold = riders.length > 1;
                       return (
@@ -6240,7 +6318,8 @@ export default function Transport() {
                 </div>
               )}
             </div>
-          )}
+            );
+          })()}
           <DialogFooter>
             <Button variant="outline" onClick={() => setSelectedRoute(null)}>Close</Button>
           </DialogFooter>

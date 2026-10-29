@@ -1,12 +1,11 @@
 import type { LucideIcon } from "lucide-react";
-import { CloudRain, Droplets, Shirt, Sun, Utensils, Waves } from "lucide-react";
+import { CloudRain, Droplets, Shirt, Sun } from "lucide-react";
 
+/** Todd: four NSDC reminder graphics only (no towel / pack lunch). */
 export type ParentEmailTemplateKey =
   | "sunscreen"
   | "extra_clothes"
-  | "towel"
   | "water_bottle"
-  | "lunch"
   | "rain_gear";
 
 export type ParentEmailTemplateOption = {
@@ -18,8 +17,6 @@ export type ParentEmailTemplateOption = {
 export const PARENT_EMAIL_TEMPLATE_OPTIONS: ParentEmailTemplateOption[] = [
   { key: "sunscreen", label: "More sunscreen", icon: Sun },
   { key: "extra_clothes", label: "Extra clothes", icon: Shirt },
-  { key: "towel", label: "Towel", icon: Waves },
   { key: "water_bottle", label: "Water bottle", icon: Droplets },
-  { key: "lunch", label: "Pack lunch", icon: Utensils },
   { key: "rain_gear", label: "Rain gear", icon: CloudRain },
 ];
