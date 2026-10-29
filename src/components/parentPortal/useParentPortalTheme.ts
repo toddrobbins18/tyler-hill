@@ -12,7 +12,7 @@ export function useParentPortalTheme(
 
   useEffect(() => {
     const color = resolveParentPortalThemeColor(themeColor, companySlug);
-    applyParentPortalTheme(color, rootRef.current);
+    applyParentPortalTheme(color, rootRef.current, companySlug);
   }, [themeColor, companySlug]);
 
   return rootRef;

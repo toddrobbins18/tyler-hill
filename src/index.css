@@ -186,6 +186,12 @@ All colors MUST be HSL.
   --pp-text-subtle: 215 14% 57%;
   --pp-border: 214 32% 91%;
   --pp-border-strong: 214 25% 84%;
+  /* Sidebar (Nest-style); overridden per camp in applyParentPortalTheme */
+  --pp-sidebar-bg: 215 28% 17%;
+  --pp-sidebar-accent: 215 25% 25%;
+  --pp-sidebar-border: 215 25% 25%;
+  --pp-sidebar-fg: 210 20% 95%;
+  --pp-sidebar-fg-muted: 215 15% 72%;
   background-color: hsl(var(--pp-bg));
   color: hsl(var(--pp-text));
   font-feature-settings: "cv11", "ss01";
@@ -199,25 +205,34 @@ All colors MUST be HSL.
   }
 
   .pp-sidebar {
-    background: hsl(var(--pp-bg-elevated));
-    border-color: hsl(var(--pp-border));
+    background: hsl(var(--pp-sidebar-bg));
+    border-color: hsl(var(--pp-sidebar-border));
+    color: hsl(var(--pp-sidebar-fg));
     overflow-y: auto;
     overscroll-behavior: contain;
   }
 
+  .pp-sidebar .pp-brand-mark {
+    border: 1px solid hsl(var(--pp-brand) / 0.45);
+    background: hsl(var(--pp-brand));
+    color: white;
+  }
+
   .pp-sidebar-link-idle {
-    color: hsl(var(--pp-text-muted));
+    color: hsl(var(--pp-sidebar-fg-muted));
   }
 
   .pp-sidebar-link-idle:hover {
-    background: hsl(220 14% 96%);
-    color: hsl(var(--pp-text));
+    background: hsl(var(--pp-sidebar-accent));
+    color: hsl(var(--pp-sidebar-fg));
   }
 
   .pp-sidebar-link-active {
-    background: hsl(var(--pp-brand-subtle));
-    color: hsl(var(--pp-brand-dark));
+    border-left: 3px solid hsl(var(--pp-brand));
+    background: hsl(var(--pp-brand) / 0.2);
+    color: hsl(var(--pp-sidebar-fg));
     font-weight: 600;
+    padding-left: calc(0.75rem - 3px);
   }
 
   .pp-brand-mark {

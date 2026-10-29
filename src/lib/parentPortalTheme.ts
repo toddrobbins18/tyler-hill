@@ -1,4 +1,8 @@
-import { hexToHSL } from "@/utils/themeUtils";
+import {
+  computeSidebarAccentHSL,
+  computeSidebarBackgroundHSL,
+  hexToHSL,
+} from "@/utils/themeUtils";
 import { CAMP_SLUG } from "@/lib/camps";
 import tylerHillDashboardBg from "@/assets/image001.jpg";
 import timberLakeWestBg from "@/assets/timber-lake-west-bg.jpeg";
@@ -67,15 +71,21 @@ export function resolveParentPortalThemeColor(
 }
 
 /** Set CSS variables on a `.parent-portal` root from camp brand hex. */
-export function applyParentPortalTheme(themeColor: string, root?: HTMLElement | null) {
+export function applyParentPortalTheme(
+  themeColor: string,
+  root?: HTMLElement | null,
+  companySlug?: string | null,
+) {
   const target =
     root ??
     (document.querySelector(".parent-portal") as HTMLElement | null) ??
     document.documentElement;
 
+  const brandHex = resolveParentPortalThemeColor(themeColor, companySlug);
+
   let hsl: string;
   try {
-    hsl = hexToHSL(themeColor);
+    hsl = hexToHSL(brandHex);
   } catch {
     hsl = hexToHSL(DEFAULT_PARENT_PORTAL_THEME);
   }
@@ -100,4 +110,20 @@ export function applyParentPortalTheme(themeColor: string, root?: HTMLElement | 
   target.style.setProperty("--pp-text-subtle", "215 14% 57%");
   target.style.setProperty("--pp-border", "214 32% 91%");
   target.style.setProperty("--pp-border-strong", "214 25% 84%");
+
+  /* Colored sidebar — same derivation as staff Nest (`applyThemeColor`). */
+  let sidebarBg: string;
+  let sidebarAccent: string;
+  if (companySlug === CAMP_SLUG.TIMBER_LAKE_CAMP) {
+    sidebarBg = "0 0% 0%";
+    sidebarAccent = "0 0% 14%";
+  } else {
+    sidebarBg = computeSidebarBackgroundHSL(brandHex);
+    sidebarAccent = computeSidebarAccentHSL(brandHex);
+  }
+  target.style.setProperty("--pp-sidebar-bg", sidebarBg);
+  target.style.setProperty("--pp-sidebar-accent", sidebarAccent);
+  target.style.setProperty("--pp-sidebar-border", sidebarAccent);
+  target.style.setProperty("--pp-sidebar-fg", "210 20% 95%");
+  target.style.setProperty("--pp-sidebar-fg-muted", "215 15% 72%");
 }

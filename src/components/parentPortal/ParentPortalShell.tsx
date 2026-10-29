@@ -73,13 +73,15 @@ function SidebarPanel({
   return (
     <div className={cn("flex h-full min-h-0 flex-col", className)}>
       <div className="flex flex-col gap-6 px-5 py-6">
-        <div className="flex items-start gap-3 border-b border-[hsl(var(--pp-border))] pb-5">
+        <div className="flex items-start gap-3 border-b border-[hsl(var(--pp-sidebar-border))] pb-5">
           <div className="pp-brand-mark flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
             <Shield className="h-4 w-4" />
           </div>
           <div className="min-w-0 pt-0.5">
-            <p className="truncate text-sm font-semibold leading-tight tracking-tight">{campName}</p>
-            <p className="pp-text-muted mt-0.5 truncate text-xs leading-snug">
+            <p className="truncate text-sm font-semibold leading-tight tracking-tight text-[hsl(var(--pp-sidebar-fg))]">
+              {campName}
+            </p>
+            <p className="mt-0.5 truncate text-xs leading-snug text-[hsl(var(--pp-sidebar-fg-muted))]">
               {familyName} Family
               {firstName ? ` · ${firstName}` : ""}
             </p>
@@ -108,7 +110,7 @@ function SidebarPanel({
         </nav>
       </div>
 
-      <div className="mt-auto border-t px-5 py-4">
+      <div className="mt-auto border-t border-[hsl(var(--pp-sidebar-border))] px-5 py-4">
         <Button
           variant="ghost"
           size="sm"
@@ -116,7 +118,7 @@ function SidebarPanel({
             onNavSelect?.();
             onSignOut();
           }}
-          className="pp-sidebar-link-idle h-9 w-full justify-start rounded-lg px-3 text-[0.8125rem] font-medium"
+          className="pp-sidebar-link-idle h-9 w-full justify-start rounded-lg px-3 text-[0.8125rem] font-medium hover:bg-[hsl(var(--pp-sidebar-accent))] hover:text-[hsl(var(--pp-sidebar-fg))]"
         >
           <LogOut className="mr-2.5 h-4 w-4" />
           Sign out
