@@ -1700,15 +1700,20 @@ async function backfillGuardianEmailsFromSwimImport(
   if (emailByChildId.size === 0) return 0;
 
   const childIds = [...emailByChildId.keys()];
-  const { data: existingRows, error: loadError } = await supabase
-    .from("children")
-    .select("id, guardian_email")
-    .eq("company_id", companyId)
-    .in("id", childIds);
-  if (loadError) throw loadError;
+  const existingRows: { id: string; guardian_email: string | null }[] = [];
+  for (let i = 0; i < childIds.length; i += SWIM_IMPORT_BATCH_SIZE) {
+    const idBatch = childIds.slice(i, i + SWIM_IMPORT_BATCH_SIZE);
+    const { data, error: loadError } = await supabase
+      .from("children")
+      .select("id, guardian_email")
+      .eq("company_id", companyId)
+      .in("id", idBatch);
+    if (loadError) throw loadError;
+    existingRows.push(...(data ?? []));
+  }
 
   const toUpdate: { id: string; guardian_email: string }[] = [];
-  for (const row of existingRows ?? []) {
+  for (const row of existingRows) {
     if (row.guardian_email?.trim()) continue;
     const email = emailByChildId.get(String(row.id));
     if (email) toUpdate.push({ id: String(row.id), guardian_email: email });
@@ -1731,8 +1736,7 @@ async function backfillGuardianEmailsFromSwimImport(
           .from("children")
           .update({ guardian_email })
           .eq("id", id)
-          .eq("company_id", companyId)
-          .or("guardian_email.is.null,guardian_email.eq.");
+          .eq("company_id", companyId);
         if (!error) updated += 1;
       }),
     );
