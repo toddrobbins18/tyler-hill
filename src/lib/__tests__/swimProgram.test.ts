@@ -11,6 +11,7 @@ import {
   resolveStoredDivisionLeader,
   normalizeSkillStatus,
   parseSwimProgramCsv,
+  inferImportSeasonFromFileName,
   swimLevelColumnVisible,
   swimHistoryRecordHasData,
   type RosterChild,
@@ -134,6 +135,32 @@ describe("swimProgram", () => {
     };
     expect(swimHistoryRecordHasData(null, levelsOnlyRedCross)).toBe(true);
     expect(swimHistoryRecordHasData(null, { ...levelsOnlyRedCross, redCross: "—", frog: "Complete" })).toBe(true);
+  });
+
+  it("parses Swim Bracelets 2026 grid (Division Leader, tests, bracelet color)", () => {
+    const csv = [
+      "Name,Group,Division Leader,Current Bracelet,Note Field ,1st Test Proctor,1st Testing Date,1st Note,Send Email",
+      'Nicholas Hwang,Everest,Alyssa,Orange,,JT,"June 29, 2026",PASSED,checked',
+    ].join("\n");
+    const rosterChild: RosterChild = {
+      ...child,
+      name: "Nicholas Hwang",
+      season: "2026",
+    };
+    const { rows, unmatched } = parseSwimProgramCsv(csv, [rosterChild], "2026");
+    expect(unmatched).toHaveLength(0);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].season).toBe("2026");
+    expect(rows[0].bracelet?.currentBracelet).toBe("Orange");
+    expect(rows[0].bracelet?.divisionLeader).toBe("Alyssa");
+    expect(rows[0].bracelet?.proctor1).toBe("JT");
+    expect(rows[0].bracelet?.note1).toBe("PASSED");
+    expect(rows[0].bracelet?.emailSent).toBe(true);
+  });
+
+  it("infers import season from filename when Season column is absent", () => {
+    expect(inferImportSeasonFromFileName("2026-Grid view(1).csv", "2027")).toBe("2026");
+    expect(inferImportSeasonFromFileName("Swim Records 2026-ALL KIDS(1).csv", "2027")).toBe("2026");
   });
 
   it("matches PersonID across seasons when importing historical data", () => {

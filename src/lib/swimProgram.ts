@@ -1392,6 +1392,103 @@ function findPersonColumnIndex(headers: string[]): number {
   );
 }
 
+/** When CSV has no Season column, use year in filename (e.g. Todd's "2026-Grid view.csv"). */
+export function inferImportSeasonFromFileName(fileName: string, fallback: string): string {
+  const m = fileName.match(/\b(20\d{2})\b/);
+  return m?.[1] ?? fallback;
+}
+
+function headerColIndex(headers: string[], ...candidates: string[]): number {
+  for (const c of candidates) {
+    const n = normHeader(c);
+    const idx = headers.indexOf(n);
+    if (idx >= 0) return idx;
+  }
+  return -1;
+}
+
+function colAt(headers: string[], cols: string[], ...candidates: string[]): string {
+  const idx = headerColIndex(headers, ...candidates);
+  return idx >= 0 ? (cols[idx]?.trim() ?? "") : "";
+}
+
+/** Swim Bracelets 2026 grid — Division Leader, tests 1–5, note field, Send Email. */
+function parseAirtableBraceletImport(
+  headers: string[],
+  cols: string[],
+  csvGroup: string,
+): Partial<BraceletRecord> | undefined {
+  const currentBracelet = normalizeBraceletColor(
+    colAt(headers, cols, "Current Bracelet", "current_bracelet", "bracelet"),
+  );
+  const divisionLeaderRaw = colAt(headers, cols, "Division Leader", "division_leader");
+  const divisionLeader = divisionLeaderRaw ? normalizeDivisionLeader(divisionLeaderRaw) : "";
+  const generalNote = colAt(headers, cols, "Note Field", "note_field", "note");
+
+  const proctor1 = colAt(headers, cols, "1st Test Proctor", "1st_test_proctor");
+  const date1 = colAt(headers, cols, "1st Testing Date", "1st_testing_date");
+  const note1Raw = colAt(headers, cols, "1st Note", "1st_note");
+  const note1 = normalizeSwimTestNote(note1Raw) || note1Raw;
+
+  const proctor2 = colAt(headers, cols, "2nd Test Proctor", "2nd_test_proctor");
+  const date2 = colAt(headers, cols, "2nd Testing Date", "2nd_testing_date");
+  const note2Raw = colAt(headers, cols, "2nd Note", "2nd_note");
+  const note2 = normalizeSwimTestNote(note2Raw) || note2Raw;
+
+  const proctor3 = colAt(headers, cols, "3rd Test Proctor", "3rd_test_proctor");
+  const date3 = colAt(headers, cols, "3rd Testing Date", "3rd_testing_date");
+  const note3Raw = colAt(headers, cols, "3rd Note", "3rd_note");
+  const note3 = normalizeSwimTestNote(note3Raw) || note3Raw;
+
+  const proctor4 = colAt(headers, cols, "4th Test Proctor", "4th_test_proctor");
+  const date4 = colAt(headers, cols, "4th Testing Date", "4th_testing_date");
+  const note4Raw = colAt(headers, cols, "4th note", "4th_note");
+  const note4 = normalizeSwimTestNote(note4Raw) || note4Raw;
+
+  const proctor5 = colAt(headers, cols, "5th Test Proctor", "5th_test_proctor");
+  const date5 = colAt(headers, cols, "5th Testing Date", "5th_testing_date");
+  const note5Raw = colAt(headers, cols, "5th note", "5th_note");
+  const note5 = normalizeSwimTestNote(note5Raw) || note5Raw;
+
+  const sendEmail = colAt(headers, cols, "Send Email", "send_email");
+  const emailSent = /^(checked|true|yes|1)$/i.test(sendEmail);
+
+  const hasLeader = Boolean(divisionLeader && !isBlankDivisionLeader(divisionLeader));
+  const hasTests =
+    Boolean(proctor1 || date1 || note1) ||
+    Boolean(proctor2 || date2 || note2) ||
+    Boolean(proctor3 || date3 || note3) ||
+    Boolean(proctor4 || date4 || note4) ||
+    Boolean(proctor5 || date5 || note5);
+
+  if (!currentBracelet && !hasLeader && !generalNote && !hasTests && !emailSent && !csvGroup) {
+    return undefined;
+  }
+
+  return {
+    ...(csvGroup ? { group: csvGroup } : {}),
+    ...(currentBracelet ? { currentBracelet } : {}),
+    ...(hasLeader ? { divisionLeader } : {}),
+    ...(generalNote ? { generalNote } : {}),
+    ...(proctor1 ? { proctor1 } : {}),
+    ...(date1 ? { date1 } : {}),
+    ...(note1 ? { note1 } : {}),
+    ...(proctor2 ? { proctor2 } : {}),
+    ...(date2 ? { date2 } : {}),
+    ...(note2 ? { note2 } : {}),
+    ...(proctor3 ? { proctor3 } : {}),
+    ...(date3 ? { date3 } : {}),
+    ...(note3 ? { note3 } : {}),
+    ...(proctor4 ? { proctor4 } : {}),
+    ...(date4 ? { date4 } : {}),
+    ...(note4 ? { note4 } : {}),
+    ...(proctor5 ? { proctor5 } : {}),
+    ...(date5 ? { date5 } : {}),
+    ...(note5 ? { note5 } : {}),
+    ...(emailSent ? { emailSent } : {}),
+  };
+}
+
 function resolveChildForImportRow(
   cols: string[],
   headers: string[],
@@ -1441,10 +1538,10 @@ export function parseSwimProgramCsv(
 
   const rawHeaders = parseCsvLine(lines[0]);
   const headers = rawHeaders.map(normHeader);
-  const braceletIdx = headers.findIndex((h) => h === "current_bracelet" || h === "bracelet");
   const nameIdx = findNameColumnIndex(headers);
   const seasonIdx = headers.findIndex((h) => h === "season" || h === "year");
   const groupIdx = headers.findIndex((h) => h === "group");
+  const personIdx = findPersonColumnIndex(headers);
 
   const index = buildSwimChildIndex(children, defaultSeason);
   const rows: SwimCsvImportRow[] = [];
@@ -1452,9 +1549,12 @@ export function parseSwimProgramCsv(
 
   for (let li = 1; li < lines.length; li++) {
     const cols = parseCsvLine(lines[li]);
+    const name = nameIdx >= 0 ? cols[nameIdx]?.trim() : "";
+    const personId = personIdx >= 0 ? cols[personIdx]?.trim() : "";
+    if (!name && !personId) continue;
+
     const importSeason = (seasonIdx >= 0 ? cols[seasonIdx]?.trim() : "") || defaultSeason;
     const child = resolveChildForImportRow(cols, headers, index, importSeason);
-    const name = nameIdx >= 0 ? cols[nameIdx]?.trim() : "";
     const csvGroup = groupIdx >= 0 ? cols[groupIdx]?.trim() : "";
 
     if (!child) {
@@ -1464,15 +1564,9 @@ export function parseSwimProgramCsv(
 
     const importRow: SwimCsvImportRow = { child, season: importSeason };
 
-    if (braceletIdx >= 0) {
-      const color = cols[braceletIdx]?.trim();
-      const normalizedColor = normalizeBraceletColor(color);
-      if (normalizedColor) {
-        importRow.bracelet = {
-          currentBracelet: normalizedColor,
-          ...(csvGroup ? { group: csvGroup } : {}),
-        };
-      }
+    const braceletPartial = parseAirtableBraceletImport(headers, cols, csvGroup);
+    if (braceletPartial) {
+      importRow.bracelet = braceletPartial;
     }
 
     const goldfish = emptySkills4();
@@ -1678,6 +1772,7 @@ export async function importSwimProgramCsv(
   csvText: string,
   defaultSeason: string,
   onProgress?: (progress: SwimImportProgress) => void,
+  options?: { fileName?: string },
 ): Promise<{
   bracelets: number;
   levels: number;
@@ -1692,6 +1787,9 @@ export async function importSwimProgramCsv(
     total: 1,
     message: "Reading CSV…",
   });
+  const seasonDefault = options?.fileName
+    ? inferImportSeasonFromFileName(options.fileName, defaultSeason)
+    : defaultSeason;
   const children = await fetchAllSwimRosterChildren(supabase, companyId);
   onProgress?.({
     phase: "matching",
@@ -1699,7 +1797,7 @@ export async function importSwimProgramCsv(
     total: 1,
     message: `Matching campers to roster (${children.length} on file)…`,
   });
-  const { rows, unmatched } = parseSwimProgramCsv(csvText, children, defaultSeason);
+  const { rows, unmatched } = parseSwimProgramCsv(csvText, children, seasonDefault);
   const counts = await importSwimProgramRows(supabase, companyId, rows, onProgress);
   const seasons = [...new Set(rows.map((r) => r.season))].sort((a, b) => b.localeCompare(a));
   return { ...counts, unmatched, csvRows: rows.length, matched: rows.length, seasons };

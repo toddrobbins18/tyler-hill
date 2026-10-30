@@ -944,6 +944,7 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
         text,
         currentSeason,
         setImportProgress,
+        { fileName: file.name },
       );
       await reload();
       await loadHistory();
@@ -1184,14 +1185,15 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
         <AlertTitle className="text-sm">Load prior swim bracelets &amp; levels</AlertTitle>
         <AlertDescription className="text-xs space-y-1.5">
           <p>
-            Use <strong>Import CSV</strong> to feed data from Airtable or a spreadsheet. Include a{" "}
-            <strong>Season</strong> column (e.g. 2026, 2027), <strong>PersonID</strong> (CampMinder ID), and{" "}
-            <strong>current_bracelet</strong> (Red, Orange, Yellow, Green, or Blue).
+            Import Todd&apos;s Airtable exports: <strong>Swim Bracelets</strong> grid (Name, Division Leader, Current
+            Bracelet, test dates) and <strong>Swim Records</strong> (Child&apos;s Name, PersonID, skill columns). Import{" "}
+            <strong>both files</strong> for the same camp — order does not matter; rows merge by camper and season.
           </p>
           <p>
-            Campers must exist on the roster for that season (or match by PersonID). After import, open{" "}
-            <strong>Prior Seasons Report</strong> to review all years. Download <strong>Template</strong> for the
-            expected column layout.
+            Season comes from a <strong>Season</strong> column, or the year in the filename (e.g.{" "}
+            <strong>2026-Grid view.csv</strong>). For prior years, add a Season column (2024, 2025…) or import one file
+            per year. Campers must be on the roster or match by <strong>PersonID</strong>. Then open{" "}
+            <strong>Prior Seasons Report</strong>.
           </p>
         </AlertDescription>
       </Alert>
