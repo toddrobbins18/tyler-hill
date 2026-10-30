@@ -46,6 +46,9 @@ export default function PendingTransportChanges() {
   const [runPeriod, setRunPeriod] = useState<TransportRunPeriod>("am");
   const [routeMeta, setRouteMeta] = useState<TransportRouteMeta[]>([]);
   const [coreStops, setCoreStops] = useState<Record<number, TransportRouteStop[]>>({});
+  const [parentTransportCampers, setParentTransportCampers] = useState<
+    { routeId: number | null; name: string }[]
+  >([]);
   const [rows, setRows] = useState<TransportChangeSheetRow[]>([]);
   const [actions, setActions] = useState<PendingAction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,6 +80,12 @@ export default function PendingTransportChanges() {
       stops[Number(k)] = v as TransportRouteStop[];
     }
     setCoreStops(stops);
+    setParentTransportCampers(
+      (normalized.parentTransportCampers ?? []).map((c) => ({
+        routeId: c.routeId ?? null,
+        name: c.name,
+      })),
+    );
   }, [currentCompany?.id, currentSeason]);
 
   const loadPending = useCallback(async () => {
@@ -141,13 +150,15 @@ export default function PendingTransportChanges() {
         exceptions,
         routeMeta,
         coreStops,
-        selectedRouteIds: [],
+        selectedRouteIds: routeMeta.map((r) => r.id),
+        includeParentTransport: true,
+        parentTransportCampers,
       });
       setRows(built.filter((r) => !r.camper.startsWith("(No transport")));
     } finally {
       setLoading(false);
     }
-  }, [coreStops, currentCompany?.id, routeMeta, runPeriod, sheetDate]);
+  }, [coreStops, currentCompany?.id, parentTransportCampers, routeMeta, runPeriod, sheetDate]);
 
   useEffect(() => {
     void loadBoard();

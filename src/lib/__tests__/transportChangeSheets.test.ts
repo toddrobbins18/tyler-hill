@@ -3,6 +3,7 @@ import {
   buildApprovedChangeSheetRows,
   buildBusAttendanceAbsentRows,
   groupChangeSheetRowsByBus,
+  PARENT_TRANSPORT_CHANGE_SHEET_BUS,
   sortChangeSheetRowsByBus,
 } from "@/lib/transportChangeSheets";
 import { attendanceRecordKey } from "@/lib/transportBusAttendance";
@@ -113,6 +114,32 @@ describe("transportChangeSheets", () => {
 
     expect(rows.filter((r) => r.camper === "Jamie Smith")).toHaveLength(1);
     expect(rows.find((r) => r.camper === "Jamie Smith")?.source).toBe("Parent absence");
+  });
+
+  it("assigns parent transport campers to the PT bus on change sheets", () => {
+    const exceptions: TransportException[] = [
+      {
+        source: "parent_absence",
+        camperName: "PT Kid",
+        label: "Parent absence (acknowledged)",
+      },
+    ];
+
+    const rows = buildApprovedChangeSheetRows({
+      overrideDate: "2027-07-07",
+      runPeriod: "am",
+      exceptions,
+      manual: { excluded: {}, added: {} },
+      routeMeta,
+      coreStops,
+      selectedRouteIds: [],
+      includeParentTransport: true,
+      parentTransportCampers: [{ routeId: null, name: "PT Kid" }],
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.bus).toBe(PARENT_TRANSPORT_CHANGE_SHEET_BUS);
+    expect(rows[0]?.camper).toBe("PT Kid");
   });
 
   it("sorts and groups master sheet rows by bus", () => {

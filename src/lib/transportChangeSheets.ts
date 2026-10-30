@@ -11,6 +11,22 @@ import {
   parseAttendanceRecordKey,
   type BusAttendanceMap,
 } from "./transportBusAttendance";
+import {
+  PARENT_TRANSPORT_CHANGE_SHEET_BUS,
+  PARENT_TRANSPORT_STOP_LABEL,
+} from "./transportParentTransport";
+
+export { PARENT_TRANSPORT_CHANGE_SHEET_BUS };
+
+export type ChangeSheetParentTransportCamper = {
+  routeId: number | null;
+  name: string;
+};
+
+export type ChangeSheetSelectionFilter = {
+  selectedRouteIds: number[];
+  includeParentTransport: boolean;
+};
 
 export type TransportChangeSheetRow = {
   date: string;
@@ -62,13 +78,39 @@ function reportRowToChangeSheet(row: (string | number)[]): TransportChangeSheetR
   };
 }
 
-function rowMatchesSelectedRoutes(
+function isParentTransportCamper(
+  camperName: string,
+  parentTransportCampers: ChangeSheetParentTransportCamper[],
+): ChangeSheetParentTransportCamper | undefined {
+  const target = normName(camperName);
+  return parentTransportCampers.find((c) => normName(c.name) === target);
+}
+
+function rowMatchesChangeSheetFilter(
   row: TransportChangeSheetRow,
-  selectedRouteIds: number[],
+  filter: ChangeSheetSelectionFilter,
   routeMeta: TransportRouteMeta[],
   coreStops: Record<number, TransportRouteStop[]>,
+  parentTransportCampers: ChangeSheetParentTransportCamper[],
 ): boolean {
-  if (!selectedRouteIds.length) return true;
+  const { selectedRouteIds, includeParentTransport } = filter;
+  if (!selectedRouteIds.length && !includeParentTransport) return false;
+
+  const ptCamper =
+    row.camper && !row.camper.startsWith("(")
+      ? isParentTransportCamper(row.camper, parentTransportCampers)
+      : undefined;
+
+  if (!selectedRouteIds.length) {
+    if (!includeParentTransport) return false;
+    return row.bus === PARENT_TRANSPORT_CHANGE_SHEET_BUS || ptCamper != null;
+  }
+
+  if (includeParentTransport) {
+    if (row.bus === PARENT_TRANSPORT_CHANGE_SHEET_BUS) return true;
+    if (ptCamper) return true;
+  }
+
   const selectedMeta = routeMeta.filter((r) => selectedRouteIds.includes(r.id));
   const selectedBuses = new Set(selectedMeta.map((r) => r.bus));
   const selectedNames = new Set(selectedMeta.map((r) => r.name));
@@ -77,6 +119,8 @@ function rowMatchesSelectedRoutes(
   if (row.route && selectedNames.has(row.route)) return true;
 
   if (!row.camper || row.camper.startsWith("(")) return false;
+
+  if (ptCamper?.routeId != null && selectedRouteIds.includes(ptCamper.routeId)) return true;
 
   const assignment = findCamperRouteAssignment(row.camper, selectedMeta, coreStops);
   return assignment != null;
@@ -153,6 +197,14 @@ export function buildBusAttendanceAbsentRows(options: {
       parentTransportCampers,
     );
 
+    const ptOnRoute = parentTransportCampers.some(
+      (c) => c.routeId === parsed.routeId && normName(c.name) === parsed.camperNameLower,
+    );
+    const ptOnly = parentTransportCampers.some(
+      (c) => c.routeId == null && normName(c.name) === parsed.camperNameLower,
+    );
+    const isPt = ptOnRoute || ptOnly || camper.stopName.includes("Parent Transport");
+
     rows.push({
       date: overrideDate,
       run: runPeriod.toUpperCase(),
@@ -160,9 +212,9 @@ export function buildBusAttendanceAbsentRows(options: {
       source: "Bus attendance",
       description: "Marked absent on bus",
       status: "saved",
-      route: meta.name,
-      bus: meta.bus,
-      stop: camper.stopName || camper.address,
+      route: isPt ? `${meta.name} · PT` : meta.name,
+      bus: isPt ? PARENT_TRANSPORT_CHANGE_SHEET_BUS : meta.bus,
+      stop: camper.stopName || camper.address || PARENT_TRANSPORT_STOP_LABEL,
       notes: "",
     });
   }
@@ -193,8 +245,9 @@ export function buildApprovedChangeSheetRows(options: {
   routeMeta: TransportRouteMeta[];
   coreStops: Record<number, TransportRouteStop[]>;
   selectedRouteIds: number[];
+  includeParentTransport?: boolean;
   busAttendance?: BusAttendanceMap;
-  parentTransportCampers?: { routeId: number | null; name: string }[];
+  parentTransportCampers?: ChangeSheetParentTransportCamper[];
 }): TransportChangeSheetRow[] {
   const {
     overrideDate,
@@ -204,9 +257,15 @@ export function buildApprovedChangeSheetRows(options: {
     routeMeta,
     coreStops,
     selectedRouteIds,
+    includeParentTransport = true,
     busAttendance,
-    parentTransportCampers,
+    parentTransportCampers = [],
   } = options;
+
+  const selectionFilter: ChangeSheetSelectionFilter = {
+    selectedRouteIds,
+    includeParentTransport,
+  };
 
   const approvedExceptions = exceptions.filter(
     (ex) => ex.appliedToRoutes !== false && exceptionMatchesRun(ex, runPeriod),
@@ -228,14 +287,19 @@ export function buildApprovedChangeSheetRows(options: {
     manual: filteredManual,
     routeMeta,
     coreStops,
+    parentTransportCampers,
   });
 
   let dataRows = reportRows.slice(1).map(reportRowToChangeSheet);
-  if (selectedRouteIds.length) {
-    dataRows = dataRows.filter((row) =>
-      rowMatchesSelectedRoutes(row, selectedRouteIds, routeMeta, coreStops),
-    );
-  }
+  dataRows = dataRows.filter((row) =>
+    rowMatchesChangeSheetFilter(
+      row,
+      selectionFilter,
+      routeMeta,
+      coreStops,
+      parentTransportCampers,
+    ),
+  );
 
   if (!busAttendance || !Object.keys(busAttendance).length) return dataRows;
 
@@ -247,7 +311,15 @@ export function buildApprovedChangeSheetRows(options: {
     coreStops,
     parentTransportCampers,
     selectedRouteIds,
-  });
+  }).filter((row) =>
+    rowMatchesChangeSheetFilter(
+      row,
+      selectionFilter,
+      routeMeta,
+      coreStops,
+      parentTransportCampers,
+    ),
+  );
 
   return mergeChangeSheetRows(dataRows, attendanceRows);
 }
@@ -259,8 +331,24 @@ export function buildPendingChangeSheetRows(options: {
   routeMeta: TransportRouteMeta[];
   coreStops: Record<number, TransportRouteStop[]>;
   selectedRouteIds: number[];
+  includeParentTransport?: boolean;
+  parentTransportCampers?: ChangeSheetParentTransportCamper[];
 }): TransportChangeSheetRow[] {
-  const { overrideDate, runPeriod, exceptions, routeMeta, coreStops, selectedRouteIds } = options;
+  const {
+    overrideDate,
+    runPeriod,
+    exceptions,
+    routeMeta,
+    coreStops,
+    selectedRouteIds,
+    includeParentTransport = true,
+    parentTransportCampers = [],
+  } = options;
+
+  const selectionFilter: ChangeSheetSelectionFilter = {
+    selectedRouteIds,
+    includeParentTransport,
+  };
 
   const pending = exceptions.filter(
     (ex) => ex.appliedToRoutes === false && exceptionMatchesRun(ex, runPeriod),
@@ -272,13 +360,18 @@ export function buildPendingChangeSheetRows(options: {
     manual: { excluded: {}, added: {} },
     routeMeta,
     coreStops,
+    parentTransportCampers,
   });
 
   const dataRows = reportRows.slice(1).map(reportRowToChangeSheet);
-  if (!selectedRouteIds.length) return dataRows;
-
   return dataRows.filter((row) =>
-    rowMatchesSelectedRoutes(row, selectedRouteIds, routeMeta, coreStops),
+    rowMatchesChangeSheetFilter(
+      row,
+      selectionFilter,
+      routeMeta,
+      coreStops,
+      parentTransportCampers,
+    ),
   );
 }
 
@@ -291,6 +384,8 @@ export function sortChangeSheetRowsByBus(
       .sort((a, b) => compareBusLabels(a.bus, b.bus))
       .map((r, index) => [r.bus, index]),
   );
+  const ptOrder = routeMeta.length;
+  busOrder.set(PARENT_TRANSPORT_CHANGE_SHEET_BUS, ptOrder);
   return [...rows].sort((a, b) => {
     const busA = busOrder.get(a.bus) ?? 999;
     const busB = busOrder.get(b.bus) ?? 999;

@@ -26,6 +26,9 @@ export const PARENT_TRANSPORT_STOP_LABEL = "Parent Transport (PT)";
 /** Shown on Car Report when camper is parent transport only — not assigned to a bus. */
 export const PARENT_TRANSPORT_NO_BUS_LABEL = "PT only (no bus)";
 
+/** Master Change Sheet bus column / filter — PT appears alongside numbered buses. */
+export const PARENT_TRANSPORT_CHANGE_SHEET_BUS = "Parent Transport (PT)";
+
 export type ParentTransportCamper = {
   id: number;
   childId?: string | null;

@@ -21,6 +21,7 @@ import {
   buildApprovedChangeSheetRows,
   changeSheetRowsToCsv,
   groupChangeSheetRowsByBus,
+  PARENT_TRANSPORT_CHANGE_SHEET_BUS,
   sortChangeSheetRowsByBus,
   type TransportChangeSheetRow,
 } from "@/lib/transportChangeSheets";
@@ -35,6 +36,7 @@ export default function TransportChangeSheets() {
   const [sheetDate, setSheetDate] = useState(todayDateString());
   const [runPeriod, setRunPeriod] = useState<TransportRunPeriod>("am");
   const [selectedRouteIds, setSelectedRouteIds] = useState<number[]>([]);
+  const [includeParentTransport, setIncludeParentTransport] = useState(true);
   const [routeMeta, setRouteMeta] = useState<RouteWithColor[]>([]);
   const [coreStops, setCoreStops] = useState<Record<number, TransportRouteStop[]>>({});
   const [parentTransportCampers, setParentTransportCampers] = useState<
@@ -47,6 +49,7 @@ export default function TransportChangeSheets() {
 
   useEffect(() => {
     setSelectedRouteIds(routeMeta.map((r) => r.id));
+    setIncludeParentTransport(true);
   }, [routeIdsKey, routeMeta]);
 
   const loadBoard = useCallback(async () => {
@@ -93,7 +96,7 @@ export default function TransportChangeSheets() {
     if (!currentCompany?.id) return;
     setLoading(true);
     try {
-      if (!selectedRouteIds.length) {
+      if (!selectedRouteIds.length && !includeParentTransport) {
         setRows([]);
         return;
       }
@@ -110,6 +113,7 @@ export default function TransportChangeSheets() {
         routeMeta,
         coreStops,
         selectedRouteIds,
+        includeParentTransport,
         busAttendance: attendance.records,
         parentTransportCampers,
       });
@@ -125,6 +129,7 @@ export default function TransportChangeSheets() {
     parentTransportCampers,
     routeMeta,
     runPeriod,
+    includeParentTransport,
     selectedRouteIds,
     sheetDate,
   ]);
@@ -140,16 +145,23 @@ export default function TransportChangeSheets() {
 
   const allBusesSelected =
     routeMeta.length > 0 && selectedRouteIds.length === routeMeta.length;
+  const masterSheetSelected = allBusesSelected && includeParentTransport;
 
   const routeLabel = useMemo(() => {
-    if (!selectedRouteIds.length) return "No buses selected";
-    if (allBusesSelected) return "Master sheet — all buses";
+    if (!selectedRouteIds.length && !includeParentTransport) return "Nothing selected";
+    if (!selectedRouteIds.length && includeParentTransport) return PARENT_TRANSPORT_CHANGE_SHEET_BUS;
+    if (masterSheetSelected) return "Master sheet — all buses & PT";
+    if (allBusesSelected && !includeParentTransport) return "All buses (PT excluded)";
+    if (!allBusesSelected && includeParentTransport && selectedRouteIds.length === 0)
+      return PARENT_TRANSPORT_CHANGE_SHEET_BUS;
     if (selectedRouteIds.length === 1) {
       const r = routeMeta.find((x) => x.id === selectedRouteIds[0]);
       return r ? `${r.bus} · ${r.name}` : "1 bus";
     }
-    return `${selectedRouteIds.length} buses selected`;
-  }, [allBusesSelected, routeMeta, selectedRouteIds]);
+    const parts = [`${selectedRouteIds.length} bus${selectedRouteIds.length === 1 ? "" : "es"}`];
+    if (includeParentTransport) parts.push("PT");
+    return parts.join(" + ");
+  }, [allBusesSelected, includeParentTransport, masterSheetSelected, routeMeta, selectedRouteIds]);
 
   const groupedRows = useMemo(
     () => groupChangeSheetRowsByBus(rows, routeMeta),
@@ -164,6 +176,7 @@ export default function TransportChangeSheets() {
 
   const selectAllBuses = () => {
     setSelectedRouteIds(routeMeta.map((r) => r.id));
+    setIncludeParentTransport(true);
   };
 
   const downloadCsv = () => {
@@ -173,8 +186,10 @@ export default function TransportChangeSheets() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    const busSuffix = allBusesSelected
-      ? "master-all-buses"
+    const busSuffix = masterSheetSelected
+      ? "master-all-buses-pt"
+      : allBusesSelected && !includeParentTransport
+        ? "master-all-buses"
       : routeMeta
           .filter((r) => selectedRouteIds.includes(r.id))
           .map((r) => r.bus.replace(/\s+/g, "-"))
@@ -240,12 +255,12 @@ export default function TransportChangeSheets() {
             <div>
               <CardTitle className="text-base">Select buses</CardTitle>
               <CardDescription>
-                Check one or more buses, or use Select all for the full master sheet.
+                Check buses and Parent Transport (PT), or use Select all for the full master sheet.
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant={allBusesSelected ? "default" : "outline"} onClick={selectAllBuses}>
-                Select all buses
+              <Button size="sm" variant={masterSheetSelected ? "default" : "outline"} onClick={selectAllBuses}>
+                Select all (buses + PT)
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setSelectedRouteIds([])}>
                 Clear selection
@@ -269,22 +284,41 @@ export default function TransportChangeSheets() {
                 </label>
               );
             })}
+            <label
+              className="flex items-center gap-2 cursor-pointer text-sm rounded-md border px-3 py-2 hover:bg-muted/40 border-dashed"
+            >
+              <Checkbox
+                checked={includeParentTransport}
+                onCheckedChange={(v) => setIncludeParentTransport(v === true)}
+              />
+              <span className="font-medium">{PARENT_TRANSPORT_CHANGE_SHEET_BUS}</span>
+              <span className="text-xs text-muted-foreground">Car / parent drop-off &amp; pick-up</span>
+            </label>
           </div>
           {!routeMeta.length ? (
             <p className="text-sm text-muted-foreground">No buses configured for this season.</p>
           ) : null}
           <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-            <Button size="sm" onClick={downloadCsv} disabled={!rows.length || !selectedRouteIds.length}>
+            <Button
+              size="sm"
+              onClick={downloadCsv}
+              disabled={!rows.length || (!selectedRouteIds.length && !includeParentTransport)}
+            >
               <Share2 className="mr-2 h-4 w-4" />
               Download CSV
             </Button>
-            <Button size="sm" variant="outline" onClick={handlePrint} disabled={!rows.length || !selectedRouteIds.length}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handlePrint}
+              disabled={!rows.length || (!selectedRouteIds.length && !includeParentTransport)}
+            >
               <Printer className="mr-2 h-4 w-4" />
               Print
             </Button>
-            {allBusesSelected ? (
+            {masterSheetSelected ? (
               <Badge variant="secondary" className="bg-primary/10 text-primary">
-                Master — all buses
+                Master — all buses &amp; PT
               </Badge>
             ) : null}
           </div>
@@ -305,9 +339,9 @@ export default function TransportChangeSheets() {
             <div className="flex justify-center py-8 no-print">
               <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
             </div>
-          ) : !selectedRouteIds.length ? (
+          ) : !selectedRouteIds.length && !includeParentTransport ? (
             <p className="text-sm text-muted-foreground no-print">
-              Select at least one bus to view the change sheet.
+              Select at least one bus or Parent Transport (PT) to view the change sheet.
             </p>
           ) : rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">
