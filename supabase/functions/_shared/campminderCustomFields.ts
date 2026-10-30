@@ -104,8 +104,11 @@ function normalizeDayCampGradeKey(value?: string | null): DayCampGradeSortKey | 
   if (!raw) return null;
 
   const compact = raw.replace(/\s+/g, " ").replace(/\s-\s/g, "-");
+  const squashed = compact.replace(/\s/g, "");
   if (/^nursery(\s+campers?)?$/.test(compact)) return "nursery";
+  if (squashed === "prek" || squashed === "pk") return "pre-k";
   if (/^pre\s*-?\s*k(inder(garten)?)?$/.test(compact)) return "pre-k";
+  if (squashed === "kg" || squashed === "k") return "kindergarten";
   if (/^k(inder(garten)?)?$/.test(compact)) return "kindergarten";
 
   const ordinalMatch = compact.match(/^(\d+)(st|nd|rd|th)?$/);

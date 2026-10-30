@@ -25,7 +25,7 @@ import {
   getCamperEffectiveDivision,
   getCamperGradeDisplay,
   getDayCampDivisionDropdownLabel,
-  getDayCampGradeSortIndex,
+  compareDayCampGradesByLabels,
   getDivisionDropdownLabel,
   normalizeDivisionNameForFilter,
   prepareDayCampDivisionDropdown,
@@ -226,9 +226,12 @@ export default function Roster() {
         if (genderCompare !== 0) return genderCompare;
         const divA = getCamperEffectiveDivision(a);
         const divB = getCamperEffectiveDivision(b);
-        const gradeCompare =
-          getDayCampGradeSortIndex(divA.name ?? a.grade) -
-          getDayCampGradeSortIndex(divB.name ?? b.grade);
+        const gradeCompare = compareDayCampGradesByLabels(
+          divA.name,
+          a.grade,
+          divB.name,
+          b.grade,
+        );
         if (gradeCompare !== 0) return gradeCompare;
         return compareByLastName(a, b);
       }
@@ -245,13 +248,19 @@ export default function Roster() {
       if (sortBy === "division") {
         const divA = getCamperEffectiveDivision(a);
         const divB = getCamperEffectiveDivision(b);
-        const orderA = isDayCamp
-          ? getDayCampGradeSortIndex(divA.name ?? a.grade)
-          : (divA.sort_order ?? 999);
-        const orderB = isDayCamp
-          ? getDayCampGradeSortIndex(divB.name ?? b.grade)
-          : (divB.sort_order ?? 999);
-        if (orderA !== orderB) return orderA - orderB;
+        if (isDayCamp) {
+          const gradeCompare = compareDayCampGradesByLabels(
+            divA.name,
+            a.grade,
+            divB.name,
+            b.grade,
+          );
+          if (gradeCompare !== 0) return gradeCompare;
+        } else {
+          const orderA = divA.sort_order ?? 999;
+          const orderB = divB.sort_order ?? 999;
+          if (orderA !== orderB) return orderA - orderB;
+        }
         if (isDayCamp) {
           const genderCompare = compareByCamperGender(a.gender, b.gender);
           if (genderCompare !== 0) return genderCompare;

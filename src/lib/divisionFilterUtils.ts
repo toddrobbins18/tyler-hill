@@ -109,9 +109,12 @@ export function normalizeDayCampGradeKey(value?: string | null): DayCampGradeSor
   if (!raw) return null;
 
   const compact = raw.replace(/\s+/g, " ").replace(/\s-\s/g, "-");
+  const squashed = compact.replace(/\s/g, "");
 
   if (/^nursery(\s+campers?)?$/.test(compact)) return "nursery";
+  if (squashed === "prek" || squashed === "pk") return "pre-k";
   if (/^pre\s*-?\s*k(inder(garten)?)?$/.test(compact)) return "pre-k";
+  if (squashed === "kg" || squashed === "k") return "kindergarten";
   if (/^k(inder(garten)?)?$/.test(compact)) return "kindergarten";
 
   const ordinalMatch = compact.match(/^(\d+)(st|nd|rd|th)?$/);
@@ -132,6 +135,47 @@ export function getDayCampGradeSortIndex(value?: string | null): number {
   if (!key) return 9999;
   const idx = DAY_CAMP_GRADE_SORT_KEYS.indexOf(key);
   return idx >= 0 ? idx : 9999;
+}
+
+/** Prefer Camp Grade on the child when division is a bunk/group label (Paris, etc.). */
+export function resolveDayCampGradeSortLabel(
+  divisionName?: string | null,
+  grade?: string | null,
+): string {
+  const division = (divisionName ?? "").trim();
+  const gradeVal = (grade ?? "").trim();
+  if (normalizeDayCampGradeKey(division)) return division;
+  if (normalizeDayCampGradeKey(gradeVal)) return gradeVal;
+  return division || gradeVal;
+}
+
+export function compareDayCampGradesByLabels(
+  divisionNameA?: string | null,
+  gradeA?: string | null,
+  divisionNameB?: string | null,
+  gradeB?: string | null,
+): number {
+  const labelA = resolveDayCampGradeSortLabel(divisionNameA, gradeA);
+  const labelB = resolveDayCampGradeSortLabel(divisionNameB, gradeB);
+  const byGrade = getDayCampGradeSortIndex(labelA) - getDayCampGradeSortIndex(labelB);
+  if (byGrade !== 0) return byGrade;
+  return labelA.localeCompare(labelB, undefined, { sensitivity: "base" });
+}
+
+/** Nursery, Pre-K, and Kindergarten — coed bunking / youngest grades. */
+export function isCoedYoungDayCampGrade(value?: string | null): boolean {
+  const key = normalizeDayCampGradeKey(value);
+  return key === "nursery" || key === "pre-k" || key === "kindergarten";
+}
+
+export function getCanonicalDayCampGradeDisplay(
+  divisionName?: string | null,
+  grade?: string | null,
+): string {
+  const label = resolveDayCampGradeSortLabel(divisionName, grade);
+  const key = normalizeDayCampGradeKey(label);
+  if (key) return DAY_CAMP_GRADE_DISPLAY[key];
+  return label || "—";
 }
 
 /** CampMinder-facing label for day-camp grade divisions. */
@@ -202,8 +246,9 @@ export function camperMatchesDayCampDivisionFilter(
 
   const selectedKey = normalizeDayCampGradeKey(selectedDivisionName);
   if (selectedKey) {
-    const camperKey =
-      normalizeDayCampGradeKey(camperDivisionName) ?? normalizeDayCampGradeKey(camperGrade);
+    const camperKey = normalizeDayCampGradeKey(
+      resolveDayCampGradeSortLabel(camperDivisionName, camperGrade),
+    );
     if (camperKey && camperKey === selectedKey) return true;
   }
 

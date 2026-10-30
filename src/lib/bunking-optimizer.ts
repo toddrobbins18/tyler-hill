@@ -1,6 +1,8 @@
 // Bunking auto-optimizer
 // Priority: town first, then mutual requests, then single requests.
-// Coed only for Nursery / Pre-K divisions; everyone else split by gender.
+// Coed for Nursery / Pre-K / Kindergarten; everyone else split by gender.
+
+import { isCoedYoungDayCampGrade } from "@/lib/divisionFilterUtils";
 
 export type OptCamper = {
   id: string;
@@ -29,6 +31,7 @@ export type OptimizeOptions = {
 const norm = (s?: string) => (s || "").trim().toLowerCase();
 
 function isCoedDivision(division: string, coed: string[]) {
+  if (isCoedYoungDayCampGrade(division)) return true;
   const d = norm(division);
   return coed.some((c) => d === c || d.includes(c));
 }
