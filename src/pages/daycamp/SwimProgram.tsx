@@ -149,12 +149,12 @@ function levelRecordHasData(record: LevelRecord): boolean {
 }
 
 const BRACELET_STYLES: Record<BraceletColor, string> = {
-  "Non Swimmer/Beginner": "bg-violet-500/15 text-violet-200 border-violet-500/35",
-  Red: "bg-red-500/20 text-red-300 border-red-500/40",
-  Orange: "bg-orange-500/20 text-orange-300 border-orange-500/40",
-  Yellow: "bg-yellow-500/20 text-yellow-200 border-yellow-500/40",
-  Green: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
-  Blue: "bg-sky-500/20 text-sky-300 border-sky-500/40",
+  "Non Swimmer/Beginner": "bg-slate-200 text-slate-900 border-slate-400",
+  Red: "bg-red-600 text-white border-red-700",
+  Orange: "bg-orange-500 text-white border-orange-600",
+  Yellow: "bg-yellow-400 text-yellow-950 border-yellow-500",
+  Green: "bg-green-600 text-white border-green-700",
+  Blue: "bg-blue-600 text-white border-blue-700",
 };
 
 const editableSelect =
@@ -1047,6 +1047,9 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
           minnow: s.levels?.minnow ?? [],
           tadpole: s.levels?.tadpole ?? [],
           redCross: s.levels?.redCross ?? "—",
+          redCross2: s.levels?.redCross2 ?? "—",
+          redCross3: s.levels?.redCross3 ?? "—",
+          redCross4: s.levels?.redCross4 ?? "—",
           frog: s.levels?.frog ?? "—",
         })),
       ),
@@ -1828,6 +1831,9 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                         <TableCell className="font-semibold">Minnow</TableCell>
                         <TableCell className="font-semibold">Tadpole</TableCell>
                         <TableCell className="font-semibold">Red Cross 1</TableCell>
+                        <TableCell className="font-semibold">Red Cross 2</TableCell>
+                        <TableCell className="font-semibold">Red Cross 3</TableCell>
+                        <TableCell className="font-semibold">Red Cross 4</TableCell>
                         <TableCell className="font-semibold">Frog</TableCell>
                       </TableRow>
                     </TableHeader>
@@ -1859,6 +1865,9 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                             </div>
                           </TableCell>
                           <TableCell>{row.redCross}</TableCell>
+                          <TableCell>{row.redCross2}</TableCell>
+                          <TableCell>{row.redCross3}</TableCell>
+                          <TableCell>{row.redCross4}</TableCell>
                           <TableCell>{row.frog}</TableCell>
                         </TableRow>
                       ))}
