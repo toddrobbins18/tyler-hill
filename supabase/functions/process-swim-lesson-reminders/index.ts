@@ -66,7 +66,7 @@ serve(async (req) => {
       .from("swim_lessons")
       .select("id, camper_id, scheduled_at, status, parent_confirmed, children:camper_id(name, guardian_email)")
       .eq("company_id", company_id)
-      .eq("status", "scheduled")
+      .in("status", ["booked", "scheduled"])
       .eq("parent_confirmed", false)
       .is("reminder_sent_at", null)
       .gte("scheduled_at", dayStart)

@@ -1,20 +1,46 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type SwimLessonStatus = "pending" | "scheduled" | "rejected" | "cancelled";
+export type SwimLessonStatus = "pending" | "booked" | "scheduled" | "rejected" | "cancelled";
 
-export const SWIM_LESSON_STATUS_LABELS: Record<SwimLessonStatus, string> = {
+/** Status values that mean the lesson is on the calendar (staff approved). */
+export const SWIM_LESSON_BOOKED_STATUSES = ["booked", "scheduled"] as const;
+
+export function isSwimLessonBookedStatus(status: string | null | undefined): boolean {
+  return status === "booked" || status === "scheduled";
+}
+
+export const SWIM_LESSON_STATUS_LABELS: Record<string, string> = {
   pending: "Pending approval",
-  scheduled: "Approved",
+  booked: "Booked",
+  scheduled: "Booked",
   rejected: "Rejected",
   cancelled: "Cancelled",
 };
 
+export function swimLessonStatusLabel(status: string | null | undefined): string {
+  if (!status) return "—";
+  return SWIM_LESSON_STATUS_LABELS[status] ?? status;
+}
+
+export function swimParentApprovalLabel(parentConfirmed: boolean): "Pending" | "Approved" {
+  return parentConfirmed ? "Approved" : "Pending";
+}
+
+export function swimTransportApprovalLabel(
+  parentConfirmed: boolean,
+  transportStatus: string | null | undefined,
+): "—" | "Pending" | "Approved" {
+  if (!parentConfirmed) return "—";
+  if (transportStatus === "acknowledged") return "Approved";
+  return "Pending";
+}
+
 export function isSwimLessonApproved(status: string | null | undefined): boolean {
-  return status === "scheduled";
+  return isSwimLessonBookedStatus(status);
 }
 
 export function canParentConfirmLesson(status: string | null | undefined): boolean {
-  return status === "scheduled";
+  return isSwimLessonBookedStatus(status);
 }
 
 /** Fix common typos before save / parent-facing display. */
@@ -37,9 +63,8 @@ export const SWIM_LESSON_REJECTION_DEFAULT = "Not available";
 export function swimLessonStatusBadgeVariant(
   status: string,
 ): "default" | "secondary" | "destructive" | "outline" {
+  if (isSwimLessonBookedStatus(status)) return "default";
   switch (status) {
-    case "scheduled":
-      return "default";
     case "pending":
       return "outline";
     case "rejected":
@@ -57,7 +82,7 @@ export async function approveSwimLessonRequest(
   return supabase
     .from("swim_lessons")
     .update({
-      status: "scheduled",
+      status: "booked",
       rejection_reason: null,
       reviewed_at: new Date().toISOString(),
       reviewed_by: userId ?? null,

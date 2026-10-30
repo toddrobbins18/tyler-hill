@@ -226,7 +226,7 @@ export async function fetchTransportExceptions(
         "scheduled_at, duration_minutes, location, instructor, parent_confirmed, transport_status, status, children:camper_id(name)",
       )
       .eq("company_id", companyId)
-      .eq("status", "scheduled")
+      .in("status", ["booked", "scheduled"])
       .eq("parent_confirmed", true)
       .eq("transport_status", "acknowledged")
       .gte("scheduled_at", campYmdToUtcStartIso(overrideDate))
@@ -362,7 +362,7 @@ export async function fetchTransportExceptionsForReport(
           "scheduled_at, duration_minutes, location, instructor, parent_confirmed, transport_status, status, children:camper_id(name)",
         )
         .eq("company_id", companyId)
-        .in("status", ["scheduled", "pending"])
+        .in("status", ["booked", "scheduled", "pending"])
         .gte("scheduled_at", campYmdToUtcStartIso(overrideDate))
         .lt("scheduled_at", campYmdToUtcEndIso(overrideDate)),
     ]);
@@ -442,8 +442,10 @@ export async function fetchTransportExceptionsForReport(
     if (!name || !scheduledAt) continue;
     if (campDateFromTimestamp(scheduledAt) !== overrideDate) continue;
 
-    const lessonStatus = String((row as { status?: string }).status ?? "scheduled");
-    if (lessonStatus !== "scheduled") continue;
+    const lessonStatus = String((row as { status?: string }).status ?? "booked");
+    if (lessonStatus === "pending" || lessonStatus === "rejected" || lessonStatus === "cancelled") {
+      continue;
+    }
 
     const parentConfirmed = (row as { parent_confirmed?: boolean }).parent_confirmed === true;
     const transportStatus = String((row as { transport_status?: string | null }).transport_status ?? "submitted");

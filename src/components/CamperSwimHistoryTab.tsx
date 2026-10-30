@@ -10,7 +10,7 @@ import {
   type SwimSeasonHistory,
 } from "@/lib/swimProgram";
 import { fetchSwimLessonsForCamper, type CamperSwimLessonRow } from "@/lib/camperProfileSwim";
-import { SWIM_LESSON_STATUS_LABELS, type SwimLessonStatus } from "@/lib/swimLessonApproval";
+import { swimLessonStatusLabel } from "@/lib/swimLessonApproval";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -65,9 +65,6 @@ export default function CamperSwimHistoryTab({
     return <p className="text-sm text-muted-foreground">Loading swim…</p>;
   }
 
-  const lessonStatusLabel = (status: string) =>
-    SWIM_LESSON_STATUS_LABELS[status as SwimLessonStatus] ?? status;
-
   return (
     <div className="space-y-6">
       <Card>
@@ -94,7 +91,7 @@ export default function CamperSwimHistoryTab({
                     <p className="font-medium">
                       {format(when, "EEE, MMM d, yyyy")}
                     </p>
-                    <Badge variant="outline">{lessonStatusLabel(lesson.status)}</Badge>
+                    <Badge variant="outline">{swimLessonStatusLabel(lesson.status)}</Badge>
                   </div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground text-xs">
                     <span className="inline-flex items-center gap-1">

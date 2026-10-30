@@ -23,8 +23,11 @@ import {
   approveSwimLessonRequest,
   rejectSwimLessonRequest,
   SWIM_LESSON_REJECTION_DEFAULT,
-  SWIM_LESSON_STATUS_LABELS,
+  isSwimLessonBookedStatus,
   swimLessonStatusBadgeVariant,
+  swimLessonStatusLabel,
+  swimParentApprovalLabel,
+  swimTransportApprovalLabel,
 } from "@/lib/swimLessonApproval";
 import { toast } from "sonner";
 import { campDateTimeToIso, formatCampDate, formatCampTime } from "@/lib/campTime";
@@ -219,10 +222,7 @@ export default function SwimLessons() {
     [lessonRows],
   );
   const activeLessons = useMemo(
-    () =>
-      lessonRows.filter(
-        (l) => l.status !== "pending" && l.status !== "rejected" && l.status !== "cancelled",
-      ),
+    () => lessonRows.filter((l) => isSwimLessonBookedStatus(l.status)),
     [lessonRows],
   );
 
@@ -386,9 +386,9 @@ export default function SwimLessons() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Approved lessons</CardTitle>
+          <CardTitle className="text-base">Booked lessons</CardTitle>
           <CardDescription>
-            Parents confirm attendance in the Parent Portal after approval.
+            Parent Pending/Approved and transport approval flow to Pending Changes after parent approves.
             {!loading && activeLessons.length > 0 && filteredActiveLessons.length !== activeLessons.length ? (
               <span className="ml-1">
                 Showing {filteredActiveLessons.length} of {activeLessons.length}.
@@ -414,7 +414,7 @@ export default function SwimLessons() {
                   <SortableHeader label="Cost" sortKey="cost_cents" currentSort={activeSort} onSort={requestActiveSort} />
                   <SortableHeader label="Status" sortKey="status" currentSort={activeSort} onSort={requestActiveSort} />
                   <SortableHeader label="Parent" sortKey="parent_confirmed" currentSort={activeSort} onSort={requestActiveSort} />
-                  <SortableHeader label="Bus" sortKey="transport_status" currentSort={activeSort} onSort={requestActiveSort} />
+                  <SortableHeader label="Transport" sortKey="transport_status" currentSort={activeSort} onSort={requestActiveSort} />
                   <SortableHeader label="Reminder" sortKey="reminder_sent_at" currentSort={activeSort} onSort={requestActiveSort} />
                   <TableHead />
                 </TableRow>
@@ -434,27 +434,27 @@ export default function SwimLessons() {
                     <TableCell>${(l.cost_cents / 100).toFixed(2)}</TableCell>
                     <TableCell>
                       <Badge variant={swimLessonStatusBadgeVariant(l.status)}>
-                        {SWIM_LESSON_STATUS_LABELS[l.status as keyof typeof SWIM_LESSON_STATUS_LABELS] ?? l.status}
+                        {swimLessonStatusLabel(l.status)}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {l.parent_confirmed ? (
-                        <Badge className="gap-1"><CheckCircle2 className="h-3 w-3" />Confirmed</Badge>
+                      {swimParentApprovalLabel(l.parent_confirmed) === "Approved" ? (
+                        <Badge className="gap-1"><CheckCircle2 className="h-3 w-3" />Approved</Badge>
                       ) : (
                         <Badge variant="outline" className="gap-1"><Clock className="h-3 w-3" />Pending</Badge>
                       )}
                     </TableCell>
                     <TableCell>
-                      {!l.parent_confirmed ? (
+                      {swimTransportApprovalLabel(l.parent_confirmed, l.transport_status) === "—" ? (
                         <span className="text-xs text-muted-foreground">—</span>
-                      ) : l.transport_status === "acknowledged" ? (
+                      ) : swimTransportApprovalLabel(l.parent_confirmed, l.transport_status) === "Approved" ? (
                         <Badge className="gap-1 bg-emerald-600">
                           <Bus className="h-3 w-3" />
-                          No PM bus
+                          Approved
                         </Badge>
                       ) : (
                         <Button size="sm" variant="outline" onClick={() => void approveTransport(l.id)}>
-                          Approve bus
+                          Approve transport
                         </Button>
                       )}
                     </TableCell>
@@ -668,11 +668,11 @@ function LessonDialog({
         instructor: instructorVal,
         cost_cents: costCents,
         notes: notesVal,
-        status: "scheduled",
+        status: "booked",
       });
       setSaving(false);
       if (error) return toast.error(error.message);
-      toast.success("Swim lesson scheduled");
+      toast.success("Swim lesson booked");
     }
 
     setOpen(false);

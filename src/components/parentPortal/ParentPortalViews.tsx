@@ -26,7 +26,7 @@ import { AbsenceDialog } from "./AbsenceDialog";
 import { AuthorizedPickupDialog } from "./AuthorizedPickupDialog";
 import { SwimLessonRequestDialog } from "@/components/swim/SwimLessonRequestDialog";
 import type { ParentPortalView } from "@/lib/parentPortalConstants";
-import { formatSwimLessonRejectionForParent } from "@/lib/swimLessonApproval";
+import { canParentConfirmLesson, formatSwimLessonRejectionForParent } from "@/lib/swimLessonApproval";
 import { PP_AERIAL_GLASS_SURFACE } from "@/lib/parentPortalTheme";
 import { cn } from "@/lib/utils";
 
@@ -546,7 +546,7 @@ export function ParentSwimView({
                   transport_status: "submitted",
                 })
                 .eq("id", lesson.id)
-                .eq("status", "scheduled");
+                .in("status", ["booked", "scheduled"]);
               if (error) toast.error(error.message);
               else {
                 toast.success("Attendance confirmed");
@@ -626,11 +626,13 @@ export function ParentSwimView({
                     <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-800">
                       Declined
                     </span>
+                  ) : !canParentConfirmLesson(lesson.status) ? (
+                    <span className="text-xs text-muted-foreground">—</span>
                   ) : lesson.parent_confirmed ? (
                     <div className="flex items-center gap-2">
                       <span className="inline-flex items-center gap-1 rounded-full bg-[hsl(158_45%_92%)] px-3 py-1 text-xs font-medium text-[hsl(158_40%_28%)]">
                         <CheckCircle2 className="h-3.5 w-3.5" />
-                        Confirmed
+                        Approved
                       </span>
                       <Button size="sm" variant="ghost" className="rounded-xl" onClick={unconfirm}>
                         Undo

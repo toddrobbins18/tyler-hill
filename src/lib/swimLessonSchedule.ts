@@ -116,6 +116,6 @@ export function buildSwimLessonRows(params: {
     cost_cents: params.costCents,
     notes: params.notes,
     recurrence_series_id: seriesId,
-    status: "scheduled",
+    status: "booked",
   }));
 }

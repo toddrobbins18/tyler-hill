@@ -669,9 +669,9 @@ export default function ParentPortalDashboard() {
                         <TableCell>{l.instructor ?? "—"}</TableCell>
                         <TableCell>
                           {l.parent_confirmed ? (
-                            <Badge className="gap-1"><CheckCircle2 className="h-3 w-3" />Confirmed</Badge>
+                            <Badge className="gap-1"><CheckCircle2 className="h-3 w-3" />Approved</Badge>
                           ) : (
-                            <Badge variant="outline">Awaiting parent</Badge>
+                            <Badge variant="outline">Pending</Badge>
                           )}
                         </TableCell>
                         <TableCell>

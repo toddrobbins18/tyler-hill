@@ -166,7 +166,7 @@ export async function fetchDismissalDashboard(
       .from("swim_lessons")
       .select("id, scheduled_at, instructor, transport_status, children:camper_id(name)")
       .eq("company_id", companyId)
-      .eq("status", "scheduled")
+      .in("status", ["booked", "scheduled"])
       .eq("parent_confirmed", true)
       .gte("scheduled_at", campYmdToUtcStartIso(selectedDate))
       .lt("scheduled_at", campYmdToUtcEndIso(selectedDate))
@@ -197,7 +197,7 @@ export async function fetchDismissalDashboard(
       .from("swim_lessons")
       .select("id", { count: "exact", head: true })
       .eq("company_id", companyId)
-      .eq("status", "scheduled")
+      .in("status", ["booked", "scheduled"])
       .eq("parent_confirmed", true)
       .eq("transport_status", "submitted"),
     loadTransportRunBoard(supabase, companyId, season, selectedDate),
