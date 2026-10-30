@@ -131,6 +131,56 @@ describe("pruneEmptyPassengerStops", () => {
 });
 
 describe("fixBoardAddressesFromEnrollment", () => {
+  it("splits a mega-stop using MapPoint hints when 2026 home_address is null", () => {
+    const hints = buildMappoint2026AddressHints();
+    expect(hints.get(normCamperNameKey("Amelia Flores"))?.address).toContain("61 Locust");
+    expect(hints.get(normCamperNameKey("August Meile"))?.address).toContain("9 Central");
+
+    const fixed = fixBoardAddressesFromEnrollment({
+      enrolled: [
+        {
+          id: "1",
+          personId: null,
+          name: "Amelia Flores",
+          age: 7,
+          session: null,
+          grade: "1st",
+          groupName: "Madrid",
+          homeAddress: null,
+        },
+        {
+          id: "2",
+          personId: null,
+          name: "August Meile",
+          age: 5,
+          session: null,
+          grade: "Pre - K",
+          groupName: "Manatees",
+          homeAddress: null,
+        },
+      ],
+      coreStops: {
+        1: [
+          {
+            name: "Amelia Flores +1",
+            address: "96 Barkers Point Rd, Port Washington, NY 11050",
+            lat: 40.84,
+            lng: -73.72,
+            pickupTime: "7:07 AM",
+            passengers: 2,
+            camperNames: ["Amelia Flores", "August Meile"],
+          },
+        ],
+      },
+      unplottedCampers: [],
+      addressHints: hints,
+    });
+
+    expect(fixed.splitStopCount).toBe(1);
+    const stops = fixed.coreStops[1] ?? [];
+    expect(stops.length).toBeGreaterThanOrEqual(2);
+  });
+
   it("splits shared stops when riders have different CampMinder addresses", () => {
     const fixed = fixBoardAddressesFromEnrollment({
       enrolled: [

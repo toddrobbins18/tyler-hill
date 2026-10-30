@@ -25,6 +25,7 @@ import {
   loadCamperRoutingPriors,
   loadRouteReferenceImport,
   normCamperNameKey,
+  rosterNameLookupKeys,
 } from "@/lib/routeReferenceWarehouse";
 import { fetchCompanySlug, isSandboxTransportSlug } from "@/lib/nestSandboxTransport";
 import {
@@ -147,7 +148,7 @@ export async function normalizeTransportBoardForSeason(
     parentTransportCampers,
   );
 
-  const unplottedCampers = filterUnplottedExcludingParentTransport(
+  let unplottedCampers = filterUnplottedExcludingParentTransport(
     buildUnplottedFromEnrollment({
       enrolled,
       coreStops: prunedStops,
@@ -157,7 +158,19 @@ export async function normalizeTransportBoardForSeason(
     parentTransportCampers,
   );
 
-  return { ...board, coreStops: prunedStops, parentTransportCampers, unplottedCampers };
+  const addressFixed = fixBoardAddressesFromEnrollment({
+    enrolled,
+    coreStops: prunedStops,
+    unplottedCampers,
+    addressHints: hints,
+  });
+
+  return {
+    ...board,
+    coreStops: addressFixed.coreStops,
+    parentTransportCampers,
+    unplottedCampers: addressFixed.unplottedCampers,
+  };
 }
 
 /** True when season normalize changed stored stops or unplotted (ghost riders removed). */
@@ -343,13 +356,94 @@ async function enrichEnrolledHomeAddresses(
     }
   }
 
-  if (addressByPerson.size === 0) return enrolled;
-
-  return enrolled.map((camper) => {
+  let enriched = enrolled.map((camper) => {
     if (camper.homeAddress || !camper.personId) return camper;
     const fallback = addressByPerson.get(camper.personId);
     return fallback ? { ...camper, homeAddress: fallback } : camper;
   });
+
+  if (enriched.some((c) => !c.homeAddress)) {
+    enriched = await enrichHomeAddressesFromOtherSeasonsByName(
+      supabase,
+      companyId,
+      season,
+      enriched,
+    );
+  }
+
+  return enriched;
+}
+
+/** When person_id is missing, use the newest other-season row with the same camper name. */
+async function enrichHomeAddressesFromOtherSeasonsByName(
+  supabase: SupabaseClient,
+  companyId: string,
+  season: string,
+  enrolled: TransportEnrolledCamper[],
+): Promise<TransportEnrolledCamper[]> {
+  const needsName = enrolled.filter((c) => !c.homeAddress);
+  if (needsName.length === 0) return enrolled;
+
+  const { data: historical, error } = await supabase
+    .from("children")
+    .select("name, home_address, season")
+    .eq("company_id", companyId)
+    .neq("season", season)
+    .not("home_address", "is", null)
+    .order("season", { ascending: false });
+
+  if (error) {
+    console.warn("[Transport] Name-based address enrich failed:", error.message);
+    return enrolled;
+  }
+
+  const addressByNormName = new Map<string, string>();
+  for (const row of historical ?? []) {
+    const name = (row.name as string)?.trim();
+    const address = (row.home_address as string | null)?.trim();
+    if (!name || !address) continue;
+    const key = normName(name);
+    if (!addressByNormName.has(key)) addressByNormName.set(key, address);
+  }
+
+  if (addressByNormName.size === 0) return enrolled;
+
+  return enrolled.map((camper) => {
+    if (camper.homeAddress) return camper;
+    const fallback = addressByNormName.get(normName(camper.name));
+    return fallback ? { ...camper, homeAddress: fallback } : camper;
+  });
+}
+
+function lookupAddressHint(
+  hints: Map<string, { address: string; lat: number; lng: number }> | undefined,
+  camperName: string,
+): { address: string; lat: number; lng: number } | undefined {
+  if (!hints?.size) return undefined;
+  for (const key of rosterNameLookupKeys(camperName)) {
+    const hit = hints.get(normCamperNameKey(key));
+    if (hit?.address?.trim()) return hit;
+  }
+  return hints.get(normCamperNameKey(camperName));
+}
+
+function buildAddressByNameForBoardFix(
+  enrolled: TransportEnrolledCamper[],
+  addressHints?: Map<string, { address: string; lat: number; lng: number }>,
+): Map<string, string> {
+  const addressByName = new Map<string, string>();
+  for (const camper of enrolled) {
+    const fromRow = camper.homeAddress?.trim();
+    if (fromRow) {
+      addressByName.set(normName(camper.name), fromRow);
+      continue;
+    }
+    const hint = lookupAddressHint(addressHints, camper.name);
+    if (hint?.address?.trim()) {
+      addressByName.set(normName(camper.name), hint.address.trim());
+    }
+  }
+  return addressByName;
 }
 
 const normAddressKey = (address: string) => address.trim().toLowerCase();
@@ -538,6 +632,7 @@ export function fixBoardAddressesFromEnrollment(options: {
   enrolled: TransportEnrolledCamper[];
   coreStops: Record<number, TransportRouteStop[]>;
   unplottedCampers: TransportUnplottedCamper[];
+  addressHints?: Map<string, { address: string; lat: number; lng: number }>;
 }): {
   coreStops: Record<number, TransportRouteStop[]>;
   unplottedCampers: TransportUnplottedCamper[];
@@ -545,11 +640,10 @@ export function fixBoardAddressesFromEnrollment(options: {
   fixedUnplottedCount: number;
   splitStopCount: number;
 } {
-  const addressByName = new Map<string, string>();
-  for (const camper of options.enrolled) {
-    const address = camper.homeAddress?.trim();
-    if (address) addressByName.set(normName(camper.name), address);
-  }
+  const addressByName = buildAddressByNameForBoardFix(
+    options.enrolled,
+    options.addressHints,
+  );
 
   let fixedStopCount = 0;
   let splitStopCount = 0;
@@ -692,7 +786,7 @@ export function buildUnplottedFromEnrollment(options: {
 
     const resolvedAge = child.age ?? null;
     const kept = existingByName.get(key);
-    const hint = addressHints?.get(key);
+    const hint = lookupAddressHint(addressHints, child.name);
     const syncedAddress = child.homeAddress?.trim() || "";
     if (kept) {
       const address = syncedAddress || kept.address?.trim() || hint?.address || "";

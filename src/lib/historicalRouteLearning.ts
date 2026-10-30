@@ -442,13 +442,6 @@ function findStopForHistoricalPlacement(
     if (stopKey && addressKeys.has(stopKey)) return i;
   }
 
-  if (prior.stopOrder > 0 && stops.length > 0) {
-    const idx = Math.min(prior.stopOrder - 1, stops.length - 1);
-    if (isValidRouteCoordinate(stops[idx]?.lat ?? 0, stops[idx]?.lng ?? 0)) {
-      return idx;
-    }
-  }
-
   return -1;
 }
 
