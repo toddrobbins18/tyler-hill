@@ -27,7 +27,7 @@ import {
   userIsCampStaff,
 } from "@/lib/parentPortalConstants";
 import { linkFamilyChildrenByGuardianEmail } from "@/lib/parentFamilyLink";
-import { fetchPublishedCampUpdate } from "@/lib/parentPortalCampUpdates";
+import { fetchLatestParentPortalHomeBulletin } from "@/lib/parentPortalAnnouncements";
 import { resolveParentPortalHeroImageUrl } from "@/lib/parentPortalTheme";
 import type { CampAnnouncementContent } from "@/components/parentPortal/CampAnnouncement";
 import { ParentPortalSandboxStaffPreview } from "@/components/parentPortal/ParentPortalSandboxStaffPreview";
@@ -150,7 +150,7 @@ export default function ParentPortal() {
         .order("absence_date", { ascending: false }),
       supabase.from("authorized_pickups").select("*").eq("family_id", fam.id).order("full_name"),
       swimQuery,
-      fetchPublishedCampUpdate(supabase, companyId).catch(() => null),
+      fetchLatestParentPortalHomeBulletin(supabase, companyId).catch(() => null),
     ]);
 
     setCampers(linkedCampers);

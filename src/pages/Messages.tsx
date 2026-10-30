@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Mail, Send, Eye, Clock, Bell, Users, User, Hash, ChevronDown, ChevronUp, ArrowLeft, SendHorizonal, Reply } from "lucide-react";
+import { Mail, Send, Eye, Clock, Bell, Users, User, Hash, Megaphone, ChevronDown, ChevronUp, ArrowLeft, SendHorizonal, Reply } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +16,7 @@ import GroupList from "@/components/messages/GroupList";
 import InlineThread from "@/components/messages/InlineThread";
 import { StaffParentFamiliesPanel } from "@/components/messages/StaffParentFamiliesPanel";
 import { StaffDivisionChannelsPanel } from "@/components/messages/StaffDivisionChannelsPanel";
+import { StaffAnnouncementsPanel } from "@/components/messages/StaffAnnouncementsPanel";
 import { countStaffDivisionChannelUnread } from "@/lib/divisionChannelMessaging";
 import { notifyNestStaffMessageInsert } from "@/lib/nestBrowserMessageNotify";
 import { notificationsDebug } from "@/lib/notificationDebug";
@@ -132,16 +133,16 @@ export default function Messages() {
 
   // Persist viewMode and groupId in sessionStorage so they survive re-mounts
   const [viewMode, setViewModeState] = useState<
-    'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families' | 'channels'
+    'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families' | 'channels' | 'announcements'
   >(() => {
     const saved = sessionStorage.getItem('messages_view_mode');
-    return (saved as 'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families' | 'channels') || 'inbox';
+    return (saved as 'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families' | 'channels' | 'announcements') || 'inbox';
   });
   const [activeGroupId, setActiveGroupIdState] = useState<string | null>(() => {
     return sessionStorage.getItem('messages_active_group_id') || null;
   });
 
-  const setViewMode = (mode: 'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families' | 'channels') => {
+  const setViewMode = (mode: 'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families' | 'channels' | 'announcements') => {
     sessionStorage.setItem('messages_view_mode', mode);
     if (mode !== 'groups') {
       sessionStorage.removeItem('messages_active_group_id');
@@ -724,6 +725,13 @@ export default function Messages() {
             Channels {channelsUnreadCount > 0 && `(${channelsUnreadCount})`}
           </Button>
           <Button
+            variant={viewMode === 'announcements' ? 'default' : 'outline'}
+            onClick={() => { setViewMode('announcements'); setSelectedMessage(null); }}
+          >
+            <Megaphone className="h-4 w-4 mr-2" />
+            Announcements
+          </Button>
+          <Button
             variant={viewMode === 'compose' ? 'default' : 'outline'}
             onClick={() => setViewMode('compose')}
           >
@@ -753,6 +761,10 @@ export default function Messages() {
           companyId={currentCompany.id}
           onUnreadTotalChange={setChannelsUnreadCount}
         />
+      ) : null}
+
+      {viewMode === 'announcements' && currentCompany?.id ? (
+        <StaffAnnouncementsPanel companyId={currentCompany.id} />
       ) : null}
 
       {/* Inbox / Sent Tab */}
