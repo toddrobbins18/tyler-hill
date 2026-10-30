@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   isAirtableSwimRecordsCsv,
@@ -176,5 +178,92 @@ describe("swimProgram", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].season).toBe("2026");
     expect(rows[0].child.id).toBe("child-1");
+  });
+});
+
+/** Minimal CSV line parser (matches swimProgram.parseCsvLine). */
+function parseCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (ch === "," && !inQuotes) {
+      out.push(cur.trim());
+      cur = "";
+      continue;
+    }
+    cur += ch;
+  }
+  out.push(cur.trim());
+  return out;
+}
+
+const campRoot = path.resolve(__dirname, "../../../..");
+const toddBraceletCsv = path.join(campRoot, "2026-Grid view(1).csv");
+const toddRecordsCsv = path.join(campRoot, "Swim Records 2026-ALL KIDS(1).csv");
+const toddCsvOnDisk = fs.existsSync(toddBraceletCsv) && fs.existsSync(toddRecordsCsv);
+
+describe.skipIf(!toddCsvOnDisk)("Todd Airtable CSV files (local dry-run)", () => {
+  it("imports bracelet grid: colors, leaders, test rows", () => {
+    const csv = fs.readFileSync(toddBraceletCsv, "utf8");
+    const lines = csv.split(/\r?\n/).filter((l) => l.trim());
+    const roster: RosterChild[] = [];
+    let n = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const cols = parseCsvLine(lines[i]);
+      const name = cols[0]?.trim();
+      if (!name) continue;
+      roster.push({
+        id: `b-${n++}`,
+        name,
+        person_id: `bp-${n}`,
+        group_name: cols[1]?.trim() ?? null,
+        leader: null,
+        season: "2026",
+      });
+    }
+    const season = inferImportSeasonFromFileName("2026-Grid view(1).csv", "2027");
+    const { rows, unmatched } = parseSwimProgramCsv(csv, roster, season);
+    expect(season).toBe("2026");
+    expect(rows.length).toBeGreaterThan(400);
+    expect(unmatched.length).toBe(0);
+    expect(rows.filter((r) => r.bracelet?.currentBracelet).length).toBeGreaterThan(400);
+    expect(rows.filter((r) => r.bracelet?.divisionLeader).length).toBeGreaterThan(400);
+    expect(rows.filter((r) => r.bracelet?.proctor1).length).toBeGreaterThan(200);
+  });
+
+  it("imports swim records levels when PersonID matches roster", () => {
+    const csv = fs.readFileSync(toddRecordsCsv, "utf8");
+    const lines = csv.split(/\r?\n/).filter((l) => l.trim());
+    const header = parseCsvLine(lines[0]).map((h) => h.toLowerCase());
+    const nameIdx = header.findIndex((h) => h.includes("child") && h.includes("name"));
+    const personIdx = header.indexOf("personid");
+    const groupIdx = header.indexOf("group");
+    const roster: RosterChild[] = [];
+    let n = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const cols = parseCsvLine(lines[i]);
+      const name = nameIdx >= 0 ? cols[nameIdx]?.trim() : "";
+      const person_id = personIdx >= 0 ? cols[personIdx]?.trim() : "";
+      if (!name || !person_id) continue;
+      roster.push({
+        id: `c-${n++}`,
+        name,
+        person_id,
+        group_name: groupIdx >= 0 ? cols[groupIdx]?.trim() ?? null : null,
+        leader: null,
+        season: "2026",
+      });
+    }
+    const { rows, unmatched } = parseSwimProgramCsv(csv, roster, "2026");
+    expect(roster.length).toBeGreaterThan(400);
+    expect(rows.length).toBeGreaterThan(400);
+    expect(unmatched.length).toBeLessThan(20);
+    expect(rows.filter((r) => r.levels).length).toBeGreaterThan(100);
   });
 });
