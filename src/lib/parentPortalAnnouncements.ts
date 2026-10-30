@@ -1,6 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CampAnnouncementContent } from "@/components/parentPortal/CampAnnouncement";
 import { fetchPublishedCampUpdate } from "@/lib/parentPortalCampUpdates";
+import {
+  MESSAGE_MEDIA_BUCKET,
+  uploadMessageMediaFile,
+  validateMessageMediaFile,
+  createSignedMessageMediaUrl,
+} from "@/lib/messageMedia";
 
 export type ParentPortalAnnouncement = {
   id: string;
@@ -11,7 +17,40 @@ export type ParentPortalAnnouncement = {
   is_published: boolean;
   published_at: string;
   created_at: string;
+  media_storage_path?: string | null;
+  media_mime?: string | null;
+  media_file_name?: string | null;
 };
+
+function buildAnnouncementMediaPath(companyId: string, announcementId: string, fileName: string): string {
+  const safeName = fileName.replace(/[^\w.\-()+]/g, "_");
+  return `${companyId}/announcements/${announcementId}/${safeName}`;
+}
+
+export async function notifyCompanyExpoPush(
+  supabase: SupabaseClient,
+  options: {
+    companyId: string;
+    audience: "parents" | "staff" | "both";
+    title: string;
+    body: string;
+    data?: Record<string, unknown>;
+  },
+): Promise<void> {
+  try {
+    await supabase.functions.invoke("notify-company-expo-push", {
+      body: {
+        company_id: options.companyId,
+        audience: options.audience,
+        title: options.title,
+        body: options.body,
+        data: options.data ?? {},
+      },
+    });
+  } catch (e) {
+    console.warn("[expo-push] invoke failed:", e);
+  }
+}
 
 export async function listStaffParentPortalAnnouncements(
   supabase: SupabaseClient,
@@ -32,14 +71,52 @@ export async function publishParentPortalAnnouncement(
   season: string,
   title: string,
   body: string,
+  options?: { imageFile?: File | null },
 ): Promise<{ id: string | null; error: string | null }> {
+  const announcementId = crypto.randomUUID();
+  let mediaPath: string | null = null;
+  let mediaMime: string | null = null;
+  let mediaFileName: string | null = null;
+
+  if (options?.imageFile) {
+    const validation = validateMessageMediaFile(options.imageFile);
+    if (!validation.ok) return { id: null, error: validation.error };
+    if (validation.kind !== "image") {
+      return { id: null, error: "Announcements support photos only for now." };
+    }
+    mediaPath = buildAnnouncementMediaPath(companyId, announcementId, options.imageFile.name);
+    const upload = await uploadMessageMediaFile(supabase, mediaPath, options.imageFile);
+    if (upload.error) return { id: null, error: upload.error };
+    mediaMime = options.imageFile.type;
+    mediaFileName = options.imageFile.name;
+  }
+
   const { data, error } = await supabase.rpc("publish_parent_portal_announcement", {
     _company_id: companyId,
     _season: season,
     _title: title,
     _body: body,
+    _announcement_id: announcementId,
+    _media_storage_path: mediaPath,
+    _media_mime: mediaMime,
+    _media_file_name: mediaFileName,
   });
-  if (error) return { id: null, error: error.message };
+  if (error) {
+    if (mediaPath) {
+      await supabase.storage.from(MESSAGE_MEDIA_BUCKET).remove([mediaPath]);
+    }
+    return { id: null, error: error.message };
+  }
+
+  const preview = body.trim() || (mediaPath ? "New camp photo" : "Camp announcement");
+  void notifyCompanyExpoPush(supabase, {
+    companyId,
+    audience: "parents",
+    title: title.trim() || "Camp announcement",
+    body: preview,
+    data: { kind: "announcement", announcementId },
+  });
+
   return { id: data as string, error: null };
 }
 
@@ -49,19 +126,24 @@ async function fetchLatestPublishedAnnouncement(
 ): Promise<(CampAnnouncementContent & { publishedAtMs: number }) | null> {
   const { data, error } = await supabase
     .from("parent_portal_announcements")
-    .select("title, body, published_at")
+    .select("title, body, published_at, media_storage_path, media_mime")
     .eq("company_id", companyId)
     .eq("is_published", true)
     .order("published_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  if (error || !data?.body?.trim()) return null;
+  if (error || (!data?.body?.trim() && !data?.media_storage_path)) return null;
   const publishedAt = data.published_at ?? null;
+  let mediaImageUrl: string | null = null;
+  if (data.media_storage_path) {
+    mediaImageUrl = await createSignedMessageMediaUrl(supabase, data.media_storage_path);
+  }
   return {
     title: data.title,
-    body: data.body,
+    body: data.body ?? "",
     publishedAt,
+    mediaImageUrl,
     publishedAtMs: publishedAt ? new Date(publishedAt).getTime() : 0,
   };
 }

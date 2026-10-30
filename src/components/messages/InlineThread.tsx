@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { ReadReceipt } from "@/components/messages/ReadReceipt";
 import { markThreadRepliesReadForRecipient } from "@/lib/messageReadReceipts";
 import { PP_CHAT_BUBBLE_ME, PP_CHAT_BUBBLE_THEM } from "@/lib/parentPortalTheme";
+import { resolveThreadRecipientId } from "@/lib/messageThreadRecipient";
 
 function isParentPortalThreadStarter(row: ThreadMessage): boolean {
   const text = String(row.content ?? "").trim();
@@ -181,23 +182,8 @@ export default function InlineThread({
 
   const dmRecipientId = useMemo((): string | null => {
     if (!currentUserId) return null;
-    if (currentUserId === message.sender_id && message.recipient_id) {
-      return message.recipient_id;
-    }
-    if (currentUserId === message.recipient_id && message.sender_id) {
-      return message.sender_id;
-    }
-    const peerFromReplies = [...replies]
-      .reverse()
-      .find((r) => r.sender_id && r.sender_id !== currentUserId);
-    if (peerFromReplies?.sender_id) return peerFromReplies.sender_id;
-    if (viewMode === "sent" && message.recipient_id) return message.recipient_id;
-    if (viewMode === "inbox" && message.recipient_id === currentUserId) {
-      const firstOther = replies.find((r) => r.sender_id && r.sender_id !== currentUserId);
-      if (firstOther?.sender_id) return firstOther.sender_id;
-    }
-    return message.recipient_id ?? message.sender_id ?? null;
-  }, [currentUserId, message, replies, viewMode]);
+    return resolveThreadRecipientId(message, currentUserId, replies);
+  }, [currentUserId, message, replies]);
 
   const canReply = !!currentUserId && !message.group_id && !!dmRecipientId;
 

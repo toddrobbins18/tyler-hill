@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Megaphone, Send } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +29,8 @@ export function StaffAnnouncementsPanel({ companyId }: Props) {
   const [title, setTitle] = useState("Camp announcement");
   const [body, setBody] = useState("");
   const [publishing, setPublishing] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -48,7 +50,7 @@ export function StaffAnnouncementsPanel({ companyId }: Props) {
 
   const publish = async () => {
     const text = body.trim();
-    if (!text || publishing) return;
+    if ((!text && !imageFile) || publishing) return;
     setPublishing(true);
     const { error } = await publishParentPortalAnnouncement(
       supabase,
@@ -56,6 +58,7 @@ export function StaffAnnouncementsPanel({ companyId }: Props) {
       season,
       title.trim() || "Camp announcement",
       text,
+      { imageFile },
     );
     setPublishing(false);
     if (error) {
@@ -64,6 +67,7 @@ export function StaffAnnouncementsPanel({ companyId }: Props) {
     }
     toast.success("Announcement sent to parent portal home");
     setBody("");
+    setImageFile(null);
     void refresh();
   };
 
@@ -94,7 +98,31 @@ export function StaffAnnouncementsPanel({ companyId }: Props) {
             rows={8}
             className="min-h-[160px] resize-y"
           />
-          <Button type="button" disabled={publishing || !body.trim()} onClick={() => void publish()}>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+              {imageFile ? "Change photo" : "Add photo"}
+            </Button>
+            {imageFile ? (
+              <span className="text-xs text-muted-foreground truncate max-w-[200px]">{imageFile.name}</span>
+            ) : null}
+            {imageFile ? (
+              <Button type="button" variant="ghost" size="sm" onClick={() => setImageFile(null)}>
+                Remove
+              </Button>
+            ) : null}
+          </div>
+          <Button
+            type="button"
+            disabled={publishing || (!body.trim() && !imageFile)}
+            onClick={() => void publish()}
+          >
             <Send className="h-4 w-4 mr-2" />
             {publishing ? "Publishing…" : "Publish to parent portal"}
           </Button>

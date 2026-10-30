@@ -6,6 +6,7 @@ export type CampAnnouncementContent = {
   title: string;
   body: string;
   publishedAt?: string | null;
+  mediaImageUrl?: string | null;
 };
 
 type CampAnnouncementProps = {
@@ -15,7 +16,7 @@ type CampAnnouncementProps = {
 };
 
 export function CampAnnouncement({ campName, update, className }: CampAnnouncementProps) {
-  const hasMessage = Boolean(update?.body?.trim());
+  const hasMessage = Boolean(update?.body?.trim() || update?.mediaImageUrl);
   if (!hasMessage) return null;
 
   return (
@@ -35,9 +36,18 @@ export function CampAnnouncement({ campName, update, className }: CampAnnounceme
           <h2 className="mt-1.5 text-lg font-bold leading-snug tracking-tight text-slate-900 md:text-xl">
             {update!.title}
           </h2>
-          <p className="mt-2.5 whitespace-pre-wrap text-[0.9375rem] leading-relaxed text-slate-600">
-            {update!.body}
-          </p>
+          {update?.mediaImageUrl ? (
+            <img
+              src={update.mediaImageUrl}
+              alt=""
+              className="mt-3 max-h-64 w-full rounded-xl object-cover"
+            />
+          ) : null}
+          {update!.body?.trim() ? (
+            <p className="mt-2.5 whitespace-pre-wrap text-[0.9375rem] leading-relaxed text-slate-600">
+              {update!.body}
+            </p>
+          ) : null}
           {update?.publishedAt ? (
             <p className="mt-3 text-xs text-slate-500">
               Posted {formatCampDateTime(update.publishedAt)}
