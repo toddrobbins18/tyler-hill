@@ -80,6 +80,20 @@ export function formatCampTime(iso: string): string {
   }).format(new Date(iso));
 }
 
+/** 24h HH:mm in camp timezone (for swim lesson slot matching). */
+export function campTimeHHmmFromIso(iso: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: CAMP_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(iso));
+  let h = parts.find((p) => p.type === "hour")?.value ?? "00";
+  const m = parts.find((p) => p.type === "minute")?.value ?? "00";
+  if (h === "24") h = "00";
+  return `${h.padStart(2, "0")}:${m.padStart(2, "0")}`;
+}
+
 export function formatCampDateTime(iso: string): string {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: CAMP_TIMEZONE,

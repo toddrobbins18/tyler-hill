@@ -13,7 +13,9 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Waves, Plus, Trash2, CheckCircle2, Clock, Bus, Repeat, Phone, XCircle, Search, Mail } from "lucide-react";
+import { Waves, Plus, Trash2, CheckCircle2, Clock, Bus, Repeat, Phone, XCircle, Search, Mail, List, CalendarDays } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { SwimLessonCalendarView } from "@/components/swim/SwimLessonCalendarView";
 import { runSwimLessonReminders } from "@/lib/swimLessonReminderApi";
 import { SortableHeader } from "@/components/SortableHeader";
 import { useSortable } from "@/hooks/use-sortable";
@@ -51,6 +53,7 @@ import {
 type Camper = { id: string; name: string; guardian_email: string | null };
 type ParentFilter = "all" | "confirmed" | "pending";
 type TransportFilter = "all" | "needs_approval" | "approved";
+type PageView = "list" | "calendar";
 type Lesson = {
   id: string;
   camper_id: string;
@@ -128,6 +131,7 @@ export default function SwimLessons() {
   const [parentFilter, setParentFilter] = useState<ParentFilter>("all");
   const [transportFilter, setTransportFilter] = useState<TransportFilter>("all");
   const [reminderRunning, setReminderRunning] = useState(false);
+  const [pageView, setPageView] = useState<PageView>("list");
 
   const sendThreeDayReminders = async () => {
     if (!currentCompany?.id || reminderRunning) return;
@@ -178,6 +182,18 @@ export default function SwimLessons() {
         familyEmail: camperById.get(l.camper_id)?.guardian_email ?? "—",
       })),
     [lessons, camperById],
+  );
+
+  const calendarLessons = useMemo(
+    () =>
+      lessonRows.map((l) => ({
+        id: l.id,
+        camperName: l.camperName,
+        instructor: l.instructor,
+        status: l.status,
+        scheduled_at: l.scheduled_at,
+      })),
+    [lessonRows],
   );
 
   const remove = async (id: string) => {
@@ -272,7 +288,31 @@ export default function SwimLessons() {
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            value={pageView}
+            onValueChange={(v) => v && setPageView(v as PageView)}
+            className="rounded-lg border border-border bg-muted/60 p-1 shadow-sm"
+          >
+            <ToggleGroupItem
+              value="list"
+              aria-label="List view"
+              className="gap-1.5 px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:hover:bg-primary/90"
+            >
+              <List className="h-4 w-4 shrink-0" />
+              <span className="text-xs font-medium sm:text-sm">List</span>
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="calendar"
+              aria-label="Calendar view"
+              className="gap-1.5 px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:hover:bg-primary/90"
+            >
+              <CalendarDays className="h-4 w-4 shrink-0" />
+              <span className="text-xs font-medium sm:text-sm">Calendar</span>
+            </ToggleGroupItem>
+          </ToggleGroup>
           <Button variant="outline" disabled={reminderRunning} onClick={() => void sendThreeDayReminders()}>
             <Mail className="h-4 w-4 mr-2" />
             {reminderRunning ? "Running…" : "3-day confirm emails"}
@@ -282,6 +322,16 @@ export default function SwimLessons() {
         </div>
       </div>
 
+      {pageView === "calendar" && currentCompany?.id ? (
+        <SwimLessonCalendarView
+          companyId={currentCompany.id}
+          season={currentSeason}
+          lessons={calendarLessons}
+        />
+      ) : null}
+
+      {pageView === "list" ? (
+      <>
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <div className="relative flex-1 min-w-[220px] max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -475,6 +525,8 @@ export default function SwimLessons() {
           )}
         </CardContent>
       </Card>
+      </>
+      ) : null}
     </div>
   );
 }
