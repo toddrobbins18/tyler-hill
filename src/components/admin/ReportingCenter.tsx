@@ -1161,15 +1161,6 @@ export default function ReportingCenter({
               division_id,
               divisions (name),
               gender,
-              birthday_cake_type,
-              birthday_cake_message,
-              birthday_frosting_colors,
-              birthday_toppings,
-              birthday_cake_allergies,
-              birthday_party_type,
-              birthday_party_comments,
-              birthday_cake_meal,
-              birthday_group,
               status
             `)
             .eq('company_id', currentCompany.id)
@@ -1199,15 +1190,6 @@ export default function ReportingCenter({
             division: (c.divisions as any)?.name || 'N/A',
             date_of_birth: c.date_of_birth || null,
             birthday_month: c.date_of_birth ? format(new Date(c.date_of_birth + 'T12:00:00'), 'MMMM') : 'N/A',
-            birthday_cake_type: c.birthday_cake_type || '',
-            birthday_cake_message: c.birthday_cake_message || '',
-            birthday_frosting_colors: Array.isArray(c.birthday_frosting_colors) ? c.birthday_frosting_colors.join(', ') : c.birthday_frosting_colors || '',
-            birthday_toppings: Array.isArray(c.birthday_toppings) ? c.birthday_toppings.join(', ') : c.birthday_toppings || '',
-            birthday_cake_allergies: Array.isArray(c.birthday_cake_allergies) ? c.birthday_cake_allergies.join(', ') : c.birthday_cake_allergies || '',
-            birthday_party_type: c.birthday_party_type || '',
-            birthday_party_comments: c.birthday_party_comments || '',
-            birthday_cake_meal: c.birthday_cake_meal || '',
-            birthday_group: c.birthday_group || '',
           }, [c.division_id], [(c.divisions as any)?.name])) || [];
 
           const staffBdayEditable = birthdayStaff?.filter(s => s.date_of_birth).map(s => ({
@@ -1217,15 +1199,6 @@ export default function ReportingCenter({
             division: s.department || 'N/A',
             date_of_birth: s.date_of_birth || null,
             birthday_month: s.date_of_birth ? format(new Date(s.date_of_birth + 'T12:00:00'), 'MMMM') : 'N/A',
-            birthday_cake_type: '',
-            birthday_cake_message: '',
-            birthday_frosting_colors: '',
-            birthday_toppings: '',
-            birthday_cake_allergies: '',
-            birthday_party_type: '',
-            birthday_party_comments: '',
-            birthday_cake_meal: '',
-            birthday_group: '',
           })) || [];
 
           setBirthdayData([...camperBdayEditable, ...staffBdayEditable]);
@@ -1237,15 +1210,6 @@ export default function ReportingCenter({
             Division: (c.divisions as any)?.name || 'N/A',
             'Date of Birth': c.date_of_birth || 'N/A',
             'Birthday Month': c.date_of_birth ? format(new Date(c.date_of_birth + 'T12:00:00'), 'MMMM') : 'N/A',
-            'Cake Type': c.birthday_cake_type || 'Not Set',
-            'Cake Message': c.birthday_cake_message || '',
-            'Frosting Colors': Array.isArray(c.birthday_frosting_colors) ? c.birthday_frosting_colors.join(', ') : c.birthday_frosting_colors || '',
-            'Toppings': Array.isArray(c.birthday_toppings) ? c.birthday_toppings.join(', ') : c.birthday_toppings || '',
-            'Cake Allergies': Array.isArray(c.birthday_cake_allergies) ? c.birthday_cake_allergies.join(', ') : c.birthday_cake_allergies || '',
-            'Party Type': c.birthday_party_type || '',
-            'Party Comments': c.birthday_party_comments || '',
-            'Cake Meal': c.birthday_cake_meal || '',
-            'Birthday Group': c.birthday_group || '',
           }, [c.division_id], [(c.divisions as any)?.name])) || [];
 
           const staffBirthdayRows = birthdayStaff?.filter(s => s.date_of_birth).map(s => ({
@@ -1254,15 +1218,6 @@ export default function ReportingCenter({
             Division: s.department || 'N/A',
             'Date of Birth': s.date_of_birth || 'N/A',
             'Birthday Month': s.date_of_birth ? format(new Date(s.date_of_birth + 'T12:00:00'), 'MMMM') : 'N/A',
-            'Cake Type': '',
-            'Cake Message': '',
-            'Frosting Colors': '',
-            'Toppings': '',
-            'Cake Allergies': '',
-            'Party Type': '',
-            'Party Comments': '',
-            'Cake Meal': '',
-            'Birthday Group': '',
           })) || [];
 
           data = [...camperBirthdayRows, ...staffBirthdayRows];
@@ -1276,14 +1231,14 @@ export default function ReportingCenter({
             }
           });
 
-          const withCakePrefs = camperBirthdayRows.filter(r => r['Cake Type'] !== 'Not Set').length;
+          const withDob = data.filter((r) => r['Date of Birth'] && r['Date of Birth'] !== 'N/A').length;
 
           summaryData = {
             'Total People': data.length,
             'Campers': camperBirthdayRows.length,
             'Staff': staffBirthdayRows.length,
-            'Campers with Cake Preferences': withCakePrefs,
-            'Missing Cake Preferences': camperBirthdayRows.length - withCakePrefs,
+            'With Date of Birth': withDob,
+            'Missing Date of Birth': data.length - withDob,
           };
           break;
       }
@@ -1575,14 +1530,14 @@ export default function ReportingCenter({
       case 'birthdays': {
         const campers = filteredBirthdayData.filter((row) => row.type === 'Camper');
         const staff = filteredBirthdayData.filter((row) => row.type === 'Staff');
-        const campersWithCakePreferences = campers.filter((row) => row.birthday_cake_type?.trim()).length;
+        const withDob = filteredBirthdayData.filter((row) => row.date_of_birth?.trim()).length;
 
         return {
           'Total People': filteredBirthdayData.length,
           'Campers': campers.length,
           'Staff': staff.length,
-          'Campers with Cake Preferences': campersWithCakePreferences,
-          'Missing Cake Preferences': campers.length - campersWithCakePreferences,
+          'With Date of Birth': withDob,
+          'Missing Date of Birth': filteredBirthdayData.length - withDob,
         };
       }
       default:

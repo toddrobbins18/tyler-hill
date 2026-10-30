@@ -4,9 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { childSchema } from "@/lib/validationSchemas";
@@ -42,12 +40,6 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
   const [bunkId, setBunkId] = useState("");
   const [gender, setGender] = useState("");
   const [session, setSession] = useState("");
-  const [birthdayPartyType, setBirthdayPartyType] = useState("");
-  const [birthdayCakeMeal, setBirthdayCakeMeal] = useState("");
-  const [birthdayCakeType, setBirthdayCakeType] = useState("");
-  const [birthdayFrostingColors, setBirthdayFrostingColors] = useState<string[]>([]);
-  const [birthdayToppings, setBirthdayToppings] = useState<string[]>([]);
-  const [birthdayCakeAllergies, setBirthdayCakeAllergies] = useState<string[]>([]);
   const [rfidValue, setRfidValue] = useState("");
   const [rfidJustScanned, setRfidJustScanned] = useState(false);
   const [tshirtSize, setTshirtSize] = useState<string>("");
@@ -75,12 +67,6 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
       setSession(data.session || "");
       setLeaderId(data.leader_id || "");
       setDivisionId(data.division_id || "");
-      setBirthdayPartyType(data.birthday_party_type || "");
-      setBirthdayCakeMeal(data.birthday_cake_meal || "");
-      setBirthdayCakeType(data.birthday_cake_type || "");
-      setBirthdayFrostingColors(data.birthday_frosting_colors || []);
-      setBirthdayToppings(data.birthday_toppings || []);
-      setBirthdayCakeAllergies(data.birthday_cake_allergies || []);
       setRfidValue(data.rfid || "");
       setBunkId(data.bunk_id || "");
       setTshirtSize(data.tshirt_size || "");
@@ -155,14 +141,6 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
         allergies: formData.get("allergies") as string || null,
         medical_notes: formData.get("medical_notes") as string || null,
         rfid: normalizeRfidInput(rfidValue) || null,
-      birthday_party_type: birthdayPartyType || null,
-      birthday_cake_meal: birthdayCakeMeal || null,
-      birthday_party_comments: formData.get("birthday_party_comments") as string || null,
-      birthday_cake_type: birthdayCakeType || null,
-        birthday_frosting_colors: birthdayFrostingColors.length > 0 ? birthdayFrostingColors : null,
-        birthday_toppings: birthdayToppings.length > 0 ? birthdayToppings : null,
-        birthday_cake_allergies: birthdayCakeAllergies.length > 0 ? birthdayCakeAllergies : null,
-        birthday_cake_message: formData.get("birthday_cake_message") as string || null,
         tshirt_size: tshirtSize || null,
       };
 
@@ -393,174 +371,7 @@ export default function EditChildDialog({ childId, open, onOpenChange, onSuccess
             <Label htmlFor="medical_notes">Medical Notes</Label>
             <Textarea id="medical_notes" name="medical_notes" defaultValue={child.medical_notes || ""} />
           </div>
-          
-          <div className="border-t pt-4 space-y-6">
-            <h3 className="font-semibold text-lg">Birthday Party Preferences</h3>
-            
-            <div className="space-y-3">
-              <Label>Birthday Celebration Choice</Label>
-              <RadioGroup value={birthdayPartyType} onValueChange={setBirthdayPartyType}>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="" id="party-none" />
-                  <Label htmlFor="party-none" className="font-normal cursor-pointer">None</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="pizza_soda" id="party-pizza" />
-                  <Label htmlFor="party-pizza" className="font-normal cursor-pointer">Pizza & Soda Party at Rec Hall</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="ice_cream" id="party-icecream" />
-                  <Label htmlFor="party-icecream" className="font-normal cursor-pointer">Ice Cream Party in the Canteen</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="cookies_movie" id="party-movie" />
-                  <Label htmlFor="party-movie" className="font-normal cursor-pointer">Reggies Cookies and Bunk Movie</Label>
-                </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="campfire_smores" id="party-campfire" />
-                    <Label htmlFor="party-campfire" className="font-normal cursor-pointer">Campfire and S'mores</Label>
-                  </div>
-                </RadioGroup>
-            </div>
 
-            <div>
-              <Label htmlFor="birthday_party_comments">Additional Comments</Label>
-              <Textarea 
-                id="birthday_party_comments" 
-                name="birthday_party_comments" 
-                defaultValue={child.birthday_party_comments || ""}
-                placeholder="Any special requests (e.g., campfire location, timing, number of people in bunk)"
-                rows={3}
-              />
-            </div>
-
-            <div className="space-y-3">
-              <Label>When do you want the cake served?</Label>
-              <RadioGroup value={birthdayCakeMeal} onValueChange={setBirthdayCakeMeal}>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="" id="cake-none" />
-                  <Label htmlFor="cake-none" className="font-normal cursor-pointer">None</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="lunch" id="cake-lunch" />
-                  <Label htmlFor="cake-lunch" className="font-normal cursor-pointer">Lunch</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="dinner" id="cake-dinner" />
-                  <Label htmlFor="cake-dinner" className="font-normal cursor-pointer">Dinner</Label>
-                </div>
-              </RadioGroup>
-            </div>
-
-            <div className="border-t pt-4 space-y-4">
-              <h4 className="font-semibold">Cake Customization</h4>
-              
-              <div className="space-y-3">
-                <Label>Cake Type</Label>
-                <RadioGroup value={birthdayCakeType} onValueChange={setBirthdayCakeType}>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="rice_krispy" id="cake-krispy" />
-                    <Label htmlFor="cake-krispy" className="font-normal cursor-pointer">Rice Krispy Sheet Cake</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="vanilla" id="cake-vanilla" />
-                    <Label htmlFor="cake-vanilla" className="font-normal cursor-pointer">Vanilla Frosted Cake</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="chocolate" id="cake-chocolate" />
-                    <Label htmlFor="cake-chocolate" className="font-normal cursor-pointer">Chocolate Frosted Cake</Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              <div className="space-y-3">
-                <Label>Frosting Color (select all that apply)</Label>
-                <div className="grid grid-cols-2 gap-3">
-                  {['Red', 'Orange', 'Yellow', 'Green', 'Blue', 'Purple', 'Pink', 'No Color'].map((color) => (
-                    <div key={color} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`frosting-${color.toLowerCase().replace(' ', '-')}`}
-                        checked={birthdayFrostingColors.includes(color.toLowerCase().replace(' ', '_'))}
-                        onCheckedChange={(checked) => {
-                          const value = color.toLowerCase().replace(' ', '_');
-                          if (checked) {
-                            setBirthdayFrostingColors([...birthdayFrostingColors, value]);
-                          } else {
-                            setBirthdayFrostingColors(birthdayFrostingColors.filter(c => c !== value));
-                          }
-                        }}
-                      />
-                      <Label htmlFor={`frosting-${color.toLowerCase().replace(' ', '-')}`} className="font-normal cursor-pointer">
-                        {color}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <Label>Toppings (select all that apply)</Label>
-                <div className="grid grid-cols-2 gap-3">
-                  {['Rainbow Sprinkles', 'Chocolate Sprinkles', 'Crushed Oreos', 'Sour Patch', 'Marshmallows', 'Graham Crackers', 'Pretzels', "M&M's", 'Strawberries', 'Blueberries', 'Cookies', 'Cherries', 'Chocolate Syrup', 'Caramel Syrup', 'No Toppings'].map((topping) => (
-                    <div key={topping} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`topping-${topping.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
-                        checked={birthdayToppings.includes(topping.toLowerCase().replace(/[^a-z0-9]/g, '_'))}
-                        onCheckedChange={(checked) => {
-                          const value = topping.toLowerCase().replace(/[^a-z0-9]/g, '_');
-                          if (checked) {
-                            setBirthdayToppings([...birthdayToppings, value]);
-                          } else {
-                            setBirthdayToppings(birthdayToppings.filter(t => t !== value));
-                          }
-                        }}
-                      />
-                      <Label htmlFor={`topping-${topping.toLowerCase().replace(/[^a-z0-9]/g, '-')}`} className="font-normal cursor-pointer">
-                        {topping}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <Label>Any Allergies? (select all that apply)</Label>
-                <div className="grid grid-cols-2 gap-3">
-                  {['Gluten', 'Dairy', 'Sesame', 'Egg', 'Soy', 'Vegan'].map((allergy) => (
-                    <div key={allergy} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`allergy-${allergy.toLowerCase()}`}
-                        checked={birthdayCakeAllergies.includes(allergy.toLowerCase())}
-                        onCheckedChange={(checked) => {
-                          const value = allergy.toLowerCase();
-                          if (checked) {
-                            setBirthdayCakeAllergies([...birthdayCakeAllergies, value]);
-                          } else {
-                            setBirthdayCakeAllergies(birthdayCakeAllergies.filter(a => a !== value));
-                          }
-                        }}
-                      />
-                      <Label htmlFor={`allergy-${allergy.toLowerCase()}`} className="font-normal cursor-pointer">
-                        {allergy}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="birthday_cake_message">What do you want written on the cake?</Label>
-                <Textarea 
-                  id="birthday_cake_message" 
-                  name="birthday_cake_message" 
-                  defaultValue={child.birthday_cake_message || ""}
-                  placeholder="Enter custom message for the cake"
-                  rows={3}
-                />
-              </div>
-            </div>
-          </div>
-          
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
