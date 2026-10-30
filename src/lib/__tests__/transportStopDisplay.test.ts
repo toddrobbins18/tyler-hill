@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  CAMP_LOCATION,
   routeStopListLines,
   isBlankOpenRouteStop,
   countBlankOpenStopsOnRoute,
   BLANK_OPEN_STOP_SUBTITLE,
+  filterRoutesForMapDisplay,
 } from "@/lib/transportStopTimes";
 
 describe("routeStopListLines", () => {
@@ -80,6 +82,23 @@ describe("routeStopListLines", () => {
       { isCamp: false, pendingNames: ["Alex Kottler"] },
     );
     expect(isBlankOpenRouteStop(lines)).toBe(false);
+  });
+
+  it("hides blank open stops on the map when toggle is off", () => {
+    const routes = filterRoutesForMapDisplay(
+      [
+        {
+          id: 1,
+          stops: [
+            { name: "Kid", address: "1 Main St, NY", camperNames: ["Kid"], passengers: 1, lat: 0, lng: 0, pickupTime: "" },
+            { name: "Open", address: "2 Cedar Ln, NY", passengers: 0, lat: 0, lng: 0, pickupTime: "" },
+          ],
+        },
+      ],
+      { campAddress: CAMP_LOCATION.address, showBlankOpenStops: false },
+    );
+    expect(routes[0]?.stops).toHaveLength(1);
+    expect(routes[0]?.stops[0]?.name).toBe("Kid");
   });
 
   it("counts blank open stops on a route", () => {

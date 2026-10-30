@@ -5,6 +5,7 @@ import {
   buildMappoint2026AddressHints,
   collectTransportAddressesNeedingGeocode,
   fixBoardAddressesFromEnrollment,
+  pruneEmptyPassengerStops,
 } from "@/lib/transportRoster";
 import { CAMP_LOCATION } from "@/lib/transportStopTimes";
 
@@ -88,6 +89,44 @@ describe("transport board geocoding helpers", () => {
     expect(applied.updatedCount).toBe(1);
     expect(applied.unplotted[0]?.lat).toBe(40.88);
     expect(applied.unplotted[0]?.lng).toBe(-73.64);
+  });
+});
+
+describe("pruneEmptyPassengerStops", () => {
+  it("drops MapPoint template stops with no riders but keeps staffed stops and camp", () => {
+    const pruned = pruneEmptyPassengerStops({
+      1: [
+        {
+          name: "Open",
+          address: "50 Ashwood Rd, Port Washington, NY",
+          lat: 40.84,
+          lng: -73.71,
+          pickupTime: "",
+          passengers: 0,
+        },
+        {
+          name: "Alex Rubel",
+          address: "34 Dunes Ln, Port Washington, NY",
+          lat: 40.84,
+          lng: -73.72,
+          pickupTime: "7:00 AM",
+          passengers: 1,
+          camperNames: ["Alex Rubel"],
+        },
+        {
+          name: CAMP_LOCATION.name,
+          address: CAMP_LOCATION.address,
+          lat: CAMP_LOCATION.lat,
+          lng: CAMP_LOCATION.lng,
+          pickupTime: "",
+          passengers: 0,
+        },
+      ],
+    });
+
+    expect(pruned[1]).toHaveLength(2);
+    expect(pruned[1]?.[0]?.camperNames).toEqual(["Alex Rubel"]);
+    expect(pruned[1]?.[1]?.address).toBe(CAMP_LOCATION.address);
   });
 });
 

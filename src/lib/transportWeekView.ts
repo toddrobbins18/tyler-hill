@@ -122,7 +122,7 @@ export function applySeasonRosterToRoutes<T extends RouteLike>(
   return pruneRouteStopsWithNoRiders(filtered, campAddress);
 }
 
-/** Drop passenger stops with no riders after filters (keeps camp + geocoded pins for routing). */
+/** Drop passenger stops with no riders after filters (keeps camp only). */
 export function pruneRouteStopsWithNoRiders<T extends RouteLike>(
   routes: T[],
   campAddress: string = CAMP_LOCATION.address,
@@ -131,7 +131,7 @@ export function pruneRouteStopsWithNoRiders<T extends RouteLike>(
     const stops = route.stops.filter((s) => {
       if (s.address === campAddress) return true;
       if ((s.passengers ?? 0) > 0 || (s.camperNames?.length ?? 0) > 0) return true;
-      return isValidRouteCoordinate(s.lat, s.lng);
+      return false;
     });
     const campers = stops
       .filter((s) => s.address !== campAddress)

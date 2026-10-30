@@ -222,6 +222,57 @@ export function countBlankOpenStopsOnRoute(
   return count;
 }
 
+const normAddrForPending = (address: string) =>
+  address.toLowerCase().replace(/[.,#]/g, " ").replace(/\s+/g, " ").trim();
+
+/** Group unplotted camper names by normalized address (map + open-stop pending). */
+export function buildPendingNamesByAddress(
+  unplotted: { name: string; address: string }[],
+): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  for (const camper of unplotted) {
+    const key = normAddrForPending(camper.address);
+    if (!key) continue;
+    const list = map.get(key) ?? [];
+    list.push(camper.name);
+    map.set(key, list);
+  }
+  return map;
+}
+
+/** Hide blank MapPoint template stops on the map when sidebar toggle is off. */
+export function filterRouteStopsForMapDisplay<T extends TransportRouteStop>(
+  stops: T[],
+  options: {
+    campAddress: string;
+    showBlankOpenStops: boolean;
+    pendingNamesByAddress?: Map<string, string[]>;
+  },
+): T[] {
+  if (options.showBlankOpenStops) return stops;
+  return stops.filter((stop) => {
+    if (isCampAddress(stop.address, options.campAddress)) return true;
+    const pending =
+      options.pendingNamesByAddress?.get(normAddrForPending(stop.address)) ?? [];
+    const lines = routeStopListLines(stop, { isCamp: false, pendingNames: pending });
+    return !isBlankOpenRouteStop(lines);
+  });
+}
+
+export function filterRoutesForMapDisplay<R extends { stops: TransportRouteStop[] }>(
+  routes: R[],
+  options: {
+    campAddress: string;
+    showBlankOpenStops: boolean;
+    pendingNamesByAddress?: Map<string, string[]>;
+  },
+): R[] {
+  return routes.map((route) => ({
+    ...route,
+    stops: filterRouteStopsForMapDisplay(route.stops, options),
+  }));
+}
+
 function riderFirstToken(given: string): string {
   const t = given.trim().split(/\s+/).filter(Boolean);
   return t[0] ?? given.trim();

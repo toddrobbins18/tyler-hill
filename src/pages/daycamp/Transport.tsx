@@ -158,6 +158,8 @@ import {
   routeStopListLines,
   isBlankOpenRouteStop,
   countBlankOpenStopsOnRoute,
+  buildPendingNamesByAddress,
+  filterRoutesForMapDisplay,
 } from "@/lib/transportStopTimes";
 
 const SHOW_BLANK_OPEN_STOPS_KEY = "transport-show-blank-open-stops";
@@ -1901,10 +1903,7 @@ export default function Transport() {
   );
 
   const displayRoutes = useMemo(() => {
-    const seasonFiltered =
-      seasonRosterNames.size > 0
-        ? applySeasonRosterToRoutes(routes, seasonRosterNames)
-        : routes;
+    const seasonFiltered = applySeasonRosterToRoutes(routes, seasonRosterNames);
     const withoutPtOnStops = applyParentTransportExclusionToRoutes(
       seasonFiltered,
       parentTransportCampers,
@@ -1945,6 +1944,21 @@ export default function Transport() {
     const onSeasonRoster = filterUnplottedToSeasonRoster(unplottedCampers, seasonRosterNames);
     return filterUnplottedForWeek(onSeasonRoster, activeRouteEnrollmentWeek, camperEnrollmentLookup);
   }, [unplottedCampers, seasonRosterNames, activeRouteEnrollmentWeek, camperEnrollmentLookup]);
+
+  const pendingNamesByAddress = useMemo(
+    () => buildPendingNamesByAddress(unplottedForWeek),
+    [unplottedForWeek],
+  );
+
+  const mapDisplayedRoutes = useMemo(
+    () =>
+      filterRoutesForMapDisplay(displayedRoutes, {
+        campAddress: CAMP_LOCATION.address,
+        showBlankOpenStops,
+        pendingNamesByAddress,
+      }),
+    [displayedRoutes, showBlankOpenStops, pendingNamesByAddress],
+  );
 
   type SidebarCamperHit = {
     routeId: number;
@@ -5225,7 +5239,7 @@ export default function Transport() {
                   </div>
                 )}
                 <TransportRouteMap
-                  routes={displayedRoutes}
+                  routes={mapDisplayedRoutes}
                   allRoutes={routes}
                   campAddress={CAMP_LOCATION.address}
                   layoutReady={!boardLoading && !companyLoading && !authLoading}
@@ -5300,7 +5314,7 @@ export default function Transport() {
                     </div>
                   ) : null}
                   <TransportRouteMap
-                    routes={displayedRoutes}
+                    routes={mapDisplayedRoutes}
                     allRoutes={routes}
                     campAddress={CAMP_LOCATION.address}
                     layoutReady={!boardLoading && !companyLoading && !authLoading && mapFullscreen}

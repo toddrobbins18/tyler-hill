@@ -5,7 +5,7 @@ import {
   normalizeTransportBoardSettings,
   type TransportBoardSettings,
 } from "@/lib/transportBoardSettings";
-import { isValidRouteCoordinate } from "@/lib/transportStopTimes";
+import { CAMP_LOCATION, isValidRouteCoordinate } from "@/lib/transportStopTimes";
 import {
   filterUnplottedExcludingParentTransport,
   stripParentTransportFromCoreStops,
@@ -141,7 +141,9 @@ export async function normalizeTransportBoardForSeason(
   const parentTransportCampers = board.parentTransportCampers ?? [];
   const enrolledNames = new Set(enrolled.map((c) => normName(c.name)));
   const prunedStops = stripParentTransportFromCoreStops(
-    pruneCoreStopsToSeasonRoster(board.coreStops, enrolledNames),
+    pruneEmptyPassengerStops(
+      pruneCoreStopsToSeasonRoster(board.coreStops, enrolledNames),
+    ),
     parentTransportCampers,
   );
 
@@ -170,6 +172,22 @@ export function transportBoardSeasonSyncChanged(
       .sort()
       .join("\0");
   return unplottedKey(before) !== unplottedKey(after);
+}
+
+/** Remove template / MapPoint stops with no enrolled riders (camp stop kept). */
+export function pruneEmptyPassengerStops(
+  coreStops: Record<number, TransportRouteStop[]>,
+  campAddress: string = CAMP_LOCATION.address,
+): Record<number, TransportRouteStop[]> {
+  const normCamp = campAddress.trim().toLowerCase();
+  const out: Record<number, TransportRouteStop[]> = {};
+  for (const [routeId, stops] of Object.entries(coreStops)) {
+    out[Number(routeId)] = (stops ?? []).filter((stop) => {
+      if (stop.address.trim().toLowerCase() === normCamp) return true;
+      return riderNamesFromStop(stop).length > 0;
+    });
+  }
+  return out;
 }
 
 /** Strip prior-season / MapPoint ghost riders; keep open stops (no names). */
@@ -504,10 +522,6 @@ function fixRouteStopAddressesFromEnrollment(
     if (normAddressCompareKey(address) !== stopKey) fixedStopCount += groupNames.length;
     out.push(buildRouteStopForRiders(stop, groupNames, address));
   }
-  if (noEnrollment.length > 0) {
-    out.push(buildRouteStopForRiders(stop, noEnrollment, stop.address || ""));
-  }
-
   const splitFromOne = out.length > 1;
   if (splitFromOne && fixedStopCount === 0) {
     fixedStopCount = names.filter((n) => {
