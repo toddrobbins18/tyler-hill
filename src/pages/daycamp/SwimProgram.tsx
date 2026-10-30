@@ -139,6 +139,7 @@ type SwimImportResult = {
   finishedAt: string;
   levels: number;
   bracelets: number;
+  guardianEmails: number;
   matched: number;
   unmatched: string[];
 };
@@ -957,6 +958,7 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
         finishedAt: new Date().toLocaleString(),
         levels: result.levels,
         bracelets: result.bracelets,
+        guardianEmails: result.guardianEmails,
         matched: result.matched,
         unmatched: result.unmatched,
       };
@@ -974,9 +976,13 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
         result.unmatched.length > 0
           ? ` · ${result.unmatched.length} unmatched${result.unmatched.length <= 3 ? `: ${result.unmatched.join(", ")}` : ` (e.g. ${result.unmatched.slice(0, 3).join(", ")}…)`}`
           : "";
+      const parentHint =
+        result.guardianEmails > 0
+          ? ` · ${result.guardianEmails} parent email${result.guardianEmails === 1 ? "" : "s"} added to roster`
+          : "";
       toast({
         title: "Import complete",
-        description: `Saved for season${result.seasons.length === 1 ? "" : "s"} ${importedSeasons}: ${result.levels} level rows, ${result.bracelets} bracelet rows${unmatchedHint}. Check Prior Seasons Report.`,
+        description: `Saved for season${result.seasons.length === 1 ? "" : "s"} ${importedSeasons}: ${result.levels} level rows, ${result.bracelets} bracelet rows${parentHint}${unmatchedHint}. Check Prior Seasons Report.`,
         duration: 12000,
       });
     } catch (err) {
@@ -1222,6 +1228,9 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
             <p>
               {lastImport.matched} campers matched · {lastImport.levels} level rows · {lastImport.bracelets}{" "}
               bracelet rows
+              {lastImport.guardianEmails > 0
+                ? ` · ${lastImport.guardianEmails} parent email${lastImport.guardianEmails === 1 ? "" : "s"}`
+                : ""}
               {lastImport.unmatched.length > 0 ? ` · ${lastImport.unmatched.length} unmatched` : ""}
             </p>
             {lastImport.levels > 0 && lastImport.bracelets === 0 ? (

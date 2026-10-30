@@ -13,6 +13,7 @@ import {
   resolveStoredDivisionLeader,
   normalizeSkillStatus,
   parseSwimProgramCsv,
+  normalizeSwimImportParentEmail,
   inferImportSeasonFromFileName,
   swimLevelColumnVisible,
   swimHistoryRecordHasData,
@@ -61,6 +62,7 @@ describe("swimProgram", () => {
       "Child's Name",
       "Group",
       "PersonID",
+      "Email",
       "Goldfish 1A1",
       "Goldfish 1A2",
       "Goldfish 1A3",
@@ -78,17 +80,25 @@ describe("swimProgram", () => {
     };
     const csv = [
       headers.join(","),
-      "Freddy Sendach,Syracuse,14679875,Achieved,Achieved,Achieved,Achieved,Complete,Achieved,Complete",
+      "Freddy Sendach,Syracuse,14679875,parent@example.com,Achieved,Achieved,Achieved,Achieved,Complete,Achieved,Complete",
     ].join("\n");
     const { rows, unmatched } = parseSwimProgramCsv(csv, [rosterChild], "2026");
     expect(unmatched).toHaveLength(0);
     expect(rows).toHaveLength(1);
+    expect(rows[0].guardianEmail).toBe("parent@example.com");
     expect(rows[0].season).toBe("2026");
     expect(rows[0].levels?.group).toBe("Syracuse");
     expect(rows[0].levels?.goldfish).toEqual(["A", "A", "A", "A"]);
     expect(rows[0].levels?.goldfishLevel).toBe("Complete");
     expect(rows[0].levels?.minnow?.[0]).toBe("A");
     expect(rows[0].levels?.redCross).toBe("Complete");
+  });
+
+  it("ignores non-email cells in Email column", () => {
+    expect(normalizeSwimImportParentEmail("parent@example.com")).toBe("parent@example.com");
+    expect(normalizeSwimImportParentEmail("")).toBeNull();
+    expect(normalizeSwimImportParentEmail("https://example.com/x")).toBeNull();
+    expect(normalizeSwimImportParentEmail("not-an-email")).toBeNull();
   });
 
   it("normalizes legacy pass and bracelet values", () => {
@@ -265,5 +275,11 @@ describe.skipIf(!toddCsvOnDisk)("Todd Airtable CSV files (local dry-run)", () =>
     expect(rows.length).toBeGreaterThan(400);
     expect(unmatched.length).toBeLessThan(20);
     expect(rows.filter((r) => r.levels).length).toBeGreaterThan(100);
+
+    const withParentEmail = rows.filter((r) => r.guardianEmail);
+    expect(withParentEmail.length).toBeGreaterThan(400);
+    expect(withParentEmail[0]?.guardianEmail).toMatch(/@/);
+    const jackson = rows.find((r) => r.child.name === "Jackson Gillespie");
+    expect(jackson?.guardianEmail?.toLowerCase()).toBe("erinloeffler@gmail.com");
   });
 });
