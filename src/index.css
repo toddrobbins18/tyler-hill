@@ -204,6 +204,16 @@ All colors MUST be HSL.
     color: hsl(var(--pp-text));
   }
 
+  /* Main pane when no camp photo — brand-tinted wash instead of flat gray */
+  .pp-main-brand-wash {
+    background: linear-gradient(
+      165deg,
+      hsl(var(--pp-brand-soft)) 0%,
+      hsl(var(--pp-bg)) 42%,
+      hsl(var(--pp-brand-subtle)) 100%
+    );
+  }
+
   .pp-sidebar {
     background: hsl(var(--pp-sidebar-bg));
     border-color: hsl(var(--pp-sidebar-border));

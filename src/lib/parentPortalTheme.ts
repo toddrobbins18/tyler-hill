@@ -22,14 +22,23 @@ export const PP_CHAT_BUBBLE_ME =
 export const PP_CHAT_BUBBLE_THEM =
   "rounded-2xl rounded-tl-sm border border-white/70 bg-white/52 shadow-md backdrop-blur-md text-foreground";
 
-export function parentPortalMainBackdropStyle(imageUrl: string): {
+export type ParentPortalMainBackdropTone = "hero" | "subtle";
+
+export function parentPortalMainBackdropStyle(
+  imageUrl: string,
+  tone: ParentPortalMainBackdropTone = "hero",
+): {
   backgroundImage: string;
   backgroundSize: string;
   backgroundPosition: string;
   backgroundAttachment: string;
 } {
+  const overlay =
+    tone === "hero"
+      ? "linear-gradient(to bottom, rgba(0,0,0,0.4), rgba(0,0,0,0.6)),"
+      : "linear-gradient(180deg, rgba(255,255,255,0.52) 0%, rgba(255,255,255,0.78) 55%, rgba(248,250,252,0.88) 100%),";
   return {
-    backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.4), rgba(0,0,0,0.6)), url(${imageUrl})`,
+    backgroundImage: `${overlay} url(${imageUrl})`,
     backgroundSize: "cover",
     backgroundPosition: "center",
     backgroundAttachment: "fixed",

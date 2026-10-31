@@ -142,7 +142,8 @@ export function ParentPortalSandboxStaffPreview({
         activeView={activeView}
         onNavigate={setActiveView}
         onSignOut={onSignOut}
-        mainBackdropImageUrl={activeView === "home" ? heroImageUrl : null}
+        mainBackdropImageUrl={heroImageUrl}
+        mainBackdropTone={activeView === "home" ? "hero" : "subtle"}
       >
         {activeView === "home" && <ParentHomeView {...sharedProps} />}
         {activeView === "campers" && <ParentCampersView {...sharedProps} />}

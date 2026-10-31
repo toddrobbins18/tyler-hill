@@ -19,7 +19,10 @@ import {
   PARENT_PORTAL_NAV,
   type ParentPortalView,
 } from "@/lib/parentPortalConstants";
-import { parentPortalMainBackdropStyle } from "@/lib/parentPortalTheme";
+import {
+  type ParentPortalMainBackdropTone,
+  parentPortalMainBackdropStyle,
+} from "@/lib/parentPortalTheme";
 import { useParentPortalTheme } from "./useParentPortalTheme";
 
 const NAV_ICONS: Record<ParentPortalView, typeof Home> = {
@@ -43,6 +46,8 @@ type ParentPortalShellProps = {
   onSignOut: () => void;
   /** Full-bleed camp photo behind main pane (desktop: from sidebar edge to viewport right). */
   mainBackdropImageUrl?: string | null;
+  /** Home = dark overlay + glass cards; other tabs = lighter wash so lists stay readable. */
+  mainBackdropTone?: ParentPortalMainBackdropTone;
   children: ReactNode;
 };
 
@@ -140,6 +145,7 @@ export function ParentPortalShell({
   onNavigate,
   onSignOut,
   mainBackdropImageUrl,
+  mainBackdropTone = "subtle",
   children,
 }: ParentPortalShellProps) {
   const rootRef = useParentPortalTheme(themeColor, companySlug);
@@ -186,12 +192,17 @@ export function ParentPortalShell({
         </SheetContent>
       </Sheet>
 
-      <div className="relative flex min-h-screen flex-col lg:pl-[17.5rem]">
+      <div
+        className={cn(
+          "relative flex min-h-screen flex-col lg:pl-[17.5rem]",
+          !hasMainBackdrop && "pp-main-brand-wash",
+        )}
+      >
         {hasMainBackdrop ? (
           <div
             aria-hidden
             className="pointer-events-none fixed inset-x-0 bottom-0 top-0 z-0 lg:left-[17.5rem]"
-            style={parentPortalMainBackdropStyle(mainBackdropImageUrl!)}
+            style={parentPortalMainBackdropStyle(mainBackdropImageUrl!, mainBackdropTone)}
           />
         ) : null}
 
