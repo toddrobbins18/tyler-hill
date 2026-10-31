@@ -11,6 +11,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { NotePresetButtons } from "@/components/NotePresetButtons";
+import { PARENT_TRANSPORT_NOTE_PRESETS } from "@/lib/transportNotePresets";
 import { TransportRouteMap } from "@/components/TransportRouteMap";
 import { Bus, MapPin, Users, Plus, FileText, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Eye, EyeOff, History, LayoutTemplate, Database, Car, CornerDownRight, Clock, Undo2, FlaskConical, CheckCircle2, Pin, Search } from "lucide-react";
 import { pickFirst } from "@/lib/csv";
@@ -5669,6 +5671,11 @@ export default function Transport() {
                     value={newParentTransport.notes}
                     onChange={(e) => setNewParentTransport((prev) => ({ ...prev, notes: e.target.value }))}
                     placeholder="e.g. Grandparent pickup Wed only"
+                  />
+                  <NotePresetButtons
+                    presets={PARENT_TRANSPORT_NOTE_PRESETS}
+                    currentValue={newParentTransport.notes}
+                    onSelect={(notes) => setNewParentTransport((prev) => ({ ...prev, notes }))}
                   />
                 </div>
               </div>

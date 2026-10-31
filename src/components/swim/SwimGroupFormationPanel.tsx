@@ -15,8 +15,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Users, Wand2 } from "lucide-react";
+import { Download, Loader2, Users, Wand2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useCompany } from "@/contexts/CompanyContext";
+import { buildSwimFormationReportPdf } from "@/lib/swimGroupFormationPdf";
+import { triggerBlobDownload } from "@/lib/transportBubbleSheetPdf";
 
 type Props = {
   companyId: string;
@@ -25,6 +28,7 @@ type Props = {
 
 export function SwimGroupFormationPanel({ companyId, season }: Props) {
   const { toast } = useToast();
+  const { currentCompany } = useCompany();
   const [loading, setLoading] = useState(true);
   const [building, setBuilding] = useState(false);
   const [criteria, setCriteria] = useState<SwimFormationCriterion[]>([
@@ -96,6 +100,31 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
     () => groups.reduce((sum, g) => sum + g.campers.length, 0),
     [groups],
   );
+
+  const criteriaSummary = useMemo(() => {
+    const labels = criteria
+      .map((id) => SWIM_FORMATION_CRITERIA.find((c) => c.id === id)?.label)
+      .filter(Boolean);
+    return [
+      labels.length ? `Grouped by: ${labels.join(", ")}` : "Default cohort split",
+      `${instructorCount} instructor group${instructorCount === 1 ? "" : "s"}`,
+    ].join(" · ");
+  }, [criteria, instructorCount]);
+
+  const handleDownloadPdf = () => {
+    const built = buildSwimFormationReportPdf({
+      companyName: currentCompany?.name ?? "Camp",
+      season,
+      groups,
+      criteriaSummary,
+    });
+    if (!built) {
+      toast({ title: "Build groups first", variant: "destructive" });
+      return;
+    }
+    triggerBlobDownload(built.blob, built.filename);
+    toast({ title: "Formation PDF downloaded" });
+  };
 
   if (loading) {
     return (
@@ -179,6 +208,10 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{groups.length} groups</Badge>
             <Badge variant="outline">{totalAssigned} campers assigned</Badge>
+            <Button type="button" size="sm" variant="outline" className="gap-1.5" onClick={handleDownloadPdf}>
+              <Download className="h-4 w-4" />
+              Download PDF
+            </Button>
           </div>
           {groups.map((group) => (
             <Card key={group.id}>

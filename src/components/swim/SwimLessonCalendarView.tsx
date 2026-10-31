@@ -4,7 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, ChevronRight, CalendarDays, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarDays, Download, Users } from "lucide-react";
+import { useCompany } from "@/contexts/CompanyContext";
+import { useToast } from "@/hooks/use-toast";
+import { triggerBlobDownload } from "@/lib/transportBubbleSheetPdf";
+import { buildSwimLessonCalendarSlotsPdf } from "@/lib/swimLessonCalendarPdf";
 import { campDateStringInSeason } from "@/lib/campSeasonDate";
 import {
   loadEnrollmentWeekCalendar,
@@ -19,11 +23,14 @@ import {
   SWIM_CALENDAR_TIME_COLUMNS,
   availableInstructorsForSlot,
   defaultSwimCalendarWeekNumber,
+  filterSwimCalendarLessons,
   groupLessonsBySwimSlot,
   instructorSlotStatus,
   monFriDatesForEnrollmentWeek,
+  swimCalendarFilterSummary,
   swimSlotKey,
   type SwimCalendarLesson,
+  type SwimCalendarLessonFilter,
 } from "@/lib/swimLessonCalendar";
 import { swimLessonStatusLabel } from "@/lib/swimLessonApproval";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -37,10 +44,16 @@ type Props = {
 };
 
 export function SwimLessonCalendarView({ companyId, season, lessons }: Props) {
+  const { toast } = useToast();
+  const { currentCompany } = useCompany();
   const [weekCalendar, setWeekCalendar] = useState<EnrollmentWeekCalendar>([]);
   const [weekNumber, setWeekNumber] = useState(1);
   const [instructorOptions, setInstructorOptions] = useState<string[]>([]);
   const [subView, setSubView] = useState<CalendarSubView>("slots");
+  const [lessonFilter, setLessonFilter] = useState<SwimCalendarLessonFilter>({
+    status: "all",
+    instructor: "",
+  });
 
   const resolvedCalendar = useMemo(
     () => resolveSwimLessonWeekCalendar(weekCalendar, season),
@@ -64,7 +77,12 @@ export function SwimLessonCalendarView({ companyId, season, lessons }: Props) {
     [resolvedCalendar, weekNumber],
   );
 
-  const slotMap = useMemo(() => groupLessonsBySwimSlot(lessons), [lessons]);
+  const filteredLessons = useMemo(
+    () => filterSwimCalendarLessons(lessons, lessonFilter),
+    [lessons, lessonFilter],
+  );
+
+  const slotMap = useMemo(() => groupLessonsBySwimSlot(filteredLessons), [filteredLessons]);
 
   const weekRangeLabel = weekOptions.find((w) => w.weekNumber === weekNumber)?.range ?? "";
 
@@ -78,6 +96,28 @@ export function SwimLessonCalendarView({ companyId, season, lessons }: Props) {
   };
 
   const slotColumns = SWIM_CALENDAR_TIME_COLUMNS;
+
+  const handleDownloadPdf = () => {
+    const built = buildSwimLessonCalendarSlotsPdf({
+      companyName: currentCompany?.name ?? "Camp",
+      season,
+      weekNumber,
+      weekRangeLabel,
+      calendar: resolvedCalendar,
+      lessons: filteredLessons,
+      filterSummary: swimCalendarFilterSummary(lessonFilter),
+    });
+    if (!built) {
+      toast({
+        title: "Cannot export calendar",
+        description: "Set enrollment week dates so Mon–Fri shows for this week.",
+        variant: "destructive",
+      });
+      return;
+    }
+    triggerBlobDownload(built.blob, built.filename);
+    toast({ title: "Calendar PDF downloaded" });
+  };
 
   const instructorColumns = useMemo(() => {
     const cols: { dateYmd: string; timeHHmm: string; header: string }[] = [];
@@ -158,6 +198,45 @@ export function SwimLessonCalendarView({ companyId, season, lessons }: Props) {
           {weekRangeLabel ? (
             <span className="text-xs text-muted-foreground">{weekRangeLabel}</span>
           ) : null}
+          <select
+            value={lessonFilter.status}
+            onChange={(e) =>
+              setLessonFilter((prev) => ({
+                ...prev,
+                status: e.target.value as SwimCalendarLessonFilter["status"],
+              }))
+            }
+            className="h-9 rounded-md border border-border/60 bg-background px-2 text-sm"
+            aria-label="Filter by lesson status"
+          >
+            <option value="all">All statuses</option>
+            <option value="booked">Booked only</option>
+            <option value="pending">Pending only</option>
+          </select>
+          <select
+            value={lessonFilter.instructor}
+            onChange={(e) => setLessonFilter((prev) => ({ ...prev, instructor: e.target.value }))}
+            className="h-9 rounded-md border border-border/60 bg-background px-2 text-sm min-w-[140px]"
+            aria-label="Filter by instructor"
+          >
+            <option value="">All instructors</option>
+            {instructorOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="gap-1.5"
+            onClick={handleDownloadPdf}
+            disabled={weekDays.length === 0}
+          >
+            <Download className="h-4 w-4" />
+            Download PDF
+          </Button>
         </div>
       </CardHeader>
       <CardContent>

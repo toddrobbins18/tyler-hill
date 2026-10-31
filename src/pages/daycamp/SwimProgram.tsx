@@ -42,6 +42,17 @@ import {
 import { sendSwimProgressEmail } from "@/lib/swimProgressApi";
 import { sendSwimBraceletEmail } from "@/lib/swimBraceletApi";
 import { buildSwimProgressPdf } from "@/lib/swimProgressPdf";
+import {
+  SWIM_BRACELET_PRINT_PRESETS,
+  buildSwimBraceletReportPdf,
+  filterBraceletRecordsByColors,
+  type SwimBraceletPrintPreset,
+} from "@/lib/swimBraceletReportPdf";
+import { triggerBlobDownload } from "@/lib/transportBubbleSheetPdf";
+import { NotePresetButtons } from "@/components/NotePresetButtons";
+import { SWIM_TEST_NOTE_QUICK_PRESETS } from "@/lib/transportNotePresets";
+
+const SWIM_TEST_NOTE_INLINE = ["PASSED", "Refused", "Needed Assist"] as const;
 import { swimProgressEmailSupported } from "@/lib/swimProgressSkills";
 import OperationLivePanel from "@/components/admin/OperationLivePanel";
 import type { OperationStep } from "@/lib/operationLiveLog";
@@ -312,19 +323,32 @@ function TestNoteSelect({ value, onChange }: { value: string; onChange: (v: stri
         ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
         : "";
   return (
-    <select
-      value={normalized}
-      onChange={(e) => onChange(e.target.value)}
-      onClick={(e) => e.stopPropagation()}
-      className={cn(editableSelect, "min-w-[140px] max-w-[200px]", styles)}
-    >
-      <option value="">—</option>
-      {options.map((note) => (
-        <option key={note} value={note} className="bg-background text-foreground">
-          {note}
-        </option>
-      ))}
-    </select>
+    <div className="space-y-0.5 min-w-[130px]" onClick={(e) => e.stopPropagation()}>
+      <select
+        value={normalized}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(editableSelect, "w-full max-w-[200px]", styles)}
+      >
+        <option value="">—</option>
+        {options.map((note) => (
+          <option key={note} value={note} className="bg-background text-foreground">
+            {note}
+          </option>
+        ))}
+      </select>
+      <div className="flex flex-wrap gap-0.5">
+        {SWIM_TEST_NOTE_INLINE.map((note) => (
+          <button
+            key={note}
+            type="button"
+            className="rounded border border-border/60 px-1 py-0 text-[9px] text-muted-foreground hover:bg-muted/60"
+            onClick={() => onChange(note)}
+          >
+            {note === "Needed Assist" ? "Assist" : note}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -1009,17 +1033,56 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
     return [...groups].sort((a, b) => a.localeCompare(b));
   }, [braceletData, levelData]);
 
+  const matchesBraceletBaseFilters = useCallback(
+    (b: BraceletRecord) => {
+      if (!matchesSwimSearch(b.name, b.group, search)) return false;
+      if (braceletGroupFilter !== "all" && b.group !== braceletGroupFilter) return false;
+      if (braceletAssignmentFilter === "assigned" && !b.currentBracelet) return false;
+      if (braceletAssignmentFilter === "unassigned" && b.currentBracelet) return false;
+      return true;
+    },
+    [search, braceletGroupFilter, braceletAssignmentFilter],
+  );
+
   const filteredBracelets = useMemo(
     () =>
       braceletData.filter((b) => {
-        if (!matchesSwimSearch(b.name, b.group, search)) return false;
-        if (braceletGroupFilter !== "all" && b.group !== braceletGroupFilter) return false;
+        if (!matchesBraceletBaseFilters(b)) return false;
         if (braceletColorFilter !== "all" && b.currentBracelet !== braceletColorFilter) return false;
-        if (braceletAssignmentFilter === "assigned" && !b.currentBracelet) return false;
-        if (braceletAssignmentFilter === "unassigned" && b.currentBracelet) return false;
         return true;
       }),
-    [search, braceletData, braceletGroupFilter, braceletColorFilter, braceletAssignmentFilter],
+    [braceletData, braceletColorFilter, matchesBraceletBaseFilters],
+  );
+
+  const downloadBraceletPdf = useCallback(
+    (reportTitle: string, records: BraceletRecord[]) => {
+      const built = buildSwimBraceletReportPdf({
+        companyName: currentCompany?.name ?? "Camp",
+        season: currentSeason,
+        reportTitle,
+        records,
+      });
+      if (!built) {
+        toast({
+          title: "Nothing to print",
+          description: "No campers match this bracelet report.",
+          variant: "destructive",
+        });
+        return;
+      }
+      triggerBlobDownload(built.blob, built.filename);
+      toast({ title: "Bracelet PDF downloaded", description: `${records.length} row(s)` });
+    },
+    [currentCompany?.name, currentSeason, toast],
+  );
+
+  const downloadBraceletPresetPdf = useCallback(
+    (preset: SwimBraceletPrintPreset) => {
+      const base = braceletData.filter(matchesBraceletBaseFilters);
+      const rows = filterBraceletRecordsByColors(base, preset.colors);
+      downloadBraceletPdf(preset.label, rows);
+    },
+    [braceletData, downloadBraceletPdf, matchesBraceletBaseFilters],
   );
 
   const filteredLevels = useMemo(
@@ -1190,23 +1253,6 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
         </div>
       </motion.div>
 
-      <Alert className="border-sky-500/30 bg-sky-500/5">
-        <AlertTitle className="text-sm">Load prior swim bracelets &amp; levels</AlertTitle>
-        <AlertDescription className="text-xs space-y-1.5">
-          <p>
-            Import Todd&apos;s Airtable exports: <strong>Swim Bracelets</strong> grid (Name, Division Leader, Current
-            Bracelet, test dates) and <strong>Swim Records</strong> (Child&apos;s Name, PersonID, skill columns). Import{" "}
-            <strong>both files</strong> for the same camp — order does not matter; rows merge by camper and season.
-          </p>
-          <p>
-            Season comes from a <strong>Season</strong> column, or the year in the filename (e.g.{" "}
-            <strong>2026-Grid view.csv</strong>). For prior years, add a Season column (2024, 2025…) or import one file
-            per year. Campers must be on the roster or match by <strong>PersonID</strong>. Then open{" "}
-            <strong>Prior Seasons Report</strong>.
-          </p>
-        </AlertDescription>
-      </Alert>
-
       {importing && importProgress ? (
         <Alert className="border-primary/40 bg-primary/5">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -1306,6 +1352,21 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
           <Card>
             <CardHeader className="pb-3 space-y-3">
               <CardTitle className="text-base">Current bracelet status & test history</CardTitle>
+              <div className="space-y-1.5">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+                  Quick test notes
+                </p>
+                <NotePresetButtons
+                  presets={SWIM_TEST_NOTE_QUICK_PRESETS}
+                  onSelect={(text) => {
+                    void navigator.clipboard.writeText(text);
+                    toast({
+                      title: "Note copied",
+                      description: `Paste into a test note field, or use PASSED / Refused / Assist under each row.`,
+                    });
+                  }}
+                />
+              </div>
               <div className="flex flex-wrap items-end gap-3">
                 <SwimFilterSelect
                   label="Group"
@@ -1365,6 +1426,36 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                       ) : null}
                       Apply to filtered ({sortedBracelets.length})
                     </Button>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1 w-full sm:w-auto">
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Print PDF
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1"
+                      disabled={sortedBracelets.length === 0}
+                      onClick={() => downloadBraceletPdf("Filtered bracelets", sortedBracelets)}
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Filtered ({sortedBracelets.length})
+                    </Button>
+                    {SWIM_BRACELET_PRINT_PRESETS.map((preset) => (
+                      <Button
+                        key={preset.id}
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="h-8 text-xs"
+                        onClick={() => downloadBraceletPresetPdf(preset)}
+                      >
+                        {preset.label}
+                      </Button>
+                    ))}
                   </div>
                 </div>
               </div>

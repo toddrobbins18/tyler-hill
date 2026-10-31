@@ -24,6 +24,12 @@ import {
 import { submitNurseSentHomeTransportException } from "@/lib/nurseTransportException";
 import { useTransportFamilySiblings } from "@/hooks/useTransportFamilySiblings";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
+import { NotePresetButtons } from "@/components/NotePresetButtons";
+import {
+  TRANSPORT_ABSENCE_REASON_PRESETS,
+  TRANSPORT_NURSE_REASON_PRESETS,
+  TRANSPORT_PICKUP_NOTE_PRESETS,
+} from "@/lib/transportNotePresets";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -517,6 +523,12 @@ function StaffPickupForm({
             </SelectContent>
           </Select>
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" rows={2} />
+          <NotePresetButtons
+            presets={TRANSPORT_PICKUP_NOTE_PRESETS}
+            currentValue={notes}
+            append
+            onSelect={setNotes}
+          />
           <Button type="submit" size="sm" disabled={saving}>{saving ? "Saving…" : "Submit for approval"}</Button>
         </form>
       </CardContent>
@@ -610,6 +622,11 @@ function StaffAbsenceForm({
             </SelectContent>
           </Select>
           <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason" />
+          <NotePresetButtons
+            presets={TRANSPORT_ABSENCE_REASON_PRESETS}
+            currentValue={reason}
+            onSelect={setReason}
+          />
           <Button type="submit" size="sm" disabled={saving}>{saving ? "Saving…" : "Submit for approval"}</Button>
         </form>
       </CardContent>
@@ -783,6 +800,11 @@ function StaffNurseForm({
           />
           <Input type="date" value={recordDate} onChange={(e) => setRecordDate(e.target.value)} required />
           <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (optional)" />
+          <NotePresetButtons
+            presets={TRANSPORT_NURSE_REASON_PRESETS}
+            currentValue={reason}
+            onSelect={setReason}
+          />
           <Button type="submit" size="sm" disabled={saving}>{saving ? "Saving…" : "Log sent home"}</Button>
         </form>
       </CardContent>

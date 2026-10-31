@@ -6,6 +6,36 @@ import {
   SWIM_LESSON_TIME_OPTIONS,
 } from "@/lib/swimLessonSchedule";
 import { isSwimLessonBookedStatus } from "@/lib/swimLessonApproval";
+
+export type SwimCalendarLessonFilter = {
+  status: "all" | "booked" | "pending";
+  /** Empty string = all instructors. */
+  instructor: string;
+};
+
+export function filterSwimCalendarLessons(
+  lessons: SwimCalendarLesson[],
+  filter: SwimCalendarLessonFilter,
+): SwimCalendarLesson[] {
+  const instructorKey = filter.instructor.trim().toLowerCase();
+  return lessons.filter((lesson) => {
+    if (filter.status === "booked" && !isSwimLessonBookedStatus(lesson.status)) return false;
+    if (filter.status === "pending" && lesson.status !== "pending") return false;
+    if (instructorKey) {
+      const got = lesson.instructor?.trim().toLowerCase() ?? "";
+      if (got !== instructorKey) return false;
+    }
+    return true;
+  });
+}
+
+export function swimCalendarFilterSummary(filter: SwimCalendarLessonFilter): string | undefined {
+  const parts: string[] = [];
+  if (filter.status === "booked") parts.push("Booked only");
+  if (filter.status === "pending") parts.push("Pending only");
+  if (filter.instructor.trim()) parts.push(`Instructor: ${filter.instructor.trim()}`);
+  return parts.length ? parts.join(" · ") : undefined;
+}
 import {
   defaultEnrollmentWeekForDate,
   getEnrollmentWeekRow,
