@@ -431,7 +431,7 @@ export default function BusAttendance() {
                 ? `Your profile is set to ${assignedBus}, but no matching route was found for this date and run.`
                 : canViewAll
                   ? "No routes on the board for this date."
-                  : "Ask an admin to set your assigned bus on your user profile (assigned_transport_bus)."}
+                  : "Ask transport admin to enable Bus attendance only and assign your bus (Transport Admin → Bus counselor access)."}
             </p>
           </CardContent>
         </Card>

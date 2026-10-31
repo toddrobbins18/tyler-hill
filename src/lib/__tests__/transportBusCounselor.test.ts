@@ -35,8 +35,20 @@ describe("transportBusCounselor", () => {
     expect(filtered).toHaveLength(2);
   });
 
-  it("locks nav when assigned bus and not admin", () => {
-    expect(isBusCounselorNavLocked({ canViewAll: false, assignedBus: "Bus 3" })).toBe(true);
-    expect(isBusCounselorNavLocked({ canViewAll: true, assignedBus: "Bus 3" })).toBe(false);
+  it("locks nav when bus attendance only and not admin", () => {
+    expect(isBusCounselorNavLocked({ canViewAll: false, busAttendanceOnly: true })).toBe(true);
+    expect(isBusCounselorNavLocked({ canViewAll: true, busAttendanceOnly: true })).toBe(false);
+    expect(isBusCounselorNavLocked({ canViewAll: false, busAttendanceOnly: false })).toBe(false);
+  });
+
+  it("scopes bus attendance only to assigned bus even with transport permission", () => {
+    const filtered = filterRoutesForAssignedBus(routes, {
+      assignedBus: "Bus 2",
+      canViewAll: false,
+      hasTransportCoordinatorAccess: true,
+      busAttendanceOnly: true,
+    });
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]?.id).toBe(2);
   });
 });

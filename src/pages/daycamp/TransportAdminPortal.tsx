@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { format } from "date-fns";
 import { Bus, CheckCircle2, Clock, HeartPulse, Plus, Waves } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -201,7 +202,10 @@ export default function TransportAdminPortal() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="secondary" size="sm" asChild>
+            <Link to="/day-camp/bus-counselor-access">Bus counselor access</Link>
+          </Button>
           <Label htmlFor="admin-date" className="sr-only">Date</Label>
           <Input
             id="admin-date"

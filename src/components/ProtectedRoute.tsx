@@ -19,6 +19,7 @@ const routeToMenuMap: Record<string, string> = {
   'bus-attendance': 'bus-attendance',
   'bus-check-ins': 'bus-check-ins',
   'group-attendance': 'group-attendance',
+  'bus-counselor-access': 'transport-admin',
 };
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -60,8 +61,11 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
 
   useEffect(() => {
     if (busScopeLoading || !isNavLocked) return;
-    if (hasPageAccess) return;
-    if (isBusCounselorMenuAllowed("bus-attendance") && !location.pathname.startsWith("/day-camp/bus-attendance")) {
+    const onBusTool =
+      location.pathname.startsWith("/day-camp/bus-attendance") ||
+      location.pathname.startsWith("/day-camp/bus-check-ins");
+    if (onBusTool && hasPageAccess) return;
+    if (!onBusTool) {
       navigate("/day-camp/bus-attendance", { replace: true });
     }
   }, [busScopeLoading, isNavLocked, hasPageAccess, location.pathname, navigate]);

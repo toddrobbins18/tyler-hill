@@ -1,40 +1,27 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useCallback, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import {
   canViewAllTransportBuses,
   isBusCounselorMenuAllowed,
   isBusCounselorNavLocked,
-  loadUserAssignedTransportBus,
 } from "@/lib/transportBusCounselor";
 
 export function useBusCounselorNavScope() {
-  const { user, isSuperAdmin, userRole, hasPagePermission } = useAuth();
+  const {
+    user,
+    isSuperAdmin,
+    userRole,
+    hasPagePermission,
+    busAttendanceOnly,
+    assignedTransportBus,
+    loading: authLoading,
+  } = useAuth();
   const { currentCompany } = useCompany();
   const companyId = currentCompany?.id;
 
-  const [assignedBus, setAssignedBus] = useState<string | null>(null);
-  const [assignedLoading, setAssignedLoading] = useState(true);
-
-  useEffect(() => {
-    if (!companyId || !user?.id) {
-      setAssignedBus(null);
-      setAssignedLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setAssignedLoading(true);
-    void loadUserAssignedTransportBus(supabase, user.id).then((bus) => {
-      if (!cancelled) {
-        setAssignedBus(bus);
-        setAssignedLoading(false);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [companyId, user?.id]);
+  const assignedBus = assignedTransportBus;
+  const assignedLoading = authLoading;
 
   const canViewAll = useMemo(
     () =>
@@ -52,8 +39,8 @@ export function useBusCounselorNavScope() {
   );
 
   const isNavLocked = useMemo(
-    () => isBusCounselorNavLocked({ canViewAll, assignedBus }),
-    [canViewAll, assignedBus],
+    () => isBusCounselorNavLocked({ canViewAll, busAttendanceOnly }),
+    [canViewAll, busAttendanceOnly],
   );
 
   const allowMenuItem = useCallback(

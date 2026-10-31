@@ -3,11 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
-import {
-  canViewAllTransportBuses,
-  filterRoutesForAssignedBus,
-  loadUserAssignedTransportBus,
-} from "@/lib/transportBusCounselor";
+import { canViewAllTransportBuses, filterRoutesForAssignedBus } from "@/lib/transportBusCounselor";
 import {
   loadBusRunEnrollmentContext,
   type BusRunEnrollmentContext,
@@ -15,7 +11,7 @@ import {
 import { buildRunRoutes, loadTransportRunBoard, type TransportRunBoard } from "@/lib/transportRunBoard";
 
 export function useFilteredBusRoutes(runDate: string, timeOfDay: "am" | "pm") {
-  const { user, isSuperAdmin, userRole, hasPagePermission } = useAuth();
+  const { isSuperAdmin, userRole, hasPagePermission, busAttendanceOnly, assignedTransportBus } = useAuth();
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeason();
   const companyId = currentCompany?.id;
@@ -23,7 +19,7 @@ export function useFilteredBusRoutes(runDate: string, timeOfDay: "am" | "pm") {
   const [board, setBoard] = useState<TransportRunBoard | null>(null);
   const [boardLoading, setBoardLoading] = useState(true);
   const [enrollmentCtx, setEnrollmentCtx] = useState<BusRunEnrollmentContext | null>(null);
-  const [assignedBus, setAssignedBus] = useState<string | null>(null);
+  const assignedBus = assignedTransportBus;
 
   const canViewAll = useMemo(
     () =>
@@ -39,18 +35,6 @@ export function useFilteredBusRoutes(runDate: string, timeOfDay: "am" | "pm") {
     () => (companyId ? hasPagePermission(companyId, "transportation") : false),
     [companyId, hasPagePermission],
   );
-
-  useEffect(() => {
-    if (!companyId || !user?.id) {
-      setAssignedBus(null);
-      return;
-    }
-    let cancelled = false;
-    void loadUserAssignedTransportBus(supabase, user.id).then((bus) => {
-      if (!cancelled) setAssignedBus(bus);
-    });
-    return () => { cancelled = true; };
-  }, [companyId, user?.id]);
 
   useEffect(() => {
     if (!companyId) return;
@@ -86,8 +70,9 @@ export function useFilteredBusRoutes(runDate: string, timeOfDay: "am" | "pm") {
         assignedBus,
         canViewAll,
         hasTransportCoordinatorAccess,
+        busAttendanceOnly,
       }),
-    [allRoutes, assignedBus, canViewAll, hasTransportCoordinatorAccess],
+    [allRoutes, assignedBus, canViewAll, hasTransportCoordinatorAccess, busAttendanceOnly],
   );
 
   return {
@@ -101,6 +86,6 @@ export function useFilteredBusRoutes(runDate: string, timeOfDay: "am" | "pm") {
     assignedBus,
     canViewAll,
     hasTransportCoordinatorAccess,
-    busScopeLabel: !canViewAll && assignedBus ? assignedBus : null,
+    busScopeLabel: !canViewAll && (busAttendanceOnly || assignedBus) && assignedBus ? assignedBus : null,
   };
 }

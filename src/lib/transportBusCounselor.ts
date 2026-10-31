@@ -29,9 +29,40 @@ export function canViewAllTransportBuses(options: {
 
 export function isBusCounselorNavLocked(options: {
   canViewAll: boolean;
-  assignedBus: string | null | undefined;
+  busAttendanceOnly: boolean;
 }): boolean {
-  return !options.canViewAll && !!options.assignedBus?.trim();
+  return !options.canViewAll && options.busAttendanceOnly;
+}
+
+export type BusCounselorProfile = {
+  busAttendanceOnly: boolean;
+  assignedTransportBus: string | null;
+};
+
+export async function loadUserBusCounselorProfile(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<BusCounselorProfile> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("bus_attendance_only, assigned_transport_bus")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[Transport] Load bus counselor profile failed:", error.message);
+    return { busAttendanceOnly: false, assignedTransportBus: null };
+  }
+
+  const row = data as {
+    bus_attendance_only?: boolean | null;
+    assigned_transport_bus?: string | null;
+  } | null;
+
+  return {
+    busAttendanceOnly: !!row?.bus_attendance_only,
+    assignedTransportBus: row?.assigned_transport_bus?.trim() || null,
+  };
 }
 
 export function isBusCounselorMenuAllowed(menuId: string): boolean {
@@ -45,11 +76,17 @@ export function filterRoutesForAssignedBus<T extends { bus: string }>(
     canViewAll: boolean;
     /** Transportation coordinators without an assigned bus still see all routes. */
     hasTransportCoordinatorAccess?: boolean;
+    /** Paperless bus counselor — always scoped to assigned bus. */
+    busAttendanceOnly?: boolean;
   },
 ): T[] {
-  const { assignedBus, canViewAll, hasTransportCoordinatorAccess } = options;
+  const { assignedBus, canViewAll, hasTransportCoordinatorAccess, busAttendanceOnly } = options;
   if (canViewAll) return routes;
   const bus = assignedBus?.trim();
+  if (busAttendanceOnly) {
+    if (!bus) return [];
+    return routes.filter((r) => transportBusesMatch(r.bus, bus));
+  }
   if (bus) return routes.filter((r) => transportBusesMatch(r.bus, bus));
   if (hasTransportCoordinatorAccess) return routes;
   return [];
@@ -59,17 +96,6 @@ export async function loadUserAssignedTransportBus(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<string | null> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("assigned_transport_bus")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (error) {
-    console.error("[Transport] Load assigned bus failed:", error.message);
-    return null;
-  }
-
-  const raw = (data as { assigned_transport_bus?: string | null } | null)?.assigned_transport_bus;
-  return raw?.trim() || null;
+  const profile = await loadUserBusCounselorProfile(supabase, userId);
+  return profile.assignedTransportBus;
 }

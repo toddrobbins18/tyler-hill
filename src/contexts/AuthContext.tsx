@@ -4,6 +4,7 @@ import type { User } from '@supabase/supabase-js';
 import { resolvePermissionDivisionIds } from '@/lib/divisionFilterUtils';
 import { hasMenuPermissionWithAliases } from '@/lib/dayCampPermissionAliases';
 import { isSandboxDemoStaffEmail } from '@/lib/nestSandboxStaffDemo';
+import { isBusCounselorMenuAllowed } from '@/lib/transportBusCounselor';
 
 export type AppRole = 'admin' | 'staff' | 'division_leader' | 'specialist' | 'viewer' | 'super_admin' | 'health_center';
 
@@ -17,6 +18,9 @@ interface AuthContextType {
   loading: boolean;
   // All permissions keyed by companyId -> menuItem -> boolean
   allPermissions: Record<string, Record<string, boolean>>;
+  /** Todd: paperless bus counselor — Nest limited to bus attendance tools. */
+  busAttendanceOnly: boolean;
+  assignedTransportBus: string | null;
   // Quickly check permission without DB call
   hasPagePermission: (companyId: string, menuItem: string) => boolean;
   // Force refetch
@@ -33,6 +37,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userDivisions, setUserDivisions] = useState<string[]>([]);
   const [userDivisionsByCompany, setUserDivisionsByCompany] = useState<Record<string, string[]>>({});
   const [allPermissions, setAllPermissions] = useState<Record<string, Record<string, boolean>>>({});
+  const [busAttendanceOnly, setBusAttendanceOnly] = useState(false);
+  const [assignedTransportBus, setAssignedTransportBus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   
   const hasInitializedRef = useRef(false);
@@ -53,9 +59,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUserDivisions([]);
         setUserDivisionsByCompany({});
         setAllPermissions({});
+        setBusAttendanceOnly(false);
+        setAssignedTransportBus(null);
         setLoading(false);
         return;
       }
+
+      const profileResult = await supabase
+        .from('profiles')
+        .select('bus_attendance_only, assigned_transport_bus')
+        .eq('id', currentUser.id)
+        .maybeSingle();
+
+      const profileRow = profileResult.data as {
+        bus_attendance_only?: boolean | null;
+        assigned_transport_bus?: string | null;
+      } | null;
+      setBusAttendanceOnly(!!profileRow?.bus_attendance_only);
+      setAssignedTransportBus(profileRow?.assigned_transport_bus?.trim() || null);
 
       // Fetch roles before publishing user so dependents never race on isSuperAdmin.
       const rolesResult = await supabase
@@ -169,6 +190,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUserDivisions([]);
         setUserDivisionsByCompany({});
         setAllPermissions({});
+        setBusAttendanceOnly(false);
+        setAssignedTransportBus(null);
         setLoading(false);
         hasInitializedRef.current = false;
       }
@@ -182,6 +205,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasPagePermission = useCallback((companyId: string, menuItem: string): boolean => {
     // Super admins have access to everything
     if (isSuperAdmin) return true;
+
+    if (busAttendanceOnly && userRole !== 'admin' && !userRoles.includes('admin')) {
+      return isBusCounselorMenuAllowed(menuItem);
+    }
 
     // Nest sandbox demo staff — training logins (not production camps)
     if (isSandboxDemoStaffEmail(user?.email)) {
@@ -210,7 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     return false;
-  }, [isSuperAdmin, allPermissions, user?.email]);
+  }, [isSuperAdmin, allPermissions, user?.email, busAttendanceOnly, userRole, userRoles]);
 
   return (
     <AuthContext.Provider
@@ -223,6 +250,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userDivisionsByCompany,
         loading,
         allPermissions,
+        busAttendanceOnly,
+        assignedTransportBus,
         hasPagePermission,
         refetch: fetchAuthData,
       }}
