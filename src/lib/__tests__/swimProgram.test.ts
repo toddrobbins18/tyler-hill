@@ -13,6 +13,8 @@ import {
   resolveStoredDivisionLeader,
   normalizeSkillStatus,
   parseSwimProgramCsv,
+  resolveSwimSavedRowChild,
+  swimBraceletRecordHasDisplayData,
   normalizeSwimImportParentEmail,
   inferImportSeasonFromFileName,
   swimLevelColumnVisible,
@@ -188,6 +190,57 @@ describe("swimProgram", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].season).toBe("2026");
     expect(rows[0].child.id).toBe("child-1");
+  });
+
+  it("matches bracelet grid by name when only a future-season roster row exists", () => {
+    const csv = [
+      "Name,Group,Division Leader,Current Bracelet",
+      "Nicholas Hwang,Everest,Alyssa,Orange",
+    ].join("\n");
+    const { rows, unmatched } = parseSwimProgramCsv(
+      csv,
+      [{ ...child, id: "2027-id", name: "Nicholas Hwang", season: "2027", person_id: "cm-nh" }],
+      "2026",
+    );
+    expect(unmatched).toHaveLength(0);
+    expect(rows[0]?.season).toBe("2026");
+    expect(rows[0]?.child.id).toBe("2027-id");
+    expect(rows[0]?.bracelet?.currentBracelet).toBe("Orange");
+  });
+
+  it("does not treat group-only ALL KIDS rows as bracelet imports", () => {
+    const csv = ["Child's Name,Group,PersonID,Goldfish 1A1", "Jane Doe,Syracuse,1,Achieved"].join("\n");
+    const { rows } = parseSwimProgramCsv(csv, [{ ...child, person_id: "1", season: "2026" }], "2026");
+    expect(rows[0]?.bracelet).toBeUndefined();
+    expect(rows[0]?.levels).toBeDefined();
+  });
+
+  it("resolves saved swim rows by person_id when child_id is from another season", () => {
+    const roster2026 = { ...child, id: "2026-id", season: "2026", person_id: "cm-1" };
+    const childById = new Map([[roster2026.id, roster2026]]);
+    const childByPerson = new Map([["cm-1", roster2026]]);
+    const hit = resolveSwimSavedRowChild(
+      { child_id: "2027-id", person_id: "cm-1" },
+      childById,
+      childByPerson,
+    );
+    expect(hit?.id).toBe("2026-id");
+  });
+
+  it("swimBraceletRecordHasDisplayData ignores group-only stubs", () => {
+    expect(swimBraceletRecordHasDisplayData({ group: "Everest" })).toBe(false);
+    expect(swimBraceletRecordHasDisplayData({ currentBracelet: "Orange" })).toBe(true);
+  });
+
+  it("stores prior-year import on the roster row for that season when both exist", () => {
+    const csv = ["Name,Current Bracelet", "Jane Doe,Green"].join("\n");
+    const roster: RosterChild[] = [
+      { ...child, id: "2026-id", season: "2026", person_id: "cm-1" },
+      { ...child, id: "2027-id", season: "2027", person_id: "cm-1" },
+    ];
+    const { rows } = parseSwimProgramCsv(csv, roster, "2026");
+    expect(rows[0]?.child.id).toBe("2026-id");
+    expect(rows[0]?.season).toBe("2026");
   });
 });
 

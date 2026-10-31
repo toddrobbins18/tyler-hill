@@ -8,7 +8,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const campRoot = path.resolve(__dirname, "../..");
-const braceletPath = path.join(campRoot, "2026-Grid view(1).csv");
+const bundledBracelet = path.join(__dirname, "../data/north_shore_2026_swim_bracelet_grid.csv");
+const braceletPath = fs.existsSync(bundledBracelet)
+  ? bundledBracelet
+  : path.join(campRoot, "2026-Grid view(1).csv");
 const recordsPath = path.join(campRoot, "Swim Records 2026-ALL KIDS(1).csv");
 
 const swimUrl = pathToFileURL(path.join(__dirname, "../src/lib/swimProgram.ts")).href;

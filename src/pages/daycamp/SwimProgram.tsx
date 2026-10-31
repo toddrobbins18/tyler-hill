@@ -6,6 +6,7 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import {
   BRACELETS,
+  SWIM_BRACELET_DASHBOARD_COLORS,
   DATE_FMT,
   SWIM_LEVEL_REPORT_VIEWS,
   fetchSwimDivisionLeaderOptions,
@@ -169,9 +170,15 @@ const BRACELET_STYLES: Record<BraceletColor, string> = {
 };
 
 const editableSelect =
-  "h-7 rounded-md border border-border/60 bg-background/60 px-2 text-xs font-medium text-foreground hover:border-primary/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/40 cursor-pointer";
+  "h-8 rounded-md border border-border/70 bg-background px-2.5 text-sm font-medium text-foreground hover:border-primary/50 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 cursor-pointer";
 const editableInput =
-  "h-7 w-full rounded-md border border-border/60 bg-background/60 px-2 text-xs text-foreground hover:border-primary/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "h-8 w-full rounded-md border border-border/70 bg-background px-2.5 text-sm text-foreground placeholder:text-muted-foreground/70 hover:border-primary/50 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
+
+const swimBraceletStickyName =
+  "sticky left-0 z-[1] bg-card shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)] min-w-[11rem] whitespace-nowrap";
+const swimBraceletStickyGroup =
+  "sticky left-[11rem] z-[1] bg-card shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)] min-w-[7.5rem] whitespace-nowrap";
+const swimBraceletTestCol = "border-l border-border/50 bg-muted/15";
 
 function BraceletSelect({ value, onChange }: { value: BraceletColor | ""; onChange: (v: BraceletColor | "") => void }) {
   return (
@@ -483,39 +490,37 @@ function SwimTableFooter({
           className="min-w-0"
         />
       </div>
-      {slice.totalPages > 1 ? (
-        <Pagination className="mx-0 w-auto justify-end">
-          <PaginationContent>
-            <PaginationItem>
-              <PaginationPrevious
-                onClick={() => onPageChange(Math.max(1, slice.page - 1))}
-                className={slice.page === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
-              />
+      <Pagination className="mx-0 w-auto justify-end shrink-0">
+        <PaginationContent>
+          <PaginationItem>
+            <PaginationPrevious
+              onClick={() => onPageChange(Math.max(1, slice.page - 1))}
+              className={slice.page === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+            />
+          </PaginationItem>
+          {buildPageNumbers(slice.page, slice.totalPages).map((page, idx) => (
+            <PaginationItem key={`${page}-${idx}`}>
+              {page === "ellipsis" ? (
+                <PaginationEllipsis />
+              ) : (
+                <PaginationLink
+                  onClick={() => onPageChange(page)}
+                  isActive={slice.page === page}
+                  className="cursor-pointer"
+                >
+                  {page}
+                </PaginationLink>
+              )}
             </PaginationItem>
-            {buildPageNumbers(slice.page, slice.totalPages).map((page, idx) => (
-              <PaginationItem key={`${page}-${idx}`}>
-                {page === "ellipsis" ? (
-                  <PaginationEllipsis />
-                ) : (
-                  <PaginationLink
-                    onClick={() => onPageChange(page)}
-                    isActive={slice.page === page}
-                    className="cursor-pointer"
-                  >
-                    {page}
-                  </PaginationLink>
-                )}
-              </PaginationItem>
-            ))}
-            <PaginationItem>
-              <PaginationNext
-                onClick={() => onPageChange(Math.min(slice.totalPages, slice.page + 1))}
-                className={slice.page === slice.totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
-              />
-            </PaginationItem>
-          </PaginationContent>
-        </Pagination>
-      ) : null}
+          ))}
+          <PaginationItem>
+            <PaginationNext
+              onClick={() => onPageChange(Math.min(slice.totalPages, slice.page + 1))}
+              className={slice.page === slice.totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+            />
+          </PaginationItem>
+        </PaginationContent>
+      </Pagination>
     </div>
   );
 }
@@ -1301,15 +1306,15 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
         </Alert>
       ) : null}
 
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-        {BRACELETS.map((color) => (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {SWIM_BRACELET_DASHBOARD_COLORS.map((color) => (
           <Card key={color} className="border-border/50">
             <CardContent className="p-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <BraceletPill color={color} />
-                <span className="text-2xl font-bold">{braceletCounts[color]}</span>
+                <span className="text-2xl font-bold tabular-nums">{braceletCounts[color] ?? 0}</span>
               </div>
-              <p className="text-[11px] text-muted-foreground mt-1">campers</p>
+              <p className="text-xs text-muted-foreground mt-1.5">campers on roster</p>
             </CardContent>
           </Card>
         ))}
@@ -1317,18 +1322,18 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <Trophy className="h-4 w-4 text-emerald-400" />
-              <span className="text-2xl font-bold">{totalCompleteLevels}</span>
+              <span className="text-2xl font-bold tabular-nums">{totalCompleteLevels}</span>
             </div>
-            <p className="text-[11px] text-muted-foreground mt-1">levels complete</p>
+            <p className="text-xs text-muted-foreground mt-1.5">levels complete</p>
           </CardContent>
         </Card>
-        <Card className="border-border/50 md:col-span-2">
+        <Card className="border-border/50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <CheckCircle2 className="h-4 w-4 text-sky-400" />
-              <span className="text-2xl font-bold">{campersWithLevelData}</span>
+              <span className="text-2xl font-bold tabular-nums">{campersWithLevelData}</span>
             </div>
-            <p className="text-[11px] text-muted-foreground mt-1">campers with imported / entered levels</p>
+            <p className="text-xs text-muted-foreground mt-1.5">with level data</p>
           </CardContent>
         </Card>
       </div>
@@ -1383,7 +1388,10 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                   onChange={setBraceletColorFilter}
                   options={[
                     { value: "all", label: "All colors" },
-                    ...BRACELETS.map((c) => ({ value: c, label: c })),
+                    ...SWIM_BRACELET_DASHBOARD_COLORS.map((c) => ({
+                      value: c,
+                      label: c === "Non Swimmer/Beginner" ? "Non Swimmer" : c,
+                    })),
                   ]}
                 />
                 <SwimFilterSelect
@@ -1460,125 +1468,152 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="p-0 overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <SortableHeader label="Name" sortKey="name" currentSort={braceletSort} onSort={requestBraceletSort} />
-                    <SortableHeader label="Group" sortKey="group" currentSort={braceletSort} onSort={requestBraceletSort} />
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+              <Table className="text-sm w-full min-w-max">
+                <TableHeader className="bg-muted/80">
+                  <TableRow className="hover:bg-transparent">
+                    <SortableHeader
+                      className={cn(swimBraceletStickyName, "bg-muted/95")}
+                      label="Name"
+                      sortKey="name"
+                      currentSort={braceletSort}
+                      onSort={requestBraceletSort}
+                    />
+                    <SortableHeader
+                      className={cn(swimBraceletStickyGroup, "bg-muted/95")}
+                      label="Group"
+                      sortKey="group"
+                      currentSort={braceletSort}
+                      onSort={requestBraceletSort}
+                    />
                     <SortableHeader label="Division Leader" sortKey="divisionLeader" currentSort={braceletSort} onSort={requestBraceletSort} />
                     <SortableHeader label="Current Bracelet" sortKey="currentBracelet" currentSort={braceletSort} onSort={requestBraceletSort} />
                     <SortableHeader label="Note Field" sortKey="generalNote" currentSort={braceletSort} onSort={requestBraceletSort} />
-                    <SortableHeader label="1st Proctor" sortKey="proctor1" currentSort={braceletSort} onSort={requestBraceletSort} />
-                    <SortableHeader label="1st Date" sortKey="date1" currentSort={braceletSort} onSort={requestBraceletSort} />
-                    <SortableHeader label="1st Note" sortKey="note1" currentSort={braceletSort} onSort={requestBraceletSort} />
-                    <SortableHeader label="2nd Proctor" sortKey="proctor2" currentSort={braceletSort} onSort={requestBraceletSort} />
-                    <SortableHeader label="2nd Date" sortKey="date2" currentSort={braceletSort} onSort={requestBraceletSort} />
-                    <SortableHeader label="2nd Note" sortKey="note2" currentSort={braceletSort} onSort={requestBraceletSort} />
-                    <SortableHeader label="3rd Proctor" sortKey="proctor3" currentSort={braceletSort} onSort={requestBraceletSort} />
-                    <SortableHeader label="3rd Date" sortKey="date3" currentSort={braceletSort} onSort={requestBraceletSort} />
-                    <SortableHeader label="3rd Note" sortKey="note3" currentSort={braceletSort} onSort={requestBraceletSort} />
-                    <SortableHeader label="4th Proctor" sortKey="proctor4" currentSort={braceletSort} onSort={requestBraceletSort} />
-                    <SortableHeader label="4th Date" sortKey="date4" currentSort={braceletSort} onSort={requestBraceletSort} />
-                    <SortableHeader label="4th Note" sortKey="note4" currentSort={braceletSort} onSort={requestBraceletSort} />
-                    <SortableHeader label="5th Proctor" sortKey="proctor5" currentSort={braceletSort} onSort={requestBraceletSort} />
-                    <SortableHeader label="5th Date" sortKey="date5" currentSort={braceletSort} onSort={requestBraceletSort} />
-                    <SortableHeader label="5th Note" sortKey="note5" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader className={swimBraceletTestCol} label="1st Proctor" sortKey="proctor1" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader className={swimBraceletTestCol} label="1st Date" sortKey="date1" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader className={swimBraceletTestCol} label="1st Note" sortKey="note1" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader className={swimBraceletTestCol} label="2nd Proctor" sortKey="proctor2" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader className={swimBraceletTestCol} label="2nd Date" sortKey="date2" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader className={swimBraceletTestCol} label="2nd Note" sortKey="note2" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader className={swimBraceletTestCol} label="3rd Proctor" sortKey="proctor3" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader className={swimBraceletTestCol} label="3rd Date" sortKey="date3" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader className={swimBraceletTestCol} label="3rd Note" sortKey="note3" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader className={swimBraceletTestCol} label="4th Proctor" sortKey="proctor4" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader className={swimBraceletTestCol} label="4th Date" sortKey="date4" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader className={swimBraceletTestCol} label="4th Note" sortKey="note4" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader className={swimBraceletTestCol} label="5th Proctor" sortKey="proctor5" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader className={swimBraceletTestCol} label="5th Date" sortKey="date5" currentSort={braceletSort} onSort={requestBraceletSort} />
+                    <SortableHeader className={swimBraceletTestCol} label="5th Note" sortKey="note5" currentSort={braceletSort} onSort={requestBraceletSort} />
                     <SortableHeader label="Email" sortKey="emailSent" currentSort={braceletSort} onSort={requestBraceletSort} />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedBracelets.rows.map((b) => (
-                    <TableRow key={b.id} className="cursor-pointer" onDoubleClick={() => setSelectedBraceletId(b.id)}>
-                      <TableCell className="font-medium" onClick={() => setSelectedBraceletId(b.id)}>
+                  {paginatedBracelets.rows.map((b, rowIdx) => (
+                    <TableRow
+                      key={b.id}
+                      className={cn(
+                        "cursor-pointer align-middle",
+                        rowIdx % 2 === 1 && "bg-muted/25",
+                        "hover:bg-primary/5",
+                      )}
+                      onDoubleClick={() => setSelectedBraceletId(b.id)}
+                    >
+                      <TableCell
+                        className={cn(swimBraceletStickyName, "font-semibold text-foreground py-2.5 !bg-card")}
+                        onClick={() => setSelectedBraceletId(b.id)}
+                      >
                         {b.name}
                       </TableCell>
-                      <TableCell className="text-muted-foreground" onClick={() => setSelectedBraceletId(b.id)}>
+                      <TableCell
+                        className={cn(swimBraceletStickyGroup, "text-muted-foreground py-2.5 !bg-card")}
+                        onClick={() => setSelectedBraceletId(b.id)}
+                      >
                         {b.group}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-2.5">
                         <DivisionLeaderSelect
                           value={b.divisionLeader}
                           options={divisionLeaderOptions}
                           onChange={(v) => updateBracelet(b.id, { divisionLeader: v || "—" })}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-2.5">
                         <BraceletSelect value={b.currentBracelet} onChange={(v) => updateBracelet(b.id, { currentBracelet: v })} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-2.5 min-w-[7rem]">
                         <TextEdit
                           value={b.generalNote}
                           placeholder="Note"
                           onChange={(v) => updateBracelet(b.id, { generalNote: v })}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className={cn(swimBraceletTestCol, "py-2.5")}>
                         <ProctorSelect
                           value={b.proctor1}
                           options={proctorOptions}
                           onChange={(v) => updateBracelet(b.id, { proctor1: v })}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className={cn(swimBraceletTestCol, "py-2.5")}>
                         <DateEdit value={b.date1} onChange={(v) => updateBracelet(b.id, { date1: v })} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className={cn(swimBraceletTestCol, "py-2.5")}>
                         <TestNoteSelect value={b.note1} onChange={(v) => updateBracelet(b.id, { note1: v })} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className={cn(swimBraceletTestCol, "py-2.5")}>
                         <ProctorSelect
                           value={b.proctor2}
                           options={proctorOptions}
                           onChange={(v) => updateBracelet(b.id, { proctor2: v })}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className={cn(swimBraceletTestCol, "py-2.5")}>
                         <DateEdit value={b.date2} onChange={(v) => updateBracelet(b.id, { date2: v })} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className={cn(swimBraceletTestCol, "py-2.5")}>
                         <TestNoteSelect value={b.note2} onChange={(v) => updateBracelet(b.id, { note2: v })} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className={cn(swimBraceletTestCol, "py-2.5")}>
                         <ProctorSelect
                           value={b.proctor3}
                           options={proctorOptions}
                           onChange={(v) => updateBracelet(b.id, { proctor3: v })}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className={cn(swimBraceletTestCol, "py-2.5")}>
                         <DateEdit value={b.date3} onChange={(v) => updateBracelet(b.id, { date3: v })} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className={cn(swimBraceletTestCol, "py-2.5")}>
                         <TestNoteSelect value={b.note3} onChange={(v) => updateBracelet(b.id, { note3: v })} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className={cn(swimBraceletTestCol, "py-2.5")}>
                         <ProctorSelect
                           value={b.proctor4}
                           options={proctorOptions}
                           onChange={(v) => updateBracelet(b.id, { proctor4: v })}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className={cn(swimBraceletTestCol, "py-2.5")}>
                         <DateEdit value={b.date4} onChange={(v) => updateBracelet(b.id, { date4: v })} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className={cn(swimBraceletTestCol, "py-2.5")}>
                         <TestNoteSelect value={b.note4} onChange={(v) => updateBracelet(b.id, { note4: v })} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className={cn(swimBraceletTestCol, "py-2.5")}>
                         <ProctorSelect
                           value={b.proctor5}
                           options={proctorOptions}
                           onChange={(v) => updateBracelet(b.id, { proctor5: v })}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className={cn(swimBraceletTestCol, "py-2.5")}>
                         <DateEdit value={b.date5} onChange={(v) => updateBracelet(b.id, { date5: v })} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className={cn(swimBraceletTestCol, "py-2.5")}>
                         <TestNoteSelect value={b.note5} onChange={(v) => updateBracelet(b.id, { note5: v })} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-2.5">
                         {b.emailSent ? (
                           <button
                             onClick={(e) => {
@@ -1607,6 +1642,7 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                   ))}
                 </TableBody>
               </Table>
+              </div>
               <SwimTableFooter
                 slice={paginatedBracelets}
                 pageSize={tablePageSize}

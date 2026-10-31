@@ -1,8 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus } from "lucide-react";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -11,10 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  fetchSwimLessonInstructorOptions,
-  saveInstructorName,
-} from "@/lib/swimLessonInstructors";
+import { fetchSwimLessonInstructorOptions } from "@/lib/swimLessonInstructors";
 
 type Props = {
   companyId: string | undefined;
@@ -25,7 +19,6 @@ type Props = {
 
 export function SwimLessonInstructorSelect({ companyId, season, value, onChange }: Props) {
   const [options, setOptions] = useState<string[]>([]);
-  const [newName, setNewName] = useState("");
 
   useEffect(() => {
     if (!companyId) {
@@ -35,27 +28,17 @@ export function SwimLessonInstructorSelect({ companyId, season, value, onChange 
     void fetchSwimLessonInstructorOptions(supabase, companyId, season).then(setOptions);
   }, [companyId, season]);
 
-  const addInstructor = () => {
-    if (!companyId) return;
-    const trimmed = newName.trim();
-    if (!trimmed) return;
-    const next = saveInstructorName(companyId, trimmed);
-    setOptions(next);
-    onChange(trimmed);
-    setNewName("");
-  };
-
   return (
     <div className="space-y-2">
-      <Label>Instructor</Label>
+      <Label>Instructor (lifeguard)</Label>
       <Select value={value || undefined} onValueChange={onChange}>
         <SelectTrigger>
-          <SelectValue placeholder="Select instructor" />
+          <SelectValue placeholder="Select lifeguard" />
         </SelectTrigger>
         <SelectContent>
           {options.length === 0 ? (
             <SelectItem value="__none__" disabled>
-              Add an instructor below
+              No lifeguards on staff roster for this season
             </SelectItem>
           ) : (
             options.map((name) => (
@@ -66,22 +49,9 @@ export function SwimLessonInstructorSelect({ companyId, season, value, onChange 
           )}
         </SelectContent>
       </Select>
-      <div className="flex gap-2">
-        <Input
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          placeholder="Add instructor name"
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              addInstructor();
-            }
-          }}
-        />
-        <Button type="button" variant="outline" size="icon" onClick={addInstructor} title="Add instructor">
-          <Plus className="h-4 w-4" />
-        </Button>
-      </div>
+      <p className="text-xs text-muted-foreground">
+        Only staff with Lifeguard role, Waterfront department, or Waterfront specialty appear here.
+      </p>
     </div>
   );
 }

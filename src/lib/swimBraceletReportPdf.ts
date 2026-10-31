@@ -7,11 +7,10 @@ export type SwimBraceletPrintPreset = {
   colors: BraceletColor[];
 };
 
-/** Todd proctor sheets — Nest uses Airtable bracelet colors (no Purple in catalog). */
+/** Todd proctor sheets — Non Swimmer + Orange buckets only. */
 export const SWIM_BRACELET_PRINT_PRESETS: SwimBraceletPrintPreset[] = [
+  { id: "non-swimmer", label: "Non Swimmer", colors: ["Non Swimmer/Beginner"] },
   { id: "orange", label: "Orange only", colors: ["Orange"] },
-  { id: "orange-yellow", label: "Orange + Yellow", colors: ["Orange", "Yellow"] },
-  { id: "red-orange", label: "Red + Orange", colors: ["Red", "Orange"] },
 ];
 
 export function filterBraceletRecordsByColors(

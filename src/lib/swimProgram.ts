@@ -96,6 +96,9 @@ export const BRACELETS: BraceletColor[] = [
   "Blue",
 ];
 
+/** North Shore swim ops — dashboard counts, filters, and PDF presets (proctor sheets). */
+export const SWIM_BRACELET_DASHBOARD_COLORS: BraceletColor[] = ["Non Swimmer/Beginner", "Orange"];
+
 /** Airtable Swim Bracelets 2026 — Division Leader single-select. */
 export const DIVISION_LEADER_OPTIONS = [
   "Alyssa",
@@ -641,6 +644,34 @@ export function isSwimTableMissingError(error: unknown): boolean {
   );
 }
 
+function buildChildByPersonIdForSeason(children: Iterable<RosterChild>): Map<string, RosterChild> {
+  const map = new Map<string, RosterChild>();
+  for (const child of children) {
+    const pid = String(child.person_id ?? "").trim();
+    if (!pid) continue;
+    map.set(pid, child);
+  }
+  return map;
+}
+
+/** Match saved swim row to this season's roster (import may have used another season's child_id). */
+export function resolveSwimSavedRowChild(
+  row: Pick<SwimDbRow, "child_id" | "person_id">,
+  childById: Map<string, RosterChild>,
+  childByPersonId: Map<string, RosterChild>,
+): RosterChild | null {
+  const direct = childById.get(row.child_id);
+  if (direct) return direct;
+
+  const pid = String(row.person_id ?? "").trim();
+  if (pid) {
+    const byPerson = childByPersonId.get(pid);
+    if (byPerson) return byPerson;
+  }
+
+  return null;
+}
+
 /** Saved swim rows for one season (no roster fetch). */
 export async function loadSwimSavedRecords(
   supabase: SupabaseClient,
@@ -662,17 +693,23 @@ export async function loadSwimSavedRecords(
     throw error;
   }
 
+  const childByPersonId = buildChildByPersonIdForSeason(childById.values());
   const bracelets = new Map<string, BraceletRecord>();
   const levels = new Map<string, LevelRecord>();
 
   for (const row of (data ?? []) as SwimDbRow[]) {
-    const child = childById.get(row.child_id);
+    const child = resolveSwimSavedRowChild(row, childById, childByPersonId);
     if (!child) continue;
+
+    const rosterKey = child.id;
     if (row.bracelet && typeof row.bracelet === "object") {
-      bracelets.set(row.child_id, braceletFromJson(child, row.bracelet));
+      const parsed = braceletFromJson(child, row.bracelet);
+      if (swimBraceletRecordHasDisplayData(parsed)) {
+        bracelets.set(rosterKey, parsed);
+      }
     }
     if (row.levels && typeof row.levels === "object") {
-      levels.set(row.child_id, levelFromJson(child, row.levels, row.updated_at ?? undefined));
+      levels.set(rosterKey, levelFromJson(child, row.levels, row.updated_at ?? undefined));
     }
   }
 
@@ -718,11 +755,26 @@ type ChildHistoryRow = {
 };
 
 /** Whether a saved swim row should appear on Prior Seasons Report (matches Level Report “has data”). */
+/** Bracelet grid fields (not roster group alone). */
+export function swimBraceletRecordHasDisplayData(record: BraceletRecord | Partial<BraceletRecord>): boolean {
+  if (record.currentBracelet) return true;
+  if (record.divisionLeader && !isBlankDivisionLeader(String(record.divisionLeader))) return true;
+  if (record.generalNote?.trim()) return true;
+  if (record.emailSent) return true;
+  return (
+    Boolean(record.proctor1 || record.date1 || record.note1) ||
+    Boolean(record.proctor2 || record.date2 || record.note2) ||
+    Boolean(record.proctor3 || record.date3 || record.note3) ||
+    Boolean(record.proctor4 || record.date4 || record.note4) ||
+    Boolean(record.proctor5 || record.date5 || record.note5)
+  );
+}
+
 export function swimHistoryRecordHasData(
   bracelet: BraceletRecord | null,
   levels: LevelRecord | null,
 ): boolean {
-  if (bracelet?.currentBracelet) return true;
+  if (bracelet && swimBraceletRecordHasDisplayData(bracelet)) return true;
   if (!levels) return false;
   return (
     levels.goldfish.some((s) => s !== "—") ||
@@ -1360,6 +1412,7 @@ function buildSwimChildIndex(children: RosterChild[], defaultSeason: string) {
   const bySeasonName = new Map<string, RosterChild>();
   const bySeasonPerson = new Map<string, RosterChild>();
   const byPersonId = new Map<string, RosterChild>();
+  const byName = new Map<string, RosterChild[]>();
 
   for (const c of children) {
     const season = String(c.season ?? "");
@@ -1367,12 +1420,38 @@ function buildSwimChildIndex(children: RosterChild[], defaultSeason: string) {
     bySeasonName.set(`${season}|${c.name.trim().toLowerCase()}`, c);
     bySeasonPerson.set(`${season}|${c.person_id}`, c);
 
+    const nameKey = c.name.trim().toLowerCase();
+    const nameList = byName.get(nameKey) ?? [];
+    nameList.push(c);
+    byName.set(nameKey, nameList);
+
     const existing = byPersonId.get(c.person_id);
     if (!existing || (season === defaultSeason && String(existing.season) !== defaultSeason)) {
       byPersonId.set(c.person_id, c);
     }
   }
-  return { byId, bySeasonName, bySeasonPerson, byPersonId };
+  return { byId, bySeasonName, bySeasonPerson, byPersonId, byName };
+}
+
+/** Prefer the roster row for the CSV season (prior-year import from current roster). */
+function pickRosterChildForImportSeason(
+  index: ReturnType<typeof buildSwimChildIndex>,
+  matched: RosterChild,
+  importSeason: string,
+): RosterChild {
+  if (String(matched.season ?? "") === importSeason) return matched;
+
+  const personId = String(matched.person_id ?? "").trim();
+  if (personId) {
+    const byPersonSeason = index.bySeasonPerson.get(`${importSeason}|${personId}`);
+    if (byPersonSeason) return byPersonSeason;
+  }
+
+  const nameKey = matched.name.trim().toLowerCase();
+  const byNameSeason = index.bySeasonName.get(`${importSeason}|${nameKey}`);
+  if (byNameSeason) return byNameSeason;
+
+  return matched;
 }
 
 function findNameColumnIndex(headers: string[]): number {
@@ -1505,17 +1584,27 @@ function resolveChildForImportRow(
 
   if (childId && index.byId.has(childId)) {
     const c = index.byId.get(childId)!;
-    if (!importSeason || String(c.season) === importSeason) return c;
+    if (!importSeason || String(c.season) === importSeason) {
+      return pickRosterChildForImportSeason(index, c, importSeason);
+    }
   }
   if (personId) {
     const seasonHit = index.bySeasonPerson.get(`${importSeason}|${personId}`);
     if (seasonHit) return seasonHit;
     const anySeason = index.byPersonId.get(personId);
-    if (anySeason) return anySeason;
+    if (anySeason) return pickRosterChildForImportSeason(index, anySeason, importSeason);
   }
   if (name) {
-    const seasonHit = index.bySeasonName.get(`${importSeason}|${name.toLowerCase()}`);
+    const nameKey = name.toLowerCase();
+    const seasonHit = index.bySeasonName.get(`${importSeason}|${nameKey}`);
     if (seasonHit) return seasonHit;
+
+    const sameName = index.byName.get(nameKey);
+    if (sameName?.length) {
+      const forSeason = sameName.find((c) => String(c.season ?? "") === importSeason);
+      const matched = forSeason ?? sameName[0]!;
+      return pickRosterChildForImportSeason(index, matched, importSeason);
+    }
   }
   return null;
 }
@@ -1588,7 +1677,7 @@ export function parseSwimProgramCsv(
     }
 
     const braceletPartial = parseAirtableBraceletImport(headers, cols, csvGroup);
-    if (braceletPartial) {
+    if (braceletPartial && swimBraceletRecordHasDisplayData(braceletPartial)) {
       importRow.bracelet = braceletPartial;
     }
 

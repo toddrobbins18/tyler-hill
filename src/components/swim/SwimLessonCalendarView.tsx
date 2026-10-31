@@ -304,7 +304,7 @@ export function SwimLessonCalendarView({ companyId, season, lessons }: Props) {
           </div>
         ) : instructorOptions.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No instructors yet — assign staff or type a name when booking a lesson.
+            No lifeguards on staff roster — add lifeguards under Staff to schedule lessons.
           </p>
         ) : (
           <div className="overflow-x-auto">
