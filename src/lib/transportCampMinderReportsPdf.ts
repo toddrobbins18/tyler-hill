@@ -1,6 +1,12 @@
 import jsPDF from "jspdf";
 import type { BubbleSheetCamper } from "@/lib/transportBubbleSheetPdf";
 import type { RouteSummaryStopRow } from "@/lib/transportReportData";
+import {
+  addTransportPdfFooters,
+  drawCode39Barcode,
+  drawTransportPdfHeader,
+  type TransportPdfLogo,
+} from "@/lib/transportReportPdfLayout";
 
 export type TransportReportPdf = {
   blob: Blob;
@@ -13,58 +19,12 @@ export type GroupReportCamper = {
   programLine: string;
   transportLine: string;
   contactsBlock: string;
+  /** Person ID or camper id — rendered as Code 39 when set. */
+  barcodeValue?: string;
 };
 
-const FOOTER = 10;
+const FOOTER = 12;
 const DAY_LABELS = ["mo", "tu", "we", "th", "fr"];
-
-function addPageFooters(doc: jsPDF) {
-  const total = doc.getNumberOfPages();
-  for (let i = 1; i <= total; i++) {
-    doc.setPage(i);
-    const w = doc.internal.pageSize.width;
-    const h = doc.internal.pageSize.height;
-    doc.setFontSize(7);
-    doc.setTextColor(90);
-    doc.text(`Page ${i} of ${total}`, w / 2, h - 5, { align: "center" });
-    doc.setTextColor(0);
-  }
-}
-
-function drawHeader(
-  doc: jsPDF,
-  margin: number,
-  pageWidth: number,
-  companyName: string,
-  reportTitle: string,
-  metaLines: string[],
-  subtitle?: string,
-): number {
-  let y = margin;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.text(companyName, margin, y);
-  doc.setFontSize(10);
-  doc.text(reportTitle, pageWidth - margin, y, { align: "right" });
-  y += 5;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
-  for (const line of metaLines) {
-    doc.text(line, pageWidth - margin, y, { align: "right" });
-    y += 4;
-  }
-  if (subtitle) {
-    y += 2;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.text(subtitle, margin, y);
-    y += 6;
-  }
-  doc.setDrawColor(0);
-  doc.setLineWidth(0.3);
-  doc.line(margin, y, pageWidth - margin, y);
-  return y + 4;
-}
 
 function drawDayBubbleHeader(doc: jsPDF, xStart: number, y: number, width: number): number {
   doc.setFont("helvetica", "bold");
@@ -143,6 +103,13 @@ function drawCamperBlock(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.text(camper.name, margin, y + 4);
+  if (camper.barcodeValue?.trim()) {
+    drawCode39Barcode(doc, margin + 52, y - 1, camper.barcodeValue, {
+      heightMm: 5.5,
+      narrowMm: 0.28,
+      label: false,
+    });
+  }
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   y += 7;
@@ -181,6 +148,8 @@ export function buildGroupReportPdf(options: {
   totalCampers: number;
   staffNames?: string[];
   campers: GroupReportCamper[];
+  logo?: TransportPdfLogo | null;
+  printedAt?: Date;
 }): TransportReportPdf | null {
   if (!options.campers.length) return null;
 
@@ -189,16 +158,16 @@ export function buildGroupReportPdf(options: {
   const pageWidth = doc.internal.pageSize.width;
   const pageHeight = doc.internal.pageSize.height;
   const usableBottom = pageHeight - FOOTER;
+  const printedAt = options.printedAt ?? new Date();
 
-  let y = drawHeader(
-    doc,
-    margin,
-    pageWidth,
-    options.companyName,
-    `Group Report · Summer ${options.season}`,
-    [options.weekDateRange, `Total Campers: ${options.totalCampers}`],
-    options.groupName.toUpperCase(),
-  );
+  let y = drawTransportPdfHeader(doc, margin, pageWidth, {
+    companyName: options.companyName,
+    reportTitle: `Group Report · Summer ${options.season}`,
+    metaLines: [options.weekDateRange, `Total Campers: ${options.totalCampers}`],
+    subtitle: options.groupName.toUpperCase(),
+    logo: options.logo,
+    printedAt,
+  });
 
   if (options.staffNames?.length) {
     doc.setFontSize(7.5);
@@ -220,7 +189,7 @@ export function buildGroupReportPdf(options: {
     y = drawCamperBlock(doc, margin, pageWidth, y, camper, "daily");
   }
 
-  addPageFooters(doc);
+  addTransportPdfFooters(doc, printedAt);
   const safeGroup = options.groupName.replace(/[^\w-]+/g, "-");
   return {
     blob: doc.output("blob"),
@@ -238,6 +207,8 @@ export function buildBusRosterReportPdf(options: {
   totalPassengers: number;
   campers: GroupReportCamper[];
   bubbleCampers: BubbleSheetCamper[];
+  logo?: TransportPdfLogo | null;
+  printedAt?: Date;
 }): TransportReportPdf | null {
   if (!options.campers.length) return null;
 
@@ -255,15 +226,15 @@ export function buildBusRosterReportPdf(options: {
   ];
   if (options.driverOrCounselor) meta.push(`Counselor: ${options.driverOrCounselor}`);
 
-  let y = drawHeader(
-    doc,
-    margin,
-    pageWidth,
-    options.companyName,
-    `Bus Roster Report · Summer ${options.season}`,
-    meta,
-    options.bus,
-  );
+  const printedAt = options.printedAt ?? new Date();
+  let y = drawTransportPdfHeader(doc, margin, pageWidth, {
+    companyName: options.companyName,
+    reportTitle: `Bus Roster Report · Summer ${options.season}`,
+    metaLines: meta,
+    subtitle: options.bus,
+    logo: options.logo,
+    printedAt,
+  });
 
   y = drawAmPmBubbleHeader(doc, pageWidth - margin - 38, y, 38);
   y += 2;
@@ -280,7 +251,7 @@ export function buildBusRosterReportPdf(options: {
     y = drawCamperBlock(doc, margin, pageWidth, y, camper, "am-pm", bubble);
   }
 
-  addPageFooters(doc);
+  addTransportPdfFooters(doc, printedAt);
   const safeBus = options.bus.replace(/\s+/g, "-");
   return {
     blob: doc.output("blob"),
@@ -293,6 +264,8 @@ export function buildBusRouteSummaryPdf(options: {
   season: string;
   dateLabel: string;
   rows: RouteSummaryStopRow[];
+  logo?: TransportPdfLogo | null;
+  printedAt?: Date;
 }): TransportReportPdf | null {
   if (!options.rows.length) return null;
 
@@ -310,14 +283,14 @@ export function buildBusRouteSummaryPdf(options: {
     { label: "Passengers", w: 22 },
   ];
 
-  let y = drawHeader(
-    doc,
-    margin,
-    pageWidth,
-    options.companyName,
-    "Bus Route Summary",
-    [`Season ${options.season}`, options.dateLabel, `${options.rows.length} stops`],
-  );
+  const printedAt = options.printedAt ?? new Date();
+  let y = drawTransportPdfHeader(doc, margin, pageWidth, {
+    companyName: options.companyName,
+    reportTitle: "Bus Route Summary",
+    metaLines: [`Season ${options.season}`, options.dateLabel, `${options.rows.length} stops`],
+    logo: options.logo,
+    printedAt,
+  });
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
@@ -357,7 +330,7 @@ export function buildBusRouteSummaryPdf(options: {
     doc.line(margin, y, pageWidth - margin, y);
   }
 
-  addPageFooters(doc);
+  addTransportPdfFooters(doc, printedAt);
   return {
     blob: doc.output("blob"),
     filename: `bus-route-summary-${options.dateLabel.replace(/[^0-9-]/g, "")}.pdf`,

@@ -20,8 +20,9 @@ export function camperEnrolledInWeek(
 
 /** YYYY-MM-DD even when Postgres returns a timestamp. */
 function calendarDateOnly(value: string): string {
-  const match = /^(\d{4}-\d{2}-\d{2})/.exec(value.trim());
-  return match?.[1] ?? value.trim();
+  const s = String(value ?? "").trim();
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(s);
+  return match?.[1] ?? s;
 }
 
 export function enrollmentWeekForDate(

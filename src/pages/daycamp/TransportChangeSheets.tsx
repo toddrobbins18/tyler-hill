@@ -33,6 +33,7 @@ import {
 } from "@/lib/transportChangeSheets";
 import { normalizeTransportBoardForSeason, type TransportRouteMeta, type TransportRouteStop } from "@/lib/transportRoster";
 import { ROUTE_COLORS } from "@/lib/transportRunBoard";
+import { resolveTransportPdfBranding } from "@/lib/transportReportPdfBranding";
 
 type RouteWithColor = TransportRouteMeta & { color: string };
 
@@ -206,16 +207,19 @@ export default function TransportChangeSheets() {
     setIncludeParentTransport(true);
   };
 
-  const downloadPdf = () => {
+  const downloadPdf = async () => {
     if (!rows.length || !currentCompany?.name) return;
+    const branding = await resolveTransportPdfBranding(currentCompany);
     const pdfRows = mapRowsToMasterChangeSheetPdf(rows, camperMetaLookup);
     const built = buildMasterChangeSheetPdf({
-      companyName: currentCompany.name,
+      companyName: branding.companyName,
       season: currentSeason,
       sheetDate,
       runPeriod: runPeriod.toUpperCase(),
       totalCampers,
       rows: pdfRows,
+      logo: branding.logo,
+      printedAt: branding.printedAt,
     });
     if (!built) return;
     setReportPreview({

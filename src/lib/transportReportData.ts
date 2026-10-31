@@ -13,6 +13,7 @@ import type { GroupReportCamper } from "@/lib/transportCampMinderReportsPdf";
 
 export type TransportReportChildRow = {
   id: string;
+  personId: string | null;
   name: string;
   groupName: string;
   gender: string | null;
@@ -36,7 +37,7 @@ export async function loadTransportReportChildren(
   const { data, error } = await supabase
     .from("children")
     .select(
-      "id, name, group_name, gender, age, grade, session, enrolled_weeks, guardian_name, guardian_name_p2, guardian_phone, guardian_email, division:division_id(name)",
+      "id, person_id, name, group_name, gender, age, grade, session, enrolled_weeks, guardian_name, guardian_name_p2, guardian_phone, guardian_email, division:division_id(name)",
     )
     .eq("company_id", companyId)
     .eq("season", season)
@@ -63,6 +64,7 @@ export async function loadTransportReportChildren(
     const divisionRaw = r.division as { name?: string | null } | null;
     out.push({
       id: String(r.id),
+      personId: r.person_id != null ? String(r.person_id).trim() : null,
       name,
       groupName: String(r.group_name ?? "").trim() || "Unassigned",
       gender: (r.gender as string | null) ?? null,
@@ -173,12 +175,14 @@ export function childToGroupReportCamper(
   child: TransportReportChildRow,
   transportLine: string,
 ): GroupReportCamper {
+  const barcodeValue = String(child.personId ?? child.id ?? "").trim();
   return {
     name: child.name,
     demographicsLine: formatReportGenderAgeGrade(child),
     programLine: formatReportProgramLine(child),
     transportLine,
     contactsBlock: formatReportParentContacts(child),
+    barcodeValue,
   };
 }
 

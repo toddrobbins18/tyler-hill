@@ -38,6 +38,7 @@ import {
 } from "@/lib/enrollmentWeekCalendar";
 import { todayDateString } from "@/lib/transportDailyOverrides";
 import { useToast } from "@/hooks/use-toast";
+import { resolveTransportPdfBranding } from "@/lib/transportReportPdfBranding";
 
 export default function TransportPrintReports() {
   const { toast } = useToast();
@@ -57,10 +58,10 @@ export default function TransportPrintReports() {
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
   const [preview, setPreview] = useState<TransportReportPreview | null>(null);
 
-  const enrollmentWeek = useMemo(() => {
-    const row = enrollmentWeekForDate(runDate, calendar);
-    return row?.weekNumber ?? null;
-  }, [runDate, calendar]);
+  const enrollmentWeek = useMemo(
+    () => enrollmentWeekForDate(calendar, runDate),
+    [runDate, calendar],
+  );
 
   const weekRow = useMemo(
     () => (enrollmentWeek != null ? resolveEnrollmentWeekRow(enrollmentWeek, calendar) : null),
@@ -96,7 +97,7 @@ export default function TransportPrintReports() {
       ]);
       setCalendar(cal);
       setBoard(loadedBoard);
-      setEnrollmentLookup(enrollCtx.enrollmentLookup);
+      setEnrollmentLookup(enrollCtx?.enrollmentLookup);
       setChildren(kids);
       if (loadedBoard?.routeMeta.length) {
         setSelectedRouteIds(loadedBoard.routeMeta.map((r) => Number(r.id)));
@@ -128,13 +129,16 @@ export default function TransportPrintReports() {
     });
   };
 
-  const handleRouteSummaryPdf = () => {
+  const handleRouteSummaryPdf = async () => {
+    const branding = await resolveTransportPdfBranding(currentCompany);
     const rows = buildRouteSummaryRows(selectedRoutes, coreStops);
     const built = buildBusRouteSummaryPdf({
-      companyName: currentCompany?.name ?? "Day Camp",
+      companyName: branding.companyName,
       season: currentSeason,
       dateLabel: weekRangeLabel,
       rows,
+      logo: branding.logo,
+      printedAt: branding.printedAt,
     });
     openPreview(built, "Bus Route Summary", `${selectedRoutes.length} route(s)`);
   };
@@ -154,13 +158,16 @@ export default function TransportPrintReports() {
         ),
       ),
     );
+    const branding = await resolveTransportPdfBranding(currentCompany);
     const built = buildGroupReportPdf({
-      companyName: currentCompany?.name ?? "Day Camp",
+      companyName: branding.companyName,
       season: currentSeason,
       weekDateRange: weekRangeLabel,
       groupName,
       totalCampers: groupKids.length,
       campers,
+      logo: branding.logo,
+      printedAt: branding.printedAt,
     });
     if (downloadOnly && built) triggerBlobDownload(built.blob, built.filename);
     else openPreview(built, "Group Report", groupName);
@@ -231,8 +238,9 @@ export default function TransportPrintReports() {
       }
     }
 
+    const branding = await resolveTransportPdfBranding(currentCompany);
     const built = buildBusRosterReportPdf({
-      companyName: currentCompany?.name ?? "Day Camp",
+      companyName: branding.companyName,
       season: currentSeason,
       weekDateRange: weekRangeLabel,
       bus: route.bus,
@@ -241,6 +249,8 @@ export default function TransportPrintReports() {
       totalPassengers: bubbleRoute.campers.length,
       campers: reportCampers,
       bubbleCampers: bubbleRoute.campers,
+      logo: branding.logo,
+      printedAt: branding.printedAt,
     });
 
     if (downloadOnly && built) triggerBlobDownload(built.blob, built.filename);

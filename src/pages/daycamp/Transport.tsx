@@ -104,6 +104,10 @@ import {
   summarizeCarSeatsByBus,
 } from "@/lib/transportCarSeatReport";
 import { TransportReportPreviewDialog, type TransportReportPreview } from "@/components/TransportReportPreviewDialog";
+import { buildBusRouteSummaryPdf } from "@/lib/transportCampMinderReportsPdf";
+import { buildRouteSummaryRows } from "@/lib/transportReportData";
+import { resolveTransportPdfBranding } from "@/lib/transportReportPdfBranding";
+import { buildTransportTableReportPdf } from "@/lib/transportReportPdfLayout";
 import OperationLivePanel from "@/components/admin/OperationLivePanel";
 import type { OperationStep } from "@/lib/operationLiveLog";
 import {
@@ -565,16 +569,16 @@ const persistBoardCache = (companyId: string, season: string, payload: BoardPayl
 const dayCampReports = [
   { name: "Master Change Sheet", desc: "Daily changes PDF (CampMinder-style) — buses + PT", href: "/day-camp/change-sheets" },
   { name: "Transport Print Reports", desc: "Group reports, bus rosters, and route summary PDFs (pick groups/buses)", href: "/day-camp/transport-reports" },
-  { name: "Transport Exceptions", desc: "Absences, swim, office changes, and manual route edits for this date" },
-  { name: "Bus Bubble Sheet", desc: "Per bus: AM & PM bubbles per camper. X = not on that run (mini day, PM-only, or today’s exception)" },
-  { name: "Group Bubble Sheet", desc: "Everyone enrolled in the group this week. Exceptions are never removed" },
-  { name: "Digital Attendance Log", desc: "Export Present/Absent saved in Bus Attendance for this date & run" },
-  { name: "Bus Report", desc: "Day camp bus assignments" },
-  { name: "Bus Route Summary", desc: "Route overview with stops" },
-  { name: "Car Seat Count by Bus", desc: "Nursery & Pre-K riders per bus (car seats required)" },
-  { name: "Car Report", desc: "All parent transport (PT) campers — with or without a bus assignment" },
-  { name: "Daily Passenger Update", desc: "Real-time passenger counts" },
-  { name: "Extended Care", desc: "Before/after care transport" },
+  { name: "Transport Exceptions", desc: "PDF — absences, swim, office changes, and manual route edits for this date" },
+  { name: "Bus Bubble Sheet", desc: "PDF — per bus AM & PM bubbles (mini day / exceptions marked)" },
+  { name: "Group Bubble Sheet", desc: "PDF — everyone enrolled in the group this week" },
+  { name: "Digital Attendance Log", desc: "PDF — Present/Absent from Bus Attendance for this date & run" },
+  { name: "Bus Report", desc: "PDF — day camp bus assignments" },
+  { name: "Bus Route Summary", desc: "PDF — route overview with stops (CampMinder-style)" },
+  { name: "Car Seat Count by Bus", desc: "PDF — Nursery & Pre-K riders per bus" },
+  { name: "Car Report", desc: "PDF — all parent transport (PT) campers" },
+  { name: "Daily Passenger Update", desc: "PDF — passenger counts by route" },
+  { name: "Extended Care", desc: "PDF — after-care transport list" },
 ];
 
 const countBoardStops = (stops: Record<number, RouteStop[]>) =>
@@ -2312,6 +2316,43 @@ export default function Transport() {
     setReportPreview({ ...preview, open: true });
   };
 
+  const openTableReportPdf = async (
+    title: string,
+    description: string,
+    rows: (string | number)[][],
+    filenameSlug: string,
+  ) => {
+    if (!rows.length) {
+      toast({ title: "No data for this report", variant: "destructive" });
+      return;
+    }
+    const branding = await resolveTransportPdfBranding(currentCompany);
+    const headers = rows[0]!.map(String);
+    const dataRows = rows.slice(1).map((row) => row.map((cell) => String(cell ?? "")));
+    const built = buildTransportTableReportPdf({
+      companyName: branding.companyName,
+      reportTitle: title,
+      metaLines: [
+        `Season ${currentSeason}`,
+        `${overrideDate} · ${timeOfDay.toUpperCase()}`,
+        `${dataRows.length} row${dataRows.length === 1 ? "" : "s"}`,
+      ],
+      headers,
+      dataRows,
+      logo: branding.logo,
+      printedAt: branding.printedAt,
+      landscape: headers.length > 5,
+      filenameSlug,
+    });
+    openReportPreview({
+      title,
+      description,
+      kind: "pdf",
+      blob: built.blob,
+      filename: built.filename,
+    });
+  };
+
 
   const hideAllRoutes = () => setVisibleRoutes([]);
 
@@ -3905,14 +3946,6 @@ export default function Transport() {
   };
 
   // ─── Report Generation ──────────────────────────────────────────────
-  const csvRowsToBlob = (rows: (string | number)[][]) => {
-    const csv = rows.map(r => r.map(c => {
-      const s = String(c ?? "");
-      return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
-    }).join(",")).join("\n");
-    return new Blob([csv], { type: "text/csv" });
-  };
-
   const handleGenerateReport = async (reportName: string) => {
     if (reportName === "Transport Exceptions") {
       if (!companyId) {
@@ -3928,14 +3961,12 @@ export default function Transport() {
         coreStops,
       });
       const dataRowCount = rows.length > 1 && String(rows[1][0]).startsWith("(") ? 0 : rows.length - 1;
-      openReportPreview({
-        title: "Transport Exceptions",
-        description: `${overrideDate} · ${dataRowCount} change${dataRowCount === 1 ? "" : "s"} · season ${currentSeason}`,
-        kind: "csv",
-        blob: csvRowsToBlob(rows),
-        filename: `daycamp-transport-exceptions-${overrideDate}.csv`,
+      await openTableReportPdf(
+        "Transport Exceptions",
+        `${overrideDate} · ${dataRowCount} change${dataRowCount === 1 ? "" : "s"} · season ${currentSeason}`,
         rows,
-      });
+        `daycamp-transport-exceptions-${overrideDate}`,
+      );
       return;
     }
 
@@ -4071,14 +4102,12 @@ export default function Transport() {
       const totalCarSeats = summaries.reduce((sum, s) => sum + s.carSeatsRequired, 0);
       const weekNote =
         activeRouteEnrollmentWeek != null ? ` · Week ${activeRouteEnrollmentWeek} riders` : "";
-      openReportPreview({
-        title: "Car Seat Count by Bus",
-        description: `${overrideDate} · ${timeOfDay.toUpperCase()} · ${totalCarSeats} car seat${totalCarSeats === 1 ? "" : "s"} (Nursery + Pre-K)${weekNote}`,
-        kind: "csv",
-        blob: csvRowsToBlob(rows),
-        filename: `daycamp-car-seats-by-bus-${overrideDate}-${timeOfDay}.csv`,
+      await openTableReportPdf(
+        "Car Seat Count by Bus",
+        `${overrideDate} · ${timeOfDay.toUpperCase()} · ${totalCarSeats} car seat${totalCarSeats === 1 ? "" : "s"} (Nursery + Pre-K)${weekNote}`,
         rows,
-      });
+        `daycamp-car-seats-by-bus-${overrideDate}-${timeOfDay}`,
+      );
       return;
     }
 
@@ -4118,20 +4147,17 @@ export default function Transport() {
         ptRiders,
       );
       const marked = rows.slice(1).filter((r) => r[9] === "Present" || r[9] === "Absent").length;
-      openReportPreview({
-        title: "Digital Attendance Log",
-        description: `${overrideDate} · ${timeOfDay.toUpperCase()} · ${marked} marked in system · ${loaded.submittedAt ? "all buses submitted" : "in progress"}`,
-        kind: "csv",
-        blob: csvRowsToBlob(rows),
-        filename: `daycamp-digital-attendance-${overrideDate}-${timeOfDay}.csv`,
+      await openTableReportPdf(
+        "Digital Attendance Log",
+        `${overrideDate} · ${timeOfDay.toUpperCase()} · ${marked} marked in system · ${loaded.submittedAt ? "all buses submitted" : "in progress"}`,
         rows,
-      });
+        `daycamp-digital-attendance-${overrideDate}-${timeOfDay}`,
+      );
       return;
     }
 
     const today = new Date().toISOString().slice(0, 10);
     const safeName = reportName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    const filename = `daycamp-${safeName}-${today}.csv`;
 
     // Build rows specific to each report type
     let rows: (string | number)[][] = [];
@@ -4210,14 +4236,49 @@ export default function Transport() {
       }
     }
 
-    openReportPreview({
-      title: reportName,
-      description: `Day Camp · ${rows.length - 1} row${rows.length - 1 === 1 ? "" : "s"}`,
-      kind: "csv",
-      blob: csvRowsToBlob(rows),
-      filename,
+    if (reportName === "Bus Route Summary") {
+      const branding = await resolveTransportPdfBranding(currentCompany);
+      const coreStopsMap = Object.fromEntries(routes.map((r) => [r.id, r.stops]));
+      const summaryRows = buildRouteSummaryRows(
+        routes.map((r) => ({ id: r.id, name: r.name, bus: r.bus })),
+        coreStopsMap,
+      );
+      if (!summaryRows.length) {
+        toast({ title: "No stops on routes", variant: "destructive" });
+        return;
+      }
+      const weekLabel =
+        activeRouteEnrollmentWeek != null
+          ? formatEnrollmentWeekLabel(activeRouteEnrollmentWeek, enrollmentWeekCalendar)
+          : overrideDate;
+      const built = buildBusRouteSummaryPdf({
+        companyName: branding.companyName,
+        season: currentSeason,
+        dateLabel: weekLabel,
+        rows: summaryRows,
+        logo: branding.logo,
+        printedAt: branding.printedAt,
+      });
+      if (!built) {
+        toast({ title: "Could not build PDF", variant: "destructive" });
+        return;
+      }
+      openReportPreview({
+        title: "Bus Route Summary",
+        description: `${summaryRows.length} stops · ${routes.length} route(s)`,
+        kind: "pdf",
+        blob: built.blob,
+        filename: built.filename,
+      });
+      return;
+    }
+
+    await openTableReportPdf(
+      reportName,
+      `Day Camp · ${Math.max(0, rows.length - 1)} row${rows.length - 1 === 1 ? "" : "s"}`,
       rows,
-    });
+      `daycamp-${safeName}-${overrideDate}`,
+    );
   };
 
   const assignedCamperCount = useMemo(

@@ -1,6 +1,11 @@
 import jsPDF from "jspdf";
 import type { TransportChangeSheetRow } from "./transportChangeSheets";
 import { PARENT_TRANSPORT_CHANGE_SHEET_BUS } from "./transportParentTransport";
+import {
+  addTransportPdfFooters,
+  drawTransportPdfHeader,
+  type TransportPdfLogo,
+} from "@/lib/transportReportPdfLayout";
 
 export type MasterChangeSheetPdfRow = {
   camper: string;
@@ -155,6 +160,8 @@ export function buildMasterChangeSheetPdf(options: {
   runPeriod: string;
   totalCampers?: number;
   rows: MasterChangeSheetPdfRow[];
+  logo?: TransportPdfLogo | null;
+  printedAt?: Date;
 }): { blob: Blob; filename: string } | null {
   if (!options.rows.length) return null;
 
@@ -163,21 +170,8 @@ export function buildMasterChangeSheetPdf(options: {
   const pageHeight = doc.internal.pageSize.height;
   const margin = 14;
   const tableRight = pageWidth - margin;
+  const printedAt = options.printedAt ?? new Date();
 
-  const title = "Consolidated Daily Passenger Update";
-  let y = margin;
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.text(options.companyName, margin, y);
-  y += 6;
-
-  doc.setFontSize(11);
-  doc.text(title, margin, y);
-  y += 5;
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
   const metaParts = [
     `Season ${options.season}`,
     `Date ${options.sheetDate}`,
@@ -187,8 +181,14 @@ export function buildMasterChangeSheetPdf(options: {
     metaParts.push(`Total Campers: ${options.totalCampers}`);
   }
   metaParts.push(`Changes: ${options.rows.length}`);
-  doc.text(metaParts.join("  ·  "), margin, y);
-  y += 8;
+
+  let y = drawTransportPdfHeader(doc, margin, pageWidth, {
+    companyName: options.companyName,
+    reportTitle: "Consolidated Daily Passenger Update",
+    metaLines: metaParts,
+    logo: options.logo,
+    printedAt,
+  });
 
   y = drawTableHeader(doc, margin, y, tableRight);
 
@@ -200,6 +200,8 @@ export function buildMasterChangeSheetPdf(options: {
     }
     y = drawDataRow(doc, margin, tableRight, y, row);
   }
+
+  addTransportPdfFooters(doc, printedAt);
 
   const safeDate = options.sheetDate.replace(/[^0-9-]/g, "");
   const run = options.runPeriod.toLowerCase();
