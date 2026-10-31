@@ -147,8 +147,8 @@ export function ParentPortalShell({
 
   const [moreOpen, setMoreOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const mobilePrimary: ParentPortalView[] = ["home", "campers", "pickups", "absences"];
-  const mobileMoreItems: ParentPortalView[] = ["messages", "authorized", "swim"];
+  const mobilePrimary: ParentPortalView[] = ["home", "messages", "pickups", "absences"];
+  const mobileMoreItems: ParentPortalView[] = ["campers", "authorized", "swim"];
 
   const firstName = contactName?.trim().split(/\s+/)[0];
   const activeLabel = PARENT_PORTAL_NAV.find((item) => item.id === activeView)?.label ?? "Home";

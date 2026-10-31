@@ -104,3 +104,14 @@ export function formatCampDateTime(iso: string): string {
     minute: "2-digit",
   }).format(new Date(iso));
 }
+
+/** Inbox row date (e.g. 10/8/26) in camp timezone. */
+export function formatParentMessageListDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: CAMP_TIMEZONE,
+    month: "numeric",
+    day: "numeric",
+    year: "2-digit",
+  }).format(new Date(iso));
+}

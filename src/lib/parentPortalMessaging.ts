@@ -11,6 +11,14 @@ export type ParentPortalThreadRow = {
   latest_at: string | null;
 };
 
+/** Inbox title — camper plus division leader (parent-school app style). */
+export function parentPortalThreadListTitle(row: ParentPortalThreadRow): string {
+  const child = row.child_name.trim();
+  const leader = row.division_leader_name?.trim();
+  if (leader) return `${child} and ${leader}`;
+  return child;
+}
+
 export async function listParentPortalThreads(
   supabase: SupabaseClient,
   companyId: string,

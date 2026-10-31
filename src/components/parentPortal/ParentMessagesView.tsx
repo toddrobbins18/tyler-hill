@@ -1,20 +1,22 @@
-import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, ChevronRight, ImageIcon, MessageSquare, User } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowLeft, ImageIcon, MessageSquare, Search } from "lucide-react";
 import { ParentPortalMediaGallery } from "./ParentPortalMediaGallery";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import InlineThread from "@/components/messages/InlineThread";
 import { EmptyState } from "./EmptyState";
+import { camperInitials } from "@/lib/parentPortalConstants";
 import {
   fetchMessageRootById,
   listParentPortalThreads,
   openParentDivisionLeaderThread,
+  parentPortalThreadListTitle,
   type ParentPortalThreadRow,
 } from "@/lib/parentPortalMessaging";
 import { messageContentPreview } from "@/lib/messageContentUtils";
-import { formatCampDateTime } from "@/lib/campTime";
+import { formatParentMessageListDate } from "@/lib/campTime";
 import { cn } from "@/lib/utils";
 import { markThreadRepliesReadForRecipient } from "@/lib/messageReadReceipts";
 
@@ -48,6 +50,7 @@ type SectionTab = "chats" | "photos";
 
 export function ParentMessagesView({ companyId, companySlug }: Props) {
   const [sectionTab, setSectionTab] = useState<SectionTab>("chats");
+  const [searchQuery, setSearchQuery] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [rows, setRows] = useState<ParentPortalThreadRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,6 +74,23 @@ export function ParentMessagesView({ companyId, companySlug }: Props) {
   useEffect(() => {
     void refreshList();
   }, [refreshList]);
+
+  const filteredRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) => {
+      const haystack = [
+        row.child_name,
+        row.division_leader_name,
+        row.latest_preview,
+        row.group_name,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [rows, searchQuery]);
 
   const openThreadByRootId = async (threadRootId: string, childId: string | null) => {
     const row = rows.find((r) => r.child_id === childId);
@@ -137,28 +157,41 @@ export function ParentMessagesView({ companyId, companySlug }: Props) {
     void refreshList();
   };
 
+  const threadHeaderTitle =
+    selectedLeaderName && rows.find((r) => r.child_id === selectedChildId)
+      ? parentPortalThreadListTitle(rows.find((r) => r.child_id === selectedChildId)!)
+      : selectedLeaderName ?? "Messages";
+
   if (selectedChildId && threadRoot) {
     return (
-      <div className="space-y-3">
-        <Button variant="ghost" size="sm" className="rounded-xl -ml-2" onClick={handleBack}>
+      <div className="flex min-h-[min(720px,calc(100vh-8rem))] flex-col gap-0 lg:min-h-[680px]">
+        <div className="pp-header-bar flex items-center gap-2 rounded-t-2xl border border-b-0 border-[hsl(var(--pp-border))] px-3 py-2.5 lg:hidden">
+          <Button variant="ghost" size="icon" className="shrink-0 rounded-xl" onClick={handleBack}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <p className="min-w-0 flex-1 truncate text-sm font-semibold text-[hsl(var(--pp-fg))]">
+            {threadHeaderTitle}
+          </p>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mb-2 hidden rounded-xl -ml-2 lg:inline-flex"
+          onClick={handleBack}
+        >
           <ArrowLeft className="h-4 w-4 mr-2" />
           All conversations
         </Button>
-        <div className="flex h-[min(640px,calc(100vh-12rem))] min-h-[480px] flex-col overflow-hidden rounded-2xl border border-[hsl(var(--pp-border))] bg-white shadow-sm">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[hsl(var(--pp-border))] bg-[hsl(var(--pp-bg))] shadow-sm lg:rounded-2xl">
           <InlineThread
             message={threadRoot}
             viewMode="sent"
             campCompanyId={companyId}
             campCompanySlug={companySlug}
             bubbleStyle="parentGlass"
+            threadHeaderTitle={threadHeaderTitle}
           />
         </div>
-        {selectedLeaderName ? (
-          <p className="pp-text-muted text-center text-xs">
-            Messages go to your camper&apos;s division leader ({selectedLeaderName}). Camp office may also
-            assist if needed.
-          </p>
-        ) : null}
       </div>
     );
   }
@@ -190,35 +223,44 @@ export function ParentMessagesView({ companyId, companySlug }: Props) {
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="pp-dashboard-section-title">Messages</h2>
+    <div className="mx-auto w-full max-w-2xl space-y-4">
+      <div className="hidden lg:block">
+        <h1 className="pp-page-title">Messages</h1>
         <p className="pp-text-muted mt-1 text-sm">
-          Chat with your camper&apos;s division leader and view photos &amp; videos shared in your threads.
+          Chat with your camper&apos;s division leader. Photos and videos appear in your threads and
+          in the gallery tab.
         </p>
-        <div className="mt-3 flex gap-2">
-          <Button
-            type="button"
-            variant={sectionTab === "chats" ? "default" : "outline"}
-            size="sm"
-            className="rounded-xl"
-            onClick={() => setSectionTab("chats")}
-          >
-            <MessageSquare className="h-4 w-4 mr-1.5" />
-            Chats
-          </Button>
-          <Button
-            type="button"
-            variant={sectionTab === "photos" ? "default" : "outline"}
-            size="sm"
-            className="rounded-xl"
-            onClick={() => setSectionTab("photos")}
-          >
-            <ImageIcon className="h-4 w-4 mr-1.5" />
-            Photos &amp; videos
-          </Button>
-        </div>
       </div>
+
+      <div className="flex gap-1 rounded-xl border border-[hsl(var(--pp-border))] bg-[hsl(var(--pp-bg-elevated))] p-1">
+        <button
+          type="button"
+          onClick={() => setSectionTab("chats")}
+          className={cn(
+            "flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-medium transition-colors",
+            sectionTab === "chats"
+              ? "bg-[hsl(var(--pp-brand))] text-white shadow-sm"
+              : "text-[hsl(var(--pp-text-muted))] hover:text-[hsl(var(--pp-fg))]",
+          )}
+        >
+          <MessageSquare className="h-4 w-4" />
+          Chats
+        </button>
+        <button
+          type="button"
+          onClick={() => setSectionTab("photos")}
+          className={cn(
+            "flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-medium transition-colors",
+            sectionTab === "photos"
+              ? "bg-[hsl(var(--pp-brand))] text-white shadow-sm"
+              : "text-[hsl(var(--pp-text-muted))] hover:text-[hsl(var(--pp-fg))]",
+          )}
+        >
+          <ImageIcon className="h-4 w-4" />
+          Photos
+        </button>
+      </div>
+
       {sectionTab === "photos" ? (
         <ParentPortalMediaGallery
           companyId={companyId}
@@ -226,49 +268,64 @@ export function ParentMessagesView({ companyId, companySlug }: Props) {
           onOpenThread={(rootId, childId) => void openThreadByRootId(rootId, childId)}
         />
       ) : null}
+
       {sectionTab === "chats" ? (
-      <Card className="rounded-2xl border-[hsl(var(--pp-border))] overflow-hidden">
-        <CardContent className="p-0 divide-y divide-[hsl(var(--pp-border))]">
-          {rows.map((row) => {
-            const disabled = !row.division_leader_user_id;
-            return (
-              <button
-                key={row.child_id}
-                type="button"
-                disabled={disabled}
-                onClick={() => void openThread(row)}
-                className={cn(
-                  "flex w-full items-center gap-3 px-4 py-4 text-left transition-colors",
-                  disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-[hsl(var(--pp-brand-subtle))]",
-                )}
-              >
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--pp-brand-subtle))] text-[hsl(var(--pp-brand))]">
-                  <User className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-[hsl(var(--pp-fg))] truncate">{row.child_name}</p>
-                  <p className="text-xs text-[hsl(var(--pp-brand))] truncate">
-                    {row.division_leader_name
-                      ? `Division leader: ${row.division_leader_name}`
-                      : "Division leader not assigned yet"}
-                  </p>
-                  {row.latest_preview ? (
-                    <p className="pp-text-muted mt-1 text-sm truncate">
-                      {messageContentPreview(row.latest_preview, 80)}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="shrink-0 text-right">
-                  {row.latest_at ? (
-                    <p className="text-[10px] pp-text-muted">{formatCampDateTime(row.latest_at)}</p>
-                  ) : null}
-                  {!disabled ? <ChevronRight className="h-5 w-5 pp-text-muted mt-1 ml-auto" /> : null}
-                </div>
-              </button>
-            );
-          })}
-        </CardContent>
-      </Card>
+        <>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--pp-text-muted))]" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search"
+              className="h-11 rounded-xl border-[hsl(var(--pp-border))] bg-[hsl(var(--pp-bg-elevated))] pl-10 text-[hsl(var(--pp-fg))] placeholder:text-[hsl(var(--pp-text-muted))]"
+            />
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-[hsl(var(--pp-border))] bg-[hsl(var(--pp-bg-elevated))]">
+            {filteredRows.length === 0 ? (
+              <p className="px-4 py-8 text-center text-sm pp-text-muted">No conversations match your search.</p>
+            ) : (
+              filteredRows.map((row, index) => {
+                const disabled = !row.division_leader_user_id;
+                const preview = row.latest_preview
+                  ? messageContentPreview(row.latest_preview, 100)
+                  : row.division_leader_name
+                    ? "Tap to message your division leader"
+                    : "Division leader not assigned yet";
+                return (
+                  <button
+                    key={row.child_id}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => void openThread(row)}
+                    className={cn(
+                      "flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors",
+                      index > 0 && "border-t border-[hsl(var(--pp-border))]",
+                      disabled ? "cursor-not-allowed opacity-45" : "hover:bg-[hsl(var(--pp-brand-subtle))]",
+                    )}
+                  >
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--pp-brand))]/15 text-sm font-semibold text-[hsl(var(--pp-brand-dark))]">
+                      {camperInitials(row.child_name)}
+                    </div>
+                    <div className="min-w-0 flex-1 pt-0.5">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <p className="truncate font-semibold text-[hsl(var(--pp-fg))]">
+                          {parentPortalThreadListTitle(row)}
+                        </p>
+                        {row.latest_at ? (
+                          <span className="shrink-0 text-xs tabular-nums pp-text-muted">
+                            {formatParentMessageListDate(row.latest_at)}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-sm leading-snug pp-text-muted">{preview}</p>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </>
       ) : null}
     </div>
   );

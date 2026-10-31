@@ -59,6 +59,8 @@ interface InlineThreadProps {
   onRootReadChange?: (messageId: string, read: boolean, read_at: string | null) => void;
   /** Parent portal: frosted glass bubbles and hide auto-generated thread root text. */
   bubbleStyle?: "nest" | "parentGlass";
+  /** Parent portal chat header (defaults to party label). */
+  threadHeaderTitle?: string | null;
 }
 
 export default function InlineThread({
@@ -69,6 +71,7 @@ export default function InlineThread({
   onNavigateToGroup,
   onRootReadChange,
   bubbleStyle = "nest",
+  threadHeaderTitle,
 }: InlineThreadProps) {
   const [replies, setReplies] = useState<ThreadMessage[]>([]);
   const [newReply, setNewReply] = useState("");
@@ -364,19 +367,31 @@ export default function InlineThread({
     );
   };
 
+  const headerTitle = threadHeaderTitle?.trim() || partyLabel;
+  const showSubjectLine =
+    bubbleStyle !== "parentGlass" && Boolean(message.subject?.trim());
+
   return (
     <Card className="h-full min-h-0 flex flex-col overflow-hidden border-0 shadow-md">
-      <div className="bg-primary text-primary-foreground px-4 py-3 shrink-0">
-        <div className="flex items-center gap-2">
-          <p className="font-semibold truncate">{partyLabel}</p>
-          {message.sender_id === null && (
-            <Badge variant="secondary" className="shrink-0">
-              Automated
-            </Badge>
-          )}
+      {bubbleStyle === "parentGlass" ? (
+        <div className="shrink-0 bg-gradient-to-b from-[hsl(var(--pp-brand))] to-[hsl(var(--pp-brand-dark))] px-4 py-3.5 text-white">
+          <p className="truncate text-base font-semibold">{headerTitle}</p>
         </div>
-        <p className="text-xs opacity-90 truncate mt-0.5">{message.subject}</p>
-      </div>
+      ) : (
+        <div className="bg-primary text-primary-foreground px-4 py-3 shrink-0">
+          <div className="flex items-center gap-2">
+            <p className="font-semibold truncate">{headerTitle}</p>
+            {message.sender_id === null && (
+              <Badge variant="secondary" className="shrink-0">
+                Automated
+              </Badge>
+            )}
+          </div>
+          {showSubjectLine ? (
+            <p className="text-xs opacity-90 truncate mt-0.5">{message.subject}</p>
+          ) : null}
+        </div>
+      )}
 
       <CardContent
         className={`flex-1 flex flex-col p-0 min-h-0 ${
