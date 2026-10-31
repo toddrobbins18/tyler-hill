@@ -28,6 +28,7 @@ import {
   rosterNameLookupKeys,
 } from "@/lib/routeReferenceWarehouse";
 import { fetchCompanySlug, isSandboxTransportSlug } from "@/lib/nestSandboxTransport";
+import { TRANSPORT_ADDRESS_OVERRIDE_BY_PERSON_ID } from "@/lib/northShoreTransportAddressOverrides";
 import {
   consolidateRouteStopsByAddress,
   riderNamesFromStop,
@@ -427,21 +428,65 @@ function lookupAddressHint(
   return hints.get(normCamperNameKey(camperName));
 }
 
+function normAddressCompareKeyForMerge(address: string): string {
+  return address.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** MapPoint / route-reference hint vs CampMinder — use hint when they disagree (stale CM household). */
+function resolveTransportHomeAddress(
+  camperName: string,
+  homeAddress: string | null | undefined,
+  addressHints?: Map<string, { address: string; lat: number; lng: number }>,
+  personId?: string | null,
+): string {
+  const personKey = personId?.trim();
+  if (personKey && TRANSPORT_ADDRESS_OVERRIDE_BY_PERSON_ID[personKey]) {
+    return TRANSPORT_ADDRESS_OVERRIDE_BY_PERSON_ID[personKey];
+  }
+
+  const fromRow = homeAddress?.trim() || "";
+  const hint = lookupAddressHint(addressHints, camperName);
+  const hintAddress = hint?.address?.trim() || "";
+  if (hintAddress && fromRow && normAddressCompareKey(hintAddress) !== normAddressCompareKey(fromRow)) {
+    return hintAddress;
+  }
+  return fromRow || hintAddress;
+}
+
+/** Warehouse geocode can drift; bundled 2026 MapPoint CSV wins when both exist and differ. */
+export function mergeAddressHintsPreferringBundledMappoint(
+  warehouse: Map<string, AddressHint>,
+  bundled: Map<string, AddressHint>,
+): Map<string, AddressHint> {
+  const merged = new Map<string, AddressHint>(warehouse);
+  for (const [key, bundledValue] of bundled) {
+    const existing = merged.get(key);
+    if (!existing) {
+      merged.set(key, bundledValue);
+      continue;
+    }
+    if (
+      normAddressCompareKeyForMerge(existing.address) !== normAddressCompareKeyForMerge(bundledValue.address)
+    ) {
+      merged.set(key, bundledValue);
+    }
+  }
+  return merged;
+}
+
 function buildAddressByNameForBoardFix(
   enrolled: TransportEnrolledCamper[],
   addressHints?: Map<string, { address: string; lat: number; lng: number }>,
 ): Map<string, string> {
   const addressByName = new Map<string, string>();
   for (const camper of enrolled) {
-    const fromRow = camper.homeAddress?.trim();
-    if (fromRow) {
-      addressByName.set(normName(camper.name), fromRow);
-      continue;
-    }
-    const hint = lookupAddressHint(addressHints, camper.name);
-    if (hint?.address?.trim()) {
-      addressByName.set(normName(camper.name), hint.address.trim());
-    }
+    const resolved = resolveTransportHomeAddress(
+      camper.name,
+      camper.homeAddress,
+      addressHints,
+      camper.personId,
+    );
+    if (resolved) addressByName.set(normName(camper.name), resolved);
   }
   return addressByName;
 }
@@ -739,14 +784,11 @@ export async function loadHistoricalAddressHints(
   });
   if (!priors.length) return bundled;
 
-  const hints = new Map<string, AddressHint>();
+  const warehouse = new Map<string, AddressHint>();
   for (const [key, value] of buildAddressHintsFromPriors(priors)) {
-    hints.set(key, { address: value.address, lat: value.lat, lng: value.lng });
+    warehouse.set(key, { address: value.address, lat: value.lat, lng: value.lng });
   }
-  for (const [key, value] of bundled) {
-    if (!hints.has(key)) hints.set(key, value);
-  }
-  return hints;
+  return mergeAddressHintsPreferringBundledMappoint(warehouse, bundled);
 }
 
 /** Build address hints from 2026 MapPoint routes + addresses CSV (historical learning). */
@@ -787,7 +829,12 @@ export function buildUnplottedFromEnrollment(options: {
     const resolvedAge = child.age ?? null;
     const kept = existingByName.get(key);
     const hint = lookupAddressHint(addressHints, child.name);
-    const syncedAddress = child.homeAddress?.trim() || "";
+    const syncedAddress = resolveTransportHomeAddress(
+      child.name,
+      child.homeAddress,
+      addressHints,
+      child.personId,
+    );
     if (kept) {
       const address = syncedAddress || kept.address?.trim() || hint?.address || "";
       const bundled = address ? resolveBundledGeocodeResult(address) : null;
@@ -802,7 +849,8 @@ export function buildUnplottedFromEnrollment(options: {
       return;
     }
 
-    const address = syncedAddress || hint?.address || "";
+    const address =
+      syncedAddress || hint?.address?.trim() || "";
     const bundled = address ? resolveBundledGeocodeResult(address) : null;
     out.push({
       id: stableUnplottedId(child.id, index + 1),

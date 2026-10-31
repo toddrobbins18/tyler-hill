@@ -5,6 +5,7 @@ import {
   buildMappoint2026AddressHints,
   collectTransportAddressesNeedingGeocode,
   fixBoardAddressesFromEnrollment,
+  mergeAddressHintsPreferringBundledMappoint,
   pruneEmptyPassengerStops,
 } from "@/lib/transportRoster";
 import { CAMP_LOCATION } from "@/lib/transportStopTimes";
@@ -130,6 +131,20 @@ describe("pruneEmptyPassengerStops", () => {
   });
 });
 
+describe("mergeAddressHintsPreferringBundledMappoint", () => {
+  it("replaces wrong warehouse address with bundled MapPoint", () => {
+    const bundled = buildMappoint2026AddressHints();
+    const warehouse = new Map([
+      [
+        normCamperNameKey("Harris Goldberg"),
+        { address: "69 Aspen Drive West, Woodbury, NY 11797", lat: 40.81, lng: -73.47 },
+      ],
+    ]);
+    const merged = mergeAddressHintsPreferringBundledMappoint(warehouse, bundled);
+    expect(merged.get(normCamperNameKey("Harris Goldberg"))?.address).toContain("121 Salem");
+  });
+});
+
 describe("fixBoardAddressesFromEnrollment", () => {
   it("splits a mega-stop using MapPoint hints when 2026 home_address is null", () => {
     const hints = buildMappoint2026AddressHints();
@@ -179,6 +194,45 @@ describe("fixBoardAddressesFromEnrollment", () => {
     expect(fixed.splitStopCount).toBe(1);
     const stops = fixed.coreStops[1] ?? [];
     expect(stops.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("prefers MapPoint hint over conflicting CampMinder home (Harris Goldberg pattern)", () => {
+    const hints = buildMappoint2026AddressHints();
+    const salem = hints.get(normCamperNameKey("Harris Goldberg"))?.address;
+    expect(salem).toContain("121 Salem");
+
+    const fixed = fixBoardAddressesFromEnrollment({
+      enrolled: [
+        {
+          id: "1",
+          personId: "15965489",
+          name: "Harris Goldberg",
+          age: 8,
+          session: null,
+          grade: "3rd",
+          groupName: "Syracuse",
+          homeAddress: "69 Aspen Drive West, Woodbury, NY 11797",
+        },
+      ],
+      coreStops: {
+        33: [
+          {
+            name: "Harris Goldberg",
+            address: "69 Aspen Drive West, Woodbury, NY 11797",
+            lat: 40.81,
+            lng: -73.47,
+            pickupTime: "7:37 AM",
+            passengers: 1,
+            camperNames: ["Harris Goldberg"],
+          },
+        ],
+      },
+      unplottedCampers: [],
+      addressHints: hints,
+    });
+
+    expect(fixed.fixedStopCount).toBe(1);
+    expect(fixed.coreStops[33]?.[0]?.address).toContain("121 Salem");
   });
 
   it("splits shared stops when riders have different CampMinder addresses", () => {

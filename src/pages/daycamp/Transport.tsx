@@ -116,6 +116,7 @@ import {
   collectTransportAddressesNeedingGeocode,
   fixBoardAddressesFromEnrollment,
   loadEnrolledCampersForTransport,
+  loadHistoricalAddressHints,
   loadStopsOnlyTemplateFromSeason,
   normalizeTransportBoardForSeason,
   prepareBoardForPersist,
@@ -2961,7 +2962,10 @@ export default function Transport() {
     });
 
     try {
-      const enrolled = await loadEnrolledCampersForTransport(supabase, companyId, currentSeason);
+      const [enrolled, addressHints] = await Promise.all([
+        loadEnrolledCampersForTransport(supabase, companyId, currentSeason),
+        loadHistoricalAddressHints(supabase, companyId, "2026"),
+      ]);
       fixLogSteps = upsertTransportOpStep(fixLogSteps, {
         id: "load-enrollment",
         label: "Loading CampMinder addresses from enrollment",
@@ -2986,6 +2990,7 @@ export default function Transport() {
         enrolled,
         coreStops,
         unplottedCampers,
+        addressHints,
       });
 
       if (fixed.fixedStopCount === 0 && fixed.fixedUnplottedCount === 0) {
