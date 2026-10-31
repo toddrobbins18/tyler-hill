@@ -14,8 +14,7 @@ const outFile = path.join(root, "supabase/functions/_shared/parentReminderTempla
 const KEYS = [
   ["sunscreen", "sunscreen.jpg"],
   ["extra_clothes", "extra_clothing.jpg"],
-  ["rain_gear", "rain_gear.jpg"],
-  ["water_bottle", "water_bottle.jpg"],
+  ["goggles", "goggles.jpg"],
 ];
 
 let body = `/** Auto-generated — run: node scripts/embed-parent-reminder-templates.mjs */\n\n`;

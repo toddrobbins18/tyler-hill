@@ -30,8 +30,7 @@ export const PARENT_REMINDER_ASSET: Record<
 > = {
   sunscreen: { file: "sunscreen.jpg", attachmentName: "nsdc_sunscreen_reminder.jpg" },
   extra_clothes: { file: "extra_clothing.jpg", attachmentName: "nsdc_extra_clothing_reminder.jpg" },
-  water_bottle: { file: "water_bottle.jpg", attachmentName: "nsdc_water_bottle_reminder.jpg" },
-  rain_gear: { file: "rain_gear.jpg", attachmentName: "nsdc_rain_gear_reminder.jpg" },
+  goggles: { file: "goggles.jpg", attachmentName: "nsdc_goggles_reminder.jpg" },
 };
 
 export function parentReminderPublicUrl(templateKey: ParentEmailTemplateKey): string {

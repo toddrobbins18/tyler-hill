@@ -24,20 +24,11 @@ Thank you,
 Thank you,
 {campName}`,
   },
-  water_bottle: {
-    subject: "Please send a water bottle for {camperName}",
+  goggles: {
+    subject: "Please send goggles for {camperName}",
     body: `Hi,
 
-{camperName} could use a water bottle at camp. Please see the attached reminder.
-
-Thank you,
-{campName}`,
-  },
-  rain_gear: {
-    subject: "Please send rain gear for {camperName}",
-    body: `Hi,
-
-{camperName} could use rain gear at camp. Please see the attached reminder.
+{camperName} could use goggles at camp. Please see the attached reminder.
 
 Thank you,
 {campName}`,

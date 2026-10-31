@@ -1,9 +1,5 @@
 /** Keep in sync with src/lib/parentReminderLayout.ts */
-export type ParentEmailTemplateKey =
-  | "sunscreen"
-  | "extra_clothes"
-  | "water_bottle"
-  | "rain_gear";
+export type ParentEmailTemplateKey = "sunscreen" | "extra_clothes" | "goggles";
 
 export const PARENT_REMINDER_WIDTH = 1854;
 export const PARENT_REMINDER_HEIGHT = 2400;
@@ -32,6 +28,5 @@ export const PARENT_REMINDER_ASSET: Record<
 > = {
   sunscreen: { attachmentName: "nsdc_sunscreen_reminder.jpg", embedKey: "sunscreen" },
   extra_clothes: { attachmentName: "nsdc_extra_clothing_reminder.jpg", embedKey: "extra_clothes" },
-  water_bottle: { attachmentName: "nsdc_water_bottle_reminder.jpg", embedKey: "water_bottle" },
-  rain_gear: { attachmentName: "nsdc_rain_gear_reminder.jpg", embedKey: "rain_gear" },
+  goggles: { attachmentName: "nsdc_goggles_reminder.jpg", embedKey: "goggles" },
 };
