@@ -9,7 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Printer, Share2 } from "lucide-react";
+import { FileDown, FileText, Printer, Share2 } from "lucide-react";
+import { TransportReportPreviewDialog, type TransportReportPreview } from "@/components/TransportReportPreviewDialog";
+import {
+  buildCamperSheetMetaLookup,
+  buildMasterChangeSheetPdf,
+  mapRowsToMasterChangeSheetPdf,
+} from "@/lib/transportChangeSheetPdf";
 import {
   fetchTransportExceptions,
   loadManualOverrides,
@@ -44,6 +50,9 @@ export default function TransportChangeSheets() {
   >([]);
   const [rows, setRows] = useState<TransportChangeSheetRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [camperMetaLookup, setCamperMetaLookup] = useState(() => new Map());
+  const [totalCampers, setTotalCampers] = useState<number | undefined>(undefined);
+  const [reportPreview, setReportPreview] = useState<TransportReportPreview | null>(null);
 
   const routeIdsKey = useMemo(() => routeMeta.map((r) => r.id).join(","), [routeMeta]);
 
@@ -134,9 +143,27 @@ export default function TransportChangeSheets() {
     sheetDate,
   ]);
 
+  const loadCamperMeta = useCallback(async () => {
+    if (!currentCompany?.id) {
+      setCamperMetaLookup(new Map());
+      setTotalCampers(undefined);
+      return;
+    }
+    const { data } = await supabase
+      .from("children")
+      .select("name, group_name, grade, division:division_id(name)")
+      .eq("company_id", currentCompany.id)
+      .eq("season", currentSeason)
+      .neq("status", "inactive");
+    const list = data ?? [];
+    setCamperMetaLookup(buildCamperSheetMetaLookup(list));
+    setTotalCampers(list.length);
+  }, [currentCompany?.id, currentSeason]);
+
   useEffect(() => {
     void loadBoard();
-  }, [loadBoard]);
+    void loadCamperMeta();
+  }, [loadBoard, loadCamperMeta]);
 
   useEffect(() => {
     if (routeMeta.length || Object.keys(coreStops).length) void loadSheet();
@@ -179,6 +206,28 @@ export default function TransportChangeSheets() {
     setIncludeParentTransport(true);
   };
 
+  const downloadPdf = () => {
+    if (!rows.length || !currentCompany?.name) return;
+    const pdfRows = mapRowsToMasterChangeSheetPdf(rows, camperMetaLookup);
+    const built = buildMasterChangeSheetPdf({
+      companyName: currentCompany.name,
+      season: currentSeason,
+      sheetDate,
+      runPeriod: runPeriod.toUpperCase(),
+      totalCampers,
+      rows: pdfRows,
+    });
+    if (!built) return;
+    setReportPreview({
+      open: true,
+      title: "Master Change Sheet",
+      description: `${sheetDate} · ${runPeriod.toUpperCase()} · ${routeLabel}`,
+      kind: "pdf",
+      blob: built.blob,
+      filename: built.filename,
+    });
+  };
+
   const downloadCsv = () => {
     if (!rows.length) return;
     const csv = changeSheetRowsToCsv(rows);
@@ -218,7 +267,10 @@ export default function TransportChangeSheets() {
             <h1 className="text-2xl font-bold">Master Change Sheet</h1>
             <p className="text-sm text-muted-foreground print:text-foreground">
               Daily transport changes for drivers — select all buses or pick specific buses · season{" "}
-              {currentSeason}
+              {currentSeason}.{" "}
+              <Link to="/day-camp/transport-reports" className="text-primary underline-offset-2 hover:underline">
+                Group &amp; bus print reports
+              </Link>
             </p>
           </div>
         </div>
@@ -301,6 +353,15 @@ export default function TransportChangeSheets() {
           <div className="flex flex-wrap items-center gap-2 border-t pt-4">
             <Button
               size="sm"
+              onClick={downloadPdf}
+              disabled={!rows.length || (!selectedRouteIds.length && !includeParentTransport)}
+            >
+              <FileDown className="mr-2 h-4 w-4" />
+              Download PDF
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               onClick={downloadCsv}
               disabled={!rows.length || (!selectedRouteIds.length && !includeParentTransport)}
             >
@@ -384,6 +445,11 @@ export default function TransportChangeSheets() {
           )}
         </CardContent>
       </Card>
+
+      <TransportReportPreviewDialog
+        preview={reportPreview}
+        onOpenChange={(open) => setReportPreview((prev) => (prev ? { ...prev, open } : null))}
+      />
     </div>
   );
 }

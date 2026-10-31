@@ -618,7 +618,7 @@ export type TransportReportPdf = {
   filename: string;
 };
 
-function triggerBlobDownload(blob: Blob, filename: string) {
+export function triggerBlobDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -697,6 +697,7 @@ export function buildDayBusBubbleSheetPdf(options: {
   date: string;
   enrollmentWeek?: number;
   weekDateRange?: string;
+  filename?: string;
   routes: {
     bus: string;
     routeName: string;
@@ -730,7 +731,7 @@ export function buildDayBusBubbleSheetPdf(options: {
   const safeDate = options.date.replace(/[^0-9-]/g, "");
   return {
     blob: doc.output("blob"),
-    filename: `bus-bubble-sheet-${safeDate}.pdf`,
+    filename: options.filename ?? `bus-bubble-sheet-${safeDate}.pdf`,
   };
 }
 
@@ -739,6 +740,7 @@ export function buildGroupBubbleSheetPdf(options: {
   enrollmentWeek: number;
   weekDateRange?: string;
   weekDays: WeekDayColumn[];
+  filename?: string;
   groups: {
     groupName: string;
     campers: BubbleSheetCamper[];
@@ -767,9 +769,12 @@ export function buildGroupBubbleSheetPdf(options: {
     GROUP_PRESENT_INSTRUCTION,
   );
 
+  const defaultName = options.groups.length === 1
+    ? `group-bubble-${options.groups[0].groupName.replace(/\s+/g, "-")}-week-${options.enrollmentWeek}.pdf`
+    : `group-bubble-sheet-week-${options.enrollmentWeek}.pdf`;
   return {
     blob: doc.output("blob"),
-    filename: `group-bubble-sheet-week-${options.enrollmentWeek}.pdf`,
+    filename: options.filename ?? defaultName,
   };
 }
 

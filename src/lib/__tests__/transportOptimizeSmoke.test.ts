@@ -49,7 +49,7 @@ describe("transport optimize smoke", () => {
     expect(sandsStop?.passengers).toBe(2);
 
     const lines = routeStopListLines(sandsStop!, { isCamp: false });
-    expect(lines.title).toBe("Jack Lovens, Noa Lovens");
+    expect(lines.title).toBe("Jack & Noa Lovens");
     expect(lines.subtitle).toContain("Sands");
     expect(lines.isOpenStop).toBe(false);
     expect(lines.subtitle).not.toContain("Open stop");

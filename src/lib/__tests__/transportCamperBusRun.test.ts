@@ -17,6 +17,27 @@ describe("transportCamperBusRun", () => {
     expect(camperScheduledForBusRun("am_only", "pm")).toBe(false);
   });
 
+  it("builds routes when enrollmentLookup is omitted", () => {
+    const stop = {
+      name: "Todd",
+      address: "1 Main St",
+      lat: 0,
+      lng: 0,
+      passengers: 1,
+      camperNames: ["Todd"],
+    };
+    const routes = buildBusBubbleSheetRoutes({
+      routes: [{ id: 2, bus: "Bus 02", routeName: "Route B" }],
+      baseCoreByRoute: () => [stop],
+      coreForRun: () => [stop],
+      schedules: {},
+      runDate: "2027-07-06",
+      enrollmentWeek: 2,
+      enrollmentLookup: undefined,
+    });
+    expect(routes).toHaveLength(1);
+  });
+
   it("marks PM bubble off for mini day on the bus sheet", () => {
     const routes = buildBusBubbleSheetRoutes({
       routes: [{ id: 1, bus: "Bus 10", routeName: "Route A" }],

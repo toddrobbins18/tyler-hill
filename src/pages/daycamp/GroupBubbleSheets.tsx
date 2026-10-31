@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { CalendarDays, ClipboardList, Printer, Users } from "lucide-react";
+import { Link } from "react-router-dom";
+import { CalendarDays, ClipboardList, Download, Printer, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -22,7 +23,7 @@ import {
   type EnrollmentWeekRow,
 } from "@/lib/enrollmentWeekCalendar";
 import { loadGroupRoster, type GroupRosterCamper } from "@/lib/transportGroupAttendance";
-import { buildGroupBubbleSheetPdf } from "@/lib/transportBubbleSheetPdf";
+import { buildGroupBubbleSheetPdf, triggerBlobDownload } from "@/lib/transportBubbleSheetPdf";
 import { TransportReportPreviewDialog, type TransportReportPreview } from "@/components/TransportReportPreviewDialog";
 import { FrontOfficeBackLink } from "@/components/daycamp/FrontOfficeBackLink";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -171,17 +172,17 @@ export default function GroupBubbleSheets() {
     void loadCalendar();
   };
 
-  const handlePrint = () => {
-    const groupsSource =
-      selectedGroup === ALL_GROUPS
-        ? rosterByGroup
-        : rosterByGroup.filter(([name]) => name === selectedGroup);
-
-    const groups = groupsSource.map(([groupName, campers]) => ({
+  const buildGroupsPayload = (groupsSource: [string, GroupRosterCamper[]][]) =>
+    groupsSource.map(([groupName, campers]) => ({
       groupName,
       campers: campers.map((c) => ({ name: c.name, detail: groupName })),
     }));
 
+  const openGroupPdfPreview = (
+    groupsSource: [string, GroupRosterCamper[]][],
+    titleSuffix: string,
+  ) => {
+    const groups = buildGroupsPayload(groupsSource);
     const built = buildGroupBubbleSheetPdf({
       companyName: currentCompany?.name ?? "Day Camp",
       enrollmentWeek: selectedWeek,
@@ -200,10 +201,44 @@ export default function GroupBubbleSheets() {
     setReportPreview({
       open: true,
       title: "Group Attendance Bubble Sheet",
-      description: formatEnrollmentWeekLabel(selectedWeek, displayCalendar),
+      description: `${formatEnrollmentWeekLabel(selectedWeek, displayCalendar)} · ${titleSuffix}`,
       kind: "pdf",
       blob: built.blob,
       filename: built.filename,
+    });
+  };
+
+  const handlePrint = () => {
+    const groupsSource =
+      selectedGroup === ALL_GROUPS
+        ? rosterByGroup
+        : rosterByGroup.filter(([name]) => name === selectedGroup);
+    openGroupPdfPreview(groupsSource, selectedGroup === ALL_GROUPS ? "All groups" : selectedGroup);
+  };
+
+  const handlePrintOneGroup = (groupName: string, campers: GroupRosterCamper[]) => {
+    openGroupPdfPreview([[groupName, campers]], groupName);
+  };
+
+  const handleDownloadAllGroups = () => {
+    if (!rosterByGroup.length) return;
+    rosterByGroup.forEach(([groupName, campers], index) => {
+      window.setTimeout(() => {
+        const built = buildGroupBubbleSheetPdf({
+          companyName: currentCompany?.name ?? "Day Camp",
+          enrollmentWeek: selectedWeek,
+          weekDateRange: selectedWeekDates.row
+            ? formatEnrollmentWeekRange(selectedWeekDates.row)
+            : undefined,
+          weekDays: enrollmentWeekDayColumns(selectedWeekDates.row),
+          groups: buildGroupsPayload([[groupName, campers]]),
+        });
+        if (built) triggerBlobDownload(built.blob, built.filename);
+      }, index * 450);
+    });
+    toast({
+      title: "Downloading group PDFs",
+      description: `${rosterByGroup.length} file${rosterByGroup.length === 1 ? "" : "s"} — check your downloads folder.`,
     });
   };
 
@@ -217,7 +252,10 @@ export default function GroupBubbleSheets() {
           <Users className="h-6 w-6" /> Group Bubble Sheets
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Print team attendance sheets filtered by enrollment week — one Present bubble per camper (reuse daily).
+          Print team attendance sheets filtered by enrollment week — one Present bubble per camper (reuse daily).{" "}
+          <Link to="/day-camp/transport-reports" className="text-primary underline-offset-2 hover:underline">
+            Full group reports (parent contacts)
+          </Link>
         </p>
       </div>
 
@@ -343,8 +381,19 @@ export default function GroupBubbleSheets() {
 
             <Button onClick={handlePrint} disabled={rosterLoading || !roster.length}>
               <Printer className="mr-2 h-4 w-4" />
-              Print bubble sheet
+              Preview PDF
             </Button>
+            {selectedGroup === ALL_GROUPS && rosterByGroup.length > 1 ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleDownloadAllGroups}
+                disabled={rosterLoading || !roster.length}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Download each group PDF
+              </Button>
+            ) : null}
           </div>
 
           {selectedWeekDates.row ? (
@@ -372,9 +421,21 @@ export default function GroupBubbleSheets() {
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {rosterByGroup.map(([groupName, campers]) => (
-                <div key={groupName} className="rounded-md border p-3">
-                  <p className="font-medium">{groupName}</p>
-                  <p className="text-xs text-muted-foreground">{campers.length} campers</p>
+                <div key={groupName} className="rounded-md border p-3 flex flex-col gap-2">
+                  <div>
+                    <p className="font-medium">{groupName}</p>
+                    <p className="text-xs text-muted-foreground">{campers.length} campers</p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="w-full"
+                    onClick={() => handlePrintOneGroup(groupName, campers)}
+                  >
+                    <Download className="mr-2 h-3.5 w-3.5" />
+                    PDF
+                  </Button>
                 </div>
               ))}
             </div>

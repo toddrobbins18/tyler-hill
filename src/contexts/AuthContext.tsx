@@ -200,6 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         menuItem === "group-attendance" ||
         menuItem === "group-bubble-sheets" ||
         menuItem === "change-sheets" ||
+        menuItem === "transport-reports" ||
         menuItem === "pending-transport-changes" ||
         menuItem === "transport-admin" ||
         menuItem === "front-office") &&

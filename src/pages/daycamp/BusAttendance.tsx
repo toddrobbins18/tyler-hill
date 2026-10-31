@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { ClipboardList, Moon, Printer, Sun } from "lucide-react";
+import { ClipboardList, Download, Moon, Printer, Sun } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useCampOperationalDate } from "@/hooks/useCampOperationalDate";
@@ -27,7 +27,7 @@ import {
 import { campersOnRouteForWeek, weekContextForNumber } from "@/lib/transportBusRunContext";
 import { formatEnrollmentWeekLabel } from "@/lib/enrollmentWeekCalendar";
 import { buildBusBubbleSheetRoutes } from "@/lib/transportCamperBusRun";
-import { buildDayBusBubbleSheetPdf } from "@/lib/transportBubbleSheetPdf";
+import { buildDayBusBubbleSheetPdf, triggerBlobDownload } from "@/lib/transportBubbleSheetPdf";
 import { consolidateRouteStopsByAddress } from "@/lib/transportRouteStops";
 import { getEffectiveCoreStops } from "@/lib/transportRunBoard";
 import { TransportReportPreviewDialog, type TransportReportPreview } from "@/components/TransportReportPreviewDialog";
@@ -251,6 +251,28 @@ export default function BusAttendance() {
     });
   };
 
+  const buildBubbleSheetRoutes = useCallback(
+    (routeList: typeof selectedRoutes) => {
+      if (!board || !activeWeek || !enrollmentCtx) return [];
+      return buildBusBubbleSheetRoutes({
+        routes: routeList.map((route) => ({
+          id: route.id,
+          bus: route.bus,
+          routeName: route.name,
+        })),
+        baseCoreByRoute: (routeId) =>
+          consolidateRouteStopsByAddress(board.coreStops[routeId] ?? []),
+        coreForRun: (routeId, period) => getEffectiveCoreStops(board, routeId, period),
+        schedules: board.camperBusRunSchedules,
+        runDate,
+        parentTransportCampers: board.parentTransportCampers,
+        enrollmentWeek: activeWeek,
+        enrollmentLookup: enrollmentCtx?.enrollmentLookup,
+      });
+    },
+    [activeWeek, board, enrollmentCtx, runDate],
+  );
+
   const handleBubbleSheet = useCallback(() => {
     if (!board || !selectedRoutes.length) {
       toast({ title: "No buses selected", variant: "destructive" });
@@ -265,21 +287,7 @@ export default function BusAttendance() {
       return;
     }
 
-    const sheetRoutes = buildBusBubbleSheetRoutes({
-      routes: selectedRoutes.map((route) => ({
-        id: route.id,
-        bus: route.bus,
-        routeName: route.name,
-      })),
-      baseCoreByRoute: (routeId) =>
-        consolidateRouteStopsByAddress(board.coreStops[routeId] ?? []),
-      coreForRun: (routeId, period) => getEffectiveCoreStops(board, routeId, period),
-      schedules: board.camperBusRunSchedules,
-      runDate,
-      parentTransportCampers: board.parentTransportCampers,
-      enrollmentWeek: activeWeek,
-      enrollmentLookup: enrollmentCtx.enrollmentLookup,
-    });
+    const sheetRoutes = buildBubbleSheetRoutes(selectedRoutes);
 
     const built = buildDayBusBubbleSheetPdf({
       companyName: currentCompany?.name ?? "Day Camp",
@@ -305,15 +313,58 @@ export default function BusAttendance() {
       filename: built.filename,
     });
   }, [
-    board,
-    selectedRoutes,
     activeWeek,
     activeWeekContext,
-    enrollmentCtx,
-    runDate,
-    routes.length,
-    toast,
+    board,
+    buildBubbleSheetRoutes,
     currentCompany?.name,
+    routes.length,
+    runDate,
+    selectedRoutes,
+    toast,
+  ]);
+
+  const handleBubbleSheetEachBus = useCallback(() => {
+    if (!board || !selectedRoutes.length) {
+      toast({ title: "No buses selected", variant: "destructive" });
+      return;
+    }
+    if (activeWeek == null || !activeWeekContext) {
+      toast({
+        title: "Enrollment week calendar required",
+        description: "Set week start/end dates under Group Bubble Sheets, then pick a week above.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const safeDate = runDate.replace(/[^0-9-]/g, "");
+    selectedRoutes.forEach((route, index) => {
+      window.setTimeout(() => {
+        const sheetRoutes = buildBubbleSheetRoutes([route]);
+        const built = buildDayBusBubbleSheetPdf({
+          companyName: currentCompany?.name ?? "Day Camp",
+          date: runDate,
+          enrollmentWeek: activeWeek,
+          weekDateRange: activeWeekContext.weekDateRange ?? undefined,
+          routes: sheetRoutes,
+          filename: `bus-bubble-${safeDate}-${route.bus.replace(/\s+/g, "-")}.pdf`,
+        });
+        if (built) triggerBlobDownload(built.blob, built.filename);
+      }, index * 450);
+    });
+    toast({
+      title: "Downloading bus PDFs",
+      description: `${selectedRoutes.length} file${selectedRoutes.length === 1 ? "" : "s"}.`,
+    });
+  }, [
+    activeWeek,
+    activeWeekContext,
+    board,
+    buildBubbleSheetRoutes,
+    currentCompany?.name,
+    runDate,
+    selectedRoutes,
+    toast,
   ]);
 
   const submittedCount = routes.filter((r) => isRouteBusSubmitted(r.id, busSubmissions)).length;
@@ -339,18 +390,36 @@ export default function BusAttendance() {
             <Link to="/day-camp/bus-check-ins" className="text-primary underline-offset-2 hover:underline">
               Bus Check-ins
             </Link>
+            {" · "}
+            <Link to="/day-camp/transport-reports" className="text-primary underline-offset-2 hover:underline">
+              Bus roster &amp; route PDFs
+            </Link>
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          onClick={handleBubbleSheet}
-          disabled={!selectedRoutes.length}
-        >
-          <Printer className="h-3.5 w-3.5" /> Print weekly bubble sheet
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={handleBubbleSheet}
+            disabled={!selectedRoutes.length}
+          >
+            <Printer className="h-3.5 w-3.5" /> Preview bubble PDF
+          </Button>
+          {selectedRoutes.length > 1 ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="gap-1.5"
+              onClick={handleBubbleSheetEachBus}
+              disabled={!selectedRoutes.length}
+            >
+              <Download className="h-3.5 w-3.5" /> Download each bus PDF
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {!boardLoading && routes.length === 0 ? (

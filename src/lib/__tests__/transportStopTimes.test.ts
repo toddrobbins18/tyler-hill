@@ -28,12 +28,14 @@ describe("transportStopTimes", () => {
   });
 
   it("buildAMStops adds dwell time so nearby stops do not share the same clock time", () => {
+    const lat = 40.88;
+    const lng = -73.64;
     const stops = buildAMStops(
       [
-        { name: "A", address: "a", lat: 40.88, lng: -73.64, pickupTime: "", passengers: 1 },
-        { name: "B", address: "b", lat: 40.881, lng: -73.641, pickupTime: "", passengers: 1 },
-        { name: "C", address: "c", lat: 40.885, lng: -73.645, pickupTime: "", passengers: 1 },
-        { name: "D", address: "d", lat: 40.89, lng: -73.65, pickupTime: "", passengers: 1 },
+        { name: "A", address: "a", lat, lng, pickupTime: "", passengers: 1 },
+        { name: "B", address: "b", lat, lng, pickupTime: "", passengers: 1 },
+        { name: "C", address: "c", lat, lng, pickupTime: "", passengers: 1 },
+        { name: "D", address: "d", lat, lng, pickupTime: "", passengers: 1 },
       ],
       "7:00 AM",
     );

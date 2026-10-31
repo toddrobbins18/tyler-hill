@@ -330,7 +330,7 @@ export function routeStopListLines(
 
   if (names.length > 0) {
     return {
-      title: names.join(", "),
+      title: formatHouseholdStopTitle(names),
       subtitle:
         pending.length > 0
           ? `${street} · ${pending.length} more unassigned at this address`

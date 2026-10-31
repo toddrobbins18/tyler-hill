@@ -561,7 +561,8 @@ const persistBoardCache = (companyId: string, season: string, payload: BoardPayl
 };
 
 const dayCampReports = [
-  { name: "Master Change Sheet", desc: "All buses or pick specific buses — absences, changes, and attendance", href: "/day-camp/change-sheets" },
+  { name: "Master Change Sheet", desc: "Daily changes PDF (CampMinder-style) — buses + PT", href: "/day-camp/change-sheets" },
+  { name: "Transport Print Reports", desc: "Group reports, bus rosters, and route summary PDFs (pick groups/buses)", href: "/day-camp/transport-reports" },
   { name: "Transport Exceptions", desc: "Absences, swim, office changes, and manual route edits for this date" },
   { name: "Bus Bubble Sheet", desc: "Per bus: AM & PM bubbles per camper. X = not on that run (mini day, PM-only, or today’s exception)" },
   { name: "Group Bubble Sheet", desc: "Everyone enrolled in the group this week. Exceptions are never removed" },

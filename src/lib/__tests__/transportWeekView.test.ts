@@ -53,9 +53,8 @@ describe("transportWeekView", () => {
       ],
       roster,
     );
-    expect(routes[0]?.stops).toHaveLength(2);
+    expect(routes[0]?.stops).toHaveLength(1);
     expect(routes[0]?.stops[0]?.camperNames).toEqual(["Enrolled Kid"]);
-    expect(routes[0]?.stops[1]?.camperNames).toEqual([]);
   });
 
   it("filters unplotted list to current season roster", () => {
@@ -117,11 +116,10 @@ describe("transportWeekView", () => {
       lookup,
     );
 
-    expect(routes[0]?.stops).toHaveLength(3);
+    expect(routes[0]?.stops).toHaveLength(2);
     expect(routes[0]?.stops[0]?.camperNames).toEqual(["Enrolled Kid"]);
-    const otherWeekStop = routes[0]?.stops.find((s) => s.address === "2 Oak Ave");
-    expect(otherWeekStop?.camperNames).toEqual([]);
-    expect(otherWeekStop?.passengers).toBe(0);
+    expect(routes[0]?.stops.find((s) => s.address === "2 Oak Ave")).toBeUndefined();
+    expect(routes[0]?.stops.some((s) => s.address === CAMP_LOCATION.address)).toBe(true);
   });
 
   it("filters unplotted campers by enrollment week", () => {
