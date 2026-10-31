@@ -63,10 +63,32 @@ export type GeocodeCacheEntry = { lat: number; lng: number; provider?: string };
 
 const bundledGeocodeMap = bundledGeocodes2026 as Record<string, BundledGeocode>;
 
+const normGeocodeKey = (address: string) =>
+  address.trim().toLowerCase().replace(/\s+/g, " ");
+
 /** Pre-geocoded MapPoint addresses — instant import, no API calls in production. */
 export function lookupBundledMappointGeocode(address: string): BundledGeocode | null {
-  const hit = bundledGeocodeMap[address.trim().toLowerCase()];
+  const hit = bundledGeocodeMap[normGeocodeKey(address)];
   return hit?.lat != null && hit?.lng != null ? hit : null;
+}
+
+/** Match "121 Salem Rd" to bundled "121 salem rd, roslyn heights, ny 11577". */
+export function lookupBundledMappointGeocodeFuzzy(address: string): BundledGeocode | null {
+  const exact = lookupBundledMappointGeocode(address);
+  if (exact) return exact;
+
+  const norm = normGeocodeKey(address);
+  if (!norm) return null;
+
+  const streetOnly = norm.split(",")[0]?.trim() ?? norm;
+  if (streetOnly.length < 5) return null;
+
+  for (const [key, hit] of Object.entries(bundledGeocodeMap)) {
+    if (key === streetOnly || key.startsWith(`${streetOnly},`)) {
+      if (hit?.lat != null && hit?.lng != null) return hit;
+    }
+  }
+  return null;
 }
 
 /** Resolve from bundled MapPoint cache (377 North Shore AM stops). */
@@ -75,7 +97,7 @@ export function resolveBundledGeocodeResult(address: string): {
   lng: number;
   provider: "ors" | "nominatim" | "census";
 } | null {
-  const hit = lookupBundledMappointGeocode(address);
+  const hit = lookupBundledMappointGeocodeFuzzy(address);
   if (!hit) return null;
   const provider = hit.provider === "nominatim" || hit.provider === "census" ? hit.provider : "ors";
   return { lat: hit.lat, lng: hit.lng, provider };

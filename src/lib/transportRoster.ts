@@ -168,7 +168,7 @@ export async function normalizeTransportBoardForSeason(
 
   return {
     ...board,
-    coreStops: addressFixed.coreStops,
+    coreStops: backfillRouteStopCoordinates(addressFixed.coreStops),
     parentTransportCampers,
     unplottedCampers: addressFixed.unplottedCampers,
   };
@@ -586,8 +586,12 @@ function buildRouteStopForRiders(
   let lat = template.lat;
   let lng = template.lng;
   if (addressChanged) {
-    lat = bundled?.lat ?? 0;
-    lng = bundled?.lng ?? 0;
+    lat = bundled?.lat ?? lat;
+    lng = bundled?.lng ?? lng;
+    if (!isValidRouteCoordinate(lat, lng)) {
+      lat = 0;
+      lng = 0;
+    }
   } else if (!isValidRouteCoordinate(lat, lng) && bundled) {
     lat = bundled.lat;
     lng = bundled.lng;
@@ -720,13 +724,39 @@ export function fixBoardAddressesFromEnrollment(options: {
     };
   });
 
+  const coreWithCoords = backfillRouteStopCoordinates(coreStops);
+  const unplottedWithCoords = unplottedCampers.map((camper) => backfillUnplottedCoordinates(camper));
+
   return {
-    coreStops,
-    unplottedCampers,
+    coreStops: coreWithCoords,
+    unplottedCampers: unplottedWithCoords,
     fixedStopCount,
     fixedUnplottedCount,
     splitStopCount,
   };
+}
+
+function backfillUnplottedCoordinates(camper: TransportUnplottedCamper): TransportUnplottedCamper {
+  if (isValidRouteCoordinate(camper.lat, camper.lng)) return camper;
+  const bundled = resolveBundledGeocodeResult(camper.address || "");
+  if (!bundled) return camper;
+  return { ...camper, lat: bundled.lat, lng: bundled.lng };
+}
+
+/** Fill lat/lng from bundled MapPoint geocodes when pins would be missing on the map. */
+export function backfillRouteStopCoordinates(
+  coreStops: Record<number, TransportRouteStop[]>,
+): Record<number, TransportRouteStop[]> {
+  const out: Record<number, TransportRouteStop[]> = {};
+  for (const [routeId, stops] of Object.entries(coreStops)) {
+    out[Number(routeId)] = (stops ?? []).map((stop) => {
+      if (isValidRouteCoordinate(stop.lat, stop.lng)) return stop;
+      const bundled = resolveBundledGeocodeResult(stop.address || "");
+      if (!bundled) return stop;
+      return { ...stop, lat: bundled.lat, lng: bundled.lng };
+    });
+  }
+  return out;
 }
 
 /** Names currently assigned to any route stop. */
