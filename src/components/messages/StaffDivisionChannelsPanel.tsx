@@ -15,13 +15,19 @@ import {
 import { messageContentPreview } from "@/lib/messageContentUtils";
 import { formatCampDateTime } from "@/lib/campTime";
 import { toast } from "sonner";
+import { compareDayCampProgramDivisionsByName } from "@/lib/divisionFilterUtils";
 
 type Props = {
   companyId: string;
+  dayCampDivisionSort?: boolean;
   onUnreadTotalChange?: (total: number) => void;
 };
 
-export function StaffDivisionChannelsPanel({ companyId, onUnreadTotalChange }: Props) {
+export function StaffDivisionChannelsPanel({
+  companyId,
+  dayCampDivisionSort = false,
+  onUnreadTotalChange,
+}: Props) {
   const [rows, setRows] = useState<DivisionChannelRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<{ rootId: string; name: string } | null>(null);
@@ -31,11 +37,16 @@ export function StaffDivisionChannelsPanel({ companyId, onUnreadTotalChange }: P
     setLoading(true);
     const { rows: list, error } = await listStaffDivisionChannels(supabase, companyId);
     if (error) toast.error(error);
-    setRows(list);
+    const sorted = dayCampDivisionSort
+      ? [...list].sort((a, b) =>
+          compareDayCampProgramDivisionsByName(a.division_name, b.division_name),
+        )
+      : list;
+    setRows(sorted);
     const total = list.reduce((n, r) => n + (r.unread_for_staff ?? 0), 0);
     onUnreadTotalChange?.(total);
     setLoading(false);
-  }, [companyId, onUnreadTotalChange]);
+  }, [companyId, dayCampDivisionSort, onUnreadTotalChange]);
 
   useEffect(() => {
     void refresh();

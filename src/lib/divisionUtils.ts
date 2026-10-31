@@ -2,6 +2,8 @@
  * Utility functions for division sorting and management
  */
 
+import { compareDayCampProgramDivisionsByName } from "@/lib/divisionFilterUtils";
+
 export interface Division {
   id: string;
   name: string;
@@ -24,6 +26,21 @@ export const sortDivisionsGirlsFirst = (divisions: Division[]): Division[] => {
  * e.g., Freshmen A Girls, Freshmen A Boys, Freshmen B Girls, Freshmen B Boys, Cadet Girls, Cadet Boys...
  * Groups by base name (without gender suffix), then alternates Girls/Boys within each group.
  */
+/** North Shore day camp: Nursery → 1/2 → 3/4 → Crew → CIT, then Girls/Boys within tier. */
+export const sortDayCampDivisions = (divisions: Division[]): Division[] => {
+  return [...divisions].sort((a, b) => {
+    const byProgram = compareDayCampProgramDivisionsByName(a.name, b.name);
+    if (byProgram !== 0) return byProgram;
+    const aIsGirls =
+      a.gender?.toLowerCase() === "girls" || a.name.toLowerCase().includes("girls");
+    const bIsGirls =
+      b.gender?.toLowerCase() === "girls" || b.name.toLowerCase().includes("girls");
+    if (aIsGirls && !bIsGirls) return -1;
+    if (!aIsGirls && bIsGirls) return 1;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  });
+};
+
 export const sortDivisionsAlternatingGender = (divisions: Division[]): Division[] => {
   // Extract base name by removing " Girls" or " Boys" suffix
   const getBaseName = (name: string): string => {

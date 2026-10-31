@@ -15,7 +15,7 @@ import { useSeasonContext } from "@/contexts/SeasonContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { lookupChildByRfid, normalizeRfidInput } from "@/lib/rfidUtils";
 import { useCompany } from "@/contexts/CompanyContext";
-import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
+import { sortDayCampDivisions, sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import {
   camperMatchesDayCampDivisionFilter,
   camperMatchesDivisionFilter,
@@ -153,7 +153,9 @@ export default function Roster() {
       .eq('is_active', true);
     
     if (data) {
-      setDivisions(sortDivisionsAlternatingGender(data));
+      setDivisions(
+        isDayCamp ? sortDayCampDivisions(data) : sortDivisionsAlternatingGender(data),
+      );
     }
   };
 

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
+import { isDayCampCompany } from "@/lib/camps";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -759,6 +760,7 @@ export default function Messages() {
       {viewMode === 'channels' && currentCompany?.id ? (
         <StaffDivisionChannelsPanel
           companyId={currentCompany.id}
+          dayCampDivisionSort={isDayCampCompany(currentCompany)}
           onUnreadTotalChange={setChannelsUnreadCount}
         />
       ) : null}

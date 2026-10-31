@@ -103,9 +103,13 @@ function ordinalGradeKey(n: number): DayCampGradeSortKey | null {
   return DAY_CAMP_GRADE_SORT_KEYS.includes(key) ? key : null;
 }
 
+function stripDayCampGenderSuffix(value: string): string {
+  return value.replace(/\s+(boys?|girls?)\s*$/i, "").trim();
+}
+
 /** Normalize division/grade labels to a shared day-camp grade bucket. */
 export function normalizeDayCampGradeKey(value?: string | null): DayCampGradeSortKey | null {
-  const raw = (value ?? "").trim().toLowerCase();
+  const raw = stripDayCampGenderSuffix((value ?? "").trim()).toLowerCase();
   if (!raw) return null;
 
   const compact = raw.replace(/\s+/g, " ").replace(/\s-\s/g, "-");
@@ -137,6 +141,101 @@ export function getDayCampGradeSortIndex(value?: string | null): number {
   return idx >= 0 ? idx : 9999;
 }
 
+/** North Shore program tiers: 1/2, 3/4, Crew (5–8), CIT (9). */
+export const DAY_CAMP_PROGRAM_DIVISION_KEYS = [
+  "nursery",
+  "pre-k",
+  "kindergarten",
+  "half-12",
+  "half-34",
+  "crew",
+  "cit",
+] as const;
+
+export type DayCampProgramDivisionKey = (typeof DAY_CAMP_PROGRAM_DIVISION_KEYS)[number];
+
+const DAY_CAMP_PROGRAM_DIVISION_DISPLAY: Record<DayCampProgramDivisionKey, string> = {
+  nursery: "Nursery",
+  "pre-k": "Pre - K",
+  kindergarten: "Kindergarten",
+  "half-12": "1/2",
+  "half-34": "3/4",
+  crew: "Crew",
+  cit: "CIT",
+};
+
+const DAY_CAMP_PROGRAM_DIVISION_SORT: Record<DayCampProgramDivisionKey, number> = {
+  nursery: 0,
+  "pre-k": 1,
+  kindergarten: 2,
+  "half-12": 3,
+  "half-34": 4,
+  crew: 5,
+  cit: 6,
+};
+
+function compactDayCampLabel(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Map division/grade labels to Todd's program buckets (1/2, 3/4, Crew, CIT). */
+export function resolveDayCampProgramDivisionKey(
+  value?: string | null,
+): DayCampProgramDivisionKey | null {
+  const raw = compactDayCampLabel(stripDayCampGenderSuffix(value ?? ""));
+  if (!raw) return null;
+
+  if (/\bcit\b/.test(raw)) return "cit";
+  if (/\bcrew\b/.test(raw)) return "crew";
+
+  const squashed = raw.replace(/\s/g, "").replace(/-/g, "");
+  if (squashed === "1/2" || squashed === "12") return "half-12";
+  if (squashed === "3/4" || squashed === "34") return "half-34";
+
+  const gradeKey = normalizeDayCampGradeKey(value);
+  if (!gradeKey) return null;
+
+  if (gradeKey === "nursery") return "nursery";
+  if (gradeKey === "pre-k") return "pre-k";
+  if (gradeKey === "kindergarten") return "kindergarten";
+  if (gradeKey === "1st" || gradeKey === "2nd") return "half-12";
+  if (gradeKey === "3rd" || gradeKey === "4th") return "half-34";
+  if (
+    gradeKey === "5th" ||
+    gradeKey === "6th" ||
+    gradeKey === "7th" ||
+    gradeKey === "8th"
+  ) {
+    return "crew";
+  }
+  if (gradeKey === "9th") return "cit";
+
+  return null;
+}
+
+export function getDayCampProgramDivisionSortIndex(value?: string | null): number {
+  const key = resolveDayCampProgramDivisionKey(value);
+  if (!key) return 9999;
+  return DAY_CAMP_PROGRAM_DIVISION_SORT[key];
+}
+
+export function getDayCampProgramDivisionDisplay(value?: string | null): string {
+  const key = resolveDayCampProgramDivisionKey(value);
+  if (key) return DAY_CAMP_PROGRAM_DIVISION_DISPLAY[key];
+  return (value ?? "").trim();
+}
+
+export function compareDayCampProgramDivisionsByName(
+  nameA?: string | null,
+  nameB?: string | null,
+): number {
+  const prog = getDayCampProgramDivisionSortIndex(nameA) - getDayCampProgramDivisionSortIndex(nameB);
+  if (prog !== 0) return prog;
+  const byGrade = getDayCampGradeSortIndex(nameA) - getDayCampGradeSortIndex(nameB);
+  if (byGrade !== 0) return byGrade;
+  return (nameA ?? "").localeCompare(nameB ?? "", undefined, { sensitivity: "base" });
+}
+
 /** Prefer Camp Grade on the child when division is a bunk/group label (Paris, etc.). */
 export function resolveDayCampGradeSortLabel(
   divisionName?: string | null,
@@ -157,6 +256,9 @@ export function compareDayCampGradesByLabels(
 ): number {
   const labelA = resolveDayCampGradeSortLabel(divisionNameA, gradeA);
   const labelB = resolveDayCampGradeSortLabel(divisionNameB, gradeB);
+  const byProgram =
+    getDayCampProgramDivisionSortIndex(labelA) - getDayCampProgramDivisionSortIndex(labelB);
+  if (byProgram !== 0) return byProgram;
   const byGrade = getDayCampGradeSortIndex(labelA) - getDayCampGradeSortIndex(labelB);
   if (byGrade !== 0) return byGrade;
   return labelA.localeCompare(labelB, undefined, { sensitivity: "base" });
@@ -182,6 +284,8 @@ export function getCanonicalDayCampGradeDisplay(
 export function getDayCampDivisionDropdownLabel(name?: string | null): string {
   const key = normalizeDayCampGradeKey(name);
   if (key) return DAY_CAMP_GRADE_DISPLAY[key];
+  const program = resolveDayCampProgramDivisionKey(name);
+  if (program) return DAY_CAMP_PROGRAM_DIVISION_DISPLAY[program];
   return getDivisionDropdownLabel(name);
 }
 
@@ -195,27 +299,31 @@ type DayCampCamperDivisionSource = {
   division?: { id?: string; name?: string | null; sort_order?: number | null } | null;
 };
 
-/** Grade-ordered division dropdown — hides legacy CM program divisions (e.g. Voyager Girls). */
+/** Program-tier division dropdown (Nursery … 1/2, 3/4, Crew, CIT). */
 export function prepareDayCampDivisionDropdown(
   divisions: DivisionOption[],
   campers: DayCampCamperDivisionSource[] = [],
 ): DivisionOption[] {
-  const byKey = new Map<DayCampGradeSortKey, DivisionOption>();
+  const byKey = new Map<DayCampProgramDivisionKey, DivisionOption>();
 
   const consider = (rawName: string | null | undefined, division?: DivisionOption) => {
-    const key = normalizeDayCampGradeKey(rawName);
-    if (!key || !division?.id) return;
+    if (!division?.id) return;
+    const sortLabel = rawName ?? "";
+    const programKey =
+      resolveDayCampProgramDivisionKey(sortLabel) ??
+      resolveDayCampProgramDivisionKey(division.name);
+    if (!programKey) return;
 
-    const displayName = DAY_CAMP_GRADE_DISPLAY[key];
+    const displayName = DAY_CAMP_PROGRAM_DIVISION_DISPLAY[programKey];
     const candidate: DivisionOption = {
       ...division,
       name: displayName,
-      sort_order: getDayCampGradeSortIndex(displayName),
+      sort_order: DAY_CAMP_PROGRAM_DIVISION_SORT[programKey],
     };
 
-    const existing = byKey.get(key);
+    const existing = byKey.get(programKey);
     if (!existing || (candidate.sort_order ?? 999) < (existing.sort_order ?? 999)) {
-      byKey.set(key, candidate);
+      byKey.set(programKey, candidate);
     }
   };
 
@@ -225,12 +333,16 @@ export function prepareDayCampDivisionDropdown(
 
   for (const camper of campers) {
     const linked = divisions.find((d) => d.id === camper.division_id);
-    consider(camper.division?.name ?? linked?.name, linked ?? camper.division ?? undefined);
+    const sortLabel = resolveDayCampGradeSortLabel(
+      camper.division?.name ?? linked?.name,
+      camper.grade,
+    );
+    consider(sortLabel, linked ?? camper.division ?? undefined);
     consider(camper.grade, linked ?? camper.division ?? undefined);
   }
 
   return [...byKey.values()].sort(
-    (a, b) => getDayCampGradeSortIndex(a.name) - getDayCampGradeSortIndex(b.name),
+    (a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999),
   );
 }
 
@@ -243,6 +355,14 @@ export function camperMatchesDayCampDivisionFilter(
 ): boolean {
   if (selectedDivisionId === "all") return true;
   if (camperDivisionId && camperDivisionId === selectedDivisionId) return true;
+
+  const selectedProgram = resolveDayCampProgramDivisionKey(selectedDivisionName);
+  if (selectedProgram) {
+    const camperProgram = resolveDayCampProgramDivisionKey(
+      resolveDayCampGradeSortLabel(camperDivisionName, camperGrade),
+    );
+    if (camperProgram && camperProgram === selectedProgram) return true;
+  }
 
   const selectedKey = normalizeDayCampGradeKey(selectedDivisionName);
   if (selectedKey) {

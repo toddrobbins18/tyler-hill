@@ -1,4 +1,4 @@
--- Align North Shore grade division sort_order: Nursery → Pre-K → Kindergarten → 1st …
+-- North Shore program tiers: Nursery → Pre-K → K → 1/2 (1st–2nd) → 3/4 (3rd–4th) → Crew (5th–8th) → CIT (9th).
 -- Run in Supabase SQL Editor after CampMinder sync created duplicate/mis-ordered divisions.
 
 BEGIN;
@@ -6,21 +6,23 @@ BEGIN;
 WITH ns AS (
   SELECT id AS company_id FROM public.companies WHERE slug = 'north-shore-day-camp' LIMIT 1
 ),
-grade_order AS (
+program_order AS (
   SELECT * FROM (VALUES
     ('nursery', 1),
     ('pre-k', 2),
     ('kindergarten', 3),
     ('1st', 4),
-    ('2nd', 5),
-    ('3rd', 6),
-    ('4th', 7),
-    ('5th', 8),
-    ('6th', 9),
-    ('7th', 10),
-    ('8th', 11),
-    ('9th', 12)
-  ) AS t(grade_key, sort_order)
+    ('2nd', 4),
+    ('3rd', 5),
+    ('4th', 5),
+    ('5th', 6),
+    ('6th', 6),
+    ('7th', 6),
+    ('8th', 6),
+    ('crew', 6),
+    ('9th', 7),
+    ('cit', 7)
+  ) AS t(program_key, sort_order)
 ),
 labeled AS (
   SELECT
@@ -32,6 +34,10 @@ labeled AS (
         OR lower(trim(d.name)) ~ '^pre\s*-?\s*k' THEN 'pre-k'
       WHEN lower(trim(d.name)) IN ('k', 'kg', 'kindergarten')
         OR lower(trim(d.name)) ~ '^kinder(garten)?$' THEN 'kindergarten'
+      WHEN lower(trim(d.name)) ~ 'crew' THEN 'crew'
+      WHEN lower(trim(d.name)) ~ 'cit' THEN 'cit'
+      WHEN lower(replace(trim(d.name), ' ', '')) IN ('1/2', '1-2', '12') THEN '1st'
+      WHEN lower(replace(trim(d.name), ' ', '')) IN ('3/4', '3-4', '34') THEN '3rd'
       WHEN lower(trim(d.name)) ~ '^1(st)?$' THEN '1st'
       WHEN lower(trim(d.name)) ~ '^2(nd)?$' THEN '2nd'
       WHEN lower(trim(d.name)) ~ '^3(rd)?$' THEN '3rd'
@@ -42,15 +48,15 @@ labeled AS (
       WHEN lower(trim(d.name)) ~ '^8(th)?$' THEN '8th'
       WHEN lower(trim(d.name)) ~ '^9(th)?$' THEN '9th'
       ELSE NULL
-    END AS grade_key
+    END AS program_key
   FROM public.divisions d
   JOIN ns ON d.company_id = ns.company_id
 )
 UPDATE public.divisions d
 SET sort_order = g.sort_order
 FROM labeled l
-JOIN grade_order g ON g.grade_key = l.grade_key
-WHERE d.id = l.id AND l.grade_key IS NOT NULL;
+JOIN program_order g ON g.program_key = l.program_key
+WHERE d.id = l.id AND l.program_key IS NOT NULL;
 
 COMMIT;
 
