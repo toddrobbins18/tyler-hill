@@ -181,6 +181,10 @@ const swimBraceletStickyGroup =
 const swimBraceletTestCol = "border-l border-border/50 bg-muted/15";
 
 function BraceletSelect({ value, onChange }: { value: BraceletColor | ""; onChange: (v: BraceletColor | "") => void }) {
+  const choices: BraceletColor[] =
+    value && !SWIM_BRACELET_DASHBOARD_COLORS.includes(value)
+      ? [value, ...SWIM_BRACELET_DASHBOARD_COLORS]
+      : [...SWIM_BRACELET_DASHBOARD_COLORS];
   return (
     <select
       value={value}
@@ -189,7 +193,7 @@ function BraceletSelect({ value, onChange }: { value: BraceletColor | ""; onChan
       className={cn(editableSelect, value && BRACELET_STYLES[value as BraceletColor])}
     >
       <option value="">—</option>
-      {BRACELETS.map((c) => (
+      {choices.map((c) => (
         <option key={c} value={c} className="bg-background text-foreground">
           {c}
         </option>
