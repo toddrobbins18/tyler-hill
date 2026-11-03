@@ -770,12 +770,7 @@ export function swimBraceletRecordHasDisplayData(record: BraceletRecord | Partia
   );
 }
 
-export function swimHistoryRecordHasData(
-  bracelet: BraceletRecord | null,
-  levels: LevelRecord | null,
-): boolean {
-  if (bracelet && swimBraceletRecordHasDisplayData(bracelet)) return true;
-  if (!levels) return false;
+function levelRecordHasMarks(levels: LevelRecord): boolean {
   return (
     levels.goldfish.some((s) => s !== "—") ||
     levels.minnow.some((s) => s !== "—") ||
@@ -792,6 +787,97 @@ export function swimHistoryRecordHasData(
       levels.frog,
     ].some((s) => s !== "—")
   );
+}
+
+export function swimHistoryRecordHasData(
+  bracelet: BraceletRecord | null,
+  levels: LevelRecord | null,
+): boolean {
+  if (bracelet && swimBraceletRecordHasDisplayData(bracelet)) return true;
+  if (!levels) return false;
+  return levelRecordHasMarks(levels);
+}
+
+/** Prior Seasons only. A division leader or note by itself is not swim data. */
+export function swimHistorySeasonHasMarks(
+  bracelet: BraceletRecord | null,
+  levels: LevelRecord | null,
+): boolean {
+  if (bracelet?.currentBracelet) return true;
+  if (!levels) return false;
+  return levelRecordHasMarks(levels);
+}
+
+function preferFilled(current: string, incoming: string): string {
+  const left = current.trim();
+  if (left && left !== "—") return current;
+  const right = incoming.trim();
+  if (right && right !== "—") return incoming;
+  return current;
+}
+
+function richerSkills(current: SkillStatus[], incoming: SkillStatus[]): SkillStatus[] {
+  const score = (skills: SkillStatus[]) => skills.filter((s) => s !== "—").length;
+  if (score(incoming) > score(current)) return incoming;
+  if (score(current) > score(incoming)) return current;
+  return current.map((status, index) => (status !== "—" ? status : (incoming[index] ?? status)));
+}
+
+function richerLevel(current: LevelStatus, incoming: LevelStatus): LevelStatus {
+  return current !== "—" ? current : incoming;
+}
+
+export function mergeSwimHistoryBracelet(
+  current: BraceletRecord | null,
+  incoming: BraceletRecord | null,
+): BraceletRecord | null {
+  if (!current) return incoming;
+  if (!incoming) return current;
+  return {
+    ...current,
+    currentBracelet: current.currentBracelet || incoming.currentBracelet,
+    divisionLeader: preferFilled(current.divisionLeader, incoming.divisionLeader),
+    generalNote: preferFilled(current.generalNote, incoming.generalNote),
+    proctor1: preferFilled(current.proctor1, incoming.proctor1),
+    date1: preferFilled(current.date1, incoming.date1),
+    note1: preferFilled(current.note1, incoming.note1),
+    proctor2: preferFilled(current.proctor2, incoming.proctor2),
+    date2: preferFilled(current.date2, incoming.date2),
+    note2: preferFilled(current.note2, incoming.note2),
+    proctor3: preferFilled(current.proctor3, incoming.proctor3),
+    date3: preferFilled(current.date3, incoming.date3),
+    note3: preferFilled(current.note3, incoming.note3),
+    proctor4: preferFilled(current.proctor4, incoming.proctor4),
+    date4: preferFilled(current.date4, incoming.date4),
+    note4: preferFilled(current.note4, incoming.note4),
+    proctor5: preferFilled(current.proctor5, incoming.proctor5),
+    date5: preferFilled(current.date5, incoming.date5),
+    note5: preferFilled(current.note5, incoming.note5),
+    emailSent: current.emailSent || incoming.emailSent,
+  };
+}
+
+export function mergeSwimHistoryLevels(
+  current: LevelRecord | null,
+  incoming: LevelRecord | null,
+): LevelRecord | null {
+  if (!current) return incoming;
+  if (!incoming) return current;
+  return {
+    ...current,
+    goldfish: richerSkills(current.goldfish, incoming.goldfish),
+    minnow: richerSkills(current.minnow, incoming.minnow),
+    tadpole: richerSkills(current.tadpole, incoming.tadpole),
+    exitSkills: richerSkills(current.exitSkills, incoming.exitSkills),
+    goldfishLevel: richerLevel(current.goldfishLevel, incoming.goldfishLevel),
+    minnowLevel: richerLevel(current.minnowLevel, incoming.minnowLevel),
+    tadpoleLevel: richerLevel(current.tadpoleLevel, incoming.tadpoleLevel),
+    redCross: richerLevel(current.redCross, incoming.redCross),
+    redCross2: richerLevel(current.redCross2, incoming.redCross2),
+    redCross3: richerLevel(current.redCross3, incoming.redCross3),
+    redCross4: richerLevel(current.redCross4, incoming.redCross4),
+    frog: richerLevel(current.frog, incoming.frog),
+  };
 }
 
 async function fetchAllSwimProgramRecords(
@@ -913,14 +999,19 @@ export async function fetchSwimHistoryReport(
         ? levelFromJson(rosterChild, swim.levels as Record<string, unknown>, swim.updated_at ?? undefined)
         : null;
 
-    if (!swimHistoryRecordHasData(bracelet, levels)) continue;
+    if (!swimHistorySeasonHasMarks(bracelet, levels)) continue;
 
     let row = byPerson.get(resolvedPersonId);
     if (!row) {
       row = { personId: resolvedPersonId, name: child.name, seasons: [] };
       byPerson.set(resolvedPersonId, row);
     }
-    if (row.seasons.some((s) => s.season === swimSeason)) continue;
+    const existingSeason = row.seasons.find((s) => s.season === swimSeason);
+    if (existingSeason) {
+      existingSeason.bracelet = mergeSwimHistoryBracelet(existingSeason.bracelet, bracelet);
+      existingSeason.levels = mergeSwimHistoryLevels(existingSeason.levels, levels);
+      continue;
+    }
 
     row.seasons.push({
       season: swimSeason,

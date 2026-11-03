@@ -19,7 +19,11 @@ import {
   inferImportSeasonFromFileName,
   swimLevelColumnVisible,
   swimHistoryRecordHasData,
+  swimHistorySeasonHasMarks,
+  mergeSwimHistoryBracelet,
+  mergeSwimHistoryLevels,
   type RosterChild,
+  type BraceletRecord,
   type LevelRecord,
 } from "@/lib/swimProgram";
 
@@ -149,6 +153,72 @@ describe("swimProgram", () => {
     };
     expect(swimHistoryRecordHasData(null, levelsOnlyRedCross)).toBe(true);
     expect(swimHistoryRecordHasData(null, { ...levelsOnlyRedCross, redCross: "—", frog: "Complete" })).toBe(true);
+    expect(swimHistorySeasonHasMarks(null, levelsOnlyRedCross)).toBe(true);
+  });
+
+  it("keeps leader-only rows off prior seasons and merges split season data", () => {
+    const leaderOnly: BraceletRecord = {
+      id: "c1",
+      personId: "p1",
+      name: "Test",
+      group: "—",
+      divisionLeader: "Alyssa",
+      currentBracelet: "",
+      generalNote: "",
+      proctor1: "",
+      date1: "",
+      note1: "",
+      proctor2: "",
+      date2: "",
+      note2: "",
+      proctor3: "",
+      date3: "",
+      note3: "",
+      proctor4: "",
+      date4: "",
+      note4: "",
+      proctor5: "",
+      date5: "",
+      note5: "",
+      emailSent: false,
+    };
+    const withColor: BraceletRecord = { ...leaderOnly, currentBracelet: "Orange", divisionLeader: "—" };
+    const skills: LevelRecord = {
+      id: "c1",
+      personId: "p1",
+      name: "Test",
+      group: "—",
+      goldfish: ["A", "—", "—", "—"],
+      goldfishLevel: "Incomplete",
+      minnow: ["—", "—", "—", "—", "—", "—"],
+      minnowLevel: "—",
+      tadpole: ["—", "—", "—", "—"],
+      tadpoleLevel: "—",
+      redCross: "—",
+      redCross2: "—",
+      redCross3: "—",
+      redCross4: "—",
+      frog: "—",
+      exitSkills: ["—", "—"],
+      lastModified: "Imported",
+    };
+    const emptyLevels: LevelRecord = {
+      ...skills,
+      goldfish: ["—", "—", "—", "—"],
+      goldfishLevel: "—",
+    };
+
+    expect(swimHistoryRecordHasData(leaderOnly, null)).toBe(true);
+    expect(swimHistorySeasonHasMarks(leaderOnly, null)).toBe(false);
+    expect(swimHistorySeasonHasMarks(withColor, emptyLevels)).toBe(true);
+
+    const bracelet = mergeSwimHistoryBracelet(withColor, leaderOnly);
+    expect(bracelet?.currentBracelet).toBe("Orange");
+    expect(bracelet?.divisionLeader).toBe("Alyssa");
+
+    const levels = mergeSwimHistoryLevels(emptyLevels, skills);
+    expect(levels?.goldfish[0]).toBe("A");
+    expect(levels?.goldfishLevel).toBe("Incomplete");
   });
 
   it("parses Swim Bracelets 2026 grid (Division Leader, tests, bracelet color)", () => {

@@ -556,6 +556,18 @@ function LevelPill({ status }: { status: LevelStatus }) {
   );
 }
 
+function HistorySkillMarks({ skills, level }: { skills: SkillStatus[]; level: LevelStatus }) {
+  const marks = skills.filter((status) => status !== "—");
+  if (marks.length === 0) return <LevelPill status={level} />;
+  return (
+    <div className="flex gap-0.5">
+      {skills.map((status, index) => (
+        <SkillCell key={index} status={status} />
+      ))}
+    </div>
+  );
+}
+
 type SwimProgramProps = {
   defaultTab?: "bracelets" | "levels" | "formation" | "history";
 };
@@ -1112,8 +1124,11 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
           season: s.season,
           bracelet: s.bracelet?.currentBracelet || "—",
           goldfish: s.levels?.goldfish ?? [],
+          goldfishLevel: s.levels?.goldfishLevel ?? "—",
           minnow: s.levels?.minnow ?? [],
+          minnowLevel: s.levels?.minnowLevel ?? "—",
           tadpole: s.levels?.tadpole ?? [],
+          tadpoleLevel: s.levels?.tadpoleLevel ?? "—",
           redCross: s.levels?.redCross ?? "—",
           redCross2: s.levels?.redCross2 ?? "—",
           redCross3: s.levels?.redCross3 ?? "—",
@@ -1133,10 +1148,11 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
     const q = search.trim().toLowerCase();
     return historyTableRows.filter((r) => {
       if (q && !r.name.toLowerCase().includes(q) && !r.season.includes(q)) return false;
+      if (historySeasonFilter === "all" && r.season === currentSeason) return false;
       if (historySeasonFilter !== "all" && r.season !== historySeasonFilter) return false;
       return true;
     });
-  }, [historyTableRows, search, historySeasonFilter]);
+  }, [historyTableRows, search, historySeasonFilter, currentSeason]);
 
   const { sorted: sortedBracelets, sort: braceletSort, handleSort: requestBraceletSort } = useSortable(filteredBracelets, {
     key: "name",
@@ -1925,6 +1941,9 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
           <Card>
             <CardHeader className="pb-3 space-y-3">
               <CardTitle className="text-base">Prior seasons — all campers with saved swim data</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Earlier seasons only. {currentSeason} is on Bracelets and Level Report.
+              </p>
               {historySeasonOptions.length > 0 ? (
                 <div className="flex flex-wrap items-end gap-3">
                   <SwimFilterSelect
@@ -1932,7 +1951,7 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                     value={historySeasonFilter}
                     onChange={setHistorySeasonFilter}
                     options={[
-                      { value: "all", label: "All seasons" },
+                      { value: "all", label: "All prior seasons" },
                       ...historySeasonOptions.map((s) => ({ value: s, label: s })),
                     ]}
                   />
@@ -1971,25 +1990,13 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                           <TableCell>{row.season}</TableCell>
                           <TableCell>{row.bracelet}</TableCell>
                           <TableCell>
-                            <div className="flex gap-0.5">
-                              {row.goldfish.map((sk, i) => (
-                                <SkillCell key={i} status={sk} />
-                              ))}
-                            </div>
+                            <HistorySkillMarks skills={row.goldfish} level={row.goldfishLevel} />
                           </TableCell>
                           <TableCell>
-                            <div className="flex gap-0.5">
-                              {row.minnow.map((sk, i) => (
-                                <SkillCell key={i} status={sk} />
-                              ))}
-                            </div>
+                            <HistorySkillMarks skills={row.minnow} level={row.minnowLevel} />
                           </TableCell>
                           <TableCell>
-                            <div className="flex gap-0.5">
-                              {row.tadpole.map((sk, i) => (
-                                <SkillCell key={i} status={sk} />
-                              ))}
-                            </div>
+                            <HistorySkillMarks skills={row.tadpole} level={row.tadpoleLevel} />
                           </TableCell>
                           <TableCell>{row.redCross}</TableCell>
                           <TableCell>{row.redCross2}</TableCell>
