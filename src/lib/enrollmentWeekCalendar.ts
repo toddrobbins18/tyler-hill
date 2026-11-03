@@ -48,6 +48,19 @@ export function configuredEnrollmentWeekRows(calendar: EnrollmentWeekCalendar): 
 }
 
 /** Match run date to a week, or pick the nearest configured week (for offseason / test dates). */
+/** Camp week for schedule rotation: exact calendar match, else Monday-based week from program start. */
+export function campWeekForScheduleLookup(
+  calendar: EnrollmentWeekCalendar,
+  lookupDate: string,
+  campStartYmd: string,
+  campWeekFromStart: (ymd: string, start: string) => number,
+): number | null {
+  if (!lookupDate.trim()) return null;
+  const fromCalendar = enrollmentWeekForDate(calendar, lookupDate);
+  if (fromCalendar != null) return fromCalendar;
+  return campWeekFromStart(lookupDate, campStartYmd);
+}
+
 export function defaultEnrollmentWeekForDate(
   calendar: EnrollmentWeekCalendar,
   runDate: string,

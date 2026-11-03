@@ -6,6 +6,7 @@ import {
   areaLabel,
   formatMinutes12,
   parseClockToMinutes,
+  rotationWeekFromLocation,
   scheduleGroupName,
   scheduleRotationWeek,
   slotsAtTime,
@@ -222,6 +223,60 @@ describe("readScheduleFile", () => {
     expect(bunniesMonday.some((row) => row.rotationWeek === 1)).toBe(true);
     expect(slots.every((row) => !/\s-\s/.test(row.groupName) && !/\bcrew\b/i.test(row.groupName))).toBe(true);
     expect(slots.length).toBeGreaterThan(1000);
+  }, 30000);
+
+  it.skipIf(!fs.existsSync(toddWorkbook))("finds groups on a camp Tuesday at 10:30", async () => {
+    const bytes = fs.readFileSync(toddWorkbook);
+    const file = new File([bytes], "2026 Group Schedules.xlsx");
+    const sheets = await readScheduleFile(file);
+    const { slots } = scanGroupScheduleSheets(sheets);
+    const ymd = "2026-07-07";
+    const minutes = 10 * 60 + 30;
+    const at = slotsAtTime(
+      slots.map((row, index) => ({ ...row, id: String(index), uploadId: "u" })),
+      ymd,
+      minutes,
+      1,
+    );
+    expect(at.length).toBeGreaterThan(0);
+  }, 30000);
+
+  it.skipIf(!fs.existsSync(toddWorkbook))("still finds Tuesday slots when only the first 1000 periods are loaded", async () => {
+    const bytes = fs.readFileSync(toddWorkbook);
+    const file = new File([bytes], "2026 Group Schedules.xlsx");
+    const { slots } = scanGroupScheduleSheets(await readScheduleFile(file));
+    const capped = slots.slice(0, 1000);
+    const at = slotsAtTime(
+      capped.map((row, index) => ({ ...row, id: String(index), uploadId: "u" })),
+      "2026-07-07",
+      10 * 60 + 30,
+      1,
+    );
+    expect(at.length).toBeGreaterThan(0);
+  }, 30000);
+
+  it.skipIf(!fs.existsSync(toddWorkbook))("loads Todd-style DB rows with Week 1/2 in location", async () => {
+    const bytes = fs.readFileSync(toddWorkbook);
+    const { slots } = scanGroupScheduleSheets(await readScheduleFile(new File([bytes], "x.xlsx")));
+    const { groupScheduleSlotFromRow, activeScheduleRotationWeek } = await import("@/lib/groupSchedule");
+    const loaded = slots.slice(0, 1000).map((row, index) => {
+      const loc =
+        row.rotationWeek === 1 || row.rotationWeek === 2 ? `Week ${row.rotationWeek}` : row.location;
+      return groupScheduleSlotFromRow({
+        id: String(index),
+        upload_id: "u",
+        group_name: `${row.groupName} - SS3`,
+        day_of_week: row.dayOfWeek,
+        applies_on: row.appliesOn,
+        start_time: `${String(Math.floor(row.startMinutes / 60)).padStart(2, "0")}:${String(row.startMinutes % 60).padStart(2, "0")}:00`,
+        end_time: `${String(Math.floor(row.endMinutes / 60)).padStart(2, "0")}:${String(row.endMinutes % 60).padStart(2, "0")}:00`,
+        activity: row.activity,
+        location: loc,
+      });
+    });
+    const rotation = activeScheduleRotationWeek(loaded, 3);
+    const at = slotsAtTime(loaded, "2026-07-07", 10 * 60 + 30, rotation);
+    expect(at.length).toBeGreaterThan(0);
   }, 30000);
 });
 

@@ -147,8 +147,36 @@ export function minutesToPgTime(minutes: number): string {
 }
 
 export function pgTimeToMinutes(value: string): number {
-  const [hour, minute] = value.split(":").map(Number);
-  return (hour || 0) * 60 + (minute || 0);
+  const match = /(\d{1,2}):(\d{2})/.exec(value.trim());
+  if (!match) return 0;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+export function groupScheduleSlotFromRow(row: {
+  id: string;
+  upload_id: string;
+  group_name: string;
+  day_of_week: number | string | null;
+  applies_on: string | null;
+  start_time: string;
+  end_time: string;
+  activity: string;
+  location: string | null;
+}): GroupScheduleSlot {
+  const location = row.location ?? "";
+  const rotationWeek = rotationWeekFromLocation(location);
+  return {
+    id: row.id,
+    uploadId: row.upload_id,
+    groupName: scheduleGroupName(row.group_name),
+    dayOfWeek: row.day_of_week == null ? null : Number(row.day_of_week),
+    appliesOn: row.applies_on,
+    rotationWeek,
+    startMinutes: pgTimeToMinutes(row.start_time),
+    endMinutes: pgTimeToMinutes(row.end_time),
+    activity: row.activity,
+    location: rotationWeek ? "" : location,
+  };
 }
 
 export function hhmmToMinutes(hhmm: string): number | null {
@@ -185,8 +213,18 @@ export function scheduleAreaOptions(slots: GroupScheduleDraft[]): string[] {
  * A row with appliesOn wins over the weekly template for that group.
  * End time is the start of the next period, so 9:45 belongs to the next block.
  */
-function slotRotation(slot: GroupScheduleDraft): 1 | 2 | null {
+export function slotRotation(slot: GroupScheduleDraft): 1 | 2 | null {
   return slot.rotationWeek ?? rotationWeekFromLocation(slot.location);
+}
+
+/** Skip rotation filtering when nothing in the file was tagged with week 1 or 2. */
+export function activeScheduleRotationWeek(
+  slots: GroupScheduleDraft[],
+  campWeek: number | null | undefined,
+): 1 | 2 | null {
+  const hasRotation = slots.some((slot) => slotRotation(slot) != null);
+  if (!hasRotation) return null;
+  return scheduleRotationWeek(campWeek);
 }
 
 export function slotsAtTime(
