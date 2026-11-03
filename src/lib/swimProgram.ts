@@ -228,6 +228,36 @@ export function normalizeSwimTestNote(raw: unknown): SwimTestNote | "" {
   return "";
 }
 
+/** Airtable 1st–5th Note is a multi-select. Cells export as comma-separated labels. */
+export function parseSwimTestNotes(raw: unknown): string[] {
+  const s = String(raw ?? "").trim();
+  if (!s || s === "—" || s === "-") return [];
+  const notes: string[] = [];
+  for (const part of s.split(",")) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const note = normalizeSwimTestNote(trimmed) || trimmed;
+    if (notes.some((existing) => existing.toLowerCase() === note.toLowerCase())) continue;
+    notes.push(note);
+  }
+  return notes;
+}
+
+export function formatSwimTestNotes(notes: string[]): string {
+  return notes.map((note) => note.trim()).filter(Boolean).join(", ");
+}
+
+export function toggleSwimTestNote(current: string, note: string): string {
+  const canonical = normalizeSwimTestNote(note) || note.trim();
+  if (!canonical) return formatSwimTestNotes(parseSwimTestNotes(current));
+  const notes = parseSwimTestNotes(current);
+  const key = canonical.toLowerCase();
+  const next = notes.some((existing) => existing.toLowerCase() === key)
+    ? notes.filter((existing) => existing.toLowerCase() !== key)
+    : [...notes, canonical];
+  return formatSwimTestNotes(next);
+}
+
 /** @deprecated Use normalizeSwimTestNote */
 export function normalizePassStatus(raw: unknown): PassStatus | "" {
   const note = normalizeSwimTestNote(raw);
@@ -418,19 +448,19 @@ function braceletFromJson(child: RosterChild, raw: Record<string, unknown>): Bra
     generalNote: String(raw.generalNote ?? raw.noteField ?? "").trim(),
     proctor1: String(raw.proctor1 ?? "").trim(),
     date1: String(raw.date1 ?? ""),
-    note1: normalizeSwimTestNote(raw.note1) || String(raw.note1 ?? "").trim(),
+    note1: formatSwimTestNotes(parseSwimTestNotes(raw.note1)),
     proctor2: String(raw.proctor2 ?? "").trim(),
     date2: String(raw.date2 ?? ""),
-    note2: normalizeSwimTestNote(raw.note2) || String(raw.note2 ?? "").trim(),
+    note2: formatSwimTestNotes(parseSwimTestNotes(raw.note2)),
     proctor3: String(raw.proctor3 ?? "").trim(),
     date3: String(raw.date3 ?? ""),
-    note3: normalizeSwimTestNote(raw.note3) || String(raw.note3 ?? "").trim(),
+    note3: formatSwimTestNotes(parseSwimTestNotes(raw.note3)),
     proctor4: String(raw.proctor4 ?? raw["4th_test_proctor"] ?? "").trim(),
     date4: String(raw.date4 ?? raw["4th_testing_date"] ?? ""),
-    note4: normalizeSwimTestNote(raw.note4 ?? raw["4th_note"]) || String(raw.note4 ?? raw["4th_note"] ?? "").trim(),
+    note4: formatSwimTestNotes(parseSwimTestNotes(raw.note4 ?? raw["4th_note"])),
     proctor5: String(raw.proctor5 ?? raw["5th_test_proctor"] ?? "").trim(),
     date5: String(raw.date5 ?? raw["5th_testing_date"] ?? ""),
-    note5: normalizeSwimTestNote(raw.note5 ?? raw["5th_note"]) || String(raw.note5 ?? raw["5th_note"] ?? "").trim(),
+    note5: formatSwimTestNotes(parseSwimTestNotes(raw.note5 ?? raw["5th_note"])),
     emailSent: Boolean(raw.emailSent),
   };
 }
@@ -1598,27 +1628,27 @@ function parseAirtableBraceletImport(
   const proctor1 = colAt(headers, cols, "1st Test Proctor", "1st_test_proctor");
   const date1 = colAt(headers, cols, "1st Testing Date", "1st_testing_date");
   const note1Raw = colAt(headers, cols, "1st Note", "1st_note");
-  const note1 = normalizeSwimTestNote(note1Raw) || note1Raw;
+  const note1 = formatSwimTestNotes(parseSwimTestNotes(note1Raw));
 
   const proctor2 = colAt(headers, cols, "2nd Test Proctor", "2nd_test_proctor");
   const date2 = colAt(headers, cols, "2nd Testing Date", "2nd_testing_date");
   const note2Raw = colAt(headers, cols, "2nd Note", "2nd_note");
-  const note2 = normalizeSwimTestNote(note2Raw) || note2Raw;
+  const note2 = formatSwimTestNotes(parseSwimTestNotes(note2Raw));
 
   const proctor3 = colAt(headers, cols, "3rd Test Proctor", "3rd_test_proctor");
   const date3 = colAt(headers, cols, "3rd Testing Date", "3rd_testing_date");
   const note3Raw = colAt(headers, cols, "3rd Note", "3rd_note");
-  const note3 = normalizeSwimTestNote(note3Raw) || note3Raw;
+  const note3 = formatSwimTestNotes(parseSwimTestNotes(note3Raw));
 
   const proctor4 = colAt(headers, cols, "4th Test Proctor", "4th_test_proctor");
   const date4 = colAt(headers, cols, "4th Testing Date", "4th_testing_date");
   const note4Raw = colAt(headers, cols, "4th note", "4th_note");
-  const note4 = normalizeSwimTestNote(note4Raw) || note4Raw;
+  const note4 = formatSwimTestNotes(parseSwimTestNotes(note4Raw));
 
   const proctor5 = colAt(headers, cols, "5th Test Proctor", "5th_test_proctor");
   const date5 = colAt(headers, cols, "5th Testing Date", "5th_testing_date");
   const note5Raw = colAt(headers, cols, "5th note", "5th_note");
-  const note5 = normalizeSwimTestNote(note5Raw) || note5Raw;
+  const note5 = formatSwimTestNotes(parseSwimTestNotes(note5Raw));
 
   const sendEmail = colAt(headers, cols, "Send Email", "send_email");
   const emailSent = /^(checked|true|yes|1)$/i.test(sendEmail);

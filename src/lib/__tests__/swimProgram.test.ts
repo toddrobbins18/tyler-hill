@@ -7,6 +7,9 @@ import {
   normalizeBraceletColor,
   normalizePassStatus,
   normalizeSwimTestNote,
+  parseSwimTestNotes,
+  formatSwimTestNotes,
+  toggleSwimTestNote,
   normalizeDivisionLeader,
   isBlankDivisionLeader,
   matchDivisionLeaderOption,
@@ -110,6 +113,14 @@ describe("swimProgram", () => {
   it("normalizes legacy pass and bracelet values", () => {
     expect(normalizeSwimTestNote("PASSED")).toBe("PASSED");
     expect(normalizeSwimTestNote("No Backfloat")).toBe("No Backfloat");
+    expect(parseSwimTestNotes("PASSED, Tread needs endurance")).toEqual(["PASSED", "Tread needs endurance"]);
+    expect(parseSwimTestNotes("Lap Swimming form needs work,Needs endurance to do 2nd lap")).toEqual([
+      "Lap swimming form needs work",
+      "Needs endurance to do 2nd lap",
+    ]);
+    expect(formatSwimTestNotes(["PASSED", "Refused"])).toBe("PASSED, Refused");
+    expect(toggleSwimTestNote("PASSED", "Refused")).toBe("PASSED, Refused");
+    expect(toggleSwimTestNote("PASSED, Refused", "PASSED")).toBe("Refused");
     expect(normalizePassStatus("PASSED")).toBe("Passed");
     expect(normalizePassStatus("did not pass")).toBe("Did Not Pass");
     expect(normalizeBraceletColor("orange")).toBe("Orange");

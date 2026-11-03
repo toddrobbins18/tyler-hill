@@ -15,8 +15,9 @@ import {
   matchDivisionLeaderOption,
   mergeDivisionLeaderOptions,
   mergeProctorOptions,
-  mergeSwimTestNoteOptions,
-  normalizeSwimTestNote,
+  parseSwimTestNotes,
+  toggleSwimTestNote,
+  SWIM_TEST_NOTE_OPTIONS,
   saveSwimBraceletsBulk,
   swimLevelColumnVisible,
   type BraceletColor,
@@ -321,43 +322,81 @@ function DivisionLeaderSelect({
   );
 }
 
+function testNoteChipClass(note: string): string {
+  if (note === "PASSED") return "bg-emerald-600 text-white border-emerald-700";
+  if (note === "Refused") return "bg-red-600 text-white border-red-700";
+  return "bg-amber-400 text-amber-950 border-amber-600";
+}
+
 function TestNoteSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const normalized = normalizeSwimTestNote(value) || value;
-  const options = useMemo(() => mergeSwimTestNoteOptions(value ? [value] : []), [value]);
-  const isPass = normalized === "PASSED";
-  const isRefused = normalized === "Refused";
-  const styles = isPass
-    ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-    : isRefused
-      ? "bg-red-500/15 text-red-300 border-red-500/30"
-      : normalized
-        ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
-        : "";
+  const selected = parseSwimTestNotes(value);
+  const toggle = (note: string) => onChange(toggleSwimTestNote(value, note));
+  const selectedKeys = new Set(selected.map((note) => note.toLowerCase()));
   return (
-    <div className="space-y-0.5 min-w-[130px]" onClick={(e) => e.stopPropagation()}>
-      <select
-        value={normalized}
-        onChange={(e) => onChange(e.target.value)}
-        className={cn(editableSelect, "w-full max-w-[200px]", styles)}
-      >
-        <option value="">—</option>
-        {options.map((note) => (
-          <option key={note} value={note} className="bg-background text-foreground">
-            {note}
-          </option>
-        ))}
-      </select>
-      <div className="flex flex-wrap gap-0.5">
-        {SWIM_TEST_NOTE_INLINE.map((note) => (
-          <button
-            key={note}
-            type="button"
-            className="rounded border border-border/60 px-1 py-0 text-[9px] text-muted-foreground hover:bg-muted/60"
-            onClick={() => onChange(note)}
-          >
-            {note === "Needed Assist" ? "Assist" : note}
+    <div className="space-y-1.5 min-w-[200px] max-w-[280px]" onClick={(e) => e.stopPropagation()}>
+      {selected.length > 0 ? (
+        <div className="flex flex-col gap-1">
+          {selected.map((note) => (
+            <button
+              key={note}
+              type="button"
+              title="Remove"
+              className={cn(
+                "rounded-md border px-2 py-1 text-left text-xs font-semibold leading-snug",
+                testNoteChipClass(note),
+              )}
+              onClick={() => toggle(note)}
+            >
+              {note}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <Popover>
+        <PopoverTrigger asChild>
+          <button type="button" className={cn(editableSelect, "w-full max-w-[200px] text-left text-xs")}>
+            {selected.length > 0 ? "Edit notes" : "—"}
           </button>
-        ))}
+        </PopoverTrigger>
+        <PopoverContent className="w-64 p-1" align="start" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-64 overflow-y-auto">
+            {SWIM_TEST_NOTE_OPTIONS.map((note) => {
+              const on = selectedKeys.has(note.toLowerCase());
+              return (
+                <button
+                  key={note}
+                  type="button"
+                  className={cn(
+                    "flex w-full items-start gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted/70",
+                    on && "bg-primary/10",
+                  )}
+                  onClick={() => toggle(note)}
+                >
+                  <span className="mt-0.5 w-3 shrink-0">{on ? "✓" : ""}</span>
+                  <span>{note}</span>
+                </button>
+              );
+            })}
+          </div>
+        </PopoverContent>
+      </Popover>
+      <div className="flex flex-wrap gap-0.5">
+        {SWIM_TEST_NOTE_INLINE.map((note) => {
+          const on = selectedKeys.has(note.toLowerCase());
+          return (
+            <button
+              key={note}
+              type="button"
+              className={cn(
+                "rounded-md border px-1.5 py-0.5 text-[11px] font-semibold",
+                on ? testNoteChipClass(note) : "border-border/60 text-muted-foreground hover:bg-muted/60",
+              )}
+              onClick={() => toggle(note)}
+            >
+              {note === "Needed Assist" ? "Assist" : note}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
