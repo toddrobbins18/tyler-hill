@@ -5,6 +5,7 @@ import {
   dayOfWeekFromYmd,
   parseClockToMinutes,
   parseTimeRange,
+  scheduleGroupName,
 } from "@/lib/groupSchedule";
 
 export type ScheduleSheet = {
@@ -196,24 +197,17 @@ function pushSlot(
   slots: GroupScheduleDraft[],
   slot: GroupScheduleDraft,
 ) {
-  const key = [
-    slot.groupName.trim().toLowerCase(),
-    slot.dayOfWeek ?? "",
-    slot.appliesOn ?? "",
-    slot.startMinutes,
-    slot.endMinutes,
-    slot.activity.trim().toLowerCase(),
-    slot.location.trim().toLowerCase(),
-  ].join("|");
-  if (slots.some((existing) => slotKey(existing) === key)) return;
-  slots.push(slot);
+  const normalized = { ...slot, groupName: scheduleGroupName(slot.groupName) };
+  if (slots.some((existing) => slotKey(existing) === slotKey(normalized))) return;
+  slots.push(normalized);
 }
 
 function slotKey(slot: GroupScheduleDraft): string {
   return [
-    slot.groupName.trim().toLowerCase(),
+    scheduleGroupName(slot.groupName).toLowerCase(),
     slot.dayOfWeek ?? "",
     slot.appliesOn ?? "",
+    slot.rotationWeek ?? "",
     slot.startMinutes,
     slot.endMinutes,
     slot.activity.trim().toLowerCase(),
@@ -319,14 +313,16 @@ function parseDayGrid(
     for (const dayCol of dayCols) {
       const activity = splitActivity(rows[entry.rowIndex]?.[dayCol.col] ?? "");
       if (!activity) continue;
+      const weekNumber = /^week\s*2\b/i.test(weekLabel ?? "") ? 2 : weekLabel ? 1 : null;
       pushSlot(slots, {
         groupName,
         dayOfWeek: dayCol.day,
         appliesOn: null,
+        rotationWeek: weekNumber,
         startMinutes: range.start,
         endMinutes: range.end,
         activity: activity.activity,
-        location: activity.location || weekLabel || "",
+        location: activity.location,
       });
     }
   });

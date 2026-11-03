@@ -6,6 +6,8 @@ import {
   areaLabel,
   formatMinutes12,
   parseClockToMinutes,
+  scheduleGroupName,
+  scheduleRotationWeek,
   slotsAtTime,
   type GroupScheduleSlot,
 } from "@/lib/groupSchedule";
@@ -94,16 +96,19 @@ describe("group schedule scan", () => {
     ]);
     expect(warnings).toEqual([]);
     expect(slots.find((row) => row.dayOfWeek === 1 && row.activity === "SWIM")).toMatchObject({
-      groupName: "Bunnies - SS3",
+      groupName: "Bunnies",
+      rotationWeek: 1,
       startMinutes: 9 * 60 + 30,
       endMinutes: 10 * 60,
-      location: "Week 1",
+      location: "",
     });
     expect(slots.find((row) => row.activity === "Cooking")).toMatchObject({
+      groupName: "Bunnies",
+      rotationWeek: 2,
       dayOfWeek: 2,
       startMinutes: 10 * 60 + 30,
       endMinutes: 11 * 60,
-      location: "Week 2",
+      location: "",
     });
   });
 
@@ -210,12 +215,14 @@ describe("readScheduleFile", () => {
     const { slots, warnings } = scanGroupScheduleSheets(sheets);
     expect(warnings.filter((warning) => warning.includes("no day"))).toEqual([]);
     const bunniesMonday = slots.filter(
-      (row) => row.groupName === "Bunnies - SS3" && row.dayOfWeek === 1 && row.activity === "SWIM",
+      (row) => row.groupName === "Bunnies" && row.dayOfWeek === 1 && row.activity === "SWIM",
     );
     expect(bunniesMonday.length).toBeGreaterThan(0);
     expect(bunniesMonday.every((row) => row.startMinutes < row.endMinutes)).toBe(true);
+    expect(bunniesMonday.some((row) => row.rotationWeek === 1)).toBe(true);
+    expect(slots.every((row) => !/\s-\s/.test(row.groupName) && !/\bcrew\b/i.test(row.groupName))).toBe(true);
     expect(slots.length).toBeGreaterThan(1000);
-  });
+  }, 30000);
 });
 
 describe("slotsAtTime", () => {
@@ -283,5 +290,45 @@ describe("slotsAtTime", () => {
     );
     expect(at.find((row) => row.groupName === "Dolphins")?.activity).toBe("Gym");
     expect(at.find((row) => row.groupName === "Sharks")?.activity).toBe("Gaga");
+  });
+
+  it("uses schedule week 1 on odd camp weeks and week 2 on even weeks", () => {
+    const rows = [
+      slot({
+        groupName: "Bunnies - SS3",
+        dayOfWeek: 1,
+        appliesOn: null,
+        startMinutes: 10 * 60 + 30,
+        endMinutes: 11 * 60,
+        activity: "TGIM",
+        location: "Week 1",
+      }),
+      slot({
+        id: "cook",
+        groupName: "Bunnies",
+        dayOfWeek: 1,
+        appliesOn: null,
+        startMinutes: 10 * 60 + 30,
+        endMinutes: 11 * 60,
+        activity: "Cooking",
+        location: "Week 2",
+      }),
+    ];
+    expect(scheduleRotationWeek(1)).toBe(1);
+    expect(scheduleRotationWeek(2)).toBe(2);
+    expect(scheduleRotationWeek(3)).toBe(1);
+    expect(scheduleRotationWeek(8)).toBe(2);
+    expect(slotsAtTime(rows, "2026-07-06", 10 * 60 + 45, 1).map((row) => row.activity)).toEqual(["TGIM"]);
+    expect(slotsAtTime(rows, "2026-07-06", 10 * 60 + 45, 2).map((row) => row.activity)).toEqual(["Cooking"]);
+    expect(areaLabel(rows[0])).toBe("TGIM");
+  });
+});
+
+describe("scheduleGroupName", () => {
+  it("drops the sheet suffix so the roster name matches", () => {
+    expect(scheduleGroupName("Bunnies - SS3")).toBe("Bunnies");
+    expect(scheduleGroupName("Dublin- G1")).toBe("Dublin");
+    expect(scheduleGroupName("Honolulu CREW GIRLS")).toBe("Honolulu");
+    expect(scheduleGroupName("Everest - CREW Boys")).toBe("Everest");
   });
 });

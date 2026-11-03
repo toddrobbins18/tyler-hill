@@ -11,16 +11,22 @@ import {
   type EnrollmentWeekCalendar,
 } from "@/lib/enrollmentWeekCalendar";
 import { campTimeHHmmFromIso } from "@/lib/campTime";
+import { campProgramStartDate } from "@/lib/medicationStartDate";
 import {
   SCHEDULE_DAY_LABELS,
   areaLabel,
+  campWeekNumber,
   dayOfWeekFromYmd,
   formatMinutes12,
   minutesToPgTime,
   pgTimeToMinutes,
   hhmmToMinutes,
+  rotationWeekFromLocation,
   sameScheduleLabel,
   scheduleAreaOptions,
+  scheduleGroupName,
+  scheduleLocationForSave,
+  scheduleRotationWeek,
   slotMatchesArea,
   slotsAtTime,
   weeklyScheduleTemplateCsv,
@@ -63,16 +69,19 @@ function slotFromRow(row: {
   activity: string;
   location: string | null;
 }): GroupScheduleSlot {
+  const location = row.location ?? "";
+  const rotationWeek = rotationWeekFromLocation(location);
   return {
     id: row.id,
     uploadId: row.upload_id,
-    groupName: row.group_name,
+    groupName: scheduleGroupName(row.group_name),
     dayOfWeek: row.day_of_week,
     appliesOn: row.applies_on,
+    rotationWeek,
     startMinutes: pgTimeToMinutes(row.start_time),
     endMinutes: pgTimeToMinutes(row.end_time),
     activity: row.activity,
-    location: row.location ?? "",
+    location: rotationWeek ? "" : location,
   };
 }
 
@@ -81,9 +90,13 @@ function periodLabel(slot: GroupScheduleDraft): string {
 }
 
 function dayLabel(slot: GroupScheduleDraft): string {
-  if (slot.appliesOn) return slot.appliesOn;
-  if (slot.dayOfWeek == null) return "—";
-  return SCHEDULE_DAY_LABELS[slot.dayOfWeek] ?? "—";
+  const day = slot.appliesOn
+    ? slot.appliesOn
+    : slot.dayOfWeek == null
+      ? "—"
+      : (SCHEDULE_DAY_LABELS[slot.dayOfWeek] ?? "—");
+  if (slot.rotationWeek === 1 || slot.rotationWeek === 2) return `${day} · Week ${slot.rotationWeek}`;
+  return day;
 }
 
 export default function GroupSchedules() {
@@ -145,7 +158,7 @@ export default function GroupSchedules() {
         .select("id, upload_id, group_name, day_of_week, applies_on, start_time, end_time, activity, location")
         .eq("company_id", companyId)
         .eq("season", currentSeason)
-        .limit(5000),
+        .limit(20000),
       supabase
         .from("group_schedule_uploads")
         .select("id, file_name, applies_on, created_at")
@@ -170,9 +183,14 @@ export default function GroupSchedules() {
   }, [companyId, currentSeason]);
 
   const minutes = hhmmToMinutes(lookupTime) ?? 0;
+  const campWeek = useMemo(() => {
+    if (!lookupDate) return null;
+    return enrollmentWeek ?? campWeekNumber(lookupDate, campProgramStartDate(currentSeason));
+  }, [enrollmentWeek, lookupDate, currentSeason]);
+  const rotationWeek = scheduleRotationWeek(campWeek);
   const atTime = useMemo(
-    () => (lookupDate ? slotsAtTime(slots, lookupDate, minutes) : []),
-    [slots, lookupDate, minutes],
+    () => (lookupDate ? slotsAtTime(slots, lookupDate, minutes, rotationWeek) : []),
+    [slots, lookupDate, minutes, rotationWeek],
   );
   const visible = useMemo(
     () =>
@@ -187,7 +205,7 @@ export default function GroupSchedules() {
   const campersByGroup = useMemo(() => {
     const map = new Map<string, string[]>();
     for (const camper of roster) {
-      const key = camper.groupName.trim().toLowerCase();
+      const key = scheduleGroupName(camper.groupName).toLowerCase();
       const names = map.get(key) ?? [];
       names.push(camper.name);
       map.set(key, names);
@@ -198,10 +216,14 @@ export default function GroupSchedules() {
 
   const groupOptions = useMemo(() => {
     const names = new Map<string, string>();
-    for (const slot of slots) names.set(slot.groupName.trim().toLowerCase(), slot.groupName.trim());
+    for (const slot of slots) {
+      const name = scheduleGroupName(slot.groupName);
+      names.set(name.toLowerCase(), name);
+    }
     for (const camper of roster) {
       if (camper.groupName === "Unassigned") continue;
-      names.set(camper.groupName.trim().toLowerCase(), camper.groupName.trim());
+      const name = scheduleGroupName(camper.groupName);
+      names.set(name.toLowerCase(), name);
     }
     return [...names.values()].sort((a, b) => a.localeCompare(b));
   }, [slots, roster]);
@@ -309,7 +331,7 @@ export default function GroupSchedules() {
               start_time: minutesToPgTime(slot.startMinutes),
               end_time: minutesToPgTime(slot.endMinutes),
               activity: slot.activity,
-              location: slot.location,
+              location: scheduleLocationForSave(slot),
             }));
             const { error: slotError } = await supabase.from("group_schedule_slots").insert(chunk);
             if (slotError) throw slotError;
@@ -445,6 +467,11 @@ export default function GroupSchedules() {
               </Select>
             </div>
             {lookupDay ? <Badge variant="outline">{lookupDay}</Badge> : null}
+            {campWeek && rotationWeek ? (
+              <Badge variant="outline">
+                Camp week {campWeek} · schedule week {rotationWeek}
+              </Badge>
+            ) : null}
             {loading ? <span className="text-xs text-muted-foreground">Loading…</span> : null}
           </div>
 
@@ -463,7 +490,8 @@ export default function GroupSchedules() {
                   {focusedGroup.location && focusedGroup.activity !== focusedGroup.location
                     ? ` for ${focusedGroup.activity}`
                     : ""}{" "}
-                  ({periodLabel(focusedGroup)}).
+                  ({periodLabel(focusedGroup)}
+                  {rotationWeek ? `, schedule week ${rotationWeek}` : ""}).
                 </>
               ) : visible.length === 0 ? (
                 <>has nothing scheduled at this time.</>
@@ -486,7 +514,7 @@ export default function GroupSchedules() {
               </TableHeader>
               <TableBody>
                 {visible.map((slot) => {
-                  const names = campersByGroup.get(slot.groupName.trim().toLowerCase()) ?? [];
+                  const names = campersByGroup.get(scheduleGroupName(slot.groupName).toLowerCase()) ?? [];
                   return (
                     <TableRow key={slot.id}>
                       <TableCell className="font-medium">{slot.groupName}</TableCell>

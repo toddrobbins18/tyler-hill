@@ -20,6 +20,8 @@ export type GroupScheduleDraft = {
   endMinutes: number;
   activity: string;
   location: string;
+  /** 1 or 2 when the file is a two-week rotation. Null applies every week. */
+  rotationWeek?: 1 | 2 | null;
 };
 
 export type GroupScheduleSlot = GroupScheduleDraft & {
@@ -32,8 +34,52 @@ export function dayOfWeekFromYmd(ymd: string): number {
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
 
+/** "Bunnies - SS3" and "Honolulu CREW GIRLS" match the roster group. */
+export function scheduleGroupName(raw: string): string {
+  let name = raw.trim().replace(/\s+/g, " ");
+  const beforeDash = name.split(/\s*-\s*/)[0]?.trim() ?? "";
+  if (beforeDash.length >= 2 && beforeDash !== name) name = beforeDash;
+  name = name.replace(/\s+crew\b.*$/i, "").trim();
+  return name || raw.trim();
+}
+
+const WEEK_LOCATION = /^week\s*([12])$/i;
+
+export function rotationWeekFromLocation(location: string): 1 | 2 | null {
+  const match = WEEK_LOCATION.exec(location.trim());
+  if (!match) return null;
+  return match[1] === "1" ? 1 : 2;
+}
+
+/** Odd camp weeks use schedule week 1. Even camp weeks use schedule week 2. */
+export function scheduleRotationWeek(campWeek: number | null | undefined): 1 | 2 | null {
+  if (campWeek == null || campWeek < 1) return null;
+  return campWeek % 2 === 1 ? 1 : 2;
+}
+
+/** Camp week 1 is the Monday-start week that contains the program start date. */
+export function campWeekNumber(ymd: string, campStartYmd: string): number {
+  const monday = (value: string) => {
+    const [y, m, d] = value.split("-").map(Number);
+    const utc = Date.UTC(y, (m ?? 1) - 1, d ?? 1);
+    const dow = new Date(utc).getUTCDay();
+    const offset = dow === 0 ? -6 : 1 - dow;
+    return utc + offset * 86_400_000;
+  };
+  const diffDays = Math.round((monday(ymd) - monday(campStartYmd)) / 86_400_000);
+  const week = Math.floor(diffDays / 7) + 1;
+  return week < 1 ? 1 : week;
+}
+
+export function scheduleLocationForSave(slot: GroupScheduleDraft): string {
+  const place = slot.location.trim();
+  if (place && !rotationWeekFromLocation(place)) return place;
+  if (slot.rotationWeek === 1 || slot.rotationWeek === 2) return `Week ${slot.rotationWeek}`;
+  return "";
+}
+
 export function sameScheduleLabel(a: string, b: string): boolean {
-  return a.trim().toLowerCase() === b.trim().toLowerCase();
+  return scheduleGroupName(a).toLowerCase() === scheduleGroupName(b).toLowerCase();
 }
 
 /** Clock text, Excel day-fraction, or a bare hour. Hours 1–6 without AM/PM are afternoon. */
@@ -112,7 +158,9 @@ export function hhmmToMinutes(hhmm: string): number | null {
 }
 
 export function areaLabel(slot: GroupScheduleDraft): string {
-  return slot.location.trim() || slot.activity.trim();
+  const place = slot.location.trim();
+  if (!place || rotationWeekFromLocation(place)) return slot.activity.trim();
+  return place;
 }
 
 export function slotMatchesArea(slot: GroupScheduleDraft, area: string): boolean {
@@ -125,7 +173,8 @@ export function slotMatchesArea(slot: GroupScheduleDraft, area: string): boolean
 export function scheduleAreaOptions(slots: GroupScheduleDraft[]): string[] {
   const names = new Set<string>();
   for (const slot of slots) {
-    if (slot.location.trim()) names.add(slot.location.trim());
+    const place = slot.location.trim();
+    if (place && !rotationWeekFromLocation(place)) names.add(place);
     if (slot.activity.trim()) names.add(slot.activity.trim());
   }
   return [...names].sort((a, b) => a.localeCompare(b));
@@ -136,24 +185,36 @@ export function scheduleAreaOptions(slots: GroupScheduleDraft[]): string[] {
  * A row with appliesOn wins over the weekly template for that group.
  * End time is the start of the next period, so 9:45 belongs to the next block.
  */
+function slotRotation(slot: GroupScheduleDraft): 1 | 2 | null {
+  return slot.rotationWeek ?? rotationWeekFromLocation(slot.location);
+}
+
 export function slotsAtTime(
   slots: GroupScheduleSlot[],
   ymd: string,
   minutes: number,
+  rotationWeek?: 1 | 2 | null,
 ): GroupScheduleSlot[] {
   const day = dayOfWeekFromYmd(ymd);
   const covering = slots.filter((slot) => {
     if (minutes < slot.startMinutes || minutes >= slot.endMinutes) return false;
+    if (rotationWeek != null) {
+      const week = slotRotation(slot);
+      if (week != null && week !== rotationWeek) return false;
+    }
     if (slot.appliesOn) return slot.appliesOn === ymd;
     return slot.dayOfWeek === day;
   });
 
   const groupsWithOverride = new Set(
-    covering.filter((slot) => slot.appliesOn === ymd).map((slot) => slot.groupName.trim().toLowerCase()),
+    covering.filter((slot) => slot.appliesOn === ymd).map((slot) => scheduleGroupName(slot.groupName).toLowerCase()),
   );
 
   return covering
-    .filter((slot) => slot.appliesOn === ymd || !groupsWithOverride.has(slot.groupName.trim().toLowerCase()))
+    .filter(
+      (slot) =>
+        slot.appliesOn === ymd || !groupsWithOverride.has(scheduleGroupName(slot.groupName).toLowerCase()),
+    )
     .sort((a, b) => a.groupName.localeCompare(b.groupName) || a.activity.localeCompare(b.activity));
 }
 
