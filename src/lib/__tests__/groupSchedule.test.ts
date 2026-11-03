@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import * as XLSX from "xlsx";
 import { describe, expect, it } from "vitest";
 import {
@@ -71,6 +73,38 @@ describe("group schedule scan", () => {
         location: "Lodge",
       },
     ]);
+  });
+
+  it("reads a North Shore group sheet with a merged title and week sections", () => {
+    const span = (label: string) => [label, label, label, label, label, label];
+    const { slots, warnings } = scanGroupScheduleSheets([
+      {
+        name: "Bunnies - SS3",
+        rows: [
+          span("Bunnies - SS3"),
+          span("Week 1"),
+          ["Periods", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+          ["09:30 AM\n10:00 AM", "Change", "Change", "Change", "Change", "Change"],
+          ["09:30 AM\n10:00 AM", "SWIM", "SWIM", "SWIM", "SWIM", "SWIM"],
+          span("Week 2"),
+          ["Periods", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+          ["10:30 AM\n11:00 AM", "TGIM", "Cooking", "Dance", "Music", "Soccer"],
+        ],
+      },
+    ]);
+    expect(warnings).toEqual([]);
+    expect(slots.find((row) => row.dayOfWeek === 1 && row.activity === "SWIM")).toMatchObject({
+      groupName: "Bunnies - SS3",
+      startMinutes: 9 * 60 + 30,
+      endMinutes: 10 * 60,
+      location: "Week 1",
+    });
+    expect(slots.find((row) => row.activity === "Cooking")).toMatchObject({
+      dayOfWeek: 2,
+      startMinutes: 10 * 60 + 30,
+      endMinutes: 11 * 60,
+      location: "Week 2",
+    });
   });
 
   it("reads one sheet per group with days across the top", () => {
@@ -166,6 +200,21 @@ describe("readScheduleFile", () => {
       ["Dolphins", 1, "Swim"],
       ["Dolphins", 2, "Arts"],
     ]);
+  });
+
+  const toddWorkbook = path.resolve(__dirname, "../../../../2026 Group Schedules.xlsx");
+  it.skipIf(!fs.existsSync(toddWorkbook))("reads the 2026 group workbook", async () => {
+    const bytes = fs.readFileSync(toddWorkbook);
+    const file = new File([bytes], "2026 Group Schedules.xlsx");
+    const sheets = await readScheduleFile(file);
+    const { slots, warnings } = scanGroupScheduleSheets(sheets);
+    expect(warnings.filter((warning) => warning.includes("no day"))).toEqual([]);
+    const bunniesMonday = slots.filter(
+      (row) => row.groupName === "Bunnies - SS3" && row.dayOfWeek === 1 && row.activity === "SWIM",
+    );
+    expect(bunniesMonday.length).toBeGreaterThan(0);
+    expect(bunniesMonday.every((row) => row.startMinutes < row.endMinutes)).toBe(true);
+    expect(slots.length).toBeGreaterThan(1000);
   });
 });
 

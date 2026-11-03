@@ -95,9 +95,19 @@ function isGenericSheetName(name: string): boolean {
 type ClockCell = { start: number; end: number | null };
 
 function readClockCell(value: string): ClockCell | null {
-  const range = parseTimeRange(value);
+  const text = value.replace(/\r\n/g, "\n").trim();
+  const range = parseTimeRange(text);
   if (range) return { start: range.start, end: range.end };
-  const start = parseClockToMinutes(value);
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length >= 2) {
+    const start = parseClockToMinutes(lines[0] ?? "");
+    const end = parseClockToMinutes(lines[1] ?? "");
+    if (start != null && end != null && end > start) return { start, end };
+  }
+  const start = parseClockToMinutes(text);
   if (start == null) return null;
   return { start, end: null };
 }
@@ -166,8 +176,19 @@ function headerKind(row: string[]): "list" | "days" | "times" | "groups" | null 
   if (filled.length < 2) return null;
   if (isListHeader(row)) return "list";
   if (row.filter((cell) => weekdayFromLabel(cell) != null).length >= 2) return "days";
+  // A merged title such as "Bunnies - SS3" is copied into every column. That is not a group grid.
+  if (new Set(filled.map((cell) => norm(cell))).size === 1) return null;
   if (row.filter((cell) => readClockCell(cell) != null).length >= 2) return "times";
   if (row.filter((cell) => isLikelyGroupHeader(cell)).length >= 2) return "groups";
+  return null;
+}
+
+function weekLabelAbove(rows: string[][], headerIndex: number): string | null {
+  for (let index = headerIndex - 1; index >= 0; index--) {
+    const label = (rows[index] ?? []).map((cell) => cell.trim()).find((cell) => /^week\s+\d+\b/i.test(cell));
+    if (label) return label.replace(/\s+/g, " ");
+    if ((rows[index] ?? []).some((cell) => weekdayFromLabel(cell) != null)) break;
+  }
   return null;
 }
 
@@ -263,7 +284,14 @@ function parseList(rows: string[][], headerIndex: number, warnings: string[], sh
   return slots;
 }
 
-function parseDayGrid(sheetName: string, rows: string[][], headerIndex: number, warnings: string[]) {
+function parseDayGrid(
+  sheetName: string,
+  rows: string[][],
+  headerIndex: number,
+  warnings: string[],
+  untilRow = rows.length,
+  weekLabel: string | null = null,
+) {
   const header = rows[headerIndex];
   const dayCols = header
     .map((cell, col) => ({ col, day: weekdayFromLabel(cell) }))
@@ -278,7 +306,7 @@ function parseDayGrid(sheetName: string, rows: string[][], headerIndex: number, 
 
   const dayColSet = new Set(dayCols.map((entry) => entry.col));
   const timedRows: { rowIndex: number; clock: ClockCell }[] = [];
-  for (let rowIndex = headerIndex + 1; rowIndex < rows.length; rowIndex++) {
+  for (let rowIndex = headerIndex + 1; rowIndex < untilRow; rowIndex++) {
     const row = rows[rowIndex];
     const timeCell = row.find((value, col) => !dayColSet.has(col) && readClockCell(value));
     const clock = timeCell ? readClockCell(timeCell) : null;
@@ -298,7 +326,7 @@ function parseDayGrid(sheetName: string, rows: string[][], headerIndex: number, 
         startMinutes: range.start,
         endMinutes: range.end,
         activity: activity.activity,
-        location: activity.location,
+        location: activity.location || weekLabel || "",
       });
     }
   });
@@ -390,6 +418,21 @@ export function scanGroupScheduleSheets(sheets: ScheduleSheet[]): GroupScheduleS
 
   for (const sheet of sheets) {
     const rows = sheet.rows.map((row) => row.map((cell) => (cell ?? "").trim()));
+    const dayHeaders: number[] = [];
+    for (let index = 0; index < rows.length; index++) {
+      if (headerKind(rows[index] ?? []) === "days") dayHeaders.push(index);
+    }
+    if (dayHeaders.length > 0) {
+      dayHeaders.forEach((headerIndex, section) => {
+        const untilRow = dayHeaders[section + 1] ?? rows.length;
+        const weekLabel = dayHeaders.length > 1 ? weekLabelAbove(rows, headerIndex) : null;
+        for (const slot of parseDayGrid(sheet.name, rows, headerIndex, warnings, untilRow, weekLabel)) {
+          pushSlot(slots, slot);
+        }
+      });
+      continue;
+    }
+
     let headerIndex = -1;
     let kind: ReturnType<typeof headerKind> = null;
     const searchLimit = Math.min(rows.length, 15);
@@ -431,7 +474,7 @@ function matrixFromSheet(sheet: XLSX.WorkSheet): string[][] {
     header: 1,
     raw: false,
     defval: "",
-    blankrows: false,
+    blankrows: true,
   });
   const rows = matrix.map((row) => (row ?? []).map((cell) => (cell == null ? "" : String(cell).trim())));
   for (const merge of sheet["!merges"] ?? []) {
