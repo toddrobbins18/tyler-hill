@@ -1561,6 +1561,101 @@ export type Database = {
           },
         ]
       }
+      group_schedule_slots: {
+        Row: {
+          activity: string
+          applies_on: string | null
+          company_id: string
+          day_of_week: number | null
+          end_time: string
+          group_name: string
+          id: string
+          location: string
+          season: string
+          start_time: string
+          upload_id: string
+        }
+        Insert: {
+          activity: string
+          applies_on?: string | null
+          company_id: string
+          day_of_week?: number | null
+          end_time: string
+          group_name: string
+          id?: string
+          location?: string
+          season: string
+          start_time: string
+          upload_id: string
+        }
+        Update: {
+          activity?: string
+          applies_on?: string | null
+          company_id?: string
+          day_of_week?: number | null
+          end_time?: string
+          group_name?: string
+          id?: string
+          location?: string
+          season?: string
+          start_time?: string
+          upload_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_schedule_slots_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_schedule_slots_upload_id_fkey"
+            columns: ["upload_id"]
+            isOneToOne: false
+            referencedRelation: "group_schedule_uploads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      group_schedule_uploads: {
+        Row: {
+          applies_on: string | null
+          company_id: string
+          created_at: string
+          created_by: string | null
+          file_name: string
+          id: string
+          season: string
+        }
+        Insert: {
+          applies_on?: string | null
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          file_name: string
+          id?: string
+          season: string
+        }
+        Update: {
+          applies_on?: string | null
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          file_name?: string
+          id?: string
+          season?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_schedule_uploads_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       group_messages: {
         Row: {
           content: string

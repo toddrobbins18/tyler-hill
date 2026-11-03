@@ -32,6 +32,7 @@ import GroupAttendance from "./pages/daycamp/GroupAttendance";
 import BusCheckIns from "./pages/daycamp/BusCheckIns";
 import BusCounselorAccess from "./pages/daycamp/BusCounselorAccess";
 import GroupBubbleSheets from "./pages/daycamp/GroupBubbleSheets";
+import GroupSchedules from "./pages/daycamp/GroupSchedules";
 import TransportPrintReports from "./pages/daycamp/TransportPrintReports";
 import Roster from "./pages/Roster";
 import Staff from "./pages/Staff";
@@ -123,6 +124,7 @@ function CompanyScopedMainRoutes() {
       <Route path="/day-camp/bus-counselor-access" element={<BusCounselorAccess />} />
       <Route path="/day-camp/group-attendance" element={<GroupAttendance />} />
       <Route path="/day-camp/group-bubble-sheets" element={<GroupBubbleSheets />} />
+      <Route path="/day-camp/schedules" element={<GroupSchedules />} />
       <Route path="/day-camp/transport-reports" element={<TransportPrintReports />} />
       <Route path="/sunshine-report" element={<SunshineReport />} />
       <Route path="/roster" element={<Roster />} />

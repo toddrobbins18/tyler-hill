@@ -16,6 +16,7 @@ import {
   UserCog,
   Mail,
   Calendar,
+  CalendarClock,
   Utensils,
   Palmtree,
   CloudRain,
@@ -85,6 +86,7 @@ export function getDayCampNestCarryoverItems(): DayCampMenuItem[] {
 /** Nest 2.0 / Airtable POC — Day Camp features (Jul 30 North Shore priorities). */
 export function getDayCampPocItems(): DayCampMenuItem[] {
   return [
+    { title: "Schedules", url: "/day-camp/schedules", icon: CalendarClock, menuId: "schedules" },
     { title: "Front Office", url: "/day-camp/front-office", icon: Radio, menuId: "front-office" },
     { title: "Transport Admin", url: "/day-camp/transport-admin", icon: Bus, menuId: "transport-admin" },
     { title: "Bunking", url: "/day-camp/bunking", icon: BedDouble, menuId: "bunking" },
