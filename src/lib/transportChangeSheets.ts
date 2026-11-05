@@ -223,6 +223,22 @@ export function buildBusAttendanceAbsentRows(options: {
   return rows;
 }
 
+/** One daily list. Same camper + same change on AM and PM stays a single row. */
+export function mergeDailyChangeSheets(
+  amRows: TransportChangeSheetRow[],
+  pmRows: TransportChangeSheetRow[],
+): TransportChangeSheetRow[] {
+  const out: TransportChangeSheetRow[] = [];
+  const seen = new Set<string>();
+  for (const row of [...amRows, ...pmRows]) {
+    const key = `${normName(row.camper)}|${row.source.trim().toLowerCase()}|${row.description.trim().toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ ...row, run: "DAY" });
+  }
+  return out;
+}
+
 function mergeChangeSheetRows(
   primary: TransportChangeSheetRow[],
   extra: TransportChangeSheetRow[],

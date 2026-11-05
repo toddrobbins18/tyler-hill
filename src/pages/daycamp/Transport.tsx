@@ -65,6 +65,7 @@ import {
 import {
   buildDayBusBubbleSheetPdf,
   buildGroupBubbleSheetPdf,
+  triggerBlobDownload,
 } from "@/lib/transportBubbleSheetPdf";
 import {
   buildBusBubbleSheetRoutes,
@@ -4011,24 +4012,26 @@ export default function Transport() {
             groupName,
             campers: campers.map((c) => ({ name: c.name, detail: groupName })),
           }));
-        const built = buildGroupBubbleSheetPdf({
-          companyName: currentCompany?.name ?? "Day Camp",
-          enrollmentWeek: week,
-          weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : undefined,
-          weekDays: enrollmentWeekDayColumns(weekRow),
-          groups,
-        });
-        if (!built) {
+        if (!groups.length) {
           toast({ title: "No campers to print", variant: "destructive" });
-        } else {
-          openReportPreview({
-            title: "Group Attendance Bubble Sheet",
-            description: `${weekLabel} · enrolled campers only`,
-            kind: "pdf",
-            blob: built.blob,
-            filename: built.filename,
-          });
+          return;
         }
+        groups.forEach((group, index) => {
+          window.setTimeout(() => {
+            const built = buildGroupBubbleSheetPdf({
+              companyName: currentCompany?.name ?? "Day Camp",
+              enrollmentWeek: week,
+              weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : undefined,
+              weekDays: enrollmentWeekDayColumns(weekRow),
+              groups: [group],
+            });
+            if (built) triggerBlobDownload(built.blob, built.filename);
+          }, index * 400);
+        });
+        toast({
+          title: "Downloading group PDFs",
+          description: `${groups.length} PDF(s), one per group.`,
+        });
         return;
       }
 
@@ -4060,24 +4063,29 @@ export default function Transport() {
           camperEnrolledInWeekByLookup(camperEnrollmentLookup, name, week),
       });
 
-      const built = buildDayBusBubbleSheetPdf({
-        companyName: currentCompany?.name ?? "Day Camp",
-        date: overrideDate,
-        enrollmentWeek: week,
-        weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : undefined,
-        routes: mergedBusRoutes,
-      });
-      if (!built) {
+      const printableRoutes = mergedBusRoutes.filter((route) => route.campers.length > 0);
+      if (!printableRoutes.length) {
         toast({ title: "No campers to print", variant: "destructive" });
-      } else {
-        openReportPreview({
-          title: "Bus Bubble Sheet",
-          description: `${overrideDate} · AM & PM per camper (X = not on that run) · ${weekLabel}`,
-          kind: "pdf",
-          blob: built.blob,
-          filename: built.filename,
-        });
+        return;
       }
+      const safeDate = overrideDate.replace(/[^0-9-]/g, "");
+      printableRoutes.forEach((route, index) => {
+        window.setTimeout(() => {
+          const built = buildDayBusBubbleSheetPdf({
+            companyName: currentCompany?.name ?? "Day Camp",
+            date: overrideDate,
+            enrollmentWeek: week,
+            weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : undefined,
+            routes: [route],
+            filename: `bus-bubble-${safeDate}-${route.bus.replace(/\s+/g, "-")}.pdf`,
+          });
+          if (built) triggerBlobDownload(built.blob, built.filename);
+        }, index * 400);
+      });
+      toast({
+        title: "Downloading bus PDFs",
+        description: `${printableRoutes.length} PDF(s), one per bus. ${weekLabel}`,
+      });
       return;
     }
 

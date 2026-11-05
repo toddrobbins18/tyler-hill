@@ -3,6 +3,7 @@ import {
   buildApprovedChangeSheetRows,
   buildBusAttendanceAbsentRows,
   groupChangeSheetRowsByBus,
+  mergeDailyChangeSheets,
   PARENT_TRANSPORT_CHANGE_SHEET_BUS,
   sortChangeSheetRowsByBus,
 } from "@/lib/transportChangeSheets";
@@ -178,5 +179,23 @@ describe("transportChangeSheets", () => {
     const groups = groupChangeSheetRowsByBus(rows, routeMeta);
     expect(groups.map((g) => g.bus)).toEqual(["Bus 3", "Bus 7"]);
     expect(groups[0]?.rows).toHaveLength(1);
+  });
+
+  it("keeps one row when the same change is on AM and PM", () => {
+    const row = {
+      date: "2027-07-07",
+      run: "AM",
+      camper: "Jamie Smith",
+      source: "Bus attendance",
+      description: "Marked absent on bus",
+      status: "saved",
+      route: "Route East",
+      bus: "Bus 3",
+      stop: "Smith house",
+      notes: "",
+    };
+    const merged = mergeDailyChangeSheets([row], [{ ...row, run: "PM" }]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.run).toBe("DAY");
   });
 });

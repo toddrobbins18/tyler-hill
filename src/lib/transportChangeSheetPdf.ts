@@ -49,12 +49,32 @@ export function formatChangeSheetTransportation(bus: string): string {
   return t;
 }
 
+/** Short Change column, matching the old daily passenger update. */
+export function shortChangeSheetPhrase(
+  row: Pick<TransportChangeSheetRow, "source" | "description" | "notes">,
+): string {
+  const blob = `${row.source} ${row.description} ${row.notes}`.toLowerCase();
+  if (blob.includes("swim")) return "swim lesson";
+  if (blob.includes("nurse")) return "nurse sign out";
+  if (blob.includes("mansion")) return "to mansion at dismissal";
+  if (
+    blob.includes("early") ||
+    blob.includes("gone home") ||
+    blob.includes("leaving") ||
+    blob.includes("sign out")
+  ) {
+    return "has gone home early";
+  }
+  if (blob.includes("absent")) return "Absent (All Day)";
+  const desc = row.description.trim().replace(/\s*\(acknowledged\)/gi, "");
+  if (desc && !/^(parent |office |bus attendance|manual )/i.test(desc)) return desc;
+  const notes = row.notes.trim();
+  if (notes) return notes;
+  return desc || row.source.trim() || "—";
+}
+
 export function formatChangeSheetChangeText(row: TransportChangeSheetRow): string {
-  const desc = row.description.trim();
-  if (desc) return desc;
-  const source = row.source.trim();
-  if (source) return source;
-  return row.notes.trim() || "—";
+  return shortChangeSheetPhrase(row);
 }
 
 export function mapRowsToMasterChangeSheetPdf(
@@ -139,6 +159,7 @@ function drawDataRow(
     const col = COLUMNS[i];
     const w = col.key === "change" ? tableRight - x : col.width;
     const lines = cellTexts[i].lines;
+    doc.setFont("helvetica", col.key === "camper" ? "bold" : "normal");
     let textY = y + 4;
     for (const line of lines) {
       doc.text(line, x + 1, textY);
@@ -146,6 +167,7 @@ function drawDataRow(
     }
     x += w;
   }
+  doc.setFont("helvetica", "normal");
 
   const bottom = y + rowH;
   doc.setLineWidth(0.15);
@@ -172,15 +194,10 @@ export function buildMasterChangeSheetPdf(options: {
   const tableRight = pageWidth - margin;
   const printedAt = options.printedAt ?? new Date();
 
-  const metaParts = [
-    `Season ${options.season}`,
-    `Date ${options.sheetDate}`,
-    options.runPeriod.toUpperCase(),
-  ];
+  const metaParts = [`Summer ${options.season}`, options.sheetDate];
   if (options.totalCampers != null) {
     metaParts.push(`Total Campers: ${options.totalCampers}`);
   }
-  metaParts.push(`Changes: ${options.rows.length}`);
 
   let y = drawTransportPdfHeader(doc, margin, pageWidth, {
     companyName: options.companyName,

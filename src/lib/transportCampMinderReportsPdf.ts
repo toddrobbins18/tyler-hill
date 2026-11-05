@@ -21,69 +21,49 @@ export type GroupReportCamper = {
   contactsBlock: string;
   /** Person ID or camper id — rendered as Code 39 when set. */
   barcodeValue?: string;
+  addressLine?: string;
+  divisionLine?: string;
+  town?: string;
+  sessionLine?: string;
 };
 
 const FOOTER = 12;
 const DAY_LABELS = ["mo", "tu", "we", "th", "fr"];
 
-function drawDayBubbleHeader(doc: jsPDF, xStart: number, y: number, width: number): number {
+function drawWeekBubbleColumn(
+  doc: jsPDF,
+  x: number,
+  top: number,
+  width: number,
+  mode: "days" | "am-pm",
+): number {
+  const labelW = mode === "am-pm" ? 8 : 0;
+  const gridX = x + labelW;
+  const gridW = width - labelW;
+  const colW = gridW / DAY_LABELS.length;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7);
-  const colW = width / DAY_LABELS.length;
   DAY_LABELS.forEach((label, i) => {
-    doc.text(label, xStart + colW * i + colW / 2, y, { align: "center" });
+    doc.text(label, gridX + colW * i + colW / 2, top + 3, { align: "center" });
   });
-  return y + 4;
-}
-
-function drawDayBubbles(doc: jsPDF, cxStart: number, cy: number, width: number, radius = 2.2) {
-  const colW = width / DAY_LABELS.length;
-  doc.setDrawColor(0);
-  doc.setLineWidth(0.2);
-  DAY_LABELS.forEach((_, i) => {
-    const cx = cxStart + colW * i + colW / 2;
-    doc.circle(cx, cy, radius, "S");
-  });
-}
-
-function drawAmPmBubbleHeader(doc: jsPDF, xStart: number, y: number, width: number): number {
+  const drawRow = (cy: number) => {
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.25);
+    DAY_LABELS.forEach((_, i) => {
+      doc.circle(gridX + colW * i + colW / 2, cy, 2.1, "S");
+    });
+  };
+  if (mode === "days") {
+    drawRow(top + 8);
+    return 14;
+  }
   doc.setFont("helvetica", "bold");
   doc.setFontSize(6.5);
-  const colW = width / DAY_LABELS.length;
-  DAY_LABELS.forEach((label, i) => {
-    const cx = xStart + colW * i + colW / 2;
-    doc.text(label, cx, y, { align: "center" });
-    doc.text("AM", cx - 2.5, y + 3.5, { align: "center" });
-    doc.text("PM", cx + 2.5, y + 3.5, { align: "center" });
-  });
-  return y + 8;
-}
-
-function drawAmPmBubbles(
-  doc: jsPDF,
-  cxStart: number,
-  cy: number,
-  width: number,
-  camper: BubbleSheetCamper,
-) {
-  const colW = width / DAY_LABELS.length;
-  const r = 1.8;
-  doc.setLineWidth(0.2);
-  DAY_LABELS.forEach((_, i) => {
-    const cx = cxStart + colW * i + colW / 2;
-    const amX = cx - 2.5;
-    const pmX = cx + 2.5;
-    if (camper.ridesAm !== false) doc.circle(amX, cy, r, "S");
-    else {
-      doc.circle(amX, cy, r, "S");
-      doc.line(amX - r, cy - r, amX + r, cy + r);
-    }
-    if (camper.ridesPm !== false) doc.circle(pmX, cy, r, "S");
-    else {
-      doc.circle(pmX, cy, r, "S");
-      doc.line(pmX - r, cy - r, pmX + r, cy + r);
-    }
-  });
+  doc.text("AM", x + 1, top + 9);
+  drawRow(top + 8.2);
+  doc.text("PM", x + 1, top + 15);
+  drawRow(top + 14.2);
+  return 20;
 }
 
 function drawCamperBlock(
@@ -93,50 +73,59 @@ function drawCamperBlock(
   y: number,
   camper: GroupReportCamper,
   bubbleMode: "daily" | "am-pm",
-  bubbleCamper?: BubbleSheetCamper,
 ): number {
-  const bubbleWidth = 38;
+  const bubbleWidth = bubbleMode === "am-pm" ? 52 : 42;
   const bubbleX = pageWidth - margin - bubbleWidth;
-  const textRight = bubbleX - 4;
   const rowTop = y;
+  const nameLine = `${camper.name}${camper.demographicsLine ? ` ${camper.demographicsLine}` : ""}`;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
-  doc.text(camper.name, margin, y + 4);
-  if (camper.barcodeValue?.trim()) {
-    drawCode39Barcode(doc, margin + 52, y - 1, camper.barcodeValue, {
-      heightMm: 5.5,
-      narrowMm: 0.28,
+  doc.text(nameLine, margin, y + 4);
+  if (bubbleMode === "daily" && camper.barcodeValue?.trim()) {
+    drawCode39Barcode(doc, bubbleX - 28, y - 1, camper.barcodeValue, {
+      heightMm: 6,
+      narrowMm: 0.26,
       label: false,
     });
   }
+
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
-  y += 7;
-  doc.text(camper.demographicsLine, margin, y);
-  y += 3.5;
-  doc.text(camper.programLine, margin, y);
-  y += 3.5;
-  doc.text(camper.transportLine, margin, y);
-
-  const contactLines = doc.splitTextToSize(camper.contactsBlock, textRight - margin - 8) as string[];
-  doc.setFontSize(7);
-  let contactY = rowTop + 5;
-  for (const line of contactLines.slice(0, 4)) {
-    doc.text(line, margin + (textRight - margin) * 0.45, contactY, { align: "center" });
-    contactY += 3.2;
+  let textY = y + 8;
+  const leftLines = [
+    camper.addressLine,
+    camper.sessionLine || camper.programLine,
+    camper.divisionLine,
+    camper.town,
+    camper.transportLine,
+  ].filter((line): line is string => !!line && line !== "—");
+  for (const line of leftLines.slice(0, 4)) {
+    doc.text(line, margin, textY);
+    textY += 3.4;
   }
 
-  const bubbleY = rowTop + 12;
-  if (bubbleMode === "am-pm" && bubbleCamper) {
-    drawAmPmBubbles(doc, bubbleX, bubbleY, bubbleWidth, bubbleCamper);
-  } else {
-    drawDayBubbles(doc, bubbleX, bubbleY, bubbleWidth);
+  const contactX = margin + 78;
+  const contactLines = (doc.splitTextToSize(camper.contactsBlock, 55) as string[]).slice(0, 6);
+  let contactY = rowTop + 8;
+  for (const line of contactLines) {
+    doc.text(line, contactX, contactY);
+    contactY += 3.3;
   }
 
-  const rowBottom = Math.max(y + 4, bubbleY + 5);
-  doc.setLineWidth(0.12);
+  const bubbleHeight = drawWeekBubbleColumn(
+    doc,
+    bubbleX,
+    rowTop + 1,
+    bubbleWidth,
+    bubbleMode === "am-pm" ? "am-pm" : "days",
+  );
+
+  const rowBottom = Math.max(textY, contactY, rowTop + bubbleHeight) + 2;
+  doc.setDrawColor(180);
+  doc.setLineWidth(0.15);
   doc.line(margin, rowBottom, pageWidth - margin, rowBottom);
+  doc.setDrawColor(0);
   return rowBottom + 3;
 }
 
@@ -147,6 +136,8 @@ export function buildGroupReportPdf(options: {
   groupName: string;
   totalCampers: number;
   staffNames?: string[];
+  capacity?: number | null;
+  sessionSummary?: string | null;
   campers: GroupReportCamper[];
   logo?: TransportPdfLogo | null;
   printedAt?: Date;
@@ -169,22 +160,28 @@ export function buildGroupReportPdf(options: {
     printedAt,
   });
 
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
   if (options.staffNames?.length) {
-    doc.setFontSize(7.5);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Staff: ${options.staffNames.join(", ")}`, margin, y);
-    y += 5;
+    doc.text(`Staff List: ${options.staffNames.join(", ")}`, margin, y);
+    y += 4;
   }
-
-  y = drawDayBubbleHeader(doc, pageWidth - margin - 38, y, 38);
-  y += 2;
+  if (options.capacity != null) {
+    doc.text(`Capacity: ${options.capacity}`, margin, y);
+    y += 4;
+  }
+  const sessionSummary = options.sessionSummary?.trim();
+  doc.text(
+    `Total Campers: ${options.totalCampers}${sessionSummary ? `; Sessions: ${sessionSummary}` : ""}`,
+    margin,
+    y,
+  );
+  y += 6;
 
   for (const camper of options.campers) {
-    if (y > usableBottom - 22) {
+    if (y > usableBottom - 28) {
       doc.addPage();
       y = margin;
-      y = drawDayBubbleHeader(doc, pageWidth - margin - 38, y, 38);
-      y += 2;
     }
     y = drawCamperBlock(doc, margin, pageWidth, y, camper, "daily");
   }
@@ -218,13 +215,15 @@ export function buildBusRosterReportPdf(options: {
   const pageHeight = doc.internal.pageSize.height;
   const usableBottom = pageHeight - FOOTER;
 
+  const crew = options.driverOrCounselor?.trim() ?? "";
+  const [driverName, ...escortNames] = crew.split(/\s*[·,/]\s*/).filter(Boolean);
   const meta = [
     options.weekDateRange,
-    `Bus: ${options.bus}`,
-    options.routeName,
+    options.routeName ? options.routeName : "",
+    driverName ? `Driver: ${driverName}` : "Driver: —",
+    `Escorts: ${escortNames.join(", ") || "—"}`,
     `Total Passengers: ${options.totalPassengers}`,
-  ];
-  if (options.driverOrCounselor) meta.push(`Counselor: ${options.driverOrCounselor}`);
+  ].filter(Boolean);
 
   const printedAt = options.printedAt ?? new Date();
   let y = drawTransportPdfHeader(doc, margin, pageWidth, {
@@ -236,19 +235,13 @@ export function buildBusRosterReportPdf(options: {
     printedAt,
   });
 
-  y = drawAmPmBubbleHeader(doc, pageWidth - margin - 38, y, 38);
-  y += 2;
-
   for (let i = 0; i < options.campers.length; i++) {
     const camper = options.campers[i];
-    const bubble = options.bubbleCampers[i];
-    if (y > usableBottom - 24) {
+    if (y > usableBottom - 28) {
       doc.addPage();
       y = margin;
-      y = drawAmPmBubbleHeader(doc, pageWidth - margin - 38, y, 38);
-      y += 2;
     }
-    y = drawCamperBlock(doc, margin, pageWidth, y, camper, "am-pm", bubble);
+    y = drawCamperBlock(doc, margin, pageWidth, y, camper, "am-pm");
   }
 
   addTransportPdfFooters(doc, printedAt);
@@ -284,10 +277,12 @@ export function buildBusRouteSummaryPdf(options: {
   ];
 
   const printedAt = options.printedAt ?? new Date();
+  const buses = [...new Set(options.rows.map((row) => row.bus))];
   let y = drawTransportPdfHeader(doc, margin, pageWidth, {
     companyName: options.companyName,
     reportTitle: "Bus Route Summary",
-    metaLines: [`Season ${options.season}`, options.dateLabel, `${options.rows.length} stops`],
+    metaLines: [`Summer ${options.season}`, options.dateLabel, `${options.rows.length} stops`],
+    subtitle: buses.length === 1 ? buses[0] : undefined,
     logo: options.logo,
     printedAt,
   });
@@ -331,8 +326,9 @@ export function buildBusRouteSummaryPdf(options: {
   }
 
   addTransportPdfFooters(doc, printedAt);
+  const busSlug = buses.length === 1 ? buses[0].replace(/\s+/g, "-") : "buses";
   return {
     blob: doc.output("blob"),
-    filename: `bus-route-summary-${options.dateLabel.replace(/[^0-9-]/g, "")}.pdf`,
+    filename: `bus-route-summary-${busSlug}.pdf`,
   };
 }

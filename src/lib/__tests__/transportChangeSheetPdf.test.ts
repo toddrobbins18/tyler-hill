@@ -3,6 +3,7 @@ import {
   buildCamperSheetMetaLookup,
   formatChangeSheetTransportation,
   mapRowsToMasterChangeSheetPdf,
+  shortChangeSheetPhrase,
 } from "@/lib/transportChangeSheetPdf";
 import { PARENT_TRANSPORT_CHANGE_SHEET_BUS } from "@/lib/transportChangeSheets";
 
@@ -39,6 +40,27 @@ describe("transportChangeSheetPdf", () => {
       ],
       lookup,
     );
+    expect(shortChangeSheetPhrase({
+      source: "Bus attendance",
+      description: "Marked absent on bus",
+      notes: "",
+    })).toBe("Absent (All Day)");
+    expect(shortChangeSheetPhrase({
+      source: "Swim lesson",
+      description: "Swim lesson — no PM bus (acknowledged)",
+      notes: "",
+    })).toBe("swim lesson");
+    expect(shortChangeSheetPhrase({
+      source: "Nurse — sent home",
+      description: "Nurse — sent home (acknowledged)",
+      notes: "",
+    })).toBe("nurse sign out");
+    expect(shortChangeSheetPhrase({
+      source: "Office change",
+      description: "Office phone change",
+      notes: "to mansion at dismissal",
+    })).toBe("to mansion at dismissal");
+
     expect(pdfRows[0]).toMatchObject({
       camper: "Jamie Smith",
       transportation: "03",

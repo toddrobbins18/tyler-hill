@@ -25,6 +25,7 @@ export type TransportReportChildRow = {
   guardianNameP2: string | null;
   guardianPhone: string | null;
   guardianEmail: string | null;
+  homeAddress: string | null;
   enrolledWeeks?: number[];
 };
 
@@ -37,7 +38,7 @@ export async function loadTransportReportChildren(
   const { data, error } = await supabase
     .from("children")
     .select(
-      "id, person_id, name, group_name, gender, age, grade, session, enrolled_weeks, guardian_name, guardian_name_p2, guardian_phone, guardian_email, division:division_id(name)",
+      "id, person_id, name, group_name, gender, age, grade, session, enrolled_weeks, guardian_name, guardian_name_p2, guardian_phone, guardian_email, home_address, division:division_id(name)",
     )
     .eq("company_id", companyId)
     .eq("season", season)
@@ -76,6 +77,7 @@ export async function loadTransportReportChildren(
       guardianNameP2: (r.guardian_name_p2 as string | null) ?? null,
       guardianPhone: (r.guardian_phone as string | null) ?? null,
       guardianEmail: (r.guardian_email as string | null) ?? null,
+      homeAddress: (r.home_address as string | null)?.trim() || null,
       enrolledWeeks,
     });
   }
@@ -93,23 +95,33 @@ export function formatReportGenderLetter(gender: string | null): string {
 }
 
 export function formatReportGenderAgeGrade(row: TransportReportChildRow): string {
-  const parts = [
-    formatReportGenderLetter(row.gender),
-    row.age != null ? String(row.age) : row.grade?.trim() || "—",
-  ];
-  if (row.grade?.trim() && row.age != null) parts[1] = row.grade.trim();
-  return parts.join(" | ");
+  const letter = formatReportGenderLetter(row.gender);
+  const gradeOrAge = row.grade?.trim() || (row.age != null ? String(row.age) : "");
+  if (letter === "—" && !gradeOrAge) return "";
+  return `(${letter}|${gradeOrAge || "—"})`;
+}
+
+export function townFromHomeAddress(address: string | null | undefined): string {
+  const parts = (address ?? "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length < 2) return "";
+  return parts[parts.length - 2].replace(/\b[A-Z]{2}\b\s*\d{5}(-\d{4})?/i, "").trim();
 }
 
 export function formatReportParentContacts(row: TransportReportChildRow): string {
   const lines: string[] = [];
+  const phone = row.guardianPhone?.trim();
   if (row.guardianName?.trim()) {
-    lines.push(`${row.guardianName.trim()}${row.guardianPhone ? ` · ${row.guardianPhone.trim()}` : ""}`);
+    lines.push(`Mother: ${row.guardianName.trim()}`);
+    if (phone) lines.push(`(C: ${phone})`);
+  } else if (phone) {
+    lines.push(`(C: ${phone})`);
   }
   if (row.guardianNameP2?.trim()) {
-    lines.push(`${row.guardianNameP2.trim()}${row.guardianPhone ? "" : ""}`);
+    lines.push(`Father: ${row.guardianNameP2.trim()}`);
   }
-  if (!lines.length && row.guardianPhone?.trim()) lines.push(row.guardianPhone.trim());
   if (!lines.length && row.guardianEmail?.trim()) lines.push(row.guardianEmail.trim());
   return lines.join("\n") || "—";
 }
@@ -183,7 +195,18 @@ export function childToGroupReportCamper(
     transportLine,
     contactsBlock: formatReportParentContacts(child),
     barcodeValue,
+    addressLine: child.homeAddress?.trim() || undefined,
+    divisionLine: child.divisionName?.trim() || undefined,
+    town: townFromHomeAddress(child.homeAddress) || undefined,
+    sessionLine: child.session?.trim() || undefined,
   };
+}
+
+export function sessionSummaryForCampers(children: { session: string | null }[]): string | null {
+  const sessions = [...new Set(children.map((child) => child.session?.trim()).filter(Boolean))] as string[];
+  if (!sessions.length) return null;
+  if (sessions.length === 1) return sessions[0];
+  return sessions.slice(0, 3).join(", ");
 }
 
 export function buildRouteSummaryRows(

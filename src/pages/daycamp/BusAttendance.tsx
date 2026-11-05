@@ -402,7 +402,10 @@ export default function BusAttendance() {
             variant="outline"
             size="sm"
             className="gap-1.5"
-            onClick={handleBubbleSheet}
+            onClick={() => {
+              if (selectedRoutes.length > 1) handleBubbleSheetEachBus();
+              else handleBubbleSheet();
+            }}
             disabled={!selectedRoutes.length}
           >
             <Printer className="h-3.5 w-3.5" /> Preview bubble PDF

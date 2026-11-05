@@ -28,6 +28,7 @@ import {
   loadBusCounselorForRoute,
   loadTransportReportChildren,
   resolveCamperTransportLine,
+  sessionSummaryForCampers,
 } from "@/lib/transportReportData";
 import {
   enrollmentWeekForDate,
@@ -129,25 +130,39 @@ export default function TransportPrintReports() {
     });
   };
 
-  const handleRouteSummaryPdf = async () => {
+  const handleRouteSummaryPdf = async (routeIds?: number[]) => {
     const branding = await resolveTransportPdfBranding(currentCompany);
-    const rows = buildRouteSummaryRows(selectedRoutes, coreStops);
-    const built = buildBusRouteSummaryPdf({
-      companyName: branding.companyName,
-      season: currentSeason,
-      dateLabel: weekRangeLabel,
-      rows,
-      logo: branding.logo,
-      printedAt: branding.printedAt,
+    const routes = routeMeta.filter((route) => (routeIds ?? selectedRouteIds).includes(Number(route.id)));
+    const files = routes.flatMap((route) => {
+      const built = buildBusRouteSummaryPdf({
+        companyName: branding.companyName,
+        season: currentSeason,
+        dateLabel: weekRangeLabel,
+        rows: buildRouteSummaryRows([route], coreStops),
+        logo: branding.logo,
+        printedAt: branding.printedAt,
+      });
+      return built ? [{ built, bus: route.bus }] : [];
     });
-    openPreview(built, "Bus Route Summary", `${selectedRoutes.length} route(s)`);
+    if (!files.length) {
+      toast({ title: "Nothing to export", variant: "destructive" });
+      return;
+    }
+    if (files.length === 1) {
+      openPreview(files[0].built, "Bus Route Summary", files[0].bus);
+      return;
+    }
+    files.forEach((file, index) => {
+      window.setTimeout(() => triggerBlobDownload(file.built.blob, file.built.filename), index * 400);
+    });
+    toast({ title: "Downloading route summaries", description: `${files.length} PDF(s), one per bus.` });
   };
 
   const handleGroupReport = async (groupName: string, downloadOnly = false) => {
     const groupKids = children.filter((c) => c.groupName === groupName);
     if (!groupKids.length) return;
-    const campers = groupKids.map((c) =>
-      childToGroupReportCamper(
+    const campers = groupKids.map((c) => ({
+      ...childToGroupReportCamper(
         c,
         resolveCamperTransportLine(
           c.name,
@@ -157,7 +172,8 @@ export default function TransportPrintReports() {
           schedules,
         ),
       ),
-    );
+      transportLine: "",
+    }));
     const branding = await resolveTransportPdfBranding(currentCompany);
     const built = buildGroupReportPdf({
       companyName: branding.companyName,
@@ -165,6 +181,7 @@ export default function TransportPrintReports() {
       weekDateRange: weekRangeLabel,
       groupName,
       totalCampers: groupKids.length,
+      sessionSummary: sessionSummaryForCampers(groupKids),
       campers,
       logo: branding.logo,
       printedAt: branding.printedAt,
@@ -215,8 +232,8 @@ export default function TransportPrintReports() {
     for (const bc of bubbleRoute.campers) {
       const child = children.find((c) => c.name.trim().toLowerCase() === bc.name.trim().toLowerCase());
       if (child) {
-        reportCampers.push(
-          childToGroupReportCamper(
+        reportCampers.push({
+          ...childToGroupReportCamper(
             child,
             resolveCamperTransportLine(
               child.name,
@@ -226,7 +243,8 @@ export default function TransportPrintReports() {
               schedules,
             ),
           ),
-        );
+          transportLine: "",
+        });
       } else {
         reportCampers.push({
           name: bc.name,
@@ -328,15 +346,15 @@ export default function TransportPrintReports() {
           <CardTitle className="text-base flex items-center gap-2">
             <Bus className="h-4 w-4" /> Bus route summary
           </CardTitle>
-          <CardDescription>Stops, times, and passenger counts — PDF export.</CardDescription>
+          <CardDescription>One PDF per bus. Select the buses you want, or download one bus at a time.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="outline" onClick={() => setSelectedRouteIds(routeMeta.map((r) => r.id))}>
               Select all buses
             </Button>
-            <Button size="sm" onClick={handleRouteSummaryPdf} disabled={!selectedRoutes.length || loading}>
-              <Download className="mr-2 h-4 w-4" /> Download summary PDF
+            <Button size="sm" onClick={() => void handleRouteSummaryPdf()} disabled={!selectedRoutes.length || loading}>
+              <Download className="mr-2 h-4 w-4" /> Download each selected bus PDF
             </Button>
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-2">
@@ -344,6 +362,19 @@ export default function TransportPrintReports() {
               <label key={r.id} className="flex items-center gap-2 text-sm cursor-pointer">
                 <Checkbox checked={selectedRouteIds.includes(r.id)} onCheckedChange={() => toggleRoute(r.id)} />
                 <span className="font-medium">{r.bus}</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void handleRouteSummaryPdf([r.id]);
+                  }}
+                >
+                  PDF
+                </Button>
               </label>
             ))}
           </div>

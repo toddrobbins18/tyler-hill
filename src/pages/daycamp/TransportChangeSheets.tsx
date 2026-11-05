@@ -20,13 +20,12 @@ import {
   fetchTransportExceptions,
   loadManualOverrides,
   todayDateString,
-  type TransportRunPeriod,
 } from "@/lib/transportDailyOverrides";
 import { loadBusAttendance } from "@/lib/transportBusAttendance";
 import {
   buildApprovedChangeSheetRows,
   changeSheetRowsToCsv,
-  groupChangeSheetRowsByBus,
+  mergeDailyChangeSheets,
   PARENT_TRANSPORT_CHANGE_SHEET_BUS,
   sortChangeSheetRowsByBus,
   type TransportChangeSheetRow,
@@ -41,7 +40,6 @@ export default function TransportChangeSheets() {
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
   const [sheetDate, setSheetDate] = useState(todayDateString());
-  const [runPeriod, setRunPeriod] = useState<TransportRunPeriod>("am");
   const [selectedRouteIds, setSelectedRouteIds] = useState<number[]>([]);
   const [includeParentTransport, setIncludeParentTransport] = useState(true);
   const [routeMeta, setRouteMeta] = useState<RouteWithColor[]>([]);
@@ -110,23 +108,34 @@ export default function TransportChangeSheets() {
         setRows([]);
         return;
       }
-      const [exceptions, manual, attendance] = await Promise.all([
+      const [exceptions, manual, amAttendance, pmAttendance] = await Promise.all([
         fetchTransportExceptions(supabase, currentCompany.id, sheetDate),
         loadManualOverrides(supabase, currentCompany.id, currentSeason, sheetDate),
-        loadBusAttendance(supabase, currentCompany.id, currentSeason, sheetDate, runPeriod),
+        loadBusAttendance(supabase, currentCompany.id, currentSeason, sheetDate, "am"),
+        loadBusAttendance(supabase, currentCompany.id, currentSeason, sheetDate, "pm"),
       ]);
-      const built = buildApprovedChangeSheetRows({
+      const shared = {
         overrideDate: sheetDate,
-        runPeriod,
         exceptions,
         manual,
         routeMeta,
         coreStops,
         selectedRouteIds,
         includeParentTransport,
-        busAttendance: attendance.records,
         parentTransportCampers,
-      });
+      };
+      const built = mergeDailyChangeSheets(
+        buildApprovedChangeSheetRows({
+          ...shared,
+          runPeriod: "am",
+          busAttendance: amAttendance.records,
+        }),
+        buildApprovedChangeSheetRows({
+          ...shared,
+          runPeriod: "pm",
+          busAttendance: pmAttendance.records,
+        }),
+      );
       const filtered = built.filter((r) => !r.camper.startsWith("(No transport"));
       setRows(sortChangeSheetRowsByBus(filtered, routeMeta));
     } finally {
@@ -138,7 +147,6 @@ export default function TransportChangeSheets() {
     currentSeason,
     parentTransportCampers,
     routeMeta,
-    runPeriod,
     includeParentTransport,
     selectedRouteIds,
     sheetDate,
@@ -191,10 +199,12 @@ export default function TransportChangeSheets() {
     return parts.join(" + ");
   }, [allBusesSelected, includeParentTransport, masterSheetSelected, routeMeta, selectedRouteIds]);
 
-  const groupedRows = useMemo(
-    () => groupChangeSheetRowsByBus(rows, routeMeta),
-    [rows, routeMeta],
-  );
+  const sheetRows = useMemo(() => {
+    const mapped = mapRowsToMasterChangeSheetPdf(rows, camperMetaLookup);
+    return [...mapped].sort(
+      (a, b) => a.transportation.localeCompare(b.transportation) || a.camper.localeCompare(b.camper),
+    );
+  }, [camperMetaLookup, rows]);
 
   const toggleRoute = (routeId: number) => {
     setSelectedRouteIds((prev) =>
@@ -215,7 +225,7 @@ export default function TransportChangeSheets() {
       companyName: branding.companyName,
       season: currentSeason,
       sheetDate,
-      runPeriod: runPeriod.toUpperCase(),
+      runPeriod: "daily",
       totalCampers,
       rows: pdfRows,
       logo: branding.logo,
@@ -225,7 +235,7 @@ export default function TransportChangeSheets() {
     setReportPreview({
       open: true,
       title: "Master Change Sheet",
-      description: `${sheetDate} · ${runPeriod.toUpperCase()} · ${routeLabel}`,
+      description: `${sheetDate} · ${routeLabel} · buses and PT`,
       kind: "pdf",
       blob: built.blob,
       filename: built.filename,
@@ -247,7 +257,7 @@ export default function TransportChangeSheets() {
           .filter((r) => selectedRouteIds.includes(r.id))
           .map((r) => r.bus.replace(/\s+/g, "-"))
           .join("-");
-    a.download = `master-change-sheet-${sheetDate}-${runPeriod}-${busSuffix}.csv`;
+    a.download = `master-change-sheet-${sheetDate}-${busSuffix}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -285,23 +295,13 @@ export default function TransportChangeSheets() {
 
       <Card className="no-print">
         <CardHeader>
-          <CardTitle className="text-base">Date &amp; run</CardTitle>
-          <CardDescription>Choose the day and AM/PM run for this change sheet.</CardDescription>
+          <CardTitle className="text-base">Date</CardTitle>
+          <CardDescription>
+            One daily sheet for every bus and parent transport (PT). AM and PM changes are combined.
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
           <Input type="date" value={sheetDate} onChange={(e) => setSheetDate(e.target.value)} className="w-auto" />
-          <div className="flex gap-1">
-            {(["am", "pm"] as const).map((run) => (
-              <Button
-                key={run}
-                size="sm"
-                variant={runPeriod === run ? "default" : "outline"}
-                onClick={() => setRunPeriod(run)}
-              >
-                {run.toUpperCase()}
-              </Button>
-            ))}
-          </div>
         </CardContent>
       </Card>
 
@@ -391,7 +391,7 @@ export default function TransportChangeSheets() {
       </Card>
 
       <div className="hidden print:block text-sm text-muted-foreground">
-        {sheetDate} · {runPeriod.toUpperCase()} · {routeLabel} · {rows.length} change{rows.length === 1 ? "" : "s"}
+        {sheetDate} · {routeLabel} · {rows.length} change{rows.length === 1 ? "" : "s"}
       </div>
 
       <p className="text-sm text-muted-foreground no-print">
@@ -413,38 +413,29 @@ export default function TransportChangeSheets() {
               No approved changes for this date and filter. Pending items are on the Pending Changes page.
             </p>
           ) : (
-            <div className="space-y-6">
-              {groupedRows.map((group) => (
-                <section key={group.bus} className="space-y-3 break-inside-avoid">
-                  <div className="flex items-center gap-2 border-b pb-2">
-                    <h2 className="text-base font-semibold">{group.bus}</h2>
-                    {group.routeName ? (
-                      <span className="text-sm text-muted-foreground">{group.routeName}</span>
-                    ) : null}
-                    <Badge variant="outline" className="ml-auto text-[10px] no-print">
-                      {group.rows.length} change{group.rows.length === 1 ? "" : "s"}
-                    </Badge>
-                  </div>
-                  <div className="space-y-3">
-                    {group.rows.map((row, i) => (
-                      <div key={`${group.bus}-${row.camper}-${i}`} className="rounded-lg border p-3 print:p-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-semibold">{row.camper}</span>
-                          <Badge variant="secondary" className="bg-green-100 text-green-800 no-print">
-                            Approved
-                          </Badge>
-                        </div>
-                        <p className="text-xs font-medium text-primary">{row.source}</p>
-                        <p className="text-sm">{row.description}</p>
-                        {row.stop ? (
-                          <p className="text-xs text-muted-foreground">{row.stop}</p>
-                        ) : null}
-                        {row.notes ? <p className="text-xs italic">{row.notes}</p> : null}
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              ))}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left">
+                    <th className="py-2 pr-3 font-semibold">Camper</th>
+                    <th className="py-2 pr-3 font-semibold">Transportation</th>
+                    <th className="py-2 pr-3 font-semibold">Division</th>
+                    <th className="py-2 pr-3 font-semibold">Group</th>
+                    <th className="py-2 font-semibold">Change</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sheetRows.map((row, i) => (
+                    <tr key={`${row.camper}-${row.change}-${i}`} className="border-b">
+                      <td className="py-2 pr-3 font-semibold">{row.camper}</td>
+                      <td className="py-2 pr-3">{row.transportation}</td>
+                      <td className="py-2 pr-3">{row.division}</td>
+                      <td className="py-2 pr-3">{row.group}</td>
+                      <td className="py-2">{row.change}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </CardContent>
