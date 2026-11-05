@@ -318,6 +318,12 @@ export function resolveStoredDivisionLeader(saved: string | undefined, child: Ro
   return resolveDivisionLeaderFromRoster(child);
 }
 
+/** Swim Bracelets grid — show Airtable/imported leader only (not roster staff names). */
+export function displayImportedDivisionLeader(value: string | undefined | null): string {
+  if (isBlankDivisionLeader(value)) return "—";
+  return matchDivisionLeaderOption(value!);
+}
+
 export function mergeSwimTestNoteOptions(extra: string[]): string[] {
   return mergeProctorOptions([...SWIM_TEST_NOTE_OPTIONS], extra);
 }
@@ -384,7 +390,7 @@ export function braceletFromChild(child: RosterChild): BraceletRecord {
     personId: child.person_id,
     name: child.name,
     group: rosterGroup(child),
-    divisionLeader: rosterDivisionLeader(child),
+    divisionLeader: "—",
     currentBracelet: "",
     generalNote: "",
     proctor1: "",
@@ -568,7 +574,7 @@ export function mergeBracelets(
       name: child.name,
       personId: child.person_id,
       group: resolveDisplayGroup(rosterGroup(child), prev?.group),
-      divisionLeader: resolveStoredDivisionLeader(prev?.divisionLeader, child),
+      divisionLeader: displayImportedDivisionLeader(prev?.divisionLeader),
     };
     return prev ? { ...prev, ...rosterFields } : braceletFromChild(child);
   });
@@ -1084,7 +1090,6 @@ export async function fetchSwimDivisionLeaderOptions(
   for (const row of staffRows ?? []) {
     const name = String(row.name ?? "").trim();
     if (!name) continue;
-    options.push(name);
     const role = String(row.role ?? "").toLowerCase();
     if (role.includes("division") || role.includes("leader")) {
       options.push(matchDivisionLeaderOption(name));
@@ -1093,7 +1098,7 @@ export async function fetchSwimDivisionLeaderOptions(
   for (const row of swimRows ?? []) {
     const bracelet = row.bracelet as Record<string, unknown> | null;
     const leader = String(bracelet?.divisionLeader ?? "").trim();
-    if (leader) options.push(leader);
+    if (leader) options.push(matchDivisionLeaderOption(leader));
   }
 
   return mergeDivisionLeaderOptions(options);
