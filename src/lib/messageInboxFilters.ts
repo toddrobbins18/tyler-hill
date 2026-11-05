@@ -81,3 +81,32 @@ export function filterMessagesForCampInbox<T extends InboxMessageLike>(
 export function sandboxInboxUsesTrainingFilter(slug: string | null | undefined): boolean {
   return isNestSandboxCompany(slug);
 }
+
+export const DIVISION_CHANNEL_THREAD = "division_channel";
+export const PARENT_PORTAL_THREAD = "parent_division_leader";
+
+type ThreadListRow = {
+  thread_kind?: string | null;
+  sender_id?: string | null;
+  recipient_id?: string | null;
+};
+
+/** Division channels live on the Channels tab. Parent chats live in Inbox for both people. */
+export function messageShownInSentList(row: ThreadListRow): boolean {
+  const kind = row.thread_kind ?? null;
+  return kind !== DIVISION_CHANNEL_THREAD && kind !== PARENT_PORTAL_THREAD;
+}
+
+export function messageShownInInboxList(
+  row: ThreadListRow,
+  userId: string,
+  options?: { hasInboundReply?: boolean },
+): boolean {
+  const kind = row.thread_kind ?? null;
+  if (kind === DIVISION_CHANNEL_THREAD) return false;
+  if (kind === PARENT_PORTAL_THREAD) {
+    return row.sender_id === userId || row.recipient_id === userId;
+  }
+  if (row.recipient_id === userId) return true;
+  return !!options?.hasInboundReply && row.sender_id === userId;
+}

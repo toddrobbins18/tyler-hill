@@ -295,8 +295,8 @@ export default function ParentPortal() {
       activeView={activeView}
       onNavigate={setActiveView}
       onSignOut={handleSignOut}
-      mainBackdropImageUrl={heroImageUrl}
-      mainBackdropTone={activeView === "home" ? "hero" : "subtle"}
+      mainBackdropImageUrl={activeView === "home" ? heroImageUrl : null}
+      mainBackdropTone="hero"
     >
       {activeView === "home" && <ParentHomeView {...sharedProps} />}
       {activeView === "campers" && <ParentCampersView {...sharedProps} />}

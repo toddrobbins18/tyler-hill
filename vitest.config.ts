@@ -21,6 +21,8 @@ export default defineConfig({
       "src/lib/__tests__/swimBraceletReportPdf.test.ts",
       "src/lib/__tests__/divisionFilterUtils.test.ts",
       "src/lib/__tests__/groupSchedule.test.ts",
+      "src/lib/__tests__/audienceMessaging.test.ts",
+      "src/lib/__tests__/messageInboxFilters.test.ts",
       "src/lib/__tests__/operationsDashboard.test.ts",
     ],
   },

@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ImageIcon, MessageSquare, Search } from "lucide-react";
+import { ArrowLeft, Bus, ImageIcon, MessageSquare, Search, Users } from "lucide-react";
 import { ParentPortalMediaGallery } from "./ParentPortalMediaGallery";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import InlineThread from "@/components/messages/InlineThread";
+import { AudienceMessageThread } from "@/components/messages/AudienceMessageThread";
 import { EmptyState } from "./EmptyState";
 import { camperInitials } from "@/lib/parentPortalConstants";
+import { formatParentMessageListDate } from "@/lib/campTime";
 import {
   fetchMessageRootById,
   listParentPortalThreads,
@@ -16,7 +18,6 @@ import {
   type ParentPortalThreadRow,
 } from "@/lib/parentPortalMessaging";
 import { messageContentPreview } from "@/lib/messageContentUtils";
-import { formatParentMessageListDate } from "@/lib/campTime";
 import { cn } from "@/lib/utils";
 import { markThreadRepliesReadForRecipient } from "@/lib/messageReadReceipts";
 
@@ -46,7 +47,65 @@ type ThreadMessage = {
   media_file_name?: string | null;
 };
 
-type SectionTab = "chats" | "photos";
+function ParentAudienceNotes({
+  notes,
+  empty,
+  onOpen,
+}: {
+  notes: CampNote[];
+  empty: string;
+  onOpen: (note: CampNote) => void;
+}) {
+  if (notes.length === 0) {
+    return (
+      <div className="overflow-hidden rounded-2xl border border-[hsl(var(--pp-border))] bg-[hsl(var(--pp-bg-elevated))]">
+        <p className="px-4 py-8 text-center text-sm text-[hsl(var(--pp-text-muted))]">{empty}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[hsl(var(--pp-border))] bg-[hsl(var(--pp-bg-elevated))]">
+      {notes.map((note, index) => (
+        <button
+          key={note.id}
+          type="button"
+          onClick={() => onOpen(note)}
+          className={cn(
+            "flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-[hsl(var(--pp-brand-subtle))]",
+            index > 0 && "border-t border-[hsl(var(--pp-border))]",
+          )}
+        >
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--pp-brand))]/15 text-sm font-semibold text-[hsl(var(--pp-brand-dark))]">
+            {camperInitials(note.audience_label || note.title)}
+          </div>
+          <div className="min-w-0 flex-1 pt-0.5">
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="truncate font-semibold text-[hsl(var(--pp-fg))]">{note.audience_label || note.title}</p>
+              {note.published_at ? (
+                <span className="shrink-0 text-xs tabular-nums text-[hsl(var(--pp-text-muted))]">
+                  {formatParentMessageListDate(note.published_at)}
+                </span>
+              ) : null}
+            </div>
+            <p className="truncate text-sm text-[hsl(var(--pp-text-muted))]">{note.title}</p>
+            <p className="mt-0.5 line-clamp-1 text-sm text-[hsl(var(--pp-text-muted))]">{note.body}</p>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+type SectionTab = "chats" | "groups" | "buses" | "photos";
+
+type CampNote = {
+  id: string;
+  title: string;
+  body: string;
+  published_at: string;
+  audience_kind: string | null;
+  audience_label: string | null;
+};
 
 export function ParentMessagesView({ companyId, companySlug }: Props) {
   const [sectionTab, setSectionTab] = useState<SectionTab>("chats");
@@ -56,6 +115,8 @@ export function ParentMessagesView({ companyId, companySlug }: Props) {
   const [loading, setLoading] = useState(true);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [selectedLeaderName, setSelectedLeaderName] = useState<string | null>(null);
+  const [campNotes, setCampNotes] = useState<CampNote[]>([]);
+  const [openNote, setOpenNote] = useState<CampNote | null>(null);
   const [threadRoot, setThreadRoot] = useState<ThreadMessage | null>(null);
   const [opening, setOpening] = useState(false);
 
@@ -68,6 +129,15 @@ export function ParentMessagesView({ companyId, companySlug }: Props) {
     const { rows: list, error } = await listParentPortalThreads(supabase, companyId);
     if (error) toast.error(error);
     setRows(list);
+    const notes = await supabase
+      .from("parent_portal_announcements")
+      .select("id, title, body, published_at, audience_kind, audience_label")
+      .eq("company_id", companyId)
+      .eq("is_published", true)
+      .in("audience_kind", ["group", "bus"])
+      .order("published_at", { ascending: false })
+      .limit(20);
+    setCampNotes((notes.data ?? []) as CampNote[]);
     setLoading(false);
   }, [companyId]);
 
@@ -212,7 +282,7 @@ export function ParentMessagesView({ companyId, companySlug }: Props) {
     );
   }
 
-  if (rows.length === 0) {
+  if (rows.length === 0 && campNotes.length === 0) {
     return (
       <EmptyState
         icon={MessageSquare}
@@ -248,6 +318,32 @@ export function ParentMessagesView({ companyId, companySlug }: Props) {
         </button>
         <button
           type="button"
+          onClick={() => setSectionTab("groups")}
+          className={cn(
+            "flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-medium transition-colors",
+            sectionTab === "groups"
+              ? "bg-[hsl(var(--pp-brand))] text-white shadow-sm"
+              : "text-[hsl(var(--pp-text-muted))] hover:text-[hsl(var(--pp-fg))]",
+          )}
+        >
+          <Users className="h-4 w-4" />
+          Groups
+        </button>
+        <button
+          type="button"
+          onClick={() => setSectionTab("buses")}
+          className={cn(
+            "flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-medium transition-colors",
+            sectionTab === "buses"
+              ? "bg-[hsl(var(--pp-brand))] text-white shadow-sm"
+              : "text-[hsl(var(--pp-text-muted))] hover:text-[hsl(var(--pp-fg))]",
+          )}
+        >
+          <Bus className="h-4 w-4" />
+          Buses
+        </button>
+        <button
+          type="button"
           onClick={() => setSectionTab("photos")}
           className={cn(
             "flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-medium transition-colors",
@@ -260,6 +356,18 @@ export function ParentMessagesView({ companyId, companySlug }: Props) {
           Photos
         </button>
       </div>
+
+      {sectionTab === "groups" || sectionTab === "buses" ? (
+        openNote && openNote.audience_kind === (sectionTab === "groups" ? "group" : "bus") ? (
+          <AudienceMessageThread note={openNote} onBack={() => setOpenNote(null)} />
+        ) : (
+          <ParentAudienceNotes
+            notes={campNotes.filter((note) => note.audience_kind === (sectionTab === "groups" ? "group" : "bus"))}
+            empty={sectionTab === "groups" ? "No group messages yet." : "No bus messages yet."}
+            onOpen={setOpenNote}
+          />
+        )
+      ) : null}
 
       {sectionTab === "photos" ? (
         <ParentPortalMediaGallery

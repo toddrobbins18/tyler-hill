@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Mail, Send, Eye, Clock, Bell, Users, User, Hash, Megaphone, ChevronDown, ChevronUp, ArrowLeft, SendHorizonal, Reply } from "lucide-react";
+import { Mail, Send, Eye, Clock, Bell, Users, User, Hash, Megaphone, Bus, ChevronDown, ChevronUp, ArrowLeft, SendHorizonal, Reply } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,6 +18,7 @@ import InlineThread from "@/components/messages/InlineThread";
 import { StaffParentFamiliesPanel } from "@/components/messages/StaffParentFamiliesPanel";
 import { StaffDivisionChannelsPanel } from "@/components/messages/StaffDivisionChannelsPanel";
 import { StaffAnnouncementsPanel } from "@/components/messages/StaffAnnouncementsPanel";
+import { StaffAudienceMessagesPanel } from "@/components/messages/StaffAudienceMessagesPanel";
 import { countStaffDivisionChannelUnread } from "@/lib/divisionChannelMessaging";
 import { notifyNestStaffMessageInsert } from "@/lib/nestBrowserMessageNotify";
 import { notificationsDebug } from "@/lib/notificationDebug";
@@ -26,6 +27,8 @@ import { messageContentPreview } from "@/lib/messageContentUtils";
 import { messageMediaEnabledForCamp, messagePreviewLabel } from "@/lib/messageMedia";
 import {
   filterMessagesForCampInbox,
+  messageShownInInboxList,
+  messageShownInSentList,
   sandboxInboxUsesTrainingFilter,
 } from "@/lib/messageInboxFilters";
 import { NestSandboxStaffTestAccountsCard } from "@/components/messages/NestSandboxStaffTestAccountsCard";
@@ -73,6 +76,8 @@ interface Message {
   thread_kind?: string | null;
   child_id?: string | null;
   child_name?: string | null;
+  /** Unread for the person viewing Inbox (not the other person's read receipt). */
+  inbox_unread?: boolean;
 }
 
 const TAG_LABELS: Record<string, string> = {
@@ -134,16 +139,16 @@ export default function Messages() {
 
   // Persist viewMode and groupId in sessionStorage so they survive re-mounts
   const [viewMode, setViewModeState] = useState<
-    'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families' | 'channels' | 'announcements'
+    'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families' | 'channels' | 'announcements' | 'group_messages' | 'bus_messages'
   >(() => {
     const saved = sessionStorage.getItem('messages_view_mode');
-    return (saved as 'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families' | 'channels' | 'announcements') || 'inbox';
+    return (saved as 'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families' | 'channels' | 'announcements' | 'group_messages' | 'bus_messages') || 'inbox';
   });
   const [activeGroupId, setActiveGroupIdState] = useState<string | null>(() => {
     return sessionStorage.getItem('messages_active_group_id') || null;
   });
 
-  const setViewMode = (mode: 'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families' | 'channels' | 'announcements') => {
+  const setViewMode = (mode: 'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families' | 'channels' | 'announcements' | 'group_messages' | 'bus_messages') => {
     sessionStorage.setItem('messages_view_mode', mode);
     if (mode !== 'groups') {
       sessionStorage.removeItem('messages_active_group_id');
@@ -172,6 +177,7 @@ export default function Messages() {
   });
   const [emailConfig, setEmailConfig] = useState<any>(null);
   const [profileCache, setProfileCache] = useState<Record<string, string>>({});
+  const [viewerId, setViewerId] = useState<string | null>(null);
   const { currentCompany } = useCompany();
 
   const resolveProfileNames = useCallback(async (messages: any[]) => {
@@ -250,6 +256,7 @@ export default function Messages() {
   const fetchMessages = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
+    setViewerId(user.id);
 
     const { error: fixErr } = await supabase.rpc("apply_message_senders_from_email_logs_for_inbox");
     const missingFixRpc =
@@ -259,18 +266,78 @@ export default function Messages() {
       notificationsDebug("apply_message_senders_from_email_logs_for_inbox error", { message: fixErr.message });
     }
 
-    // Only fetch top-level messages (not replies)
-    const { data, error } = await supabase
-      .from("messages")
-      .select("*")
-      .eq("recipient_id", user.id)
-      .is("parent_message_id", null)
-      .order("created_at", { ascending: false });
+    // Top-level mail addressed to me, parent chats I'm in, and threads someone replied to.
+    const [addressed, parentThreads, repliesToMe, unreadReplies] = await Promise.all([
+      supabase
+        .from("messages")
+        .select("*")
+        .eq("recipient_id", user.id)
+        .is("parent_message_id", null)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("messages")
+        .select("*")
+        .eq("sender_id", user.id)
+        .eq("thread_kind", "parent_division_leader")
+        .is("parent_message_id", null)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("messages")
+        .select("parent_message_id")
+        .eq("recipient_id", user.id)
+        .not("parent_message_id", "is", null),
+      supabase
+        .from("messages")
+        .select("parent_message_id")
+        .eq("recipient_id", user.id)
+        .eq("read", false)
+        .not("parent_message_id", "is", null),
+    ]);
 
-    if (error) {
-      notificationsDebug("Inbox fetch error", { message: error.message, code: error.code });
+    if (addressed.error) {
+      notificationsDebug("Inbox fetch error", { message: addressed.error.message, code: addressed.error.code });
       return;
     }
+
+    const unreadReplyRoots = new Set(
+      (unreadReplies.data ?? [])
+        .map((row) => row.parent_message_id)
+        .filter((id): id is string => !!id),
+    );
+    const inboundReplyRoots = new Set(
+      (repliesToMe.data ?? [])
+        .map((row) => row.parent_message_id)
+        .filter((id): id is string => !!id),
+    );
+
+    const byId = new Map<string, (typeof addressed.data)[number]>();
+    for (const row of [...(addressed.data ?? []), ...(parentThreads.data ?? [])]) {
+      if (!row || !messageShownInInboxList(row, user.id, { hasInboundReply: inboundReplyRoots.has(row.id) })) {
+        continue;
+      }
+      byId.set(row.id, row);
+    }
+
+    const missingRootIds = [...inboundReplyRoots].filter((id) => !byId.has(id));
+    if (missingRootIds.length > 0) {
+      const { data: extraRoots, error: extraErr } = await supabase
+        .from("messages")
+        .select("*")
+        .in("id", missingRootIds)
+        .is("parent_message_id", null);
+      if (extraErr) {
+        notificationsDebug("Inbox reply-root fetch error", { message: extraErr.message, code: extraErr.code });
+      }
+      for (const row of extraRoots ?? []) {
+        if (messageShownInInboxList(row, user.id, { hasInboundReply: true })) {
+          byId.set(row.id, row);
+        }
+      }
+    }
+
+    const data = [...byId.values()].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
 
     if (data) {
       const cache = await resolveProfileNames(data);
@@ -298,6 +365,8 @@ export default function Messages() {
           ...m,
           sender_name:
             (m.sender_id && labelFromCache(cache, m.sender_id)) || m.sender_display_name?.trim() || undefined,
+          recipient_name: m.recipient_id ? labelFromCache(cache, m.recipient_id) || "Unknown" : undefined,
+          inbox_unread: (m.recipient_id === user.id && !m.read) || unreadReplyRoots.has(m.id),
           reply_count: count || 0,
           latest_reply_content: latestReply?.content,
           latest_reply_kind: latestReply?.message_kind,
@@ -322,7 +391,7 @@ export default function Messages() {
         child_name: m.child_id ? childNames.get(m.child_id) : undefined,
       }));
       const visible = filterMessagesForCampInbox(withChildLabels, currentCompany);
-      const unread = visible.filter((m) => !m.read).length;
+      const unread = visible.filter((m) => m.inbox_unread).length;
       notificationsDebug("Inbox refetched", {
         userId: user.id,
         total: visible.length,
@@ -389,7 +458,9 @@ export default function Messages() {
           recipient_name: m.recipient_id ? (labelFromCache(cache, m.recipient_id) || "Unknown") : undefined,
         };
       });
-      const visible = filterMessagesForCampInbox(enriched, currentCompany);
+      const visible = filterMessagesForCampInbox(enriched, currentCompany).filter((m) =>
+        messageShownInSentList(m),
+      );
       notificationsDebug("Sent list refetched", { userId: user.id, count: visible.length });
       setSentMessages(visible);
     }
@@ -404,7 +475,9 @@ export default function Messages() {
         prev?.id === messageId ? { ...prev, read: true, read_at: readAt } : prev,
       );
       setReceivedMessages((prev) =>
-        prev.map((m) => (m.id === messageId ? { ...m, read: true, read_at: readAt } : m)),
+        prev.map((m) =>
+          m.id === messageId ? { ...m, read: true, read_at: readAt, inbox_unread: false } : m,
+        ),
       );
       fetchMessages();
     }
@@ -417,16 +490,15 @@ export default function Messages() {
 
   const handleMessageClick = (msg: Message) => {
     setSelectedMessage(msg);
-    if (viewMode === "inbox" && msg.recipient_id) {
-      if (!msg.read) {
-        markAsRead(msg.id);
-      } else {
-        void supabase.auth.getUser().then(({ data: { user } }) => {
-          if (user) {
-            void markThreadRepliesReadForRecipient(supabase, msg.id, user.id);
-          }
-        });
-      }
+    if (viewMode === "inbox") {
+      void supabase.auth.getUser().then(({ data: { user } }) => {
+        if (!user) return;
+        if (msg.recipient_id === user.id && msg.inbox_unread) {
+          void markAsRead(msg.id);
+          return;
+        }
+        void markThreadRepliesReadForRecipient(supabase, msg.id, user.id);
+      });
     }
   };
 
@@ -733,6 +805,20 @@ export default function Messages() {
             Announcements
           </Button>
           <Button
+            variant={viewMode === 'group_messages' ? 'default' : 'outline'}
+            onClick={() => { setViewMode('group_messages'); setSelectedMessage(null); }}
+          >
+            <Users className="h-4 w-4 mr-2" />
+            Group messages
+          </Button>
+          <Button
+            variant={viewMode === 'bus_messages' ? 'default' : 'outline'}
+            onClick={() => { setViewMode('bus_messages'); setSelectedMessage(null); }}
+          >
+            <Bus className="h-4 w-4 mr-2" />
+            Bus messages
+          </Button>
+          <Button
             variant={viewMode === 'compose' ? 'default' : 'outline'}
             onClick={() => setViewMode('compose')}
           >
@@ -765,6 +851,14 @@ export default function Messages() {
         />
       ) : null}
 
+      {viewMode === 'group_messages' && currentCompany?.id ? (
+        <StaffAudienceMessagesPanel companyId={currentCompany.id} kind="group" />
+      ) : null}
+
+      {viewMode === 'bus_messages' && currentCompany?.id ? (
+        <StaffAudienceMessagesPanel companyId={currentCompany.id} kind="bus" />
+      ) : null}
+
       {viewMode === 'announcements' && currentCompany?.id ? (
         <StaffAnnouncementsPanel companyId={currentCompany.id} />
       ) : null}
@@ -791,19 +885,19 @@ export default function Messages() {
                         onClick={() => handleMessageClick(msg)}
                         className={`w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors ${
                           selectedMessage?.id === msg.id ? 'bg-muted' : ''
-                        } ${viewMode === 'inbox' && !msg.read ? 'bg-primary/5 border-l-4 border-primary' : ''}`}
+                        } ${viewMode === 'inbox' && msg.inbox_unread ? 'bg-primary/5 border-l-4 border-primary' : ''}`}
                       >
                         <div className="min-w-0 space-y-1.5">
                           <p
                             className={`font-medium leading-snug line-clamp-2 break-words ${
-                              viewMode === 'inbox' && !msg.read ? 'font-bold' : ''
+                              viewMode === 'inbox' && msg.inbox_unread ? 'font-bold' : ''
                             }`}
                             title={inboxSidebarTitle(msg)}
                           >
                             {inboxSidebarTitle(msg)}
                           </p>
                           <div className="flex flex-wrap items-center gap-1.5">
-                            {viewMode === 'inbox' && !msg.read && (
+                            {viewMode === 'inbox' && msg.inbox_unread && (
                               <Badge variant="default" className="h-5 shrink-0 px-1.5 text-[10px]">
                                 NEW
                               </Badge>
@@ -828,15 +922,21 @@ export default function Messages() {
                           </div>
                           {viewMode === 'inbox' && (
                             <p className="text-xs font-medium text-primary truncate">
-                              From:{" "}
-                              {inboxFromDisplayName({
-                                sender_name: msg.sender_name,
-                                sender_id: msg.sender_id,
-                                sender_display_name: msg.sender_display_name,
-                                notification_type: msg.notification_type,
-                                subject: msg.subject,
-                                group_id: msg.group_id,
-                              })}
+                              {viewerId && msg.sender_id === viewerId ? (
+                                <>To: {msg.recipient_name || "Unknown"}</>
+                              ) : (
+                                <>
+                                  From:{" "}
+                                  {inboxFromDisplayName({
+                                    sender_name: msg.sender_name,
+                                    sender_id: msg.sender_id,
+                                    sender_display_name: msg.sender_display_name,
+                                    notification_type: msg.notification_type,
+                                    subject: msg.subject,
+                                    group_id: msg.group_id,
+                                  })}
+                                </>
+                              )}
                             </p>
                           )}
                           {viewMode === 'sent' && (

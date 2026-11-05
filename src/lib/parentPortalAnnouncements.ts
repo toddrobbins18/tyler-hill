@@ -129,6 +129,7 @@ async function fetchLatestPublishedAnnouncement(
     .select("title, body, published_at, media_storage_path, media_mime")
     .eq("company_id", companyId)
     .eq("is_published", true)
+    .or("audience_kind.eq.all,audience_kind.is.null")
     .order("published_at", { ascending: false })
     .limit(1)
     .maybeSingle();

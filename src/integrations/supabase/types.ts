@@ -725,6 +725,7 @@ export type Database = {
           date_of_birth: string | null
           division_id: string | null
           emergency_contact: string | null
+          enrolled_weeks: number[] | null
           gender: string | null
           grade: string | null
           group_name: string | null
@@ -766,6 +767,7 @@ export type Database = {
           date_of_birth?: string | null
           division_id?: string | null
           emergency_contact?: string | null
+          enrolled_weeks?: number[] | null
           gender?: string | null
           grade?: string | null
           group_name?: string | null
@@ -807,6 +809,7 @@ export type Database = {
           date_of_birth?: string | null
           division_id?: string | null
           emergency_contact?: string | null
+          enrolled_weeks?: number[] | null
           gender?: string | null
           grade?: string | null
           group_name?: string | null
@@ -2277,9 +2280,12 @@ export type Database = {
       }
       messages: {
         Row: {
+          child_id: string | null
           company_id: string | null
           content: string
           created_at: string | null
+          division_id: string | null
+          family_id: string | null
           group_id: string | null
           id: string
           media_file_name: string | null
@@ -2294,11 +2300,15 @@ export type Database = {
           sender_display_name: string | null
           sender_id: string | null
           subject: string
+          thread_kind: string | null
         }
         Insert: {
+          child_id?: string | null
           company_id?: string | null
           content: string
           created_at?: string | null
+          division_id?: string | null
+          family_id?: string | null
           group_id?: string | null
           id?: string
           media_file_name?: string | null
@@ -2313,11 +2323,15 @@ export type Database = {
           sender_display_name?: string | null
           sender_id?: string | null
           subject: string
+          thread_kind?: string | null
         }
         Update: {
+          child_id?: string | null
           company_id?: string | null
           content?: string
           created_at?: string | null
+          division_id?: string | null
+          family_id?: string | null
           group_id?: string | null
           id?: string
           media_file_name?: string | null
@@ -2332,6 +2346,7 @@ export type Database = {
           sender_display_name?: string | null
           sender_id?: string | null
           subject?: string
+          thread_kind?: string | null
         }
         Relationships: [
           {
