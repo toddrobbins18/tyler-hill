@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  SWIM_FORMATION_CRITERIA,
-  buildSwimFormationGroups,
+  buildSwimPeriodGroups,
   fetchSwimFormationCampers,
-  type SwimFormationCriterion,
+  type SwimFormationCamper,
   type SwimFormationGroup,
 } from "@/lib/swimGroupFormation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,21 +30,18 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
   const { currentCompany } = useCompany();
   const [loading, setLoading] = useState(true);
   const [building, setBuilding] = useState(false);
-  const [criteria, setCriteria] = useState<SwimFormationCriterion[]>([
-    "division",
-    "divisionLeader",
-    "swimLevel",
-  ]);
+  const [campers, setCampers] = useState<SwimFormationCamper[]>([]);
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [instructorCount, setInstructorCount] = useState(3);
   const [groups, setGroups] = useState<SwimFormationGroup[]>([]);
-  const [rosterCount, setRosterCount] = useState(0);
 
   const loadRoster = useCallback(async () => {
     if (!companyId || !season) return;
     setLoading(true);
     try {
-      const campers = await fetchSwimFormationCampers(supabase, companyId, season);
-      setRosterCount(campers.length);
+      const next = await fetchSwimFormationCampers(supabase, companyId, season);
+      setCampers(next);
+      setSelectedGroups((prev) => prev.filter((name) => next.some((c) => c.group === name)));
     } catch (err) {
       console.error(err);
       toast({
@@ -62,27 +58,38 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
     void loadRoster();
   }, [loadRoster]);
 
-  const toggleCriterion = (id: SwimFormationCriterion, checked: boolean) => {
-    setCriteria((prev) => {
-      if (checked) return prev.includes(id) ? prev : [...prev, id];
-      return prev.filter((c) => c !== id);
+  const campGroupNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const camper of campers) {
+      const group = camper.group.trim();
+      if (group && group !== "—") names.add(group);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  }, [campers]);
+
+  const toggleGroup = (name: string, checked: boolean) => {
+    setSelectedGroups((prev) => {
+      if (checked) return prev.includes(name) ? prev : [...prev, name];
+      return prev.filter((group) => group !== name);
     });
   };
 
   const handleBuild = async () => {
     if (!companyId || !season) return;
+    if (selectedGroups.length === 0) {
+      toast({ title: "Pick at least one camp group", variant: "destructive" });
+      return;
+    }
     setBuilding(true);
     try {
-      const campers = await fetchSwimFormationCampers(supabase, companyId, season);
-      setRosterCount(campers.length);
-      const built = buildSwimFormationGroups(campers, {
-        criteria,
-        instructorCount,
-      });
+      const next = await fetchSwimFormationCampers(supabase, companyId, season);
+      setCampers(next);
+      const built = buildSwimPeriodGroups(next, selectedGroups, instructorCount);
+      const assigned = built.reduce((sum, group) => sum + group.campers.length, 0);
       setGroups(built);
       toast({
         title: "Swim groups built",
-        description: `${built.length} group${built.length === 1 ? "" : "s"} from ${campers.length} campers`,
+        description: `${built.length} group${built.length === 1 ? "" : "s"} from ${assigned} campers`,
       });
     } catch (err) {
       console.error(err);
@@ -102,14 +109,13 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
   );
 
   const criteriaSummary = useMemo(() => {
-    const labels = criteria
-      .map((id) => SWIM_FORMATION_CRITERIA.find((c) => c.id === id)?.label)
-      .filter(Boolean);
+    const names = [...selectedGroups].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
     return [
-      labels.length ? `Grouped by: ${labels.join(", ")}` : "Default cohort split",
-      `${instructorCount} instructor group${instructorCount === 1 ? "" : "s"}`,
+      names.length ? `Camp groups: ${names.join(", ")}` : "No camp groups selected",
+      `${instructorCount} instructor${instructorCount === 1 ? "" : "s"}`,
+      "By completed swim level",
     ].join(" · ");
-  }, [criteria, instructorCount]);
+  }, [selectedGroups, instructorCount]);
 
   const handleDownloadPdf = () => {
     const built = buildSwimFormationReportPdf({
@@ -144,31 +150,40 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
             Swim group formation
           </CardTitle>
           <CardDescription>
-            Choose who mixes together, set how many instructors you have, and build balanced swim groups for
-            season {season}. {rosterCount} active campers on roster. Division leaders are never combined in
-            the same group.
+            Pick the camp groups in this swim period, set how many instructors you have, and build groups from
+            each camper’s last completed swim level. Kids stay with their camp group when the numbers allow. A
+            group can mix camps, for example 6 Cheetahs and 4 Panthers. {campers.length} active campers in
+            season {season}.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid gap-6 md:grid-cols-2">
             <div className="space-y-3">
-              <Label className="text-sm font-medium">Group by (select all that apply)</Label>
-              {SWIM_FORMATION_CRITERIA.map((item) => (
-                <label
-                  key={item.id}
-                  className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/60 p-3 hover:bg-muted/40"
-                >
-                  <Checkbox
-                    checked={criteria.includes(item.id)}
-                    onCheckedChange={(v) => toggleCriterion(item.id, v === true)}
-                    className="mt-0.5"
-                  />
-                  <span>
-                    <span className="block text-sm font-medium">{item.label}</span>
-                    <span className="block text-xs text-muted-foreground">{item.description}</span>
-                  </span>
-                </label>
-              ))}
+              <Label className="text-sm font-medium">Camp groups in this period</Label>
+              {campGroupNames.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No camp groups on this season’s roster.</p>
+              ) : (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {campGroupNames.map((name) => {
+                    const count = campers.filter((c) => c.group === name).length;
+                    return (
+                      <label
+                        key={name}
+                        className="flex cursor-pointer items-center gap-3 rounded-lg border border-border/60 p-3 hover:bg-muted/40"
+                      >
+                        <Checkbox
+                          checked={selectedGroups.includes(name)}
+                          onCheckedChange={(v) => toggleGroup(name, v === true)}
+                        />
+                        <span className="text-sm font-medium">
+                          {name}
+                          <span className="ml-1 font-normal text-muted-foreground">({count})</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             <div className="space-y-4">
               <div className="space-y-2">
@@ -183,19 +198,21 @@ export function SwimGroupFormationPanel({ companyId, season }: Props) {
                   className="max-w-[120px]"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Splits each cohort into this many balanced groups so each instructor gets roughly the same
-                  number of campers.
+                  Campers are ordered by completed swim level, then camp group, and split across this many
+                  instructors.
                 </p>
               </div>
-              <Button onClick={handleBuild} disabled={building || rosterCount === 0} className="gap-2">
+              <Button
+                onClick={handleBuild}
+                disabled={building || campers.length === 0 || selectedGroups.length === 0}
+                className="gap-2"
+              >
                 {building ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
                 Build swim groups
               </Button>
-              {criteria.length === 0 ? (
+              {selectedGroups.length === 0 ? (
                 <Alert>
-                  <AlertDescription>
-                    No criteria selected — campers split only by division leader and instructor count.
-                  </AlertDescription>
+                  <AlertDescription>Select the camp groups for this swim period first.</AlertDescription>
                 </Alert>
               ) : null}
             </div>

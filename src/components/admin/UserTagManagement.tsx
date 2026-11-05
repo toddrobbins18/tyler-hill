@@ -28,6 +28,7 @@ const TAG_COLORS = {
   admin_staff: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
   head_of_girls_side: "bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200",
   head_of_boys_side: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200",
+  wsi: "bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200",
 };
 
 const TAG_LABELS = {
@@ -41,6 +42,7 @@ const TAG_LABELS = {
   admin_staff: "Admin Staff",
   head_of_girls_side: "Head of Girls Side",
   head_of_boys_side: "Head of Boys Side",
+  wsi: "WSI",
 };
 
 function resolveDisplayName(

@@ -74,10 +74,28 @@ export function swimLessonStatusBadgeVariant(
   }
 }
 
+export type SwimLessonBookingDetails = {
+  instructor?: string | null;
+  costCents?: number;
+  durationMinutes?: number;
+  notes?: string | null;
+};
+
+function bookingPatch(details?: SwimLessonBookingDetails) {
+  if (!details) return {};
+  return {
+    ...(details.instructor !== undefined ? { instructor: details.instructor } : {}),
+    ...(details.costCents !== undefined ? { cost_cents: details.costCents } : {}),
+    ...(details.durationMinutes !== undefined ? { duration_minutes: details.durationMinutes } : {}),
+    ...(details.notes !== undefined ? { notes: details.notes } : {}),
+  };
+}
+
 export async function approveSwimLessonRequest(
   supabase: SupabaseClient,
   id: string,
   userId?: string | null,
+  details?: SwimLessonBookingDetails,
 ) {
   return supabase
     .from("swim_lessons")
@@ -86,9 +104,19 @@ export async function approveSwimLessonRequest(
       rejection_reason: null,
       reviewed_at: new Date().toISOString(),
       reviewed_by: userId ?? null,
+      ...bookingPatch(details),
     })
     .eq("id", id)
     .eq("status", "pending");
+}
+
+/** Instructor, cost, duration, and notes on a lesson that is already booked. */
+export async function updateBookedSwimLesson(
+  supabase: SupabaseClient,
+  id: string,
+  details: SwimLessonBookingDetails,
+) {
+  return supabase.from("swim_lessons").update(bookingPatch(details)).eq("id", id);
 }
 
 export async function rejectSwimLessonRequest(

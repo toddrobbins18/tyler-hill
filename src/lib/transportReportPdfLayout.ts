@@ -91,18 +91,36 @@ const CODE39: Record<string, string> = {
   "*": "nwnnwnwnn",
 };
 
+function measureCode39Width(encoded: string, narrow: number): number {
+  const wide = narrow * 3;
+  let width = 0;
+  for (const ch of encoded) {
+    const pattern = CODE39[ch];
+    if (!pattern) continue;
+    for (const unit of pattern) width += unit === "w" ? wide : narrow;
+    width += narrow;
+  }
+  return width;
+}
+
 export function drawCode39Barcode(
   doc: jsPDF,
   x: number,
   y: number,
   payload: string,
-  options?: { heightMm?: number; narrowMm?: number; label?: boolean },
+  options?: { heightMm?: number; narrowMm?: number; maxWidthMm?: number; label?: boolean },
 ): number {
   const text = sanitizeBarcodePayload(payload);
   if (!text) return y;
 
   const encoded = `*${text}*`;
-  const narrow = options?.narrowMm ?? 0.35;
+  let narrow = options?.narrowMm ?? 0.35;
+  if (options?.maxWidthMm && options.maxWidthMm > 0) {
+    const natural = measureCode39Width(encoded, narrow);
+    if (natural > options.maxWidthMm) {
+      narrow = Math.max(0.12, narrow * (options.maxWidthMm / natural));
+    }
+  }
   const wide = narrow * 3;
   const barH = options?.heightMm ?? 7;
   let cx = x;

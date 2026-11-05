@@ -16,6 +16,7 @@ export default defineConfig({
       "src/lib/__tests__/transport*.test.ts",
       "src/lib/__tests__/swimProgress*.test.ts",
       "src/lib/__tests__/swimProgram.test.ts",
+      "src/lib/__tests__/swimGroupFormation.test.ts",
       "src/lib/__tests__/swimLessonCalendar.test.ts",
       "src/lib/__tests__/swimLessonInstructors.test.ts",
       "src/lib/__tests__/swimBraceletReportPdf.test.ts",

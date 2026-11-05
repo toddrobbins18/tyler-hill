@@ -11,13 +11,18 @@ export type SwimCalendarLessonFilter = {
   status: "all" | "booked" | "pending";
   /** Empty string = all instructors. */
   instructor: string;
+  /** Camper or instructor name. */
+  query: string;
 };
+
+export type SwimCalendarSort = "camper" | "instructor";
 
 export function filterSwimCalendarLessons(
   lessons: SwimCalendarLesson[],
   filter: SwimCalendarLessonFilter,
 ): SwimCalendarLesson[] {
   const instructorKey = filter.instructor.trim().toLowerCase();
+  const query = filter.query.trim().toLowerCase();
   return lessons.filter((lesson) => {
     if (filter.status === "booked" && !isSwimLessonBookedStatus(lesson.status)) return false;
     if (filter.status === "pending" && lesson.status !== "pending") return false;
@@ -25,7 +30,26 @@ export function filterSwimCalendarLessons(
       const got = lesson.instructor?.trim().toLowerCase() ?? "";
       if (got !== instructorKey) return false;
     }
+    if (query) {
+      const haystack = `${lesson.camperName} ${lesson.instructor ?? ""}`.toLowerCase();
+      if (!haystack.includes(query)) return false;
+    }
     return true;
+  });
+}
+
+export function sortSwimCalendarLessons(
+  lessons: SwimCalendarLesson[],
+  sort: SwimCalendarSort,
+): SwimCalendarLesson[] {
+  return [...lessons].sort((a, b) => {
+    if (sort === "instructor") {
+      const byInstructor = (a.instructor ?? "").localeCompare(b.instructor ?? "", undefined, {
+        sensitivity: "base",
+      });
+      if (byInstructor !== 0) return byInstructor;
+    }
+    return a.camperName.localeCompare(b.camperName, undefined, { sensitivity: "base" });
   });
 }
 
@@ -34,6 +58,7 @@ export function swimCalendarFilterSummary(filter: SwimCalendarLessonFilter): str
   if (filter.status === "booked") parts.push("Booked only");
   if (filter.status === "pending") parts.push("Pending only");
   if (filter.instructor.trim()) parts.push(`Instructor: ${filter.instructor.trim()}`);
+  if (filter.query.trim()) parts.push(`Search: ${filter.query.trim()}`);
   return parts.length ? parts.join(" · ") : undefined;
 }
 import {

@@ -18,22 +18,25 @@ import {
   resolveSwimLessonWeekCalendar,
   swimLessonWeekOptions,
 } from "@/lib/swimLessonSchedule";
-import { fetchSwimLessonInstructorOptions } from "@/lib/swimLessonInstructors";
+import { fetchSwimLessonInstructorOptions, mergeSwimInstructorNames, saveInstructorName } from "@/lib/swimLessonInstructors";
 import {
   SWIM_CALENDAR_TIME_COLUMNS,
   availableInstructorsForSlot,
   defaultSwimCalendarWeekNumber,
   filterSwimCalendarLessons,
   groupLessonsBySwimSlot,
+  sortSwimCalendarLessons,
   instructorSlotStatus,
   monFriDatesForEnrollmentWeek,
   swimCalendarFilterSummary,
   swimSlotKey,
   type SwimCalendarLesson,
   type SwimCalendarLessonFilter,
+  type SwimCalendarSort,
 } from "@/lib/swimLessonCalendar";
 import { swimLessonStatusLabel } from "@/lib/swimLessonApproval";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Input } from "@/components/ui/input";
 
 type CalendarSubView = "slots" | "instructors";
 
@@ -53,7 +56,10 @@ export function SwimLessonCalendarView({ companyId, season, lessons }: Props) {
   const [lessonFilter, setLessonFilter] = useState<SwimCalendarLessonFilter>({
     status: "all",
     instructor: "",
+    query: "",
   });
+  const [sortBy, setSortBy] = useState<SwimCalendarSort>("camper");
+  const [newInstructor, setNewInstructor] = useState("");
 
   const resolvedCalendar = useMemo(
     () => resolveSwimLessonWeekCalendar(weekCalendar, season),
@@ -62,10 +68,24 @@ export function SwimLessonCalendarView({ companyId, season, lessons }: Props) {
 
   const weekOptions = useMemo(() => swimLessonWeekOptions(resolvedCalendar), [resolvedCalendar]);
 
+  const reloadInstructors = () => {
+    void fetchSwimLessonInstructorOptions(supabase, companyId, season).then(setInstructorOptions);
+  };
+
   useEffect(() => {
     void loadEnrollmentWeekCalendar(supabase, companyId, season).then(setWeekCalendar);
-    void fetchSwimLessonInstructorOptions(supabase, companyId, season).then(setInstructorOptions);
+    reloadInstructors();
   }, [companyId, season]);
+
+  const addInstructor = () => {
+    const name = newInstructor.trim();
+    if (!name) return;
+    saveInstructorName(companyId, name);
+    setInstructorOptions((prev) => mergeSwimInstructorNames(prev, [name], []));
+    setNewInstructor("");
+    reloadInstructors();
+    toast({ title: `${name} added`, description: "3:45 PM and 4:15 PM stay open until a lesson is booked." });
+  };
 
   useEffect(() => {
     const today = campDateStringInSeason(season);
@@ -78,11 +98,25 @@ export function SwimLessonCalendarView({ companyId, season, lessons }: Props) {
   );
 
   const filteredLessons = useMemo(
-    () => filterSwimCalendarLessons(lessons, lessonFilter),
-    [lessons, lessonFilter],
+    () => sortSwimCalendarLessons(filterSwimCalendarLessons(lessons, lessonFilter), sortBy),
+    [lessons, lessonFilter, sortBy],
+  );
+
+  const availabilityLessons = useMemo(
+    () =>
+      filterSwimCalendarLessons(lessons, {
+        status: lessonFilter.status,
+        instructor: "",
+        query: "",
+      }),
+    [lessons, lessonFilter.status],
   );
 
   const slotMap = useMemo(() => groupLessonsBySwimSlot(filteredLessons), [filteredLessons]);
+  const availabilityMap = useMemo(
+    () => groupLessonsBySwimSlot(availabilityLessons),
+    [availabilityLessons],
+  );
 
   const weekRangeLabel = weekOptions.find((w) => w.weekNumber === weekNumber)?.range ?? "";
 
@@ -213,6 +247,22 @@ export function SwimLessonCalendarView({ companyId, season, lessons }: Props) {
             <option value="booked">Booked only</option>
             <option value="pending">Pending only</option>
           </select>
+          <Input
+            value={lessonFilter.query}
+            onChange={(e) => setLessonFilter((prev) => ({ ...prev, query: e.target.value }))}
+            placeholder="Search camper or instructor"
+            className="h-9 w-[200px]"
+            aria-label="Search lessons"
+          />
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SwimCalendarSort)}
+            className="h-9 rounded-md border border-border/60 bg-background px-2 text-sm"
+            aria-label="Sort lessons"
+          >
+            <option value="camper">Sort by camper</option>
+            <option value="instructor">Sort by instructor</option>
+          </select>
           <select
             value={lessonFilter.instructor}
             onChange={(e) => setLessonFilter((prev) => ({ ...prev, instructor: e.target.value }))}
@@ -236,6 +286,19 @@ export function SwimLessonCalendarView({ companyId, season, lessons }: Props) {
           >
             <Download className="h-4 w-4" />
             Download PDF
+          </Button>
+          <Input
+            value={newInstructor}
+            onChange={(e) => setNewInstructor(e.target.value)}
+            placeholder="New instructor"
+            className="h-9 w-[160px]"
+            aria-label="New instructor name"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") addInstructor();
+            }}
+          />
+          <Button type="button" variant="outline" size="sm" onClick={addInstructor} disabled={!newInstructor.trim()}>
+            Add instructor
           </Button>
         </div>
       </CardHeader>
@@ -262,8 +325,12 @@ export function SwimLessonCalendarView({ companyId, season, lessons }: Props) {
                   <tr key={day.ymd} className="border-b border-border/50 align-top">
                     <td className="py-3 pr-3 font-medium">{day.label}</td>
                     {slotColumns.map((col) => {
-                      const slotLessons = slotMap.get(swimSlotKey(day.ymd, col.value)) ?? [];
-                      const open = availableInstructorsForSlot(instructorOptions, slotLessons);
+                      const slotKey = swimSlotKey(day.ymd, col.value);
+                      const slotLessons = slotMap.get(slotKey) ?? [];
+                      const open = availableInstructorsForSlot(
+                        instructorOptions,
+                        availabilityMap.get(slotKey) ?? [],
+                      );
                       return (
                         <td key={col.value} className="py-3 px-2">
                           <div className="space-y-2 min-h-[4rem]">
@@ -304,7 +371,7 @@ export function SwimLessonCalendarView({ companyId, season, lessons }: Props) {
           </div>
         ) : instructorOptions.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No lifeguards on staff roster — add lifeguards under Staff to schedule lessons.
+            No instructors yet. Add a name above, then each day shows 3:45 and 4:15 as open.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -325,7 +392,11 @@ export function SwimLessonCalendarView({ companyId, season, lessons }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {instructorOptions.map((name) => (
+                {[...instructorOptions]
+                  .sort((a, b) =>
+                    sortBy === "instructor" ? a.localeCompare(b, undefined, { sensitivity: "base" }) : 0,
+                  )
+                  .map((name) => (
                   <tr key={name} className="border-b border-border/50">
                     <td className="sticky left-0 z-10 bg-card py-2 pr-3 font-medium whitespace-nowrap">
                       {name}
@@ -335,7 +406,7 @@ export function SwimLessonCalendarView({ companyId, season, lessons }: Props) {
                         name,
                         col.dateYmd,
                         col.timeHHmm,
-                        slotMap,
+                        availabilityMap,
                       );
                       return (
                         <td key={`${name}-${col.dateYmd}-${col.timeHHmm}`} className="py-1 px-1 text-center">

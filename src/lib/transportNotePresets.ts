@@ -34,10 +34,10 @@ export const PARENT_TRANSPORT_NOTE_PRESETS = [
 
 /** Most-used swim test notes — full list remains in SWIM_TEST_NOTE_OPTIONS. */
 export const SWIM_TEST_NOTE_QUICK_PRESETS = [
-  "PASSED",
+  "Endurance",
+  "Tread form needs work",
   "Refused",
-  "Needed Assist",
-  "No Backfloat",
+  "Swimmers Ear",
   "Backfloat form needs work",
-  "Tread needs endurance",
+  "PASSED",
 ] as const;

@@ -46,6 +46,22 @@ export function saveInstructorName(companyId: string, name: string): string[] {
   return next;
 }
 
+/** Lifeguards, people added for lessons, and anyone already assigned on a lesson. */
+export function mergeSwimInstructorNames(
+  lifeguardNames: string[],
+  savedNames: string[],
+  lessonInstructors: string[],
+): string[] {
+  const byKey = new Map<string, string>();
+  for (const raw of [...lifeguardNames, ...savedNames, ...lessonInstructors]) {
+    const name = raw.trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (!byKey.has(key)) byKey.set(key, name);
+  }
+  return [...byKey.values()].sort((a, b) => a.localeCompare(b));
+}
+
 export async function fetchSwimLessonInstructorOptions(
   supabase: SupabaseClient,
   companyId: string,
@@ -68,20 +84,13 @@ export async function fetchSwimLessonInstructorOptions(
     lifeguardNames.add(row.name.trim());
   }
 
-  const lifeguardKeys = new Set([...lifeguardNames].map((n) => n.toLowerCase()));
+  const lessonInstructors = (lessonRows ?? [])
+    .map((row) => row.instructor?.trim() ?? "")
+    .filter(Boolean);
 
-  const names = new Set<string>(lifeguardNames);
-
-  for (const saved of loadSavedInstructorNames(companyId)) {
-    if (lifeguardKeys.has(saved.toLowerCase())) names.add(saved);
-  }
-
-  for (const row of lessonRows ?? []) {
-    const instructor = row.instructor?.trim();
-    if (instructor && lifeguardKeys.has(instructor.toLowerCase())) {
-      names.add(instructor);
-    }
-  }
-
-  return [...names].sort((a, b) => a.localeCompare(b));
+  return mergeSwimInstructorNames(
+    [...lifeguardNames],
+    loadSavedInstructorNames(companyId),
+    lessonInstructors,
+  );
 }

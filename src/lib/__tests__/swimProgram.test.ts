@@ -125,7 +125,7 @@ describe("swimProgram", () => {
     expect(normalizePassStatus("did not pass")).toBe("Did Not Pass");
     expect(normalizeBraceletColor("orange")).toBe("Orange");
     expect(normalizeBraceletColor("Non Swimmer/Beginner")).toBe("Non Swimmer/Beginner");
-    expect(normalizeBraceletColor("purple")).toBe("");
+    expect(normalizeBraceletColor("purple")).toBe("Non Swimmer/Beginner");
     expect(normalizeDivisionLeader("alyssa")).toBe("Alyssa");
     expect(normalizeDivisionLeader("CARLOTA")).toBe("CARLOTA");
     expect(isBlankDivisionLeader("—")).toBe(true);

@@ -1,5 +1,5 @@
 import jsPDF from "jspdf";
-import type { BraceletColor, BraceletRecord } from "@/lib/swimProgram";
+import { swimBraceletColorLabel, type BraceletColor, type BraceletRecord } from "@/lib/swimProgram";
 
 export type SwimBraceletPrintPreset = {
   id: string;
@@ -9,7 +9,7 @@ export type SwimBraceletPrintPreset = {
 
 /** Todd proctor sheets — Non Swimmer + Orange buckets only. */
 export const SWIM_BRACELET_PRINT_PRESETS: SwimBraceletPrintPreset[] = [
-  { id: "non-swimmer", label: "Non Swimmer", colors: ["Non Swimmer/Beginner"] },
+  { id: "non-swimmer", label: "Purple (Non-Swimmer/Beginner)", colors: ["Non Swimmer/Beginner"] },
   { id: "orange", label: "Orange only", colors: ["Orange"] },
 ];
 
@@ -99,7 +99,7 @@ export function buildSwimBraceletReportPdf(options: {
       name: r.name,
       group: r.group || "—",
       leader: r.divisionLeader || "—",
-      bracelet: r.currentBracelet || "—",
+      bracelet: r.currentBracelet ? swimBraceletColorLabel(r.currentBracelet) : "—",
       note: r.generalNote?.trim() || "—",
       tests: formatTests(r),
     };

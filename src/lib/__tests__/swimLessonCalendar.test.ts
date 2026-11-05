@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterSwimCalendarLessons } from "@/lib/swimLessonCalendar";
+import { filterSwimCalendarLessons, sortSwimCalendarLessons } from "@/lib/swimLessonCalendar";
 
 describe("swimLessonCalendar", () => {
   const lessons = [
@@ -27,12 +27,22 @@ describe("swimLessonCalendar", () => {
   ];
 
   it("filterSwimCalendarLessons by booked status", () => {
-    const out = filterSwimCalendarLessons(lessons, { status: "booked", instructor: "" });
+    const out = filterSwimCalendarLessons(lessons, { status: "booked", instructor: "", query: "" });
     expect(out.map((l) => l.camperName)).toEqual(["Ava"]);
   });
 
   it("filterSwimCalendarLessons by instructor", () => {
-    const out = filterSwimCalendarLessons(lessons, { status: "all", instructor: "Coach Kim" });
+    const out = filterSwimCalendarLessons(lessons, { status: "all", instructor: "Coach Kim", query: "" });
     expect(out.map((l) => l.camperName)).toEqual(["Ava", "Cal"]);
+  });
+
+  it("filters by camper or instructor search", () => {
+    const out = filterSwimCalendarLessons(lessons, { status: "all", instructor: "", query: "ben" });
+    expect(out.map((l) => l.camperName)).toEqual(["Ben"]);
+  });
+
+  it("sorts by instructor then camper", () => {
+    const out = sortSwimCalendarLessons(lessons, "instructor");
+    expect(out.map((l) => l.camperName)).toEqual(["Ava", "Cal", "Ben"]);
   });
 });

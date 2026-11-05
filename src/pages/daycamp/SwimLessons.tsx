@@ -13,7 +13,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Waves, Plus, Trash2, CheckCircle2, Clock, Bus, Repeat, Phone, XCircle, Search, Mail, List, CalendarDays } from "lucide-react";
+import { Waves, Plus, Trash2, CheckCircle2, Clock, Bus, Repeat, Phone, XCircle, Search, Mail, List, CalendarDays, Pencil } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { SwimLessonCalendarView } from "@/components/swim/SwimLessonCalendarView";
 import { runSwimLessonReminders } from "@/lib/swimLessonReminderApi";
@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { approveDismissalSwim } from "@/lib/dismissalDashboard";
 import {
   approveSwimLessonRequest,
+  updateBookedSwimLesson,
   rejectSwimLessonRequest,
   SWIM_LESSON_REJECTION_DEFAULT,
   isSwimLessonBookedStatus,
@@ -74,6 +75,34 @@ type LessonRow = Lesson & {
   camperName: string;
   familyEmail: string;
 };
+
+const SWIM_LESSON_COST_CENTS = [5000, 6000] as const;
+
+function SwimLessonCostButtons({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (cents: number) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>Cost (USD)</Label>
+      <div className="flex gap-2">
+        {SWIM_LESSON_COST_CENTS.map((cents) => (
+          <Button
+            key={cents}
+            type="button"
+            variant={value === cents ? "default" : "outline"}
+            onClick={() => onChange(cents)}
+          >
+            ${cents / 100}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function matchesLessonSearch(row: LessonRow, query: string): boolean {
   const q = query.trim().toLowerCase();
@@ -132,6 +161,7 @@ export default function SwimLessons() {
   const [transportFilter, setTransportFilter] = useState<TransportFilter>("all");
   const [reminderRunning, setReminderRunning] = useState(false);
   const [pageView, setPageView] = useState<PageView>("list");
+  const [booking, setBooking] = useState<{ mode: "approve" | "edit"; lesson: Lesson } | null>(null);
 
   const sendThreeDayReminders = async () => {
     if (!currentCompany?.id || reminderRunning) return;
@@ -207,16 +237,6 @@ export default function SwimLessons() {
     if (error) toast.error(error.message);
     else {
       toast.success("Transport approved — camper off bus for lesson run");
-      load();
-    }
-  };
-
-  const approveRequest = async (id: string) => {
-    const { data: userRes } = await supabase.auth.getUser();
-    const { error } = await approveSwimLessonRequest(supabase, id, userRes.user?.id);
-    if (error) toast.error(error.message);
-    else {
-      toast.success("Lesson approved — parent can confirm in portal");
       load();
     }
   };
@@ -415,7 +435,7 @@ export default function SwimLessons() {
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-2">
-                        <Button size="sm" onClick={() => void approveRequest(l.id)}>
+                        <Button size="sm" onClick={() => setBooking({ mode: "approve", lesson: l })}>
                           <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
                           Approve
                         </Button>
@@ -514,9 +534,19 @@ export default function SwimLessons() {
                         : <span className="text-xs text-muted-foreground">—</span>}
                     </TableCell>
                     <TableCell>
-                      <Button size="icon" variant="ghost" onClick={() => remove(l.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label="Edit lesson"
+                          onClick={() => setBooking({ mode: "edit", lesson: l })}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" aria-label="Remove lesson" onClick={() => remove(l.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -526,6 +556,15 @@ export default function SwimLessons() {
         </CardContent>
       </Card>
       </>
+      ) : null}
+      {booking ? (
+        <LessonBookingDialog
+          key={`${booking.mode}-${booking.lesson.id}`}
+          mode={booking.mode}
+          lesson={booking.lesson}
+          onClose={() => setBooking(null)}
+          onSaved={load}
+        />
       ) : null}
     </div>
   );
@@ -635,7 +674,7 @@ function LessonDialog({
   const [time, setTime] = useState(DEFAULT_SWIM_LESSON_TIME);
   const [duration, setDuration] = useState("30");
   const [instructor, setInstructor] = useState("");
-  const [cost, setCost] = useState("45");
+  const [costCents, setCostCents] = useState<number>(5000);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -661,7 +700,7 @@ function LessonDialog({
     setTime(DEFAULT_SWIM_LESSON_TIME);
     setDuration("30");
     setInstructor("");
-    setCost("45");
+    setCostCents(5000);
     setNotes("");
   };
 
@@ -676,7 +715,6 @@ function LessonDialog({
     if (!camperId) return toast.error("Pick a camper");
 
     const durationMinutes = parseInt(duration) || 30;
-    const costCents = Math.round(parseFloat(cost || "0") * 100);
     const instructorVal = instructor || null;
     const notesVal = notes || null;
 
@@ -816,10 +854,7 @@ function LessonDialog({
             value={instructor}
             onChange={setInstructor}
           />
-          <div className="space-y-2">
-            <Label>Cost (USD)</Label>
-            <Input type="number" step="0.01" value={cost} onChange={e => setCost(e.target.value)} />
-          </div>
+          <SwimLessonCostButtons value={costCents} onChange={setCostCents} />
           <div className="space-y-2">
             <Label>Notes</Label>
             <Input value={notes} onChange={e => setNotes(e.target.value)} />
@@ -831,6 +866,86 @@ function LessonDialog({
                 : scheduleMode === "recurring" && recurringDates.length > 1
                   ? `Schedule ${recurringDates.length} lessons`
                   : "Schedule"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function LessonBookingDialog({
+  mode,
+  lesson,
+  onClose,
+  onSaved,
+}: {
+  mode: "approve" | "edit";
+  lesson: Lesson;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { currentCompany } = useCompany();
+  const { currentSeason } = useSeasonContext();
+  const [instructor, setInstructor] = useState(lesson.instructor ?? "");
+  const [costCents, setCostCents] = useState(
+    lesson.cost_cents === 5000 || lesson.cost_cents === 6000 ? lesson.cost_cents : 5000,
+  );
+  const [duration, setDuration] = useState(String(lesson.duration_minutes || 30));
+  const [notes, setNotes] = useState(lesson.notes ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    const details = {
+      instructor: instructor.trim() || null,
+      costCents,
+      durationMinutes: parseInt(duration, 10) || 30,
+      notes: notes.trim() || null,
+    };
+    const { data: userRes } = await supabase.auth.getUser();
+    const { error } =
+      mode === "approve"
+        ? await approveSwimLessonRequest(supabase, lesson.id, userRes.user?.id, details)
+        : await updateBookedSwimLesson(supabase, lesson.id, details);
+    setSaving(false);
+    if (error) return toast.error(error.message);
+    toast.success(
+      mode === "approve" ? "Lesson approved — parent can confirm in portal" : "Lesson updated",
+    );
+    onSaved();
+    onClose();
+  };
+
+  return (
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{mode === "approve" ? "Approve swim lesson" : "Edit booked lesson"}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-3">
+          <SwimLessonInstructorSelect
+            companyId={currentCompany?.id}
+            season={currentSeason}
+            value={instructor}
+            onChange={setInstructor}
+          />
+          <SwimLessonCostButtons value={costCents} onChange={setCostCents} />
+          <div className="space-y-2">
+            <Label>Minutes</Label>
+            <Input type="number" min={1} value={duration} onChange={(e) => setDuration(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Notes</Label>
+            <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? "Saving…" : mode === "approve" ? "Approve" : "Save"}
             </Button>
           </DialogFooter>
         </form>

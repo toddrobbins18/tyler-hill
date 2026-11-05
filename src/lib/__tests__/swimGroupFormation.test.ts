@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildSwimFormationGroups,
+  buildSwimPeriodGroups,
   highestCompletedSwimLevel,
   splitBalancedByInstructors,
   type SwimFormationCamper,
@@ -83,12 +84,59 @@ describe("swimGroupFormation", () => {
     ];
     const groups = buildSwimFormationGroups(campers, {
       criteria: ["division", "swimLevel", "divisionLeader"],
-      instructorCount: 3,
+      instructorCount: 1,
     });
     expect(groups).toHaveLength(2);
     expect(groups[0].label).toContain("Junior");
     expect(groups[0].label).toContain("Goldfish");
     expect(groups[0].campers).toHaveLength(2);
     expect(groups[1].campers).toHaveLength(1);
+  });
+
+  it("builds one period group that can mix selected camp groups", () => {
+    const campers = [
+      ...Array.from({ length: 6 }, (_, i) =>
+        camper({
+          id: `c${i}`,
+          name: `Cheetah ${i}`,
+          group: "Cheetahs",
+          highestCompletedLevel: "Goldfish",
+        }),
+      ),
+      ...Array.from({ length: 4 }, (_, i) =>
+        camper({
+          id: `p${i}`,
+          name: `Panther ${i}`,
+          group: "Panthers",
+          highestCompletedLevel: "Goldfish",
+        }),
+      ),
+      camper({ id: "l1", name: "Lion Kid", group: "Lions", highestCompletedLevel: "Minnow" }),
+    ];
+
+    const groups = buildSwimPeriodGroups(campers, ["Cheetahs", "Panthers"], 1);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].campers).toHaveLength(10);
+    expect(groups[0].campers.some((c) => c.group === "Lions")).toBe(false);
+    expect(groups[0].label).toContain("6 Cheetahs");
+    expect(groups[0].label).toContain("4 Panthers");
+    expect(groups[0].label).toContain("Goldfish");
+  });
+
+  it("keeps a camp group together and mixes only the remainder", () => {
+    const campers = [
+      ...Array.from({ length: 6 }, (_, i) =>
+        camper({ id: `c${i}`, name: `C${String(i).padStart(2, "0")}`, group: "Cheetahs" }),
+      ),
+      ...Array.from({ length: 4 }, (_, i) =>
+        camper({ id: `p${i}`, name: `P${String(i).padStart(2, "0")}`, group: "Panthers" }),
+      ),
+    ];
+
+    const groups = buildSwimPeriodGroups(campers, ["cheetahs", "panthers"], 2);
+    expect(groups).toHaveLength(2);
+    expect(groups[0].campers.every((c) => c.group === "Cheetahs")).toBe(true);
+    expect(groups[1].campers.some((c) => c.group === "Panthers")).toBe(true);
+    expect(groups[1].campers.some((c) => c.group === "Cheetahs")).toBe(true);
   });
 });

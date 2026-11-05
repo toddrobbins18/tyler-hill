@@ -7,10 +7,12 @@ import { useSeasonContext } from "@/contexts/SeasonContext";
 import {
   BRACELETS,
   SWIM_BRACELET_DASHBOARD_COLORS,
+  swimBraceletColorLabel,
   DATE_FMT,
   SWIM_LEVEL_REPORT_VIEWS,
   displayImportedDivisionLeader,
   fetchSwimProctorOptions,
+  fetchWsiProctorOptions,
   isBlankDivisionLeader,
   mergeProctorOptions,
   parseSwimTestNotes,
@@ -48,10 +50,14 @@ import {
   type SwimBraceletPrintPreset,
 } from "@/lib/swimBraceletReportPdf";
 import { triggerBlobDownload } from "@/lib/transportBubbleSheetPdf";
-import { NotePresetButtons } from "@/components/NotePresetButtons";
-import { SWIM_TEST_NOTE_QUICK_PRESETS } from "@/lib/transportNotePresets";
-
-const SWIM_TEST_NOTE_INLINE = ["PASSED", "Refused", "Needed Assist"] as const;
+const SWIM_TEST_NOTE_INLINE = [
+  "Endurance",
+  "Tread form needs work",
+  "Refused",
+  "Swimmers Ear",
+  "Backfloat form needs work",
+  "PASSED",
+] as const;
 import { swimProgressEmailSupported } from "@/lib/swimProgressSkills";
 import OperationLivePanel from "@/components/admin/OperationLivePanel";
 import type { OperationStep } from "@/lib/operationLiveLog";
@@ -159,7 +165,7 @@ function levelRecordHasData(record: LevelRecord): boolean {
 }
 
 const BRACELET_STYLES: Record<BraceletColor, string> = {
-  "Non Swimmer/Beginner": "bg-slate-200 text-slate-900 border-slate-400",
+  "Non Swimmer/Beginner": "bg-purple-600 text-white border-purple-700",
   Red: "bg-red-600 text-white border-red-700",
   Orange: "bg-orange-500 text-white border-orange-600",
   Yellow: "bg-yellow-400 text-yellow-950 border-yellow-500",
@@ -193,7 +199,7 @@ function BraceletSelect({ value, onChange }: { value: BraceletColor | ""; onChan
       <option value="">—</option>
       {choices.map((c) => (
         <option key={c} value={c} className="bg-background text-foreground">
-          {c}
+          {swimBraceletColorLabel(c)}
         </option>
       ))}
     </select>
@@ -359,7 +365,7 @@ function TestNoteSelect({ value, onChange }: { value: string; onChange: (v: stri
               )}
               onClick={() => toggle(note)}
             >
-              {note === "Needed Assist" ? "Assist" : note}
+              {note}
             </button>
           );
         })}
@@ -428,7 +434,7 @@ function BraceletPill({ color }: { color: BraceletColor | "" }) {
   if (!color) return <span className="text-muted-foreground text-xs">—</span>;
   return (
     <Badge variant="outline" className={cn("font-medium", BRACELET_STYLES[color])}>
-      ● {color}
+      ● {swimBraceletColorLabel(color)}
     </Badge>
   );
 }
@@ -597,6 +603,7 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
   const [selectedLevelId, setSelectedLevelId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(defaultTab);
   const [proctorOptions, setProctorOptions] = useState<string[]>([]);
+  const [wsiProctorOptions, setWsiProctorOptions] = useState<string[]>([]);
   const [levelReportView, setLevelReportView] = useState<SwimLevelReportView>("red-cross-1");
   const [tablePageSize, setTablePageSize] = useState(DEFAULT_SWIM_PAGE_SIZE);
   const [braceletPage, setBraceletPage] = useState(1);
@@ -660,7 +667,12 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
         );
         setBraceletData(mergeBracelets(bracelets, children));
         setLevelData(mergeLevels(levels, children));
-        setProctorOptions(await fetchSwimProctorOptions(supabase, currentCompany.id, currentSeason));
+        const [allProctors, wsiProctors] = await Promise.all([
+          fetchSwimProctorOptions(supabase, currentCompany.id, currentSeason),
+          fetchWsiProctorOptions(supabase, currentCompany.id),
+        ]);
+        setProctorOptions(allProctors);
+        setWsiProctorOptions(wsiProctors);
       } catch (err) {
         console.error("[SwimProgram] load error:", err);
         if (showLoading) {
@@ -1349,21 +1361,12 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
           <Card>
             <CardHeader className="pb-3 space-y-3">
               <CardTitle className="text-base">Current bracelet status & test history</CardTitle>
-              <div className="space-y-1.5">
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
-                  Quick test notes
-                </p>
-                <NotePresetButtons
-                  presets={SWIM_TEST_NOTE_QUICK_PRESETS}
-                  onSelect={(text) => {
-                    void navigator.clipboard.writeText(text);
-                    toast({
-                      title: "Note copied",
-                      description: `Paste into a test note field, or use PASSED / Refused / Assist under each row.`,
-                    });
-                  }}
-                />
-              </div>
+              <p className="text-xs text-muted-foreground">
+                1st, 2nd, and 3rd proctors are staff tagged WSI. Add that tag in Admin under user tags.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Test notes are buttons on each row: Endurance, Tread form needs work, Refused, Swimmers Ear, Back float form, and Passed.
+              </p>
               <div className="flex flex-wrap items-end gap-3">
                 <SwimFilterSelect
                   label="Group"
@@ -1382,7 +1385,7 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                     { value: "all", label: "All colors" },
                     ...SWIM_BRACELET_DASHBOARD_COLORS.map((c) => ({
                       value: c,
-                      label: c === "Non Swimmer/Beginner" ? "Non Swimmer" : c,
+                      label: swimBraceletColorLabel(c),
                     })),
                   ]}
                 />
@@ -1510,7 +1513,7 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                       <TableCell className={cn(swimBraceletTestCol, "py-2.5")}>
                         <ProctorSelect
                           value={b.proctor1}
-                          options={proctorOptions}
+                          options={wsiProctorOptions}
                           onChange={(v) => updateBracelet(b.id, { proctor1: v })}
                         />
                       </TableCell>
@@ -1523,7 +1526,7 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                       <TableCell className={cn(swimBraceletTestCol, "py-2.5")}>
                         <ProctorSelect
                           value={b.proctor2}
-                          options={proctorOptions}
+                          options={wsiProctorOptions}
                           onChange={(v) => updateBracelet(b.id, { proctor2: v })}
                         />
                       </TableCell>
@@ -1536,7 +1539,7 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                       <TableCell className={cn(swimBraceletTestCol, "py-2.5")}>
                         <ProctorSelect
                           value={b.proctor3}
-                          options={proctorOptions}
+                          options={wsiProctorOptions}
                           onChange={(v) => updateBracelet(b.id, { proctor3: v })}
                         />
                       </TableCell>

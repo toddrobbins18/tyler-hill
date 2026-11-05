@@ -89,6 +89,7 @@ const TAG_LABELS: Record<string, string> = {
   director: "Directors",
   general_staff: "General Staff",
   admin_staff: "Admin Staff",
+  wsi: "WSI",
 };
 
 const TAG_COLORS: Record<string, string> = {
@@ -100,6 +101,7 @@ const TAG_COLORS: Record<string, string> = {
   director: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
   general_staff: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200",
   admin_staff: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+  wsi: "bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200",
 };
 
 function isCompanyEmailReady(config: { is_configured?: boolean | null; is_active?: boolean | null; email_ready?: boolean | null } | null | undefined): boolean {

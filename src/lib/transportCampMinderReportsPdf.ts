@@ -30,6 +30,73 @@ export type GroupReportCamper = {
 const FOOTER = 12;
 const DAY_LABELS = ["mo", "tu", "we", "th", "fr"];
 
+export function groupReportRowColumns(
+  pageWidth: number,
+  margin: number,
+  bubbleMode: "daily" | "am-pm",
+  hasBarcode: boolean,
+) {
+  const gap = 3;
+  const bubbleWidth = bubbleMode === "am-pm" ? 64 : 52;
+  const barcodeSlot = hasBarcode ? 36 : 0;
+  const bubbleX = pageWidth - margin - bubbleWidth;
+  const barcodeX = bubbleX - gap - barcodeSlot;
+  const textRight = (hasBarcode ? barcodeX : bubbleX) - gap;
+  const contactW = Math.min(52, Math.max(34, (textRight - margin) * 0.46));
+  const contactX = textRight - contactW;
+  return {
+    bubbleX,
+    bubbleRight: bubbleX + bubbleWidth,
+    barcodeX,
+    barcodeRight: barcodeX + barcodeSlot,
+    textRight,
+    contactX,
+    contactRight: contactX + contactW,
+    leftRight: contactX - gap,
+  };
+}
+
+function bubbleDayCenters(x: number, width: number, mode: "days" | "am-pm"): number[] {
+  const gutter = mode === "am-pm" ? 9 : 0;
+  const colW = (width - gutter) / DAY_LABELS.length;
+  return DAY_LABELS.map((_, i) => x + gutter + colW * i + colW / 2);
+}
+
+function drawCenteredLabel(doc: jsPDF, label: string, centerX: number, baseline: number) {
+  const textWidth = doc.getTextWidth(label);
+  doc.text(label, centerX - textWidth / 2, baseline);
+}
+
+/** One weekday header for the page, sitting above the circle column. */
+function drawBubbleDayHeader(
+  doc: jsPDF,
+  margin: number,
+  pageWidth: number,
+  y: number,
+  bubbleMode: "daily" | "am-pm",
+): number {
+  const columns = groupReportRowColumns(pageWidth, margin, bubbleMode, bubbleMode === "daily");
+  const mode = bubbleMode === "am-pm" ? "am-pm" : "days";
+  const width = columns.bubbleRight - columns.bubbleX;
+  const centers = bubbleDayCenters(columns.bubbleX, width, mode);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7);
+  doc.setTextColor(60);
+  DAY_LABELS.forEach((label, i) => {
+    drawCenteredLabel(doc, label, centers[i], y + 3.2);
+  });
+  doc.setTextColor(0);
+  return y + 5;
+}
+
+function drawWeekCircles(doc: jsPDF, centers: number[], cy: number) {
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.3);
+  for (const centerX of centers) {
+    doc.circle(centerX, cy, 2, "S");
+  }
+}
+
 function drawWeekBubbleColumn(
   doc: jsPDF,
   x: number,
@@ -37,33 +104,18 @@ function drawWeekBubbleColumn(
   width: number,
   mode: "days" | "am-pm",
 ): number {
-  const labelW = mode === "am-pm" ? 8 : 0;
-  const gridX = x + labelW;
-  const gridW = width - labelW;
-  const colW = gridW / DAY_LABELS.length;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(7);
-  DAY_LABELS.forEach((label, i) => {
-    doc.text(label, gridX + colW * i + colW / 2, top + 3, { align: "center" });
-  });
-  const drawRow = (cy: number) => {
-    doc.setDrawColor(0);
-    doc.setLineWidth(0.25);
-    DAY_LABELS.forEach((_, i) => {
-      doc.circle(gridX + colW * i + colW / 2, cy, 2.1, "S");
-    });
-  };
+  const centers = bubbleDayCenters(x, width, mode);
   if (mode === "days") {
-    drawRow(top + 8);
-    return 14;
+    drawWeekCircles(doc, centers, top + 3.2);
+    return 8;
   }
   doc.setFont("helvetica", "bold");
   doc.setFontSize(6.5);
-  doc.text("AM", x + 1, top + 9);
-  drawRow(top + 8.2);
-  doc.text("PM", x + 1, top + 15);
-  drawRow(top + 14.2);
-  return 20;
+  doc.text("AM", x, top + 4);
+  drawWeekCircles(doc, centers, top + 3.2);
+  doc.text("PM", x, top + 10);
+  drawWeekCircles(doc, centers, top + 9.2);
+  return 14;
 }
 
 function drawCamperBlock(
@@ -74,59 +126,85 @@ function drawCamperBlock(
   camper: GroupReportCamper,
   bubbleMode: "daily" | "am-pm",
 ): number {
-  const bubbleWidth = bubbleMode === "am-pm" ? 52 : 42;
-  const bubbleX = pageWidth - margin - bubbleWidth;
+  const reserveBarcode = bubbleMode === "daily";
+  const showBarcode = reserveBarcode && !!camper.barcodeValue?.trim();
+  const columns = groupReportRowColumns(pageWidth, margin, bubbleMode, reserveBarcode);
+  const { bubbleX, barcodeX, contactX } = columns;
+  const bubbleWidth = columns.bubbleRight - bubbleX;
+  const contactW = columns.contactRight - contactX;
+  const leftW = columns.leftRight - margin;
+  const barcodeSlot = showBarcode ? columns.barcodeRight - barcodeX : 0;
   const rowTop = y;
   const nameLine = `${camper.name}${camper.demographicsLine ? ` ${camper.demographicsLine}` : ""}`;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
-  doc.text(nameLine, margin, y + 4);
-  if (bubbleMode === "daily" && camper.barcodeValue?.trim()) {
-    drawCode39Barcode(doc, bubbleX - 28, y - 1, camper.barcodeValue, {
-      heightMm: 6,
-      narrowMm: 0.26,
-      label: false,
-    });
+  const nameLines = (doc.splitTextToSize(nameLine, leftW) as string[]).slice(0, 2);
+  let cursor = y + 4;
+  for (const line of nameLines) {
+    doc.text(line, margin, cursor);
+    cursor += 3.8;
   }
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
-  let textY = y + 8;
-  const leftLines = [
+  const sessionBits = [camper.sessionLine || camper.programLine, camper.divisionLine]
+    .map((line) => line?.trim())
+    .filter((line, index, all): line is string => !!line && line !== "—" && all.indexOf(line) === index);
+  const detailLines = [
     camper.addressLine,
-    camper.sessionLine || camper.programLine,
-    camper.divisionLine,
-    camper.town,
+    camper.addressLine?.trim() ? "" : camper.town,
+    sessionBits.join(" · "),
     camper.transportLine,
-  ].filter((line): line is string => !!line && line !== "—");
-  for (const line of leftLines.slice(0, 4)) {
-    doc.text(line, margin, textY);
-    textY += 3.4;
+  ].filter(
+    (line): line is string => !!line && line.trim() !== "" && line !== "—",
+  );
+  let textY = cursor + 0.4;
+  let leftCount = 0;
+  for (const source of detailLines) {
+    if (leftCount >= 3) break;
+    const wrapped = doc.splitTextToSize(source, leftW) as string[];
+    for (const line of wrapped) {
+      if (leftCount >= 3) break;
+      doc.text(line, margin, textY);
+      textY += 3.3;
+      leftCount += 1;
+    }
   }
 
-  const contactX = margin + 78;
-  const contactLines = (doc.splitTextToSize(camper.contactsBlock, 55) as string[]).slice(0, 6);
-  let contactY = rowTop + 8;
+  const contactSource = camper.contactsBlock.trim() === "—" ? "" : camper.contactsBlock;
+  const contactLines = contactSource
+    ? (doc.splitTextToSize(contactSource, contactW) as string[]).slice(0, 5)
+    : [];
+  let contactY = cursor + 0.6;
   for (const line of contactLines) {
     doc.text(line, contactX, contactY);
     contactY += 3.3;
   }
 
+  if (showBarcode && camper.barcodeValue) {
+    drawCode39Barcode(doc, barcodeX, rowTop + 2, camper.barcodeValue, {
+      heightMm: 8,
+      narrowMm: 0.28,
+      maxWidthMm: barcodeSlot,
+      label: false,
+    });
+  }
+
   const bubbleHeight = drawWeekBubbleColumn(
     doc,
     bubbleX,
-    rowTop + 1,
+    rowTop + 1.2,
     bubbleWidth,
     bubbleMode === "am-pm" ? "am-pm" : "days",
   );
 
-  const rowBottom = Math.max(textY, contactY, rowTop + bubbleHeight) + 2;
-  doc.setDrawColor(180);
+  const rowBottom = Math.max(textY, contactY, rowTop + Math.max(bubbleHeight, showBarcode ? 12 : 0)) + 1.5;
+  doc.setDrawColor(210);
   doc.setLineWidth(0.15);
   doc.line(margin, rowBottom, pageWidth - margin, rowBottom);
   doc.setDrawColor(0);
-  return rowBottom + 3;
+  return rowBottom + 2.5;
 }
 
 export function buildGroupReportPdf(options: {
@@ -176,12 +254,18 @@ export function buildGroupReportPdf(options: {
     margin,
     y,
   );
-  y += 6;
+  y += 5;
+  y = drawBubbleDayHeader(doc, margin, pageWidth, y, "daily");
 
   for (const camper of options.campers) {
     if (y > usableBottom - 28) {
       doc.addPage();
       y = margin;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text(`${options.groupName.toUpperCase()} (continued)`, margin, y + 4);
+      y += 8;
+      y = drawBubbleDayHeader(doc, margin, pageWidth, y, "daily");
     }
     y = drawCamperBlock(doc, margin, pageWidth, y, camper, "daily");
   }
@@ -235,11 +319,14 @@ export function buildBusRosterReportPdf(options: {
     printedAt,
   });
 
+  y = drawBubbleDayHeader(doc, margin, pageWidth, y, "am-pm");
+
   for (let i = 0; i < options.campers.length; i++) {
     const camper = options.campers[i];
-    if (y > usableBottom - 28) {
+    if (y > usableBottom - 32) {
       doc.addPage();
       y = margin;
+      y = drawBubbleDayHeader(doc, margin, pageWidth, y, "am-pm");
     }
     y = drawCamperBlock(doc, margin, pageWidth, y, camper, "am-pm");
   }

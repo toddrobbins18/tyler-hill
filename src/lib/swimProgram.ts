@@ -118,6 +118,10 @@ export const DIVISION_LEADER_OPTIONS = [
 
 /** Airtable Swim Bracelets 2026 — test note options (1st–5th Note). */
 export const SWIM_TEST_NOTE_OPTIONS = [
+  "Endurance",
+  "Tread form needs work",
+  "Refused",
+  "Swimmers Ear",
   "Backfloat form needs work",
   "Backfloat needs endurance",
   "Lap swimming form needs work",
@@ -126,8 +130,6 @@ export const SWIM_TEST_NOTE_OPTIONS = [
   "No Backfloat",
   "No Tread",
   "PASSED",
-  "Refused",
-  "Tread form needs work",
   "Tread needs endurance",
   "ZZZ Stamina Needs Work",
 ] as const;
@@ -273,8 +275,14 @@ export function normalizeBraceletColor(raw: unknown): BraceletColor | "" {
   if (!s) return "";
   const match = BRACELETS.find((c) => c.toLowerCase() === s.toLowerCase());
   if (match) return match;
-  if (/^non\s*swimmer/i.test(s) || /^beginner$/i.test(s)) return "Non Swimmer/Beginner";
+  if (/^non\s*swimmer/i.test(s) || /^beginner$/i.test(s) || /^purple$/i.test(s)) return "Non Swimmer/Beginner";
   return "";
+}
+
+/** Dashboard label. Purple is the non-swimmer / beginner bracelet. */
+export function swimBraceletColorLabel(color: BraceletColor | ""): string {
+  if (color === "Non Swimmer/Beginner") return "Purple (Non-Swimmer/Beginner)";
+  return color || "—";
 }
 
 export function isBlankDivisionLeader(value?: string | null): boolean {
@@ -1143,6 +1151,47 @@ export async function fetchSwimProctorOptions(
   }
 
   return mergeProctorOptions([], options);
+}
+
+/** 1st–3rd bracelet proctors: users tagged WSI for this camp. */
+export async function fetchWsiProctorOptions(
+  supabase: SupabaseClient,
+  companyId: string,
+): Promise<string[]> {
+  const { data: tags, error } = await supabase
+    .from("user_tags")
+    .select("user_id")
+    .eq("company_id", companyId)
+    .eq("tag", "wsi");
+
+  if (error) {
+    console.warn("[SwimProgram] WSI tag lookup failed:", error.message);
+    return [];
+  }
+
+  const ids = [...new Set((tags ?? []).map((row) => row.user_id).filter(Boolean))];
+  if (!ids.length) return [];
+
+  const { data: profiles, error: profileError } = await supabase
+    .from("profiles")
+    .select("full_name, email")
+    .in("id", ids);
+
+  if (profileError) {
+    console.warn("[SwimProgram] WSI profile lookup failed:", profileError.message);
+    return [];
+  }
+
+  const names = (profiles ?? [])
+    .map((profile) => {
+      const full = String(profile.full_name ?? "").trim();
+      if (full) return full;
+      const email = String(profile.email ?? "").trim();
+      return email.includes("@") ? email.split("@")[0] : email;
+    })
+    .filter(Boolean);
+
+  return [...new Set(names)].sort((a, b) => a.localeCompare(b));
 }
 
 export async function fetchSwimSeasons(
