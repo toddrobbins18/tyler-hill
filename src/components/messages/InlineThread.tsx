@@ -4,7 +4,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Send, Users } from "lucide-react";
+import { ArrowLeft, Send, Users } from "lucide-react";
+import { camperInitials } from "@/lib/parentPortalConstants";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { fetchMessageProfileLabels, inboxFromDisplayName } from "@/lib/messageProfiles";
@@ -61,6 +62,8 @@ interface InlineThreadProps {
   bubbleStyle?: "nest" | "parentGlass";
   /** Parent portal chat header (defaults to party label). */
   threadHeaderTitle?: string | null;
+  threadHeaderSubtitle?: string | null;
+  onClose?: () => void;
 }
 
 export default function InlineThread({
@@ -72,6 +75,8 @@ export default function InlineThread({
   onRootReadChange,
   bubbleStyle = "nest",
   threadHeaderTitle,
+  threadHeaderSubtitle,
+  onClose,
 }: InlineThreadProps) {
   const [replies, setReplies] = useState<ThreadMessage[]>([]);
   const [newReply, setNewReply] = useState("");
@@ -329,14 +334,8 @@ export default function InlineThread({
     return (
       <div key={row.id} className={`flex w-full ${isMe ? "justify-end" : "justify-start"}`}>
         <div className={`max-w-[84%] px-3.5 py-2.5 ${bubbleClass}`}>
-          {!isMe && (
-            <p
-              className={`text-xs font-semibold mb-1 ${
-                bubbleStyle === "parentGlass" ? "text-[hsl(var(--pp-brand-dark))]" : "text-secondary"
-              }`}
-            >
-              {senderLabel}
-            </p>
+          {!isMe && bubbleStyle !== "parentGlass" && (
+            <p className="mb-1 text-xs font-semibold text-secondary">{senderLabel}</p>
           )}
           <MessageContent
             content={row.content}
@@ -352,7 +351,9 @@ export default function InlineThread({
             <span
               className={`text-[11px] ${
                 bubbleStyle === "parentGlass"
-                  ? "text-[hsl(var(--pp-text-muted))]"
+                  ? isMe
+                    ? "text-white/75"
+                    : "text-[hsl(var(--pp-text-muted))]"
                   : isMe
                     ? "text-secondary-foreground/80"
                     : "text-muted-foreground"
@@ -372,10 +373,33 @@ export default function InlineThread({
     bubbleStyle !== "parentGlass" && Boolean(message.subject?.trim());
 
   return (
-    <Card className="h-full min-h-0 flex flex-col overflow-hidden border-0 shadow-md">
+    <Card
+      className={`flex h-full min-h-0 flex-col overflow-hidden border-0 ${
+        bubbleStyle === "parentGlass" ? "rounded-none shadow-none" : "shadow-md"
+      }`}
+    >
       {bubbleStyle === "parentGlass" ? (
-        <div className="shrink-0 bg-gradient-to-b from-[hsl(var(--pp-brand))] to-[hsl(var(--pp-brand-dark))] px-4 py-3.5 text-white">
-          <p className="truncate text-base font-semibold">{headerTitle}</p>
+        <div className="flex shrink-0 items-center gap-3 bg-[hsl(var(--pp-brand))] px-3 py-2.5 text-white">
+          {onClose ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 shrink-0 rounded-full text-white hover:bg-white/15 lg:hidden"
+              onClick={onClose}
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          ) : null}
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/20 text-sm font-semibold">
+            {camperInitials(headerTitle)}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[15px] font-semibold leading-tight">{headerTitle}</p>
+            {threadHeaderSubtitle ? (
+              <p className="truncate text-xs text-white/80">{threadHeaderSubtitle}</p>
+            ) : null}
+          </div>
         </div>
       ) : (
         <div className="bg-primary text-primary-foreground px-4 py-3 shrink-0">
@@ -395,7 +419,7 @@ export default function InlineThread({
 
       <CardContent
         className={`flex-1 flex flex-col p-0 min-h-0 ${
-          bubbleStyle === "parentGlass" ? "bg-[hsl(var(--pp-bg))]" : "bg-muted/30"
+          bubbleStyle === "parentGlass" ? "bg-[#e8eef5]" : "bg-muted/30"
         }`}
       >
         <ScrollArea className="flex-1 min-h-0 px-3 py-4 [&>[data-radix-scroll-area-viewport]]:max-h-full">
@@ -417,9 +441,9 @@ export default function InlineThread({
 
         {canReply && (
           <div
-            className={`shrink-0 border-t p-3 space-y-2 ${
+            className={`shrink-0 border-t p-2.5 space-y-2 ${
               bubbleStyle === "parentGlass"
-                ? "border-white/60 bg-white/70 backdrop-blur-md"
+                ? "border-[hsl(var(--pp-border))] bg-[hsl(var(--pp-bg-elevated))]"
                 : "bg-background"
             }`}
           >
@@ -449,7 +473,7 @@ export default function InlineThread({
                 rows={1}
                 className={`min-h-[44px] flex-1 resize-none rounded-3xl border shadow-sm ${
                   bubbleStyle === "parentGlass"
-                    ? "border-white/90 bg-white/88 backdrop-blur-sm"
+                    ? "border-[hsl(var(--pp-border))] bg-white"
                     : "bg-white"
                 }`}
                 value={newReply}

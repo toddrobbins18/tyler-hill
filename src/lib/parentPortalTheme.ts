@@ -16,11 +16,11 @@ export const NORTH_SHORE_PARENT_PORTAL_HERO_URL = "/parent-portal/aerial-camp-pl
 export const PP_AERIAL_GLASS_SURFACE =
   "border-white/40 bg-white/55 shadow-lg backdrop-blur-md";
 
-/** Chat bubbles on parent portal Messages (sent = brighter frost, received = softer). */
+/** Chat bubbles on parent portal Messages (sent = camp blue, received = white). */
 export const PP_CHAT_BUBBLE_ME =
-  "rounded-2xl rounded-tr-sm border border-white/90 bg-white/78 shadow-md backdrop-blur-md text-foreground";
+  "rounded-[1.15rem] rounded-br-md bg-[hsl(var(--pp-brand))] text-white shadow-sm";
 export const PP_CHAT_BUBBLE_THEM =
-  "rounded-2xl rounded-tl-sm border border-white/70 bg-white/52 shadow-md backdrop-blur-md text-foreground";
+  "rounded-[1.15rem] rounded-bl-md border border-black/[0.04] bg-white text-[hsl(var(--pp-fg))] shadow-sm";
 
 export type ParentPortalMainBackdropTone = "hero" | "subtle";
 

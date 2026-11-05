@@ -48,6 +48,8 @@ type ParentPortalShellProps = {
   mainBackdropImageUrl?: string | null;
   /** Home = dark overlay + glass cards; other tabs = lighter wash so lists stay readable. */
   mainBackdropTone?: ParentPortalMainBackdropTone;
+  /** Messages fills the pane like a chat app (no page padding). */
+  flushMain?: boolean;
   children: ReactNode;
 };
 
@@ -146,6 +148,7 @@ export function ParentPortalShell({
   onSignOut,
   mainBackdropImageUrl,
   mainBackdropTone = "subtle",
+  flushMain = false,
   children,
 }: ParentPortalShellProps) {
   const rootRef = useParentPortalTheme(themeColor, companySlug);
@@ -194,7 +197,8 @@ export function ParentPortalShell({
 
       <div
         className={cn(
-          "relative flex min-h-screen flex-col lg:pl-[17.5rem]",
+          "relative flex flex-col lg:pl-[17.5rem]",
+          flushMain ? "h-dvh overflow-hidden" : "min-h-screen",
           !hasMainBackdrop && "pp-main-brand-wash",
         )}
       >
@@ -233,10 +237,15 @@ export function ParentPortalShell({
 
         <main
           className={cn(
-            "relative z-10 w-full flex-1 pb-28 pt-5 md:pb-10 md:pt-8 lg:pb-10",
-            hasMainBackdrop
-              ? "max-w-none px-4 md:px-8"
-              : "mx-auto max-w-4xl px-4 md:max-w-5xl md:px-8 lg:max-w-6xl",
+            "relative z-10 w-full flex-1",
+            flushMain
+              ? "flex min-h-0 flex-col overflow-hidden pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:pb-0"
+              : cn(
+                  "pb-28 pt-5 md:pb-10 md:pt-8 lg:pb-10",
+                  hasMainBackdrop
+                    ? "max-w-none px-4 md:px-8"
+                    : "mx-auto max-w-4xl px-4 md:max-w-5xl md:px-8 lg:max-w-6xl",
+                ),
           )}
         >
           {children}

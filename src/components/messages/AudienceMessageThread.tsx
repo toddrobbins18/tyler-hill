@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { format } from "date-fns";
 import { ArrowLeft, Send } from "lucide-react";
+import { camperInitials } from "@/lib/parentPortalConstants";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -98,17 +99,26 @@ export function AudienceMessageThread({
   ];
 
   return (
-    <div className="flex min-h-[min(640px,calc(100vh-12rem))] flex-col overflow-hidden rounded-2xl border border-[hsl(var(--pp-border))] bg-[hsl(var(--pp-bg-elevated))]">
-      <div className="flex items-center gap-2 border-b border-[hsl(var(--pp-border))] px-3 py-2.5">
-        <Button type="button" variant="ghost" size="icon" className="shrink-0 rounded-full" onClick={onBack}>
+    <div className="flex h-full min-h-[min(560px,calc(100vh-12rem))] flex-col overflow-hidden bg-[hsl(var(--pp-bg-elevated))]">
+      <div className="flex items-center gap-3 bg-[hsl(var(--pp-brand))] px-3 py-2.5 text-white">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 shrink-0 rounded-full text-white hover:bg-white/15 lg:hidden"
+          onClick={onBack}
+        >
           <ArrowLeft className="h-5 w-5" />
         </Button>
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/20 text-sm font-semibold">
+          {camperInitials(note.audience_label || note.title)}
+        </div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-[hsl(var(--pp-fg))]">{note.audience_label || note.title}</p>
-          <p className="truncate text-xs text-[hsl(var(--pp-text-muted))]">{note.title}</p>
+          <p className="truncate text-[15px] font-semibold leading-tight">{note.audience_label || note.title}</p>
+          <p className="truncate text-xs text-white/80">{note.title}</p>
         </div>
       </div>
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto bg-[hsl(var(--pp-bg))] px-3 py-4">
+      <div className="flex flex-1 flex-col gap-2 overflow-y-auto bg-[#e8eef5] px-3 py-4">
         {bubbles.map((bubble) => (
           <div key={bubble.id} className={cn("flex", bubble.mine ? "justify-end" : "justify-start")}>
             <div

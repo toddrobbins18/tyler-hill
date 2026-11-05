@@ -11,12 +11,16 @@ export type ParentPortalThreadRow = {
   latest_at: string | null;
 };
 
-/** Inbox title — camper plus division leader (parent-school app style). */
+/** Chat list title — the person you are messaging (division leader). */
 export function parentPortalThreadListTitle(row: ParentPortalThreadRow): string {
+  return row.division_leader_name?.trim() || row.child_name.trim() || "Division leader";
+}
+
+/** Chat list subtitle — which camper this thread is about. */
+export function parentPortalThreadListSubtitle(row: ParentPortalThreadRow): string {
   const child = row.child_name.trim();
-  const leader = row.division_leader_name?.trim();
-  if (leader) return `${child} and ${leader}`;
-  return child;
+  if (!row.division_leader_user_id) return "Division leader not assigned yet";
+  return child ? child : "Division leader";
 }
 
 export async function listParentPortalThreads(
