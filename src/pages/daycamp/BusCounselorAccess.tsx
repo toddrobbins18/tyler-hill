@@ -32,6 +32,19 @@ type NestUserRow = {
   assigned_groups: string[];
 };
 
+function displayStaffName(
+  fullName: string | null | undefined,
+  email: string | null | undefined,
+  staffNameByEmail: Map<string, string>,
+): string {
+  const trimmed = fullName?.trim();
+  if (trimmed) return trimmed;
+  const emailKey = email?.trim().toLowerCase();
+  if (emailKey && staffNameByEmail.has(emailKey)) return staffNameByEmail.get(emailKey)!;
+  if (email?.includes("@")) return email.split("@")[0];
+  return "No name";
+}
+
 export default function BusCounselorAccess() {
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeason();
@@ -50,6 +63,7 @@ export default function BusCounselorAccess() {
   const [users, setUsers] = useState<NestUserRow[]>([]);
   const [busLabels, setBusLabels] = useState<string[]>([]);
   const [groupNames, setGroupNames] = useState<string[]>([]);
+  const [groupAccessAvailable, setGroupAccessAvailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [draftBus, setDraftBus] = useState<Record<string, string>>({});
@@ -58,15 +72,21 @@ export default function BusCounselorAccess() {
   const load = useCallback(async () => {
     if (!companyId) return;
     setLoading(true);
-    const [profilesResult, buses, roster] = await Promise.all([
+    const busSelect = "id, full_name, email, bus_attendance_only, assigned_transport_bus";
+    const [profilesResult, rolesResult, staffResult, buses, roster] = await Promise.all([
       supabase
         .from("profiles")
-        .select(
-          "id, full_name, email, bus_attendance_only, assigned_transport_bus, group_attendance_only, assigned_groups",
-        )
+        .select(busSelect)
         .eq("company_id", companyId)
         .eq("approved", true)
         .order("full_name"),
+      supabase.from("user_roles").select("user_id").eq("company_id", companyId),
+      supabase
+        .from("staff")
+        .select("email, name")
+        .eq("company_id", companyId)
+        .eq("season", currentSeason)
+        .not("email", "is", null),
       loadTransportBusLabels(supabase, companyId, currentSeason, operationalDateString),
       loadGroupRoster(supabase, companyId, currentSeason),
     ]);
@@ -77,11 +97,89 @@ export default function BusCounselorAccess() {
       return;
     }
 
-    const rows = ((profilesResult.data ?? []) as NestUserRow[]).map((row) => ({
-      ...row,
-      group_attendance_only: !!row.group_attendance_only,
-      assigned_groups: (row.assigned_groups ?? []).map((name) => name.trim()).filter(Boolean),
-    }));
+    const byId = new Map(
+      ((profilesResult.data ?? []) as NestUserRow[]).map((row) => [
+        row.id,
+        {
+          ...row,
+          bus_attendance_only: !!row.bus_attendance_only,
+          assigned_transport_bus: row.assigned_transport_bus ?? null,
+          group_attendance_only: false,
+          assigned_groups: [] as string[],
+        },
+      ]),
+    );
+    const extraIds = [
+      ...new Set(
+        (rolesResult.data ?? [])
+          .map((row) => row.user_id)
+          .filter((id): id is string => !!id && !byId.has(id)),
+      ),
+    ];
+    if (extraIds.length) {
+      const extraResult = await supabase
+        .from("profiles")
+        .select(busSelect)
+        .in("id", extraIds)
+        .eq("approved", true);
+      for (const row of (extraResult.data ?? []) as NestUserRow[]) {
+        byId.set(row.id, {
+          ...row,
+          bus_attendance_only: !!row.bus_attendance_only,
+          assigned_transport_bus: row.assigned_transport_bus ?? null,
+          group_attendance_only: false,
+          assigned_groups: [],
+        });
+      }
+    }
+
+    const staffNameByEmail = new Map(
+      (staffResult.data ?? [])
+        .filter((row) => row.email?.trim() && row.name?.trim())
+        .map((row) => [row.email!.trim().toLowerCase(), row.name!.trim()]),
+    );
+    const rows = [...byId.values()]
+      .map((row) => ({
+        ...row,
+        full_name: displayStaffName(row.full_name, row.email, staffNameByEmail),
+      }))
+      .sort((a, b) =>
+        (a.full_name || a.email || "").localeCompare(b.full_name || b.email || ""),
+      );
+
+    if (rows.length) {
+      const groupResult = await supabase
+        .from("profiles")
+        .select("id, group_attendance_only, assigned_groups")
+        .in(
+          "id",
+          rows.map((row) => row.id),
+        );
+      if (!groupResult.error) {
+        setGroupAccessAvailable(true);
+        const groupById = new Map(
+          (groupResult.data ?? []).map((row) => [
+            row.id as string,
+            {
+              group_attendance_only: !!(row as NestUserRow).group_attendance_only,
+              assigned_groups: ((row as NestUserRow).assigned_groups ?? [])
+                .map((name) => name.trim())
+                .filter(Boolean),
+            },
+          ]),
+        );
+        for (const row of rows) {
+          const group = groupById.get(row.id);
+          if (!group) continue;
+          row.group_attendance_only = group.group_attendance_only;
+          row.assigned_groups = group.assigned_groups;
+        }
+      } else {
+        setGroupAccessAvailable(false);
+      }
+    } else {
+      setGroupAccessAvailable(false);
+    }
     setUsers(rows);
     setBusLabels(buses.length ? buses : ["Bus 1", "Bus 2", "Bus 3", "Bus 4", "Bus 5"]);
     const names = [...new Set(roster.map((camper) => camper.groupName).filter((name) => name && name !== "Unassigned"))].sort(
@@ -278,6 +376,7 @@ export default function BusCounselorAccess() {
                       </div>
                     </div>
                   </div>
+                  {groupAccessAvailable ? (
                   <div className="space-y-2 rounded-md bg-muted/40 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <Label className="text-xs flex items-center gap-1.5">
@@ -315,6 +414,7 @@ export default function BusCounselorAccess() {
                       </div>
                     )}
                   </div>
+                  ) : null}
                 </div>
               );
             })

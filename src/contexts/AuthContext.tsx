@@ -4,7 +4,7 @@ import type { User } from '@supabase/supabase-js';
 import { resolvePermissionDivisionIds } from '@/lib/divisionFilterUtils';
 import { hasMenuPermissionWithAliases } from '@/lib/dayCampPermissionAliases';
 import { isSandboxDemoStaffEmail } from '@/lib/nestSandboxStaffDemo';
-import { isPaperlessMenuAllowed } from '@/lib/transportBusCounselor';
+import { isPaperlessMenuAllowed, loadUserBusCounselorProfile } from '@/lib/transportBusCounselor';
 
 export type AppRole = 'admin' | 'staff' | 'division_leader' | 'specialist' | 'viewer' | 'super_admin' | 'health_center';
 
@@ -71,24 +71,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const profileResult = await supabase
-        .from('profiles')
-        .select('bus_attendance_only, assigned_transport_bus, group_attendance_only, assigned_groups')
-        .eq('id', currentUser.id)
-        .maybeSingle();
-
-      const profileRow = profileResult.data as {
-        bus_attendance_only?: boolean | null;
-        assigned_transport_bus?: string | null;
-        group_attendance_only?: boolean | null;
-        assigned_groups?: string[] | null;
-      } | null;
-      setBusAttendanceOnly(!!profileRow?.bus_attendance_only);
-      setAssignedTransportBus(profileRow?.assigned_transport_bus?.trim() || null);
-      setGroupAttendanceOnly(!!profileRow?.group_attendance_only);
-      setAssignedGroups(
-        (profileRow?.assigned_groups ?? []).map((name) => name.trim()).filter(Boolean),
-      );
+      const counselor = await loadUserBusCounselorProfile(supabase, currentUser.id);
+      setBusAttendanceOnly(counselor.busAttendanceOnly);
+      setAssignedTransportBus(counselor.assignedTransportBus);
+      setGroupAttendanceOnly(counselor.groupAttendanceOnly);
+      setAssignedGroups(counselor.assignedGroups);
 
       // Fetch roles before publishing user so dependents never race on isSuperAdmin.
       const rolesResult = await supabase

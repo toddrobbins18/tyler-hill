@@ -53,7 +53,7 @@ export async function loadUserBusCounselorProfile(
   };
   const { data, error } = await supabase
     .from("profiles")
-    .select("bus_attendance_only, assigned_transport_bus, group_attendance_only, assigned_groups")
+    .select("bus_attendance_only, assigned_transport_bus")
     .eq("id", userId)
     .maybeSingle();
 
@@ -65,15 +65,25 @@ export async function loadUserBusCounselorProfile(
   const row = data as {
     bus_attendance_only?: boolean | null;
     assigned_transport_bus?: string | null;
-    group_attendance_only?: boolean | null;
-    assigned_groups?: string[] | null;
   } | null;
+
+  const groupResult = await supabase
+    .from("profiles")
+    .select("group_attendance_only, assigned_groups")
+    .eq("id", userId)
+    .maybeSingle();
+  const groupRow = groupResult.error
+    ? null
+    : (groupResult.data as {
+        group_attendance_only?: boolean | null;
+        assigned_groups?: string[] | null;
+      } | null);
 
   return {
     busAttendanceOnly: !!row?.bus_attendance_only,
     assignedTransportBus: row?.assigned_transport_bus?.trim() || null,
-    groupAttendanceOnly: !!row?.group_attendance_only,
-    assignedGroups: (row?.assigned_groups ?? []).map((name) => name.trim()).filter(Boolean),
+    groupAttendanceOnly: !!groupRow?.group_attendance_only,
+    assignedGroups: (groupRow?.assigned_groups ?? []).map((name) => name.trim()).filter(Boolean),
   };
 }
 

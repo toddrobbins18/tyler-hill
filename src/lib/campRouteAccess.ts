@@ -38,6 +38,7 @@ function getAllowedPathsForCompany(company: CampLike): Set<string> {
       paths.add(item.url);
     }
     paths.add("/day-camp/parent-portal-dashboard");
+    paths.add("/day-camp/bus-counselor-access");
     paths.add("/parents");
     paths.add("/parents/portal");
   } else {
