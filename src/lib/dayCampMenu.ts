@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import type { CampLike } from "@/lib/camps";
 import {
-  isNorthShoreDayCamp,
+  dayCampHidesUnreleasedPocModules,
   northShoreBusTransportEnabled,
   staffTimeClockEnabledForCompany,
 } from "@/lib/camps";
@@ -107,7 +107,7 @@ export function getDayCampPocItems(): DayCampMenuItem[] {
   ];
 }
 
-/** North Shore Phase 1 — Todd Jul 30: skip Hiring, Bunking, Media until asked. */
+/** North Shore Phase 1 — skip Hiring, Bunking, Media until asked (all live day camps). */
 const NORTH_SHORE_SKIP_POC_MENU_IDS = new Set(["media", "hiring", "bunking"]);
 
 function isTransportMenuItem(menuId: string): boolean {
@@ -117,7 +117,7 @@ function isTransportMenuItem(menuId: string): boolean {
 /** Day Camp POC items scoped to the active company (includes all modules for permissions). */
 export function getDayCampPocItemsForCompany(company: CampLike): DayCampMenuItem[] {
   return getDayCampPocItems().filter((item) => {
-    if (isNorthShoreDayCamp(company?.slug) && NORTH_SHORE_SKIP_POC_MENU_IDS.has(item.menuId)) {
+    if (dayCampHidesUnreleasedPocModules(company) && NORTH_SHORE_SKIP_POC_MENU_IDS.has(item.menuId)) {
       return false;
     }
     if (isTransportMenuItem(item.menuId) && !northShoreBusTransportEnabled(company)) {

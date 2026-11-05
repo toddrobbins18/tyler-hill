@@ -4,6 +4,8 @@ export const CAMP_SLUG = {
   TIMBER_LAKE_WEST: "timber-lake-west",
   TYLER_HILL_CAMP: "tyler-hill-camp",
   NORTH_SHORE_DAY_CAMP: "north-shore-day-camp",
+  HAMPTON_COUNTRY_DAY_CAMP: "hampton-country-day-camp",
+  SOUTHAMPTON_CAMP_CLUB: "southampton-camp-club",
   /** Training / demo day camp — dummy data only; enter from dashboard sandbox card. */
   NEST_SANDBOX_DAY_CAMP: "nest-sandbox-day-camp",
 } as const;
@@ -39,6 +41,14 @@ export function isNorthShoreDayCamp(slug: string | null | undefined): boolean {
   return slug === CAMP_SLUG.NORTH_SHORE_DAY_CAMP;
 }
 
+export function isHamptonCountryDayCamp(slug: string | null | undefined): boolean {
+  return slug === CAMP_SLUG.HAMPTON_COUNTRY_DAY_CAMP;
+}
+
+export function isSouthamptonCampClub(slug: string | null | undefined): boolean {
+  return slug === CAMP_SLUG.SOUTHAMPTON_CAMP_CLUB;
+}
+
 export function isNestSandboxCompany(slug: string | null | undefined): boolean {
   return slug === CAMP_SLUG.NEST_SANDBOX_DAY_CAMP;
 }
@@ -49,16 +59,21 @@ export function campminderIntegrationEnabled(company: CampLike): boolean {
   return true;
 }
 
-/** North Shore bus-route map transport — not used by Tyler Hill, Timber Lake, or other overnight camps. */
-export function northShoreBusTransportEnabled(company: CampLike): boolean {
-  return isNorthShoreDayCamp(company?.slug) || isNestSandboxCompany(company?.slug);
-}
-
 /** Day camps use CampHub-style UI (North Shore first; Hampton/Southampton later). */
 export function isDayCampCompany(company: CampLike): boolean {
   if (!company) return false;
   if (company.camp_type === "day_camp") return true;
   return isNorthShoreDayCamp(company.slug);
+}
+
+/** Day-camp bus transport modules — empty per camp; not used by overnight camps. */
+export function northShoreBusTransportEnabled(company: CampLike): boolean {
+  return isDayCampCompany(company);
+}
+
+/** Live day camps hide Hiring / Bunking / Media, same as North Shore. Sandbox keeps those extras. */
+export function dayCampHidesUnreleasedPocModules(company: CampLike): boolean {
+  return isDayCampCompany(company) && !isNestSandboxCompany(company?.slug);
 }
 
 export function isOvernightCampCompany(company: CampLike): boolean {
