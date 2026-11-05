@@ -206,7 +206,7 @@ export type RouteStopListLines = {
 export const BLANK_OPEN_STOP_SUBTITLE = "Open stop · no campers assigned";
 
 export function isBlankOpenRouteStop(lines: RouteStopListLines): boolean {
-  return lines.isOpenStop && lines.camperNames.length === 0 && lines.subtitle === BLANK_OPEN_STOP_SUBTITLE;
+  return lines.isOpenStop && lines.camperNames.length === 0;
 }
 
 export function countBlankOpenStopsOnRoute(

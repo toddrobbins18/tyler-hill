@@ -23,7 +23,15 @@ CREATE POLICY "Read audience message replies"
   ON public.parent_audience_replies
   FOR SELECT
   TO authenticated
-  USING (public.parent_can_read_announcement(announcement_id));
+  USING (
+    public.parent_can_read_announcement(announcement_id)
+    OR EXISTS (
+      SELECT 1
+      FROM public.parent_portal_announcements a
+      WHERE a.id = announcement_id
+        AND a.company_id = public.get_user_company(auth.uid())
+    )
+  );
 
 DROP POLICY IF EXISTS "Reply to an audience message" ON public.parent_audience_replies;
 CREATE POLICY "Reply to an audience message"
@@ -32,5 +40,13 @@ CREATE POLICY "Reply to an audience message"
   TO authenticated
   WITH CHECK (
     sender_id = auth.uid()
-    AND public.parent_can_read_announcement(announcement_id)
+    AND (
+      public.parent_can_read_announcement(announcement_id)
+      OR EXISTS (
+        SELECT 1
+        FROM public.parent_portal_announcements a
+        WHERE a.id = announcement_id
+          AND a.company_id = public.get_user_company(auth.uid())
+      )
+    )
   );

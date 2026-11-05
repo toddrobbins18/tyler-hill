@@ -1,9 +1,11 @@
 import type { ParentEmailTemplateKey } from "@/lib/parentEmailTemplates";
 import {
+  cropNearWhiteBounds,
   PARENT_REMINDER_HEIGHT,
   PARENT_REMINDER_NAME as N,
   PARENT_REMINDER_WIDTH,
   parentReminderPublicUrl,
+  scaleReminderNameLayout,
 } from "@/lib/parentReminderLayout";
 
 const imageCache = new Map<string, HTMLImageElement>();
@@ -34,13 +36,28 @@ export async function renderParentReminderPreviewDataUrl(
   if (!ctx) throw new Error("Canvas not supported");
 
   ctx.drawImage(template, 0, 0, PARENT_REMINDER_WIDTH, PARENT_REMINDER_HEIGHT);
+  const pixels = ctx.getImageData(0, 0, PARENT_REMINDER_WIDTH, PARENT_REMINDER_HEIGHT);
+  const crop = cropNearWhiteBounds(pixels.data, PARENT_REMINDER_WIDTH, PARENT_REMINDER_HEIGHT);
+  ctx.clearRect(0, 0, PARENT_REMINDER_WIDTH, PARENT_REMINDER_HEIGHT);
+  ctx.drawImage(
+    template,
+    crop.x,
+    crop.y,
+    crop.width,
+    crop.height,
+    0,
+    0,
+    PARENT_REMINDER_WIDTH,
+    PARENT_REMINDER_HEIGHT,
+  );
 
+  const box = scaleReminderNameLayout(N, crop, PARENT_REMINDER_WIDTH, PARENT_REMINDER_HEIGHT);
   const name = camperName.trim() || "Camper";
-  ctx.fillStyle = N.color;
-  ctx.font = `700 ${N.fontSize}px Arial, Helvetica, sans-serif`;
+  ctx.fillStyle = box.color;
+  ctx.font = `700 ${Math.round(box.fontSize)}px Arial, Helvetica, sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(name, N.x + N.width / 2, N.y + N.height / 2, N.width - 16);
+  ctx.fillText(name, box.x + box.width / 2, box.y + box.height / 2, Math.max(8, box.width - 16));
 
   return canvas.toDataURL("image/jpeg", 0.92);
 }

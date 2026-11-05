@@ -3,18 +3,20 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import {
   canViewAllTransportBuses,
-  isBusCounselorMenuAllowed,
-  isBusCounselorNavLocked,
+  isPaperlessMenuAllowed,
+  isPaperlessNavLocked,
+  paperlessHomePath,
 } from "@/lib/transportBusCounselor";
 
 export function useBusCounselorNavScope() {
   const {
-    user,
     isSuperAdmin,
     userRole,
     hasPagePermission,
     busAttendanceOnly,
     assignedTransportBus,
+    groupAttendanceOnly,
+    assignedGroups,
     loading: authLoading,
   } = useAuth();
   const { currentCompany } = useCompany();
@@ -39,16 +41,21 @@ export function useBusCounselorNavScope() {
   );
 
   const isNavLocked = useMemo(
-    () => isBusCounselorNavLocked({ canViewAll, busAttendanceOnly }),
-    [canViewAll, busAttendanceOnly],
+    () => isPaperlessNavLocked({ canViewAll, busAttendanceOnly, groupAttendanceOnly }),
+    [canViewAll, busAttendanceOnly, groupAttendanceOnly],
   );
 
   const allowMenuItem = useCallback(
     (menuId: string) => {
       if (!isNavLocked) return true;
-      return isBusCounselorMenuAllowed(menuId);
+      return isPaperlessMenuAllowed(menuId, { busAttendanceOnly, groupAttendanceOnly });
     },
-    [isNavLocked],
+    [isNavLocked, busAttendanceOnly, groupAttendanceOnly],
+  );
+
+  const homePath = useMemo(
+    () => paperlessHomePath({ busAttendanceOnly, groupAttendanceOnly }),
+    [busAttendanceOnly, groupAttendanceOnly],
   );
 
   return {
@@ -58,6 +65,10 @@ export function useBusCounselorNavScope() {
     hasTransportCoordinatorAccess,
     isNavLocked,
     allowMenuItem,
+    busAttendanceOnly,
+    groupAttendanceOnly,
+    assignedGroups,
+    homePath,
     busScopeLabel: isNavLocked && assignedBus ? assignedBus : null,
   };
 }

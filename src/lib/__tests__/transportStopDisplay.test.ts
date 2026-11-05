@@ -72,6 +72,17 @@ describe("routeStopListLines", () => {
     expect(isBlankOpenRouteStop(lines)).toBe(true);
   });
 
+  it("hides any empty open stop even if the subtitle wording differs", () => {
+    expect(
+      isBlankOpenRouteStop({
+        title: "Maple Ave",
+        subtitle: "Open stop",
+        isOpenStop: true,
+        camperNames: [],
+      }),
+    ).toBe(true);
+  });
+
   it("does not treat open stops with pending campers as blank", () => {
     const lines = routeStopListLines(
       {

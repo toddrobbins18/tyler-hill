@@ -19,6 +19,8 @@ import {
   type GroupAttendanceStatus,
   type GroupRosterCamper,
 } from "@/lib/transportGroupAttendance";
+import { filterCampersForGroupCounselor } from "@/lib/transportBusCounselor";
+import { useBusCounselorNavScope } from "@/hooks/useBusCounselorNavScope";
 import { FrontOfficeBackLink } from "@/components/daycamp/FrontOfficeBackLink";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -41,6 +43,7 @@ export default function GroupAttendance() {
   const { currentSeason } = useSeason();
   const companyId = currentCompany?.id;
   const { operationalDateString } = useCampOperationalDate();
+  const { canViewAll, groupAttendanceOnly, assignedGroups, isNavLocked } = useBusCounselorNavScope();
 
   const [attendanceDate, setAttendanceDate] = useState(operationalDateString);
   const [calendar, setCalendar] = useState<EnrollmentWeekCalendar>([]);
@@ -132,19 +135,28 @@ export default function GroupAttendance() {
     return () => clearTimeout(t);
   }, [saveState]);
 
+  const scopedRoster = useMemo(
+    () =>
+      filterCampersForGroupCounselor(roster, assignedGroups, {
+        groupAttendanceOnly,
+        canViewAll,
+      }),
+    [roster, assignedGroups, groupAttendanceOnly, canViewAll],
+  );
+
   const groupNames = useMemo(() => {
-    const set = new Set(roster.map((c) => c.groupName));
+    const set = new Set(scopedRoster.map((c) => c.groupName));
     return [...set].sort((a, b) => a.localeCompare(b));
-  }, [roster]);
+  }, [scopedRoster]);
 
   const filteredRoster = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return roster.filter((c) => {
+    return scopedRoster.filter((c) => {
       if (groupFilter !== ALL_GROUPS && c.groupName !== groupFilter) return false;
       if (!q) return true;
       return c.name.toLowerCase().includes(q) || c.groupName.toLowerCase().includes(q);
     });
-  }, [roster, groupFilter, search]);
+  }, [scopedRoster, groupFilter, search]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, GroupRosterCamper[]>();
@@ -201,13 +213,16 @@ export default function GroupAttendance() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <FrontOfficeBackLink />
+      {!isNavLocked ? <FrontOfficeBackLink /> : null}
       <div>
         <h1 className="page-header flex items-center gap-2">
           <Users className="h-6 w-6" /> Group Attendance
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
           Mark Present / Absent by camp group. Select multiple campers, then apply P or A in one tap.
+          {isNavLocked && groupAttendanceOnly && assignedGroups.length
+            ? ` Showing ${assignedGroups.join(", ")}.`
+            : ""}
         </p>
       </div>
 
@@ -296,7 +311,11 @@ export default function GroupAttendance() {
       </Card>
 
       {!rosterLoading && !filteredRoster.length ? (
-        <p className="text-sm text-muted-foreground">No campers in roster for this date / enrollment week.</p>
+        <p className="text-sm text-muted-foreground">
+          {isNavLocked && groupAttendanceOnly
+            ? "No campers in your assigned groups for this date / enrollment week."
+            : "No campers in roster for this date / enrollment week."}
+        </p>
       ) : null}
 
       <div className="space-y-4">

@@ -7,7 +7,7 @@ import { Shield } from "lucide-react";
 import { isNestSandboxCompany } from "@/lib/camps";
 import { isSandboxDemoStaffEmail } from "@/lib/nestSandboxStaffDemo";
 import { useBusCounselorNavScope } from "@/hooks/useBusCounselorNavScope";
-import { isBusCounselorMenuAllowed } from "@/lib/transportBusCounselor";
+import { isPaperlessMenuAllowed } from "@/lib/transportBusCounselor";
 
 // Map route paths to their menu item names for permission checks
 const routeToMenuMap: Record<string, string> = {
@@ -30,7 +30,14 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   
   const { user, loading: authLoading, hasPagePermission, isSuperAdmin } = useAuth();
   const { loading: companyLoading, currentCompany, sandboxMode } = useCompany();
-  const { isNavLocked, assignedLoading: busScopeLoading } = useBusCounselorNavScope();
+  const {
+    isNavLocked,
+    assignedLoading: busScopeLoading,
+    allowMenuItem,
+    homePath,
+    busAttendanceOnly,
+    groupAttendanceOnly,
+  } = useBusCounselorNavScope();
 
   // Extract page name from path
   const menuItem = useMemo(() => {
@@ -55,20 +62,27 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     if (!currentCompany) return true; // Still loading, assume access
     if (isSuperAdmin) return true;
     if (sandboxTrainingAccess) return true;
-    if (isNavLocked && !isBusCounselorMenuAllowed(menuItem)) return false;
+    if (isNavLocked && !allowMenuItem(menuItem)) return false;
     return hasPagePermission(currentCompany.id, menuItem);
-  }, [currentCompany, menuItem, isSuperAdmin, hasPagePermission, sandboxTrainingAccess, isNavLocked]);
+  }, [currentCompany, menuItem, isSuperAdmin, hasPagePermission, sandboxTrainingAccess, isNavLocked, allowMenuItem]);
 
   useEffect(() => {
     if (busScopeLoading || !isNavLocked) return;
-    const onBusTool =
-      location.pathname.startsWith("/day-camp/bus-attendance") ||
-      location.pathname.startsWith("/day-camp/bus-check-ins");
-    if (onBusTool && hasPageAccess) return;
-    if (!onBusTool) {
-      navigate("/day-camp/bus-attendance", { replace: true });
+    const onAllowedTool = isPaperlessMenuAllowed(menuItem, { busAttendanceOnly, groupAttendanceOnly });
+    if (onAllowedTool && hasPageAccess) return;
+    if (!onAllowedTool) {
+      navigate(homePath, { replace: true });
     }
-  }, [busScopeLoading, isNavLocked, hasPageAccess, location.pathname, navigate]);
+  }, [
+    busScopeLoading,
+    isNavLocked,
+    hasPageAccess,
+    menuItem,
+    busAttendanceOnly,
+    groupAttendanceOnly,
+    homePath,
+    navigate,
+  ]);
 
   // Check auth and redirect if needed
   useEffect(() => {
