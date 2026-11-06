@@ -87,6 +87,20 @@ describe("transportCamperBusRun", () => {
     expect(campers[0]!.ridesPm).toBe(false);
   });
 
+  it("includes PT kids assigned to a bus when building the Parent Transport roster", () => {
+    const campers = buildPtOnlyBubbleSheetCampers({
+      runDate: "2027-07-01",
+      includeAssignedToBus: true,
+      busLabelForRoute: (id) => `Bus ${id}`,
+      parentTransportCampers: [
+        { id: 1, name: "No Bus Kid", routeId: null, am: true, pm: false, weekdays: [] },
+        { id: 2, name: "On Bus Kid", routeId: 3, am: true, pm: true, weekdays: [] },
+      ],
+    });
+    expect(campers.map((c) => c.name)).toEqual(["No Bus Kid", "On Bus Kid"]);
+    expect(campers.find((c) => c.name === "On Bus Kid")?.detail).toContain("Bus 3");
+  });
+
   it("marks PM bubble off for mini day on the bus sheet", () => {
     const routes = buildBusBubbleSheetRoutes({
       routes: [{ id: 1, bus: "Bus 10", routeName: "Route A" }],

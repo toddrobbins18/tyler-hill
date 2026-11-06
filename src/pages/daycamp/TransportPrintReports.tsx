@@ -89,15 +89,21 @@ export default function TransportPrintReports() {
   const coreStops: Record<number, TransportRouteStop[]> = board?.coreStops ?? {};
   const schedules = board?.camperBusRunSchedules ?? {};
   const parentTransportCampers = board?.parentTransportCampers ?? [];
-  const ptOnlyCampers = useMemo(
+  const busLabelForRoute = useCallback(
+    (routeId: number) => routeMeta.find((r) => Number(r.id) === Number(routeId))?.bus ?? `Bus ${routeId}`,
+    [routeMeta],
+  );
+  const ptRosterCampers = useMemo(
     () =>
       buildPtOnlyBubbleSheetCampers({
         parentTransportCampers,
         runDate,
         enrollmentWeek,
         enrollmentLookup,
+        includeAssignedToBus: true,
+        busLabelForRoute,
       }),
-    [parentTransportCampers, runDate, enrollmentWeek, enrollmentLookup],
+    [parentTransportCampers, runDate, enrollmentWeek, enrollmentLookup, busLabelForRoute],
   );
 
   const loadAll = useCallback(async () => {
@@ -122,6 +128,7 @@ export default function TransportPrintReports() {
         runDate,
         enrollmentWeek: enrollmentWeek ?? undefined,
         enrollmentLookup: enrollCtx?.enrollmentLookup,
+        includeAssignedToBus: true,
       });
       if (ptKids.length) ids.push(PT_ROSTER_ROUTE_ID);
       setSelectedRouteIds((prev) => {
@@ -144,9 +151,9 @@ export default function TransportPrintReports() {
 
   const allRosterRouteIds = useMemo(() => {
     const ids = routeMeta.map((r) => Number(r.id));
-    if (ptOnlyCampers.length) ids.push(PT_ROSTER_ROUTE_ID);
+    if (ptRosterCampers.length) ids.push(PT_ROSTER_ROUTE_ID);
     return ids;
-  }, [routeMeta, ptOnlyCampers.length]);
+  }, [routeMeta, ptRosterCampers.length]);
 
   const selectedRoutes = routeMeta.filter((r) => selectedRouteIds.includes(Number(r.id)));
 
@@ -257,9 +264,9 @@ export default function TransportPrintReports() {
     const branding = await resolveTransportPdfBranding(currentCompany);
 
     if (routeId === PT_ROSTER_ROUTE_ID) {
-      if (!ptOnlyCampers.length) return null;
+      if (!ptRosterCampers.length) return null;
       const reportCampers = reportCampersForBusRoster(
-        ptOnlyCampers,
+        ptRosterCampers,
         children,
         routeMeta,
         coreStops,
@@ -273,9 +280,9 @@ export default function TransportPrintReports() {
         weekDateRange: weekRangeLabel,
         bus: PARENT_TRANSPORT_CHANGE_SHEET_BUS,
         routeName: "Parent drop-off / pick-up",
-        totalPassengers: ptOnlyCampers.length,
+        totalPassengers: ptRosterCampers.length,
         campers: reportCampers,
-        bubbleCampers: ptOnlyCampers,
+        bubbleCampers: ptRosterCampers,
         logo: branding.logo,
         printedAt: branding.printedAt,
       });
@@ -494,7 +501,7 @@ export default function TransportPrintReports() {
             <Bus className="h-4 w-4" /> Bus roster reports
           </CardTitle>
           <CardDescription>
-            One PDF per bus — campers, contacts, AM/PM attendance bubbles. Parent transport (PT) kids on a bus are on that roster; PT-only is a separate checkbox.
+            One PDF per bus — campers, contacts, AM/PM attendance bubbles. Parent Transport (PT) is the first row; those kids are also on their bus PDF when they have a bus.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -519,6 +526,32 @@ export default function TransportPrintReports() {
             </Button>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 max-h-[320px] overflow-y-auto">
+            {ptRosterCampers.length > 0 ? (
+              <label className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-2 py-1.5 cursor-pointer">
+                <Checkbox
+                  checked={selectedRouteIds.includes(PT_ROSTER_ROUTE_ID)}
+                  onCheckedChange={() => toggleRoute(PT_ROSTER_ROUTE_ID)}
+                />
+                <span className="flex-1 text-sm truncate font-medium">
+                  {PARENT_TRANSPORT_CHANGE_SHEET_BUS}
+                  <span className="ml-1 font-normal text-muted-foreground">({ptRosterCampers.length})</span>
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2"
+                  disabled={loading}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void handleBusRoster(PT_ROSTER_ROUTE_ID);
+                  }}
+                >
+                  PDF
+                </Button>
+              </label>
+            ) : null}
             {routeMeta.map((r) => (
               <label key={r.id} className="flex items-center gap-2 rounded-md border px-2 py-1.5 cursor-pointer">
                 <Checkbox
@@ -542,29 +575,6 @@ export default function TransportPrintReports() {
                 </Button>
               </label>
             ))}
-            {ptOnlyCampers.length > 0 ? (
-              <label className="flex items-center gap-2 rounded-md border px-2 py-1.5 cursor-pointer">
-                <Checkbox
-                  checked={selectedRouteIds.includes(PT_ROSTER_ROUTE_ID)}
-                  onCheckedChange={() => toggleRoute(PT_ROSTER_ROUTE_ID)}
-                />
-                <span className="flex-1 text-sm truncate font-medium">{PARENT_TRANSPORT_CHANGE_SHEET_BUS}</span>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 px-2"
-                  disabled={loading}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    void handleBusRoster(PT_ROSTER_ROUTE_ID);
-                  }}
-                >
-                  PDF
-                </Button>
-              </label>
-            ) : null}
           </div>
         </CardContent>
       </Card>
