@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { Waves, Plus, Trash2, CheckCircle2, Clock, Bus, Repeat, Phone, XCircle, Search, Mail, List, CalendarDays, Pencil } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SwimLessonCalendarView } from "@/components/swim/SwimLessonCalendarView";
 import { runSwimLessonReminders } from "@/lib/swimLessonReminderApi";
 import { SortableHeader } from "@/components/SortableHeader";
@@ -27,6 +28,7 @@ import {
   rejectSwimLessonRequest,
   SWIM_LESSON_REJECTION_DEFAULT,
   isSwimLessonBookedStatus,
+  isSwimLessonCompleted,
   swimLessonStatusBadgeVariant,
   swimLessonStatusLabel,
   swimParentApprovalLabel,
@@ -55,6 +57,7 @@ type Camper = { id: string; name: string; guardian_email: string | null };
 type ParentFilter = "all" | "confirmed" | "pending";
 type TransportFilter = "all" | "needs_approval" | "approved";
 type PageView = "list" | "calendar";
+type ListTab = "pending" | "booked" | "completed";
 type Lesson = {
   id: string;
   camper_id: string;
@@ -161,6 +164,7 @@ export default function SwimLessons() {
   const [transportFilter, setTransportFilter] = useState<TransportFilter>("all");
   const [reminderRunning, setReminderRunning] = useState(false);
   const [pageView, setPageView] = useState<PageView>("list");
+  const [listTab, setListTab] = useState<ListTab>("booked");
   const [booking, setBooking] = useState<{ mode: "approve" | "edit"; lesson: Lesson } | null>(null);
 
   const sendThreeDayReminders = async () => {
@@ -257,8 +261,16 @@ export default function SwimLessons() {
     () => lessonRows.filter((l) => l.status === "pending"),
     [lessonRows],
   );
-  const activeLessons = useMemo(
-    () => lessonRows.filter((l) => isSwimLessonBookedStatus(l.status)),
+  const bookedLessons = useMemo(
+    () =>
+      lessonRows.filter(
+        (l) => isSwimLessonBookedStatus(l.status) && !isSwimLessonCompleted(l.status, l.scheduled_at, l.duration_minutes),
+      ),
+    [lessonRows],
+  );
+  const completedLessons = useMemo(
+    () =>
+      lessonRows.filter((l) => isSwimLessonCompleted(l.status, l.scheduled_at, l.duration_minutes)),
     [lessonRows],
   );
 
@@ -267,9 +279,9 @@ export default function SwimLessons() {
     [pendingLessons, search],
   );
 
-  const filteredActiveLessons = useMemo(
+  const filteredBookedLessons = useMemo(
     () =>
-      activeLessons.filter((l) => {
+      bookedLessons.filter((l) => {
         if (!matchesLessonSearch(l, search)) return false;
         if (parentFilter === "confirmed" && !l.parent_confirmed) return false;
         if (parentFilter === "pending" && l.parent_confirmed) return false;
@@ -279,7 +291,12 @@ export default function SwimLessons() {
         }
         return true;
       }),
-    [activeLessons, search, parentFilter, transportFilter],
+    [bookedLessons, search, parentFilter, transportFilter],
+  );
+
+  const filteredCompletedLessons = useMemo(
+    () => completedLessons.filter((l) => matchesLessonSearch(l, search)),
+    [completedLessons, search],
   );
 
   const {
@@ -289,10 +306,16 @@ export default function SwimLessons() {
   } = useSortable(filteredPendingLessons, { key: "scheduled_at", direction: "asc" });
 
   const {
-    sorted: sortedActiveLessons,
-    sort: activeSort,
-    handleSort: requestActiveSort,
-  } = useSortable(filteredActiveLessons, { key: "scheduled_at", direction: "asc" });
+    sorted: sortedBookedLessons,
+    sort: bookedSort,
+    handleSort: requestBookedSort,
+  } = useSortable(filteredBookedLessons, { key: "scheduled_at", direction: "asc" });
+
+  const {
+    sorted: sortedCompletedLessons,
+    sort: completedSort,
+    handleSort: requestCompletedSort,
+  } = useSortable(filteredCompletedLessons, { key: "scheduled_at", direction: "desc" });
 
   return (
     <div className="space-y-6 p-4 md:p-6">
@@ -362,7 +385,7 @@ export default function SwimLessons() {
             className="pl-9"
           />
         </div>
-        {activeLessons.length > 0 ? (
+        {bookedLessons.length > 0 && listTab === "booked" ? (
           <>
             <SwimFilterSelect
               label="Parent"
@@ -388,7 +411,23 @@ export default function SwimLessons() {
         ) : null}
       </div>
 
-      {pendingLessons.length > 0 ? (
+      <Tabs value={listTab} onValueChange={(v) => setListTab(v as ListTab)}>
+        <TabsList>
+          <TabsTrigger value="pending" className="gap-1.5">
+            Pending
+            {pendingLessons.length > 0 ? <Badge variant="secondary" className="text-[10px] px-1.5">{pendingLessons.length}</Badge> : null}
+          </TabsTrigger>
+          <TabsTrigger value="booked" className="gap-1.5">
+            Booked
+            {bookedLessons.length > 0 ? <Badge variant="secondary" className="text-[10px] px-1.5">{bookedLessons.length}</Badge> : null}
+          </TabsTrigger>
+          <TabsTrigger value="completed" className="gap-1.5">
+            Completed
+            {completedLessons.length > 0 ? <Badge variant="secondary" className="text-[10px] px-1.5">{completedLessons.length}</Badge> : null}
+          </TabsTrigger>
+        </TabsList>
+
+      <TabsContent value="pending" className="mt-4">
         <Card className="border-amber-500/40">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
@@ -405,7 +444,9 @@ export default function SwimLessons() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {filteredPendingLessons.length === 0 ? (
+            {pendingLessons.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No pending requests.</p>
+            ) : filteredPendingLessons.length === 0 ? (
               <p className="text-sm text-muted-foreground">No pending requests match the current search.</p>
             ) : (
             <Table>
@@ -452,16 +493,17 @@ export default function SwimLessons() {
             )}
           </CardContent>
         </Card>
-      ) : null}
+      </TabsContent>
 
+      <TabsContent value="booked" className="mt-4">
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Booked lessons</CardTitle>
           <CardDescription>
-            Parent Pending/Approved and transport approval flow to Pending Changes after parent approves.
-            {!loading && activeLessons.length > 0 && filteredActiveLessons.length !== activeLessons.length ? (
+            Upcoming approved lessons. After the lesson time, they move to Completed.
+            {!loading && bookedLessons.length > 0 && filteredBookedLessons.length !== bookedLessons.length ? (
               <span className="ml-1">
-                Showing {filteredActiveLessons.length} of {activeLessons.length}.
+                Showing {filteredBookedLessons.length} of {bookedLessons.length}.
               </span>
             ) : null}
           </CardDescription>
@@ -469,28 +511,28 @@ export default function SwimLessons() {
         <CardContent>
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
-          ) : activeLessons.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No approved lessons yet.</p>
-          ) : filteredActiveLessons.length === 0 ? (
+          ) : bookedLessons.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No upcoming booked lessons.</p>
+          ) : filteredBookedLessons.length === 0 ? (
             <p className="text-sm text-muted-foreground">No approved lessons match the current search or filters.</p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <SortableHeader label="Date / Time" sortKey="scheduled_at" currentSort={activeSort} onSort={requestActiveSort} />
-                  <SortableHeader label="Camper" sortKey="camperName" currentSort={activeSort} onSort={requestActiveSort} />
-                  <SortableHeader label="Parent Email" sortKey="familyEmail" currentSort={activeSort} onSort={requestActiveSort} />
-                  <SortableHeader label="Instructor" sortKey="instructor" currentSort={activeSort} onSort={requestActiveSort} />
-                  <SortableHeader label="Cost" sortKey="cost_cents" currentSort={activeSort} onSort={requestActiveSort} />
-                  <SortableHeader label="Status" sortKey="status" currentSort={activeSort} onSort={requestActiveSort} />
-                  <SortableHeader label="Parent" sortKey="parent_confirmed" currentSort={activeSort} onSort={requestActiveSort} />
-                  <SortableHeader label="Transport" sortKey="transport_status" currentSort={activeSort} onSort={requestActiveSort} />
-                  <SortableHeader label="Reminder" sortKey="reminder_sent_at" currentSort={activeSort} onSort={requestActiveSort} />
+                  <SortableHeader label="Date / Time" sortKey="scheduled_at" currentSort={bookedSort} onSort={requestBookedSort} />
+                  <SortableHeader label="Camper" sortKey="camperName" currentSort={bookedSort} onSort={requestBookedSort} />
+                  <SortableHeader label="Parent Email" sortKey="familyEmail" currentSort={bookedSort} onSort={requestBookedSort} />
+                  <SortableHeader label="Instructor" sortKey="instructor" currentSort={bookedSort} onSort={requestBookedSort} />
+                  <SortableHeader label="Cost" sortKey="cost_cents" currentSort={bookedSort} onSort={requestBookedSort} />
+                  <SortableHeader label="Status" sortKey="status" currentSort={bookedSort} onSort={requestBookedSort} />
+                  <SortableHeader label="Parent" sortKey="parent_confirmed" currentSort={bookedSort} onSort={requestBookedSort} />
+                  <SortableHeader label="Transport" sortKey="transport_status" currentSort={bookedSort} onSort={requestBookedSort} />
+                  <SortableHeader label="Reminder" sortKey="reminder_sent_at" currentSort={bookedSort} onSort={requestBookedSort} />
                   <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedActiveLessons.map(l => (
+                {sortedBookedLessons.map(l => (
                   <TableRow key={l.id}>
                     <TableCell>
                       <div className="font-medium">{formatCampDate(l.scheduled_at)}</div>
@@ -555,6 +597,76 @@ export default function SwimLessons() {
           )}
         </CardContent>
       </Card>
+      </TabsContent>
+
+      <TabsContent value="completed" className="mt-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Completed lessons</CardTitle>
+            <CardDescription>
+              Booked lessons whose time has already passed.
+              {search.trim() && filteredCompletedLessons.length !== completedLessons.length ? (
+                <span className="ml-1">
+                  Showing {filteredCompletedLessons.length} of {completedLessons.length}.
+                </span>
+              ) : null}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : completedLessons.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No completed lessons yet.</p>
+            ) : filteredCompletedLessons.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No completed lessons match the current search.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableHeader label="Date / Time" sortKey="scheduled_at" currentSort={completedSort} onSort={requestCompletedSort} />
+                    <SortableHeader label="Camper" sortKey="camperName" currentSort={completedSort} onSort={requestCompletedSort} />
+                    <SortableHeader label="Parent Email" sortKey="familyEmail" currentSort={completedSort} onSort={requestCompletedSort} />
+                    <SortableHeader label="Instructor" sortKey="instructor" currentSort={completedSort} onSort={requestCompletedSort} />
+                    <SortableHeader label="Cost" sortKey="cost_cents" currentSort={completedSort} onSort={requestCompletedSort} />
+                    <TableHead>Status</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedCompletedLessons.map((l) => (
+                    <TableRow key={l.id}>
+                      <TableCell>
+                        <div className="font-medium">{formatCampDate(l.scheduled_at)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatCampTime(l.scheduled_at)} · {l.duration_minutes} min
+                        </div>
+                      </TableCell>
+                      <TableCell>{camperName(l.camper_id)}</TableCell>
+                      <TableCell>{familyEmail(l.camper_id)}</TableCell>
+                      <TableCell>{l.instructor ?? "—"}</TableCell>
+                      <TableCell>${(l.cost_cents / 100).toFixed(2)}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="gap-1">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Completed
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-end">
+                          <Button size="icon" variant="ghost" aria-label="Remove lesson" onClick={() => remove(l.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+      </Tabs>
       </>
       ) : null}
       {booking ? (

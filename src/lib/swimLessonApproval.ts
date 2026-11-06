@@ -9,6 +9,23 @@ export function isSwimLessonBookedStatus(status: string | null | undefined): boo
   return status === "booked" || status === "scheduled";
 }
 
+export function swimLessonEndAt(scheduledAt: string, durationMinutes = 0): Date {
+  const start = new Date(scheduledAt).getTime();
+  const minutes = Number.isFinite(durationMinutes) ? Math.max(0, durationMinutes) : 0;
+  return new Date(start + minutes * 60_000);
+}
+
+/** Booked lesson whose end time has passed — belongs on the Completed tab. */
+export function isSwimLessonCompleted(
+  status: string | null | undefined,
+  scheduledAt: string,
+  durationMinutes = 0,
+  now: Date = new Date(),
+): boolean {
+  if (!isSwimLessonBookedStatus(status)) return false;
+  return swimLessonEndAt(scheduledAt, durationMinutes).getTime() <= now.getTime();
+}
+
 export const SWIM_LESSON_STATUS_LABELS: Record<string, string> = {
   pending: "Pending approval",
   booked: "Booked",
