@@ -11,6 +11,7 @@ import {
   buildMonFriEnrollmentWeeks,
   enrollmentWeekForDate,
   formatEnrollmentWeekLabel,
+  enrollmentWeekSpanDays,
   formatEnrollmentWeekRange,
   mergeEnrollmentWeekCalendars,
   resolveEnrollmentWeekRow,
@@ -26,6 +27,7 @@ import { buildGroupReportPdf } from "@/lib/transportCampMinderReportsPdf";
 import { triggerBlobDownload } from "@/lib/transportBubbleSheetPdf";
 import {
   childToGroupReportCamper,
+  loadGroupStaffNames,
   loadTransportReportChildren,
   sessionSummaryForCampers,
 } from "@/lib/transportReportData";
@@ -166,6 +168,14 @@ export default function GroupBubbleSheets() {
         });
         return;
       }
+      if (enrollmentWeekSpanDays(row) > 6) {
+        toast({
+          title: `Week ${row.weekNumber} must be a Mon–Fri block, not a full season`,
+          description: "Use Auto-fill 8 weeks from Week 1 start.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
     setCalendarSaving(true);
     const ok = await saveEnrollmentWeekCalendar(supabase, companyId, currentSeason, valid);
@@ -186,13 +196,17 @@ export default function GroupBubbleSheets() {
     const groupKids = kids.filter((child) => child.groupName === groupName);
     if (!groupKids.length) return null;
     const branding = await resolveTransportPdfBranding(currentCompany);
-    const weekRange = selectedWeekDates.row ? formatEnrollmentWeekRange(selectedWeekDates.row) : "";
+    const weekRange = selectedWeekDates.row
+      ? formatEnrollmentWeekRange(selectedWeekDates.row)
+      : "";
+    const staffNames = await loadGroupStaffNames(supabase, companyId, currentSeason, groupName);
     return buildGroupReportPdf({
       companyName: branding.companyName,
       season: currentSeason,
       weekDateRange: weekRange,
       groupName,
       totalCampers: groupKids.length,
+      staffNames,
       sessionSummary: sessionSummaryForCampers(groupKids),
       campers: groupKids.map((child) => ({
         ...childToGroupReportCamper(child, ""),

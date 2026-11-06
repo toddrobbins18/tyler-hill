@@ -26,7 +26,9 @@ import {
   buildRouteSummaryRows,
   childToGroupReportCamper,
   loadBusCounselorForRoute,
+  loadGroupStaffNames,
   loadTransportReportChildren,
+  reportCampersForBusRoster,
   resolveCamperTransportLine,
   sessionSummaryForCampers,
 } from "@/lib/transportReportData";
@@ -34,8 +36,8 @@ import {
   enrollmentWeekForDate,
   formatEnrollmentWeekLabel,
   formatEnrollmentWeekRange,
+  getEnrollmentWeekRow,
   loadEnrollmentWeekCalendar,
-  resolveEnrollmentWeekRow,
 } from "@/lib/enrollmentWeekCalendar";
 import { todayDateString } from "@/lib/transportDailyOverrides";
 import { useToast } from "@/hooks/use-toast";
@@ -65,11 +67,11 @@ export default function TransportPrintReports() {
   );
 
   const weekRow = useMemo(
-    () => (enrollmentWeek != null ? resolveEnrollmentWeekRow(enrollmentWeek, calendar) : null),
+    () => (enrollmentWeek != null ? getEnrollmentWeekRow(calendar, enrollmentWeek) : null),
     [calendar, enrollmentWeek],
   );
 
-  const weekRangeLabel = weekRow ? formatEnrollmentWeekRange(weekRow) : runDate;
+  const weekRangeLabel = weekRow ? formatEnrollmentWeekRange(weekRow, runDate) : runDate;
 
   const groupNames = useMemo(() => {
     const set = new Set<string>();
@@ -175,12 +177,16 @@ export default function TransportPrintReports() {
       transportLine: "",
     }));
     const branding = await resolveTransportPdfBranding(currentCompany);
+    const staffNames = companyId
+      ? await loadGroupStaffNames(supabase, companyId, currentSeason, groupName)
+      : [];
     const built = buildGroupReportPdf({
       companyName: branding.companyName,
       season: currentSeason,
       weekDateRange: weekRangeLabel,
       groupName,
       totalCampers: groupKids.length,
+      staffNames,
       sessionSummary: sessionSummaryForCampers(groupKids),
       campers,
       logo: branding.logo,
@@ -228,33 +234,15 @@ export default function TransportPrintReports() {
       route.bus,
     );
 
-    const reportCampers: ReturnType<typeof childToGroupReportCamper>[] = [];
-    for (const bc of bubbleRoute.campers) {
-      const child = children.find((c) => c.name.trim().toLowerCase() === bc.name.trim().toLowerCase());
-      if (child) {
-        reportCampers.push({
-          ...childToGroupReportCamper(
-            child,
-            resolveCamperTransportLine(
-              child.name,
-              routeMeta,
-              coreStops,
-              parentTransportCampers,
-              schedules,
-            ),
-          ),
-          transportLine: "",
-        });
-      } else {
-        reportCampers.push({
-          name: bc.name,
-          demographicsLine: "—",
-          programLine: bc.detail ?? "—",
-          transportLine: route.bus,
-          contactsBlock: "—",
-        });
-      }
-    }
+    const reportCampers = reportCampersForBusRoster(
+      bubbleRoute.campers,
+      children,
+      routeMeta,
+      coreStops,
+      parentTransportCampers,
+      schedules,
+      route.bus,
+    );
 
     const branding = await resolveTransportPdfBranding(currentCompany);
     const built = buildBusRosterReportPdf({

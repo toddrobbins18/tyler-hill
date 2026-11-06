@@ -24,6 +24,7 @@ describe("transportReportPdfLayout", () => {
       weekDateRange: "Week 1",
       groupName: "Blue Jays",
       totalCampers: 1,
+      staffNames: ["Jamie Counselor"],
       campers: [
         {
           name: "Alina Haynes",

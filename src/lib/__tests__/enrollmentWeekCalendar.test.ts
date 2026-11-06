@@ -4,8 +4,11 @@ import {
   buildMonFriEnrollmentWeeks,
   camperEnrolledInWeek,
   enrollmentWeekForDate,
+  enrollmentWeekDayColumns,
+  enrollmentWeekSpanDays,
   formatEnrollmentWeekRange,
   isEnrollmentWeekCalendarComplete,
+  printEnrollmentWeekRow,
   resolveEnrollmentWeekRow,
 } from "@/lib/enrollmentWeekCalendar";
 
@@ -51,6 +54,35 @@ describe("enrollmentWeekCalendar", () => {
     expect(camperEnrolledInWeek([1, 2, 3], null, 2)).toBe(true);
     expect(camperEnrolledInWeek([1, 2, 3], null, 5)).toBe(false);
     expect(camperEnrolledInWeek(null, "Week 4", 4)).toBe(true);
+  });
+
+  it("clamps a season-long week to Mon–Fri of the report date", () => {
+    const row = { weekNumber: 1, startDate: "2027-01-28", endDate: "2027-07-03" };
+    expect(enrollmentWeekSpanDays(row)).toBeGreaterThan(6);
+    expect(printEnrollmentWeekRow(row, "2027-07-01")).toEqual({
+      weekNumber: 1,
+      startDate: "2027-06-28",
+      endDate: "2027-07-02",
+    });
+    const label = formatEnrollmentWeekRange(row, "2027-07-01");
+    expect(label).toContain("Jun 28");
+    expect(label).toContain("Jul 2, 2027");
+    expect(enrollmentWeekDayColumns(row, "2027-07-01").map((d) => d.sublabel)).toEqual([
+      "6/28",
+      "6/29",
+      "6/30",
+      "7/1",
+      "7/2",
+    ]);
+  });
+
+  it("clamps a season-long week to the last Mon–Fri when no report date is given", () => {
+    const row = { weekNumber: 1, startDate: "2027-01-28", endDate: "2027-07-03" };
+    expect(printEnrollmentWeekRow(row)).toEqual({
+      weekNumber: 1,
+      startDate: "2027-06-28",
+      endDate: "2027-07-02",
+    });
   });
 
   it("formats week date ranges", () => {

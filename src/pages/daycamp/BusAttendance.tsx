@@ -27,7 +27,14 @@ import {
 import { campersOnRouteForWeek, weekContextForNumber } from "@/lib/transportBusRunContext";
 import { formatEnrollmentWeekLabel } from "@/lib/enrollmentWeekCalendar";
 import { buildBusBubbleSheetRoutes } from "@/lib/transportCamperBusRun";
-import { buildDayBusBubbleSheetPdf, triggerBlobDownload } from "@/lib/transportBubbleSheetPdf";
+import { triggerBlobDownload } from "@/lib/transportBubbleSheetPdf";
+import { buildBusRosterReportPdf } from "@/lib/transportCampMinderReportsPdf";
+import {
+  loadBusCounselorForRoute,
+  loadTransportReportChildren,
+  reportCampersForBusRoster,
+} from "@/lib/transportReportData";
+import { resolveTransportPdfBranding } from "@/lib/transportReportPdfBranding";
 import { consolidateRouteStopsByAddress } from "@/lib/transportRouteStops";
 import { getEffectiveCoreStops } from "@/lib/transportRunBoard";
 import { TransportReportPreviewDialog, type TransportReportPreview } from "@/components/TransportReportPreviewDialog";
@@ -82,7 +89,7 @@ export default function BusAttendance() {
   const activeWeek = selectedWeek ?? enrollmentCtx?.defaultWeek ?? null;
   const activeWeekContext = useMemo(() => {
     if (!enrollmentCtx || activeWeek == null) return null;
-    return weekContextForNumber(enrollmentCtx.calendar, activeWeek);
+    return weekContextForNumber(enrollmentCtx.calendar, activeWeek, runDate);
   }, [enrollmentCtx, activeWeek]);
 
   const selectedRoutes = useMemo(
@@ -273,12 +280,50 @@ export default function BusAttendance() {
     [activeWeek, board, enrollmentCtx, runDate],
   );
 
-  const handleBubbleSheet = useCallback(() => {
+  const buildRosterPdfForRoute = useCallback(
+    async (
+      route: (typeof selectedRoutes)[number],
+      kids: Awaited<ReturnType<typeof loadTransportReportChildren>>,
+    ) => {
+      if (!board || !activeWeekContext) return null;
+      const sheetRoutes = buildBubbleSheetRoutes([route]);
+      const bubbleRoute = sheetRoutes[0];
+      if (!bubbleRoute?.campers.length) return null;
+      const counselor = companyId
+        ? await loadBusCounselorForRoute(supabase, companyId, currentSeason, route.bus)
+        : null;
+      const branding = await resolveTransportPdfBranding(currentCompany);
+      return buildBusRosterReportPdf({
+        companyName: branding.companyName,
+        season: currentSeason,
+        weekDateRange: activeWeekContext.weekDateRange ?? runDate,
+        bus: route.bus,
+        routeName: route.name,
+        driverOrCounselor: counselor,
+        totalPassengers: bubbleRoute.campers.length,
+        campers: reportCampersForBusRoster(
+          bubbleRoute.campers,
+          kids,
+          board.routeMeta,
+          board.coreStops,
+          board.parentTransportCampers,
+          board.camperBusRunSchedules,
+          route.bus,
+        ),
+        bubbleCampers: bubbleRoute.campers,
+        logo: branding.logo,
+        printedAt: branding.printedAt,
+      });
+    },
+    [activeWeekContext, board, buildBubbleSheetRoutes, companyId, currentCompany, currentSeason, runDate],
+  );
+
+  const handleBubbleSheet = useCallback(async () => {
     if (!board || !selectedRoutes.length) {
       toast({ title: "No buses selected", variant: "destructive" });
       return;
     }
-    if (activeWeek == null || !activeWeekContext) {
+    if (activeWeek == null || !activeWeekContext || !companyId) {
       toast({
         title: "Enrollment week calendar required",
         description: "Set week start/end dates under Group Bubble Sheets, then pick a week above.",
@@ -287,27 +332,19 @@ export default function BusAttendance() {
       return;
     }
 
-    const sheetRoutes = buildBubbleSheetRoutes(selectedRoutes);
-
-    const built = buildDayBusBubbleSheetPdf({
-      companyName: currentCompany?.name ?? "Day Camp",
-      date: runDate,
+    const kids = await loadTransportReportChildren(supabase, companyId, currentSeason, {
       enrollmentWeek: activeWeek,
-      weekDateRange: activeWeekContext.weekDateRange ?? undefined,
-      routes: sheetRoutes,
     });
+    const route = selectedRoutes[0];
+    const built = await buildRosterPdfForRoute(route, kids);
     if (!built) {
       toast({ title: "No campers to print", variant: "destructive" });
       return;
     }
-    const busLabel =
-      selectedRoutes.length === routes.length
-        ? "all buses"
-        : selectedRoutes.map((r) => r.bus).join(", ");
     setReportPreview({
       open: true,
-      title: "Bus Bubble Sheet",
-      description: `${runDate} · AM & PM (X = not on that run) · ${busLabel}`,
+      title: "Bus Roster Report",
+      description: `${activeWeekContext.weekDateRange ?? runDate} · ${route.bus} · AM/PM Mon–Fri`,
       kind: "pdf",
       blob: built.blob,
       filename: built.filename,
@@ -316,20 +353,20 @@ export default function BusAttendance() {
     activeWeek,
     activeWeekContext,
     board,
-    buildBubbleSheetRoutes,
-    currentCompany?.name,
-    routes.length,
+    buildRosterPdfForRoute,
+    companyId,
+    currentSeason,
     runDate,
     selectedRoutes,
     toast,
   ]);
 
-  const handleBubbleSheetEachBus = useCallback(() => {
+  const handleBubbleSheetEachBus = useCallback(async () => {
     if (!board || !selectedRoutes.length) {
       toast({ title: "No buses selected", variant: "destructive" });
       return;
     }
-    if (activeWeek == null || !activeWeekContext) {
+    if (activeWeek == null || !activeWeekContext || !companyId) {
       toast({
         title: "Enrollment week calendar required",
         description: "Set week start/end dates under Group Bubble Sheets, then pick a week above.",
@@ -337,32 +374,28 @@ export default function BusAttendance() {
       });
       return;
     }
-    const safeDate = runDate.replace(/[^0-9-]/g, "");
+    const kids = await loadTransportReportChildren(supabase, companyId, currentSeason, {
+      enrollmentWeek: activeWeek,
+    });
     selectedRoutes.forEach((route, index) => {
       window.setTimeout(() => {
-        const sheetRoutes = buildBubbleSheetRoutes([route]);
-        const built = buildDayBusBubbleSheetPdf({
-          companyName: currentCompany?.name ?? "Day Camp",
-          date: runDate,
-          enrollmentWeek: activeWeek,
-          weekDateRange: activeWeekContext.weekDateRange ?? undefined,
-          routes: sheetRoutes,
-          filename: `bus-bubble-${safeDate}-${route.bus.replace(/\s+/g, "-")}.pdf`,
-        });
-        if (built) triggerBlobDownload(built.blob, built.filename);
+        void (async () => {
+          const built = await buildRosterPdfForRoute(route, kids);
+          if (built) triggerBlobDownload(built.blob, built.filename);
+        })();
       }, index * 450);
     });
     toast({
-      title: "Downloading bus PDFs",
+      title: "Downloading bus rosters",
       description: `${selectedRoutes.length} file${selectedRoutes.length === 1 ? "" : "s"}.`,
     });
   }, [
     activeWeek,
     activeWeekContext,
     board,
-    buildBubbleSheetRoutes,
-    currentCompany?.name,
-    runDate,
+    buildRosterPdfForRoute,
+    companyId,
+    currentSeason,
     selectedRoutes,
     toast,
   ]);
@@ -408,7 +441,7 @@ export default function BusAttendance() {
             }}
             disabled={!selectedRoutes.length}
           >
-            <Printer className="h-3.5 w-3.5" /> Preview bubble PDF
+            <Printer className="h-3.5 w-3.5" /> Preview bus roster
           </Button>
           {selectedRoutes.length > 1 ? (
             <Button
@@ -419,7 +452,7 @@ export default function BusAttendance() {
               onClick={handleBubbleSheetEachBus}
               disabled={!selectedRoutes.length}
             >
-              <Download className="h-3.5 w-3.5" /> Download each bus PDF
+              <Download className="h-3.5 w-3.5" /> Download each bus roster
             </Button>
           ) : null}
         </div>

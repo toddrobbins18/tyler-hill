@@ -9,6 +9,7 @@ import {
 import { type ParentTransportCamper } from "@/lib/transportParentTransport";
 import type { TransportRouteMeta, TransportRouteStop } from "@/lib/transportRoster";
 import { loadRouteReferenceAssignments } from "@/lib/routeReferenceWarehouse";
+import type { BubbleSheetCamper } from "@/lib/transportBubbleSheetPdf";
 import type { GroupReportCamper } from "@/lib/transportCampMinderReportsPdf";
 
 export type TransportReportChildRow = {
@@ -152,6 +153,89 @@ export function resolveCamperTransportLine(
   const modeLabel = formatCamperBusRunMode(mode);
   if (!assignment) return modeLabel;
   return `${assignment.bus} · ${modeLabel}`;
+}
+
+function staffDisplayName(fullName: string | null | undefined, email: string | null | undefined): string | null {
+  const trimmed = fullName?.trim();
+  if (trimmed) return trimmed;
+  const local = email?.includes("@") ? email.split("@")[0]?.trim() : email?.trim();
+  return local || null;
+}
+
+export async function loadGroupStaffNames(
+  supabase: SupabaseClient,
+  companyId: string,
+  season: string,
+  groupName: string,
+): Promise<string[]> {
+  const names = new Set<string>();
+  const { data, error } = await supabase
+    .from("children")
+    .select("leader:leader_id(name)")
+    .eq("company_id", companyId)
+    .eq("season", season)
+    .eq("group_name", groupName)
+    .neq("status", "inactive");
+  if (error) {
+    console.error("[TransportReport] load group staff failed:", error.message);
+  } else {
+    for (const row of data ?? []) {
+      const leader = (row as { leader?: { name?: string | null } | null }).leader;
+      const name = leader?.name?.trim();
+      if (name) names.add(name);
+    }
+  }
+
+  const counselors = await supabase
+    .from("profiles")
+    .select("full_name, email, assigned_groups")
+    .eq("company_id", companyId);
+  if (!counselors.error) {
+    const needle = groupName.trim().toLowerCase();
+    for (const row of counselors.data ?? []) {
+      const assigned = ((row as { assigned_groups?: string[] | null }).assigned_groups ?? [])
+        .map((name) => name.trim())
+        .filter(Boolean);
+      if (!assigned.some((name) => name.toLowerCase() === needle)) continue;
+      const display = staffDisplayName(
+        (row as { full_name?: string | null }).full_name,
+        (row as { email?: string | null }).email,
+      );
+      if (display) names.add(display);
+    }
+  }
+
+  return [...names];
+}
+
+export function reportCampersForBusRoster(
+  bubbleCampers: BubbleSheetCamper[],
+  children: TransportReportChildRow[],
+  routeMeta: TransportRouteMeta[],
+  coreStops: Record<number, TransportRouteStop[]>,
+  parentTransportCampers: ParentTransportCamper[],
+  schedules: CamperBusRunSchedules,
+  busLabel: string,
+): GroupReportCamper[] {
+  return bubbleCampers.map((bc) => {
+    const child = children.find((c) => c.name.trim().toLowerCase() === bc.name.trim().toLowerCase());
+    if (!child) {
+      return {
+        name: bc.name,
+        demographicsLine: "—",
+        programLine: bc.detail ?? "—",
+        transportLine: busLabel,
+        contactsBlock: "—",
+      };
+    }
+    return {
+      ...childToGroupReportCamper(
+        child,
+        resolveCamperTransportLine(child.name, routeMeta, coreStops, parentTransportCampers, schedules),
+      ),
+      transportLine: "",
+    };
+  });
 }
 
 export async function loadBusCounselorForRoute(
