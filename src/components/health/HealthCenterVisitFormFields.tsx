@@ -146,7 +146,7 @@ export function HealthCenterVisitFormFields({
         value={value.group_name ?? ""}
         options={groupOptions}
         onChange={(group_name) => patch({ group_name })}
-        placeholder="Camper group / bunk"
+        placeholder="Camper group"
         disabled={disabled}
       />
 

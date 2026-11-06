@@ -14,22 +14,13 @@ describe("healthVisitGroupForCamper", () => {
     ).toBe("Paris");
   });
 
-  it("unwraps nested division arrays from PostgREST", () => {
+  it("does not use division or grade for day camp", () => {
     expect(
       healthVisitGroupForCamper(
-        { group_name: null, division: [{ name: "Pre-K" }] },
+        { group_name: null, division: [{ name: "Pre-K" }], grade: "8th" },
         true,
       ),
-    ).toBe("Pre-K");
-  });
-
-  it("falls back to grade when group and division are empty", () => {
-    expect(
-      healthVisitGroupForCamper(
-        { group_name: "  ", division: null, grade: "8th" },
-        true,
-      ),
-    ).toBe("8th");
+    ).toBe("");
   });
 
   it("reads counselor name from a nested leader array", () => {
