@@ -1,6 +1,7 @@
 import { camperEnrolledInWeek } from "@/lib/enrollmentWeekCalendar";
 import { normCamperName } from "@/lib/transportGroupAttendance";
 import { CAMP_LOCATION, isValidRouteCoordinate } from "@/lib/transportStopTimes";
+import { isCounselorPickupStop } from "@/lib/transportCounselorPickup";
 
 export type CamperEnrollmentInfo = {
   enrolledWeeks?: number[];
@@ -15,6 +16,7 @@ export type RouteStopLike = {
   pickupTime: string;
   passengers: number;
   camperNames?: string[];
+  stopRole?: "counselor";
 };
 
 export type RouteLike = {
@@ -73,7 +75,7 @@ export function filterStopForEnrollmentWeek<T extends RouteStopLike>(
   lookup: Map<string, CamperEnrollmentInfo>,
   campAddress: string = CAMP_LOCATION.address,
 ): T {
-  if (stop.address === campAddress) return stop;
+  if (stop.address === campAddress || isCounselorPickupStop(stop)) return stop;
 
   const riders = stopRiderNames(stop);
   if (riders.length === 0) {
@@ -94,7 +96,7 @@ export function filterStopToSeasonRoster<T extends RouteStopLike>(
   seasonRosterNames: Set<string>,
   campAddress: string = CAMP_LOCATION.address,
 ): T {
-  if (stop.address === campAddress) return stop;
+  if (stop.address === campAddress || isCounselorPickupStop(stop)) return stop;
 
   const riders = stopRiderNames(stop).filter((name) => seasonRosterNames.has(normCamperName(name)));
   const primaryLabel =
@@ -129,7 +131,7 @@ export function pruneRouteStopsWithNoRiders<T extends RouteLike>(
 ): T[] {
   return routes.map((route) => {
     const stops = route.stops.filter((s) => {
-      if (s.address === campAddress) return true;
+      if (s.address === campAddress || isCounselorPickupStop(s)) return true;
       if ((s.passengers ?? 0) > 0 || (s.camperNames?.length ?? 0) > 0) return true;
       return false;
     });

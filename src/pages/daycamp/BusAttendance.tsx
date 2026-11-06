@@ -289,9 +289,10 @@ export default function BusAttendance() {
       const sheetRoutes = buildBubbleSheetRoutes([route]);
       const bubbleRoute = sheetRoutes[0];
       if (!bubbleRoute?.campers.length) return null;
-      const counselor = companyId
-        ? await loadBusCounselorForRoute(supabase, companyId, currentSeason, route.bus)
-        : null;
+      const counselor = route.counselorPickup?.name?.trim()
+        || (companyId
+          ? await loadBusCounselorForRoute(supabase, companyId, currentSeason, route.bus)
+          : null);
       const branding = await resolveTransportPdfBranding(currentCompany);
       return buildBusRosterReportPdf({
         companyName: branding.companyName,

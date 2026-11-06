@@ -1,4 +1,5 @@
 import type { TransportRouteStop } from "@/lib/transportRoster";
+import { BUS_COUNSELOR_STOP_LABEL, isCounselorPickupStop } from "@/lib/transportCounselorPickup";
 
 export const CAMP_LOCATION = {
   name: "Camp — 85 Crescent Beach Rd",
@@ -210,11 +211,12 @@ export function isBlankOpenRouteStop(lines: RouteStopListLines): boolean {
 }
 
 export function countBlankOpenStopsOnRoute(
-  stops: { name: string; address: string; passengers?: number; camperNames?: string[] }[],
+  stops: { name: string; address: string; passengers?: number; camperNames?: string[]; stopRole?: string | null }[],
   campAddress: string = CAMP_LOCATION.address,
 ): number {
   let count = 0;
   for (const stop of stops) {
+    if (isCounselorPickupStop(stop)) continue;
     const isCamp = isCampAddress(stop.address, campAddress);
     const lines = routeStopListLines(stop, { isCamp });
     if (isBlankOpenRouteStop(lines)) count += 1;
@@ -251,7 +253,7 @@ export function filterRouteStopsForMapDisplay<T extends TransportRouteStop>(
 ): T[] {
   if (options.showBlankOpenStops) return stops;
   return stops.filter((stop) => {
-    if (isCampAddress(stop.address, options.campAddress)) return true;
+    if (isCampAddress(stop.address, options.campAddress) || isCounselorPickupStop(stop)) return true;
     const pending =
       options.pendingNamesByAddress?.get(normAddrForPending(stop.address)) ?? [];
     const lines = routeStopListLines(stop, { isCamp: false, pendingNames: pending });
@@ -314,11 +316,20 @@ export function formatHouseholdStopTitle(names: string[]): string {
 
 /** Two-line route stop label: camper name(s) + street address. */
 export function routeStopListLines(
-  stop: { name: string; address: string; passengers?: number; camperNames?: string[] },
+  stop: { name: string; address: string; passengers?: number; camperNames?: string[]; stopRole?: string | null },
   options: { isCamp: boolean; pendingNames?: string[] },
 ): RouteStopListLines {
   if (options.isCamp) {
     return { title: stop.name, subtitle: null, isOpenStop: false, camperNames: [] };
+  }
+  if (isCounselorPickupStop(stop)) {
+    const street = shortStopStreet(stop.address);
+    return {
+      title: stop.name?.trim() || "Bus counselor",
+      subtitle: street ? `${street} · counselor pickup` : "Counselor pickup",
+      isOpenStop: false,
+      camperNames: [],
+    };
   }
 
   const street = shortStopStreet(stop.address);
@@ -359,14 +370,17 @@ export function routeStopListLines(
 
 /** Stop label for route lists and map: 1, 2, 3… or C for camp. */
 export function getRouteStopLabel(
-  stops: Pick<TransportRouteStop, "address">[],
+  stops: Pick<TransportRouteStop, "address" | "stopRole">[],
   index: number,
   campAddress: string = CAMP_LOCATION.address,
 ): string {
-  if (isCampAddress(stops[index].address, campAddress)) return "C";
+  const stop = stops[index];
+  if (isCampAddress(stop.address, campAddress)) return "C";
+  if (isCounselorPickupStop(stop)) return BUS_COUNSELOR_STOP_LABEL;
   let num = 0;
   for (let j = 0; j <= index; j++) {
-    if (!isCampAddress(stops[j].address, campAddress)) num++;
+    if (isCampAddress(stops[j].address, campAddress) || isCounselorPickupStop(stops[j])) continue;
+    num++;
   }
   return String(num);
 }

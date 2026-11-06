@@ -21,15 +21,20 @@ import {
   isHealthVisitSentHome,
   submitNurseSentHomeTransportException,
 } from "@/lib/nurseTransportException";
-import { healthVisitGroupForCamper } from "@/lib/camperGroupDisplay";
+import { isDayCampCompany } from "@/lib/camps";
+import {
+  healthVisitCounselorForCamper,
+  healthVisitGroupForCamper,
+} from "@/lib/camperGroupDisplay";
 
 type CamperRow = {
   id: string;
   name: string;
   group_name?: string | null;
-  division?: { name?: string | null } | null;
-  leader?: { name?: string | null } | null;
-  bunk?: { bunk_name?: string | null; bunk_number?: number | null } | null;
+  grade?: string | null;
+  division?: { name?: string | null } | { name?: string | null }[] | null;
+  leader?: { name?: string | null } | { name?: string | null }[] | null;
+  bunk?: { bunk_name?: string | null; bunk_number?: number | null } | { bunk_name?: string | null; bunk_number?: number | null }[] | null;
 };
 
 type StaffRow = {
@@ -78,7 +83,7 @@ export default function HealthCenterDayCampPanel({
   const { currentCompany } = useCompany();
   const { currentSeason } = useSeasonContext();
   const { toast } = useToast();
-  const isDayCamp = currentCompany?.camp_type === "day_camp";
+  const isDayCamp = isDayCampCompany(currentCompany);
 
   const [entityType, setEntityType] = useState<"camper" | "staff">("camper");
   const [search, setSearch] = useState("");
@@ -99,7 +104,7 @@ export default function HealthCenterDayCampPanel({
 
   const counselorOptions = useMemo(() => {
     const names = [
-      ...children.map((c) => c.leader?.name?.trim()).filter(Boolean),
+      ...children.map((c) => healthVisitCounselorForCamper(c)).filter(Boolean),
       ...staff.map((s) => s.name?.trim()).filter(Boolean),
     ] as string[];
     return [...new Set(names)].sort((a, b) => a.localeCompare(b));
@@ -145,7 +150,7 @@ export default function HealthCenterDayCampPanel({
         setForm((prev) => ({
           ...prev,
           group_name: healthVisitGroupForCamper(camper, isDayCamp),
-          counselor_name: camper.leader?.name?.trim() || "",
+          counselor_name: healthVisitCounselorForCamper(camper),
         }));
       }
     } else {
@@ -158,7 +163,7 @@ export default function HealthCenterDayCampPanel({
     const camper = children.find((c) => c.id === selectedId);
     if (!camper) return;
     const group_name = healthVisitGroupForCamper(camper, isDayCamp);
-    const counselor_name = camper.leader?.name?.trim() || "";
+    const counselor_name = healthVisitCounselorForCamper(camper);
     setForm((prev) =>
       prev.group_name === group_name && prev.counselor_name === counselor_name
         ? prev
@@ -407,6 +412,9 @@ export default function HealthCenterDayCampPanel({
                   {filteredPeople.find((p) => p.id === selectedId)?.name ||
                     selectedCamper?.name}
                 </span>
+                {form.group_name.trim() ? (
+                  <span className="font-normal text-muted-foreground"> · {form.group_name}</span>
+                ) : null}
               </p>
               <HealthCenterVisitFormFields
                 value={form}

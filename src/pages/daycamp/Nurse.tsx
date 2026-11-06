@@ -35,8 +35,9 @@ export default function Nurse() {
         .select(`
           id,
           name,
+          grade,
           group_name,
-          division:divisions(id, name),
+          division:division_id(id, name),
           leader:leader_id(id, name),
           bunk:bunk_id(bunk_name, bunk_number)
         `)

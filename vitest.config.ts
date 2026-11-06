@@ -28,6 +28,7 @@ export default defineConfig({
       "src/lib/__tests__/messageInboxFilters.test.ts",
       "src/lib/__tests__/operationsDashboard.test.ts",
       "src/lib/__tests__/parentReminderLayout.test.ts",
+      "src/lib/__tests__/camperGroupDisplay.test.ts",
     ],
   },
 });

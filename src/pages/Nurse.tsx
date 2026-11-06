@@ -259,7 +259,7 @@ export default function Nurse() {
       .from("children")
       .select(`
         *,
-        division:divisions(id, name, gender, sort_order),
+        division:division_id(id, name, gender, sort_order),
         leader:leader_id(id, name),
         bunk:bunk_id(bunk_name, bunk_number)
       `)

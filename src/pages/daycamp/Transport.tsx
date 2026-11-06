@@ -125,6 +125,14 @@ import {
   type TransportRoutesSource,
 } from "@/lib/transportRoster";
 import {
+  coreIndexFromDisplayStops,
+  isCounselorPickupStop,
+  isValidBusCounselorPickup,
+  parseBusCounselorPickup,
+  withCounselorPickupStops,
+  type BusCounselorPickup,
+} from "@/lib/transportCounselorPickup";
+import {
   applyHistoricalAssignments,
   assignCampersDuringOptimize,
   enrichUnplottedCampersForHistoricalPlacement,
@@ -160,7 +168,6 @@ import {
   haversineMiles,
   buildAMStops,
   buildPMStops,
-  displayStopToCoreIndex,
   getRouteStopLabel,
   isValidRouteCoordinate,
   routeStopListLines,
@@ -204,6 +211,7 @@ interface RouteStop {
   pickupTime: string;
   passengers: number;
   camperNames?: string[];
+  stopRole?: "counselor";
 }
 
 interface Route {
@@ -217,6 +225,7 @@ interface Route {
   status: string;
   direction: string;
   color: string;
+  counselorPickup?: BusCounselorPickup | null;
 }
 
 const MAP_PANEL_HEIGHT: Record<"sm" | "md" | "lg" | "xl", string> = {
@@ -615,7 +624,7 @@ export default function Transport() {
   const [coreStops, setCoreStops] = useState<Record<number, RouteStop[]>>(
     () => (currentSeason === "2026" ? initialCoreStops : {}),
   );
-  const [routeMeta, setRouteMeta] = useState(
+  const [routeMeta, setRouteMeta] = useState<(typeof initialRouteMeta[number] & { counselorPickup?: BusCounselorPickup | null })[]>(
     () => (currentSeason === "2026" ? initialRouteMeta : []),
   );
   const [unplottedCampers, setUnplottedCampers] = useState<UnplottedCamper[]>(
@@ -693,7 +702,32 @@ export default function Transport() {
     status: string;
     color: string;
     capacity: number;
+    counselorName: string;
+    counselorAddress: string;
+    counselorStaffId: string | null;
   } | null>(null);
+  const [savingEditRoute, setSavingEditRoute] = useState(false);
+  const [staffCounselorOptions, setStaffCounselorOptions] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    if (!editRoute || !companyId) return;
+    let cancelled = false;
+    void (async () => {
+      let query = supabase
+        .from("staff")
+        .select("id, name")
+        .eq("company_id", companyId)
+        .neq("status", "inactive")
+        .order("name");
+      if (currentSeason) query = query.eq("season", currentSeason);
+      const { data } = await query;
+      if (cancelled) return;
+      setStaffCounselorOptions((data ?? []).map((row) => ({ id: row.id, name: row.name })));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [editRoute?.id, companyId, currentSeason]);
 
   // Today-only overrides: per route, stops added or addresses excluded for the selected date
   const [overrideDate, setOverrideDate] = useState(todayDateString);
@@ -1730,17 +1764,24 @@ export default function Transport() {
   // Drag-to-reorder stops within a single route
   const [reorderDrag, setReorderDrag] = useState<{ routeId: number; displayIndex: number } | null>(null);
 
+  const displayStopsForCoreIndex = (routeId: number): RouteStop[] => {
+    const core = getEffectiveCore(routeId);
+    const pickup = routeMeta.find((r) => r.id === routeId)?.counselorPickup;
+    const withCounselor = withCounselorPickupStops(core, pickup ?? null, timeOfDay);
+    return timeOfDay === "am"
+      ? [...withCounselor, { ...CAMP_LOCATION, pickupTime: "", passengers: 0 }]
+      : [{ ...CAMP_LOCATION, pickupTime: "", passengers: 0 }, ...withCounselor];
+  };
+
   const handleReorderStop = (routeId: number, fromDisplayIdx: number, toDisplayIdx: number) => {
     if (fromDisplayIdx === toDisplayIdx) return;
     const effective = getEffectiveCore(routeId);
     if (!effective.length) return;
 
-    // AM display: [...core, CAMP]  → core idx = display idx (camp is last, not draggable)
-    // PM display: [CAMP, ...core]  → core idx = display idx - 1
-    const isAM = timeOfDay === "am";
-    const fromCore = displayStopToCoreIndex(fromDisplayIdx, isAM);
-    const toCore = displayStopToCoreIndex(toDisplayIdx, isAM);
-    if (fromCore < 0 || fromCore >= effective.length || toCore < 0 || toCore >= effective.length) return;
+    const displayStops = displayStopsForCoreIndex(routeId);
+    const fromCore = coreIndexFromDisplayStops(displayStops, fromDisplayIdx, CAMP_LOCATION.address);
+    const toCore = coreIndexFromDisplayStops(displayStops, toDisplayIdx, CAMP_LOCATION.address);
+    if (fromCore == null || toCore == null || fromCore >= effective.length || toCore >= effective.length) return;
 
     const next = [...effective];
     const [moved] = next.splice(fromCore, 1);
@@ -1759,7 +1800,7 @@ export default function Transport() {
   const routeLegMinutesById = useMemo(() => {
     const map = new Map<number, number[]>();
     for (const meta of routeMeta) {
-      const core = getEffectiveCore(meta.id);
+      const core = withCounselorPickupStops(getEffectiveCore(meta.id), meta.counselorPickup, timeOfDay);
       const orderedStops =
         timeOfDay === "am"
           ? [...core, { ...CAMP_LOCATION, pickupTime: "", passengers: 0 }]
@@ -1778,7 +1819,7 @@ export default function Transport() {
   const routesNeedingLegDurations = useMemo(() => {
     const pending: { sig: string; coords: [number, number][] }[] = [];
     for (const meta of routeMeta) {
-      const core = getEffectiveCore(meta.id);
+      const core = withCounselorPickupStops(getEffectiveCore(meta.id), meta.counselorPickup, timeOfDay);
       const orderedStops =
         timeOfDay === "am"
           ? [...core, { ...CAMP_LOCATION, pickupTime: "", passengers: 0 }]
@@ -1837,11 +1878,12 @@ export default function Transport() {
     };
     return routeMeta.map(meta => {
       const core = getEffectiveCore(meta.id);
+      const routed = withCounselorPickupStops(core, meta.counselorPickup, tod);
       const legMinutes = routeLegMinutesById.get(meta.id);
       const stops =
         tod === "am"
-          ? buildAMStops(core, meta.departure, { ...stopTimeOptions, legMinutes })
-          : buildPMStops(core, meta.departure, { ...stopTimeOptions, legMinutes });
+          ? buildAMStops(routed, meta.departure, { ...stopTimeOptions, legMinutes })
+          : buildPMStops(routed, meta.departure, { ...stopTimeOptions, legMinutes });
       const campers = core.reduce((sum, s) => sum + s.passengers, 0);
       return {
         ...meta,
@@ -3382,8 +3424,12 @@ export default function Transport() {
   const handleMoveStop = (fromRouteId: number, stopIndex: number, toRouteId: number) => {
     // Map display index to effective core index (effective = core minus today-excluded + today-added)
     const effective = getEffectiveCore(fromRouteId);
-    const coreIndex = displayStopToCoreIndex(stopIndex, timeOfDay === "am");
-    if (coreIndex < 0 || coreIndex >= effective.length) return;
+    const coreIndex = coreIndexFromDisplayStops(
+      displayStopsForCoreIndex(fromRouteId),
+      stopIndex,
+      CAMP_LOCATION.address,
+    );
+    if (coreIndex == null || coreIndex >= effective.length) return;
     const stop = effective[coreIndex];
 
     setScopeDialog({
@@ -3437,8 +3483,12 @@ export default function Transport() {
 
   const handleRemoveStop = (routeId: number, stopIndex: number) => {
     const effective = getEffectiveCore(routeId);
-    const coreIndex = displayStopToCoreIndex(stopIndex, timeOfDay === "am");
-    if (coreIndex < 0 || coreIndex >= effective.length) return;
+    const coreIndex = coreIndexFromDisplayStops(
+      displayStopsForCoreIndex(routeId),
+      stopIndex,
+      CAMP_LOCATION.address,
+    );
+    if (coreIndex == null || coreIndex >= effective.length) return;
     const stop = effective[coreIndex];
 
     setScopeDialog({
@@ -5062,7 +5112,18 @@ export default function Transport() {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setEditRoute({ id: r.id, name: r.name, bus: r.bus, departure: r.departure, status: r.status, color: r.color, capacity: r.capacity });
+                                  setEditRoute({
+                                    id: r.id,
+                                    name: r.name,
+                                    bus: r.bus,
+                                    departure: r.departure,
+                                    status: r.status,
+                                    color: r.color,
+                                    capacity: r.capacity,
+                                    counselorName: r.counselorPickup?.name ?? "",
+                                    counselorAddress: r.counselorPickup?.address ?? "",
+                                    counselorStaffId: r.counselorPickup?.staffId ?? null,
+                                  });
                                 }}
                                 className="text-muted-foreground hover:text-primary p-1 rounded transition-colors"
                                 title="Edit route"
@@ -5110,34 +5171,36 @@ export default function Transport() {
                         >
                           {r.stops.map((stop, i) => {
                             const isCamp = stop.address === CAMP_LOCATION.address;
+                            const isCounselor = isCounselorPickupStop(stop);
+                            const isFixedStop = isCamp || isCounselor;
                             const stopLines = routeStopListLines(stop, {
                               isCamp,
                             });
-                            if (!showBlankOpenStops && !isCamp && isBlankOpenRouteStop(stopLines)) {
+                            if (!showBlankOpenStops && !isCamp && !isCounselor && isBlankOpenRouteStop(stopLines)) {
                               return null;
                             }
                             const isDragging = reorderDrag?.routeId === r.id && reorderDrag.displayIndex === i;
-                            const stopPinned = !isCamp && isStopPinnedForOptimize(r.id, stop.address);
+                            const stopPinned = !isFixedStop && isStopPinnedForOptimize(r.id, stop.address);
                             return (
                               <div
                                 key={i}
-                                draggable={!isCamp}
+                                draggable={!isFixedStop}
                                 onDragStart={(e) => {
-                                  if (isCamp) return;
+                                  if (isFixedStop) return;
                                   e.stopPropagation();
                                   e.dataTransfer.effectAllowed = "move";
                                   e.dataTransfer.setData("text/x-reorder", `${r.id}:${i}`);
                                   setReorderDrag({ routeId: r.id, displayIndex: i });
                                 }}
                                 onDragOver={(e) => {
-                                  if (isCamp) return;
+                                  if (isFixedStop) return;
                                   if (reorderDrag?.routeId === r.id && reorderDrag.displayIndex !== i) {
                                     e.preventDefault();
                                     e.dataTransfer.dropEffect = "move";
                                   }
                                 }}
                                 onDrop={(e) => {
-                                  if (isCamp) return;
+                                  if (isFixedStop) return;
                                   e.preventDefault();
                                   e.stopPropagation();
                                   if (reorderDrag && reorderDrag.routeId === r.id) {
@@ -5147,13 +5210,15 @@ export default function Transport() {
                                 }}
                                 onDragEnd={() => setReorderDrag(null)}
                                 className={`flex items-start justify-between gap-2 text-[10px] rounded px-1 py-0.5 transition-all ${
-                                  !isCamp ? "cursor-grab active:cursor-grabbing hover:bg-muted/40" : ""
-                                } ${isDragging ? "opacity-40" : ""} ${stopPinned ? "bg-primary/5 ring-1 ring-primary/20" : ""}`}
+                                  !isFixedStop ? "cursor-grab active:cursor-grabbing hover:bg-muted/40" : ""
+                                } ${isDragging ? "opacity-40" : ""} ${stopPinned ? "bg-primary/5 ring-1 ring-primary/20" : ""} ${
+                                  isCounselor ? "bg-teal-500/5" : ""
+                                }`}
                               >
                                 <div className="flex items-start gap-1.5 min-w-0 flex-1">
                                   <span
                                     className="flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full px-0.5 text-[9px] font-bold leading-none text-white mt-0.5"
-                                    style={{ backgroundColor: isCamp ? "#16a34a" : r.color }}
+                                    style={{ backgroundColor: isCamp ? "#16a34a" : isCounselor ? "#0f766e" : r.color }}
                                   >
                                     {getRouteStopLabel(r.stops, i)}
                                   </span>
@@ -5192,7 +5257,7 @@ export default function Transport() {
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-1 shrink-0">
-                                  {!isCamp && (
+                                  {!isFixedStop && (
                                     <button
                                       type="button"
                                       onClick={(e) => {
@@ -5979,16 +6044,16 @@ export default function Transport() {
 
       {/* Edit Route Dialog */}
       <Dialog open={!!editRoute} onOpenChange={(open) => { if (!open) setEditRoute(null); }}>
-        <DialogContent className="w-[calc(100vw-2rem)] max-w-md overflow-hidden">
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-md overflow-hidden max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: editRoute?.color }} />
               Edit Route
             </DialogTitle>
-            <DialogDescription>Update bus name, route details, status, and color. Applies to both AM & PM runs.</DialogDescription>
+            <DialogDescription>Update bus name, counselor pickup, status, and color. Applies to both AM & PM runs.</DialogDescription>
           </DialogHeader>
           {editRoute && (
-            <div className="space-y-3 py-2 min-w-0 max-w-full">
+            <div className="space-y-3 py-2 min-w-0 max-w-full overflow-y-auto">
               <div className="min-w-0">
                 <Label htmlFor="edit-name">Route Name</Label>
                 <Input
@@ -6046,6 +6111,54 @@ export default function Transport() {
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">Maximum total children allowed on this bus.</p>
               </div>
+              <div className="min-w-0 space-y-2 rounded-md border border-border/50 p-3">
+                <Label>Bus counselor pickup</Label>
+                <p className="text-[10px] text-muted-foreground">
+                  First stop on AM, last stop on PM. Routed on the map, not counted as a camper, and Optimize leaves this pin in place.
+                </p>
+                <Input
+                  list="edit-counselor-staff"
+                  className="w-full max-w-full"
+                  value={editRoute.counselorName}
+                  onChange={(e) => {
+                    const counselorName = e.target.value;
+                    const matched = staffCounselorOptions.find(
+                      (s) => s.name.trim().toLowerCase() === counselorName.trim().toLowerCase(),
+                    );
+                    setEditRoute({
+                      ...editRoute,
+                      counselorName,
+                      counselorStaffId: matched?.id ?? null,
+                    });
+                  }}
+                  placeholder="Counselor name"
+                />
+                <datalist id="edit-counselor-staff">
+                  {staffCounselorOptions.map((s) => (
+                    <option key={s.id} value={s.name} />
+                  ))}
+                </datalist>
+                <Input
+                  className="w-full max-w-full"
+                  value={editRoute.counselorAddress}
+                  onChange={(e) => setEditRoute({ ...editRoute, counselorAddress: e.target.value })}
+                  placeholder="Home address"
+                />
+                {(editRoute.counselorName || editRoute.counselorAddress) ? (
+                  <button
+                    type="button"
+                    className="text-[10px] text-muted-foreground hover:text-destructive"
+                    onClick={() => setEditRoute({
+                      ...editRoute,
+                      counselorName: "",
+                      counselorAddress: "",
+                      counselorStaffId: null,
+                    })}
+                  >
+                    Clear counselor pickup
+                  </button>
+                ) : null}
+              </div>
               <div className="min-w-0">
                 <Label>Route Color</Label>
                 <div className="mt-2 max-h-36 overflow-y-auto overflow-x-hidden rounded-md border border-border/40 p-2">
@@ -6099,30 +6212,82 @@ export default function Transport() {
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setEditRoute(null)}>Cancel</Button>
               <Button
+                disabled={savingEditRoute}
                 onClick={() => {
-                  if (!editRoute) return;
-                  if (!editRoute.name.trim() || !editRoute.bus.trim()) {
-                    toast({ title: "Missing info", description: "Route name and bus are required.", variant: "destructive" });
-                    return;
-                  }
-                  if (!editRoute.capacity || editRoute.capacity < 1) {
-                    toast({ title: "Invalid capacity", description: "Max capacity must be at least 1.", variant: "destructive" });
-                    return;
-                  }
-                  setRouteMeta(prev => prev.map(r => r.id === editRoute.id ? {
-                    ...r,
-                    name: editRoute.name.trim(),
-                    bus: editRoute.bus.trim(),
-                    departure: editRoute.departure.trim() || "TBD",
-                    status: editRoute.status,
-                    color: editRoute.color,
-                    capacity: editRoute.capacity,
-                  } : r));
-                  setEditRoute(null);
-                  toast({ title: "Route updated", description: "Changes applied to AM & PM runs." });
+                  void (async () => {
+                    if (!editRoute) return;
+                    if (!editRoute.name.trim() || !editRoute.bus.trim()) {
+                      toast({ title: "Missing info", description: "Route name and bus are required.", variant: "destructive" });
+                      return;
+                    }
+                    if (!editRoute.capacity || editRoute.capacity < 1) {
+                      toast({ title: "Invalid capacity", description: "Max capacity must be at least 1.", variant: "destructive" });
+                      return;
+                    }
+                    const counselorName = editRoute.counselorName.trim();
+                    const counselorAddress = editRoute.counselorAddress.trim();
+                    let counselorPickup: BusCounselorPickup | null = null;
+                    if (counselorName || counselorAddress) {
+                      if (!counselorName || !counselorAddress) {
+                        toast({
+                          title: "Counselor pickup incomplete",
+                          description: "Name and home address are both required, or clear both.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      const existing = routeMeta.find((r) => r.id === editRoute.id)?.counselorPickup;
+                      const sameAddress =
+                        existing
+                        && existing.address.trim().toLowerCase() === counselorAddress.toLowerCase()
+                        && isValidBusCounselorPickup(existing);
+                      if (sameAddress) {
+                        counselorPickup = {
+                          ...existing,
+                          name: counselorName,
+                          staffId: editRoute.counselorStaffId ?? existing.staffId ?? null,
+                        };
+                      } else {
+                        setSavingEditRoute(true);
+                        const geo = await geocodeAddress(counselorAddress);
+                        setSavingEditRoute(false);
+                        if (!isGeocodePoint(geo)) {
+                          toast({
+                            title: "Could not map counselor address",
+                            description: geocodeFailureMessage(geo, counselorAddress),
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        counselorPickup = parseBusCounselorPickup({
+                          staffId: editRoute.counselorStaffId,
+                          name: counselorName,
+                          address: counselorAddress,
+                          lat: geo.lat,
+                          lng: geo.lng,
+                        });
+                        if (!counselorPickup) {
+                          toast({ title: "Could not save counselor pickup", variant: "destructive" });
+                          return;
+                        }
+                      }
+                    }
+                    setRouteMeta((prev) => prev.map((r) => r.id === editRoute.id ? {
+                      ...r,
+                      name: editRoute.name.trim(),
+                      bus: editRoute.bus.trim(),
+                      departure: editRoute.departure.trim() || "TBD",
+                      status: editRoute.status,
+                      color: editRoute.color,
+                      capacity: editRoute.capacity,
+                      counselorPickup,
+                    } : r));
+                    setEditRoute(null);
+                    toast({ title: "Route updated", description: "Counselor pickup is first on AM and last on PM." });
+                  })();
                 }}
               >
-                Save Changes
+                {savingEditRoute ? "Saving…" : "Save Changes"}
               </Button>
             </div>
           </DialogFooter>

@@ -22,6 +22,7 @@ export type TransportRouteMeta = {
   status: string;
   capacity: number;
   color: string;
+  counselorPickup?: import("@/lib/transportCounselorPickup").BusCounselorPickup | null;
 };
 
 export type TransportRunRoute = TransportRouteMeta & {
