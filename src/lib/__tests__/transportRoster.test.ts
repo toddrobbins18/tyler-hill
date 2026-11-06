@@ -6,6 +6,7 @@ import {
   collectTransportAddressesNeedingGeocode,
   fixBoardAddressesFromEnrollment,
   mergeAddressHintsPreferringBundledMappoint,
+  prepareBoardForPersist,
   pruneEmptyPassengerStops,
 } from "@/lib/transportRoster";
 import { CAMP_LOCATION } from "@/lib/transportStopTimes";
@@ -128,6 +129,51 @@ describe("pruneEmptyPassengerStops", () => {
     expect(pruned[1]).toHaveLength(2);
     expect(pruned[1]?.[0]?.camperNames).toEqual(["Alex Rubel"]);
     expect(pruned[1]?.[1]?.address).toBe(CAMP_LOCATION.address);
+  });
+
+  it("keeps a fresh MapPoint template (open stops only) so Place Using Prior Routes can match them", () => {
+    const template = {
+      28: [
+        {
+          name: "91 Remsen Ave",
+          address: "91 Remsen Ave, Roslyn, NY 11576",
+          lat: 40.8,
+          lng: -73.6,
+          pickupTime: "",
+          passengers: 0,
+          camperNames: [] as string[],
+        },
+      ],
+    };
+    expect(pruneEmptyPassengerStops(template)[28]).toHaveLength(1);
+  });
+});
+
+describe("prepareBoardForPersist", () => {
+  it("keeps a configured 2027 template even when stops were emptied", () => {
+    const saved = prepareBoardForPersist(
+      {
+        coreStops: {},
+        routeMeta: [
+          {
+            id: 28,
+            name: "Bus 28",
+            bus: "Bus 28",
+            departure: "7:00 AM",
+            status: "Confirmed",
+            color: "#000",
+            capacity: 22,
+          },
+        ],
+        unplottedCampers: [],
+        routesConfigured: true,
+        routesSeason: "2027",
+        routesSource: "mappoint2026",
+      },
+      "2027",
+    );
+    expect(saved.routesConfigured).toBe(true);
+    expect(saved.routeMeta).toHaveLength(1);
   });
 });
 

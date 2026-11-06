@@ -10,6 +10,7 @@ export default defineConfig({
   test: {
     include: [
       "src/lib/__tests__/enrollmentWeekCalendar.test.ts",
+      "src/lib/__tests__/historicalRouteLearning.test.ts",
       "src/lib/__tests__/transportCamperBusRun.test.ts",
       "src/lib/__tests__/transportBusCheckins.test.ts",
       "src/lib/__tests__/transportWeekView.test.ts",

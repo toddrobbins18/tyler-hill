@@ -188,11 +188,16 @@ export function transportBoardSeasonSyncChanged(
   return unplottedKey(before) !== unplottedKey(after);
 }
 
-/** Remove template / MapPoint stops with no enrolled riders (camp stop kept). */
+/** Remove leftover empty stops after some campers are assigned. Keep a fresh template intact. */
 export function pruneEmptyPassengerStops(
   coreStops: Record<number, TransportRouteStop[]>,
   campAddress: string = CAMP_LOCATION.address,
 ): Record<number, TransportRouteStop[]> {
+  const hasAssignedRiders = Object.values(coreStops).some((stops) =>
+    (stops ?? []).some((stop) => riderNamesFromStop(stop).length > 0),
+  );
+  if (!hasAssignedRiders) return coreStops;
+
   const normCamp = campAddress.trim().toLowerCase();
   const out: Record<number, TransportRouteStop[]> = {};
   for (const [routeId, stops] of Object.entries(coreStops)) {
@@ -237,7 +242,9 @@ export function prepareBoardForPersist(
   payload: TransportBoardPayload,
   season: string,
 ): TransportBoardPayload {
-  const hasRoutes = countTransportBoardStops(payload.coreStops) > 0 && payload.routeMeta.length > 0;
+  const hasStops = countTransportBoardStops(payload.coreStops) > 0 && payload.routeMeta.length > 0;
+  const hasConfiguredRoutes = payload.routesConfigured === true && payload.routeMeta.length > 0;
+  const hasRoutes = hasStops || hasConfiguredRoutes;
 
   if (!hasRoutes) {
     return {

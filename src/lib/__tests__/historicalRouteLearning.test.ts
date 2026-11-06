@@ -9,6 +9,7 @@ import {
   normCamperName,
   pickHistoricalBusForCamper,
   reorderStopsByHistoricalPriors,
+  routeIdForPriorBus,
 } from "@/lib/historicalRouteLearning";
 import { buildCamperPriorMap } from "@/lib/routeReferenceWarehouse";
 
@@ -75,6 +76,47 @@ describe("historicalRouteLearning", () => {
     );
     expect(suggestion?.routeId).toBe(samplePrior.busNumber);
     expect(suggestion?.priorBusNumber).toBe(samplePrior.busNumber);
+  });
+
+  it("matches prior bus number to a board route labeled Bus N when ids differ", () => {
+    expect(
+      routeIdForPriorBus(
+        [{ id: 900, name: "Flower Hill · Bus 28", bus: "Bus 28", departure: "", status: "", color: "", capacity: 22 }],
+        28,
+      ),
+    ).toBe(900);
+  });
+
+  it("places returning camper onto the labeled bus when route id is not the MapPoint number", () => {
+    const samplePrior = priors.find((p) => p.busNumber === 28) ?? priors[0];
+    const result = applyHistoricalAssignments({
+      coreStops: { 900: [] },
+      routeMeta: [
+        {
+          id: 900,
+          name: `Flower Hill · Bus ${samplePrior.busNumber}`,
+          bus: `Bus ${samplePrior.busNumber}`,
+          departure: "7:00 AM",
+          status: "Confirmed",
+          color: "#000",
+          capacity: 22,
+        },
+      ],
+      unplottedCampers: [
+        {
+          id: 1,
+          name: samplePrior.camperName,
+          address: samplePrior.address,
+          lat: samplePrior.lat ?? 40.8,
+          lng: samplePrior.lng ?? -73.6,
+          age: 8,
+          session: "Full 8 Weeks",
+        },
+      ],
+      priorMap,
+    });
+    expect(result.placed.length).toBe(1);
+    expect(result.coreStops[900]?.[0]?.camperNames).toContain(samplePrior.camperName);
   });
 
   it("picks historical bus for camper", () => {
