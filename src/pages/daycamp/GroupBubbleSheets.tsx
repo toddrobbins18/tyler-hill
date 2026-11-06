@@ -245,18 +245,24 @@ export default function GroupBubbleSheets() {
     void openGroupPdfPreview(groupName);
   };
 
-  const handleDownloadAllGroups = () => {
+  const handleDownloadAllGroups = async () => {
     if (!rosterByGroup.length || !companyId) return;
-    rosterByGroup.forEach(([groupName], index) => {
-      window.setTimeout(() => {
-        void buildGroupPdf(groupName).then((built) => {
-          if (built) triggerBlobDownload(built.blob, built.filename);
-        });
-      }, index * 450);
-    });
+    const files: { blob: Blob; filename: string }[] = [];
+    for (const [groupName] of rosterByGroup) {
+      const built = await buildGroupPdf(groupName);
+      if (built) files.push(built);
+    }
+    for (const file of files) {
+      triggerBlobDownload(file.blob, file.filename);
+    }
     toast({
-      title: "Downloading group PDFs",
-      description: `${rosterByGroup.length} file${rosterByGroup.length === 1 ? "" : "s"} — one PDF per group.`,
+      title: files.length
+        ? `Downloaded ${files.length} group PDF${files.length === 1 ? "" : "s"}`
+        : "Nothing to export",
+      description: files.length
+        ? `${files.length} file${files.length === 1 ? "" : "s"} — one PDF per group.`
+        : undefined,
+      variant: files.length ? "default" : "destructive",
     });
   };
 

@@ -1,7 +1,12 @@
 import { campersOnRoute } from "@/lib/transportBusAttendance";
 import type { BubbleSheetCamper } from "@/lib/transportBubbleSheetPdf";
-import { ridersOnRoute } from "@/lib/transportParentTransport";
-import type { ParentTransportCamper } from "@/lib/transportParentTransport";
+import {
+  isParentTransportScheduledForRun,
+  PARENT_TRANSPORT_STOP_LABEL,
+  ridersOnRoute,
+  type ParentTransportCamper,
+} from "@/lib/transportParentTransport";
+import { camperEnrolledInWeekByLookup } from "@/lib/transportWeekView";
 import type { CamperEnrollmentInfo } from "@/lib/transportWeekView";
 import type { TransportRouteStop } from "@/lib/transportRoster";
 
@@ -84,35 +89,78 @@ export function buildBusBubbleSheetRoutes(options: {
   return routes
     .map((route) => {
       const baseCore = baseCoreByRoute(route.id);
-      const amNames = new Set(
-        ridersOnRoute(route.id, coreForRun(route.id, "am"), parentTransportCampers, {
-          ...riderBase,
-          runPeriod: "am",
-        }).map((r) => normCamperBusRunKey(r.name)),
-      );
-      const pmNames = new Set(
-        ridersOnRoute(route.id, coreForRun(route.id, "pm"), parentTransportCampers, {
-          ...riderBase,
-          runPeriod: "pm",
-        }).map((r) => normCamperBusRunKey(r.name)),
-      );
+      const amRiders = ridersOnRoute(route.id, coreForRun(route.id, "am"), parentTransportCampers, {
+        ...riderBase,
+        runPeriod: "am",
+      });
+      const pmRiders = ridersOnRoute(route.id, coreForRun(route.id, "pm"), parentTransportCampers, {
+        ...riderBase,
+        runPeriod: "pm",
+      });
+      const amNames = new Set(amRiders.map((r) => normCamperBusRunKey(r.name)));
+      const pmNames = new Set(pmRiders.map((r) => normCamperBusRunKey(r.name)));
 
-      const mergedCampers = campersOnRoute(route.id, baseCore)
-        .filter((c) => (includeCamper ? includeCamper(c.name) : true))
-        .map((c) => {
-          const mode = getCamperBusRunMode(schedules, c.name);
-          const key = normCamperBusRunKey(c.name);
-          return {
-            name: c.name,
-            detail: c.stopName,
-            ridesAm: camperScheduledForBusRun(mode, "am") ? amNames.has(key) : false,
-            ridesPm: camperScheduledForBusRun(mode, "pm") ? pmNames.has(key) : false,
-          };
-        })
-        .sort((a, b) => a.name.localeCompare(b.name));
+      const byKey = new Map<string, BubbleSheetCamper>();
+      for (const c of campersOnRoute(route.id, baseCore)) {
+        if (includeCamper && !includeCamper(c.name)) continue;
+        const mode = getCamperBusRunMode(schedules, c.name);
+        const key = normCamperBusRunKey(c.name);
+        byKey.set(key, {
+          name: c.name,
+          detail: c.stopName,
+          ridesAm: camperScheduledForBusRun(mode, "am") ? amNames.has(key) : false,
+          ridesPm: camperScheduledForBusRun(mode, "pm") ? pmNames.has(key) : false,
+        });
+      }
 
+      for (const rider of [...amRiders, ...pmRiders]) {
+        if (includeCamper && !includeCamper(rider.name)) continue;
+        const key = normCamperBusRunKey(rider.name);
+        if (byKey.has(key)) continue;
+        byKey.set(key, {
+          name: rider.name,
+          detail: rider.stopName,
+          ridesAm: amNames.has(key),
+          ridesPm: pmNames.has(key),
+        });
+      }
+
+      const mergedCampers = [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
       if (!mergedCampers.length) return null;
       return { bus: route.bus, routeName: route.routeName, campers: mergedCampers };
     })
     .filter((r): r is BusBubbleSheetRoute => r != null);
+}
+
+/** PT-only campers (no bus) for a Parent Transport roster PDF. */
+export function buildPtOnlyBubbleSheetCampers(options: {
+  parentTransportCampers: ParentTransportCamper[];
+  runDate: string;
+  enrollmentWeek?: number | null;
+  enrollmentLookup?: Map<string, CamperEnrollmentInfo>;
+  includeCamper?: (name: string) => boolean;
+}): BubbleSheetCamper[] {
+  const { parentTransportCampers, runDate, enrollmentWeek = null, enrollmentLookup, includeCamper } = options;
+  const out: BubbleSheetCamper[] = [];
+  for (const camper of parentTransportCampers) {
+    if (camper.routeId != null) continue;
+    if (includeCamper && !includeCamper(camper.name)) continue;
+    if (
+      enrollmentWeek != null &&
+      enrollmentLookup &&
+      !camperEnrolledInWeekByLookup(enrollmentLookup, camper.name, enrollmentWeek)
+    ) {
+      continue;
+    }
+    const ridesAm = isParentTransportScheduledForRun(camper, runDate, "am");
+    const ridesPm = isParentTransportScheduledForRun(camper, runDate, "pm");
+    if (!ridesAm && !ridesPm) continue;
+    out.push({
+      name: camper.name,
+      detail: PARENT_TRANSPORT_STOP_LABEL,
+      ridesAm,
+      ridesPm,
+    });
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
 }

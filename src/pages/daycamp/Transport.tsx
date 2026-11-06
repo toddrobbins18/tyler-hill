@@ -569,14 +569,13 @@ const persistBoardCache = (companyId: string, season: string, payload: BoardPayl
 };
 
 const dayCampReports = [
+  { name: "Transport Print Reports", desc: "Group reports, bus rosters (incl. PT), and route summary — pick groups and buses", href: "/day-camp/transport-reports" },
   { name: "Master Change Sheet", desc: "Daily changes PDF (CampMinder-style) — buses + PT", href: "/day-camp/change-sheets" },
-  { name: "Transport Print Reports", desc: "Group reports, bus rosters, and route summary PDFs (pick groups/buses)", href: "/day-camp/transport-reports" },
+  { name: "Group Report", desc: "Weekly Mon–Fri group PDFs — same files as Transport Print Reports", href: "/day-camp/transport-reports#group-reports" },
+  { name: "Bus Roster Report", desc: "Weekly AM/PM bus PDFs including PT — pick which buses", href: "/day-camp/transport-reports#bus-rosters" },
+  { name: "Bus Route Summary", desc: "Stops table per bus — same as Transport Print Reports", href: "/day-camp/transport-reports#route-summary" },
   { name: "Transport Exceptions", desc: "PDF — absences, swim, office changes, and manual route edits for this date" },
-  { name: "Bus Bubble Sheet", desc: "PDF — per bus AM & PM bubbles (mini day / exceptions marked)" },
-  { name: "Group Bubble Sheet", desc: "PDF — everyone enrolled in the group this week" },
   { name: "Digital Attendance Log", desc: "PDF — Present/Absent from Bus Attendance for this date & run" },
-  { name: "Bus Report", desc: "PDF — day camp bus assignments" },
-  { name: "Bus Route Summary", desc: "PDF — route overview with stops (CampMinder-style)" },
   { name: "Car Seat Count by Bus", desc: "PDF — Nursery & Pre-K riders per bus" },
   { name: "Car Report", desc: "PDF — all parent transport (PT) campers" },
   { name: "Daily Passenger Update", desc: "PDF — passenger counts by route" },
@@ -5824,7 +5823,7 @@ export default function Transport() {
                   <Link to="/day-camp/bus-check-ins" className="text-primary underline-offset-2 hover:underline">
                     Bus Check-ins
                   </Link>
-                  . Bus Bubble Sheet lists who is actually on each bus today. Group Bubble Sheet lists everyone enrolled that week.
+                  . Group and bus roster PDFs (with PT) are under Transport Print Reports.
                 </p>
                 {busAttendanceSummary && busAttendanceSummary.totalBuses > 0 ? (
                   <p className="text-[11px] text-foreground/80">

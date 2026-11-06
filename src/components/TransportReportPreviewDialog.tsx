@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Download, Printer } from "lucide-react";
+import { triggerBlobDownload } from "@/lib/transportBubbleSheetPdf";
 
 export type TransportReportPreview = {
   open: boolean;
@@ -18,15 +19,6 @@ type Props = {
   preview: TransportReportPreview | null;
   onOpenChange: (open: boolean) => void;
 };
-
-function triggerBlobDownload(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 export function TransportReportPreviewDialog({ preview, onOpenChange }: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null);

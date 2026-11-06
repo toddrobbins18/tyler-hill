@@ -377,17 +377,20 @@ export default function BusAttendance() {
     const kids = await loadTransportReportChildren(supabase, companyId, currentSeason, {
       enrollmentWeek: activeWeek,
     });
-    selectedRoutes.forEach((route, index) => {
-      window.setTimeout(() => {
-        void (async () => {
-          const built = await buildRosterPdfForRoute(route, kids);
-          if (built) triggerBlobDownload(built.blob, built.filename);
-        })();
-      }, index * 450);
-    });
+    const files: { blob: Blob; filename: string }[] = [];
+    for (const route of selectedRoutes) {
+      const built = await buildRosterPdfForRoute(route, kids);
+      if (built) files.push(built);
+    }
+    for (const file of files) {
+      triggerBlobDownload(file.blob, file.filename);
+    }
     toast({
-      title: "Downloading bus rosters",
-      description: `${selectedRoutes.length} file${selectedRoutes.length === 1 ? "" : "s"}.`,
+      title: files.length
+        ? `Downloaded ${files.length} bus roster PDF${files.length === 1 ? "" : "s"}`
+        : "No campers on the selected buses for this week",
+      description: files.length ? `${files.length} file${files.length === 1 ? "" : "s"}.` : undefined,
+      variant: files.length ? "default" : "destructive",
     });
   }, [
     activeWeek,

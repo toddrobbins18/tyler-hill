@@ -33,7 +33,7 @@ export type ParentTransportCamper = {
   id: number;
   childId?: string | null;
   name: string;
-  /** When null, camper is PT-only — appears on Car Report, not on any bus roster. */
+  /** When null, camper is PT-only — listed on the Parent Transport roster PDF. */
   routeId: number | null;
   /** Parent drop-off — counts on AM bus roster when scheduled. */
   am: boolean;
