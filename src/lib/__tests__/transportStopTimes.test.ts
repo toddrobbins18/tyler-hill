@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   assignStopTimesFromLegMinutes,
   buildAMStops,
+  CAMP_LOCATION,
   DEFAULT_STOP_DWELL_MINUTES,
+  estimateDrivingLegMinutes,
   isValidRouteCoordinate,
   parseDepartureToMinutes,
 } from "@/lib/transportStopTimes";
@@ -45,6 +47,12 @@ describe("transportStopTimes", () => {
     expect(pickupTimes[1]).toBe(`7:0${DEFAULT_STOP_DWELL_MINUTES} AM`);
     const uniqueTimes = new Set(pickupTimes);
     expect(uniqueTimes.size).toBe(4);
+  });
+
+  it("estimates Port Washington to camp as about a half hour, not 12 minutes", () => {
+    const minutes = estimateDrivingLegMinutes(40.821, -73.698, CAMP_LOCATION.lat, CAMP_LOCATION.lng);
+    expect(minutes).toBeGreaterThan(22);
+    expect(minutes).toBeLessThan(40);
   });
 
   it("assignStopTimesFromLegMinutes uses provided leg durations", () => {

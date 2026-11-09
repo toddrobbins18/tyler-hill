@@ -179,7 +179,8 @@ import {
 
 const SHOW_BLANK_OPEN_STOPS_KEY = "transport-show-blank-open-stops";
 import {
-  haversineLegMinutesFromCoords,
+  fetchRouteLegDurationsSec,
+  legDurationsSecToMinutes,
   routeStopCoordinateSignature,
 } from "@/lib/transportRouteLegDurations";
 
@@ -417,7 +418,7 @@ function restoreStopCampersToUnplotted(
 const initialUnplottedCampers: UnplottedCamper[] = [];
 
 const GEOCODE_CACHE_KEY = "transport-geocode-cache-v1";
-const ROUTE_LEG_CACHE_KEY = "transport-route-leg-cache-v1";
+const ROUTE_LEG_CACHE_KEY = "transport-route-leg-cache-v2";
 const OPTIMIZE_UNDO_KEY = "transport-optimize-undo-v1";
 
 type OptimizeUndoSnapshot = {
@@ -449,7 +450,7 @@ const persistOptimizeUndoStack = (stack: OptimizeUndoSnapshot[]) => {
 
 const loadPersistedRouteLegCache = (): Record<string, number[]> => {
   try {
-    const raw = sessionStorage.getItem(ROUTE_LEG_CACHE_KEY);
+    const raw = localStorage.getItem(ROUTE_LEG_CACHE_KEY) ?? sessionStorage.getItem(ROUTE_LEG_CACHE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw) as Record<string, number[]>;
     return parsed && typeof parsed === "object" ? parsed : {};
@@ -460,7 +461,7 @@ const loadPersistedRouteLegCache = (): Record<string, number[]> => {
 
 const persistRouteLegCache = (cache: Record<string, number[]>) => {
   try {
-    sessionStorage.setItem(ROUTE_LEG_CACHE_KEY, JSON.stringify(cache));
+    localStorage.setItem(ROUTE_LEG_CACHE_KEY, JSON.stringify(cache));
   } catch {
     // ignore quota errors
   }
@@ -673,6 +674,7 @@ export default function Transport() {
   const [routeLegMinutesCache, setRouteLegMinutesCache] = useState<Record<string, number[]>>(
     loadPersistedRouteLegCache,
   );
+  const routeLegFetchSigsRef = useRef(new Set<string>());
   const [showBlankOpenStops, setShowBlankOpenStops] = useState(() => {
     try {
       return localStorage.getItem(SHOW_BLANK_OPEN_STOPS_KEY) === "1";
@@ -1846,27 +1848,34 @@ export default function Transport() {
     routeLegMinutesCache,
   ]);
 
-  // Local drive-time estimates for pickup times — avoids dozens of route-optimizer calls on load.
+  // Road drive times from ORS (cached). Haversine is only the fallback until this returns.
   useEffect(() => {
     if (
-      routesNeedingLegDurations.length === 0
-      || boardLoading
+      boardLoading
       || !persistLoaded
       || applyingTemplate
       || applyingHistorical
     ) return;
 
-    setRouteLegMinutesCache((prev) => {
-      const next = { ...prev };
-      let changed = false;
-      for (const item of routesNeedingLegDurations) {
-        if (next[item.sig]) continue;
-        next[item.sig] = haversineLegMinutesFromCoords(item.coords);
-        changed = true;
+    const toFetch = routesNeedingLegDurations.filter((item) => !routeLegFetchSigsRef.current.has(item.sig));
+    if (toFetch.length === 0) return;
+    for (const item of toFetch) routeLegFetchSigsRef.current.add(item.sig);
+
+    const invokeLegs = (body: { action: "legDurations"; coordinates: [number, number][] }) =>
+      supabase.functions.invoke("route-optimizer", { body });
+
+    void (async () => {
+      for (const item of toFetch) {
+        const sec = await fetchRouteLegDurationsSec(invokeLegs, item.coords);
+        const minutes = legDurationsSecToMinutes(sec);
+        setRouteLegMinutesCache((prev) => {
+          if (prev[item.sig]) return prev;
+          const next = { ...prev, [item.sig]: minutes };
+          persistRouteLegCache(next);
+          return next;
+        });
       }
-      if (changed) persistRouteLegCache(next);
-      return changed ? next : prev;
-    });
+    })();
   }, [routesNeedingLegDurations, boardLoading, persistLoaded, applyingTemplate, applyingHistorical]);
 
   const stopDwellMinutes = effectiveStopDwellMinutes(boardSettings);

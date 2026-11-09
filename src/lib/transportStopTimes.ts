@@ -31,6 +31,12 @@ export const haversineMiles = (lat1: number, lng1: number, lat2: number, lng2: n
 /** Minutes the bus waits at each passenger pickup (not camp). */
 export const DEFAULT_STOP_DWELL_MINUTES = 2;
 
+/** Straight-line miles are scaled up for roads; Long Island AM traffic is slower than highway. */
+const ROAD_DISTANCE_FACTOR = 1.4;
+const SHORT_LEG_MPH = 18;
+const LONG_LEG_MPH = 14;
+const LONG_LEG_ROAD_MILES = 3;
+
 /** Estimated driving minutes between two points (fractional — round only at display). */
 export const estimateDrivingLegMinutes = (
   lat1: number,
@@ -39,9 +45,10 @@ export const estimateDrivingLegMinutes = (
   lng2: number,
 ): number => {
   if (!isValidRouteCoordinate(lat1, lng1) || !isValidRouteCoordinate(lat2, lng2)) return 0;
-  const miles = haversineMiles(lat1, lng1, lat2, lng2) * 1.4;
+  const miles = haversineMiles(lat1, lng1, lat2, lng2) * ROAD_DISTANCE_FACTOR;
   if (miles <= 0.001) return 0;
-  return (miles / 25) * 60;
+  const mph = miles >= LONG_LEG_ROAD_MILES ? LONG_LEG_MPH : SHORT_LEG_MPH;
+  return (miles / mph) * 60;
 };
 
 /** Haversine-based leg durations for an ordered stop list. */
