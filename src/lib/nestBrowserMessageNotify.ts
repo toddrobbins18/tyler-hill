@@ -41,20 +41,7 @@ export async function notifyNestStaffMessageInsert(row: InsertRow): Promise<void
 
   const body = messagePreviewLabel(row.message_kind, String(row.content ?? ""), row.media_file_name);
 
-  if (row.thread_kind === "division_channel" && row.parent_message_id && row.division_id) {
-    const { data: allowed } = await supabase.rpc("staff_can_access_division_messaging", {
-      _user_id: uid,
-      _division_id: row.division_id,
-    });
-    if (!allowed) return;
-    const title = "Division channel";
-    if (document.hidden && (await ensureBrowserNotificationPermission())) {
-      new Notification(title, { body });
-    } else {
-      toast.message(title, { description: body });
-    }
-    return;
-  }
+  if (row.thread_kind === "division_channel") return;
 
   if (row.thread_kind === "parent_division_leader") {
     const recipientId = row.recipient_id;

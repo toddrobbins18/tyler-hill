@@ -91,7 +91,7 @@ type ThreadListRow = {
   recipient_id?: string | null;
 };
 
-/** Division channels live on the Channels tab. Parent chats live in Inbox for both people. */
+/** Division channel threads stay out of Inbox and Sent. Parent chats live in Inbox. */
 export function messageShownInSentList(row: ThreadListRow): boolean {
   const kind = row.thread_kind ?? null;
   return kind !== DIVISION_CHANNEL_THREAD && kind !== PARENT_PORTAL_THREAD;

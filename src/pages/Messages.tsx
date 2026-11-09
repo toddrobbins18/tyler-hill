@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Mail, Send, Eye, Clock, Bell, Users, User, Hash, Megaphone, Bus, ChevronDown, ChevronUp, ArrowLeft, SendHorizonal, Reply } from "lucide-react";
+import { Mail, Send, Eye, Clock, Bell, Users, User, Megaphone, Bus, ChevronDown, ChevronUp, ArrowLeft, SendHorizonal, Reply } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
-import { isDayCampCompany } from "@/lib/camps";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -16,10 +15,8 @@ import { format } from "date-fns";
 import GroupList from "@/components/messages/GroupList";
 import InlineThread from "@/components/messages/InlineThread";
 import { StaffParentFamiliesPanel } from "@/components/messages/StaffParentFamiliesPanel";
-import { StaffDivisionChannelsPanel } from "@/components/messages/StaffDivisionChannelsPanel";
 import { StaffAnnouncementsPanel } from "@/components/messages/StaffAnnouncementsPanel";
 import { StaffAudienceMessagesPanel } from "@/components/messages/StaffAudienceMessagesPanel";
-import { countStaffDivisionChannelUnread } from "@/lib/divisionChannelMessaging";
 import { notifyNestStaffMessageInsert } from "@/lib/nestBrowserMessageNotify";
 import { notificationsDebug } from "@/lib/notificationDebug";
 import { fetchMessageProfileLabels, inboxFromDisplayName } from "@/lib/messageProfiles";
@@ -141,16 +138,17 @@ export default function Messages() {
 
   // Persist viewMode and groupId in sessionStorage so they survive re-mounts
   const [viewMode, setViewModeState] = useState<
-    'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families' | 'channels' | 'announcements' | 'group_messages' | 'bus_messages'
+    'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families' | 'announcements' | 'group_messages' | 'bus_messages'
   >(() => {
     const saved = sessionStorage.getItem('messages_view_mode');
-    return (saved as 'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families' | 'channels' | 'announcements' | 'group_messages' | 'bus_messages') || 'inbox';
+    if (saved === 'channels') return 'inbox';
+    return (saved as 'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families' | 'announcements' | 'group_messages' | 'bus_messages') || 'inbox';
   });
   const [activeGroupId, setActiveGroupIdState] = useState<string | null>(() => {
     return sessionStorage.getItem('messages_active_group_id') || null;
   });
 
-  const setViewMode = (mode: 'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families' | 'channels' | 'announcements' | 'group_messages' | 'bus_messages') => {
+  const setViewMode = (mode: 'compose' | 'inbox' | 'sent' | 'groups' | 'parent_families' | 'announcements' | 'group_messages' | 'bus_messages') => {
     sessionStorage.setItem('messages_view_mode', mode);
     if (mode !== 'groups') {
       sessionStorage.removeItem('messages_active_group_id');
@@ -171,7 +169,6 @@ export default function Messages() {
   const [sentMessages, setSentMessages] = useState<Message[]>([]);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [channelsUnreadCount, setChannelsUnreadCount] = useState(0);
   const [showRecipientPreview, setShowRecipientPreview] = useState(false);
   const [deliveryMethods, setDeliveryMethods] = useState({
     inApp: true,
@@ -200,12 +197,6 @@ export default function Messages() {
     return newCache;
   }, [profileCache, currentCompany?.id]);
 
-  const refreshChannelsUnread = useCallback(async () => {
-    if (!currentCompany?.id) return;
-    const { total } = await countStaffDivisionChannelUnread(supabase, currentCompany.id);
-    setChannelsUnreadCount(total);
-  }, [currentCompany?.id]);
-
   useEffect(() => {
     if (!currentCompany?.id) return;
     fetchTagGroups();
@@ -213,7 +204,6 @@ export default function Messages() {
     fetchMessages();
     fetchSentMessages();
     fetchEmailConfig();
-    void refreshChannelsUnread();
 
     const channel = supabase
       .channel('messages-changes')
@@ -231,7 +221,6 @@ export default function Messages() {
           }
           fetchMessages();
           fetchSentMessages();
-          void refreshChannelsUnread();
         }
       )
       .subscribe((status) => {
@@ -245,7 +234,7 @@ export default function Messages() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentCompany?.id, refreshChannelsUnread]);
+  }, [currentCompany?.id]);
 
   useEffect(() => {
     if (!selectedMessage) return;
@@ -793,13 +782,6 @@ export default function Messages() {
             Families
           </Button>
           <Button
-            variant={viewMode === 'channels' ? 'default' : 'outline'}
-            onClick={() => { setViewMode('channels'); setSelectedMessage(null); }}
-          >
-            <Hash className="h-4 w-4 mr-2" />
-            Channels {channelsUnreadCount > 0 && `(${channelsUnreadCount})`}
-          </Button>
-          <Button
             variant={viewMode === 'announcements' ? 'default' : 'outline'}
             onClick={() => { setViewMode('announcements'); setSelectedMessage(null); }}
           >
@@ -842,14 +824,6 @@ export default function Messages() {
         <StaffParentFamiliesPanel
           companyId={currentCompany.id}
           companySlug={currentCompany.slug}
-        />
-      ) : null}
-
-      {viewMode === 'channels' && currentCompany?.id ? (
-        <StaffDivisionChannelsPanel
-          companyId={currentCompany.id}
-          dayCampDivisionSort={isDayCampCompany(currentCompany)}
-          onUnreadTotalChange={setChannelsUnreadCount}
         />
       ) : null}
 
