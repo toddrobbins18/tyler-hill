@@ -65,9 +65,15 @@ declare global {
 const UNPLOTTED_COLOR = "#8b5cf6";
 const FADED_COLOR = "#9ca3af";
 
-const routeCoordinates = (route: MapRoute) =>
+const normAddr = (a: string) => a.toLowerCase().replace(/[.,#]/g, " ").replace(/\s+/g, " ").trim();
+
+const isCampStop = (stop: RouteStop, campAddress?: string) =>
+  !!campAddress && normAddr(stop.address) === normAddr(campAddress);
+
+const routeCoordinates = (route: MapRoute, campAddress?: string) =>
   route.stops.reduce<[number, number][]>((coords, stop) => {
     if (!isValidRouteCoordinate(stop.lat, stop.lng)) return coords;
+    if (isCampStop(stop, campAddress)) return coords;
     const next: [number, number] = [stop.lng, stop.lat];
     const prev = coords[coords.length - 1];
     if (!prev || Math.abs(prev[0] - next[0]) > 0.000001 || Math.abs(prev[1] - next[1]) > 0.000001) {
@@ -75,11 +81,6 @@ const routeCoordinates = (route: MapRoute) =>
     }
     return coords;
   }, []);
-
-const normAddr = (a: string) => a.toLowerCase().replace(/[.,#]/g, " ").replace(/\s+/g, " ").trim();
-
-const isCampStop = (stop: RouteStop, campAddress?: string) =>
-  !!campAddress && normAddr(stop.address) === normAddr(campAddress);
 
 /** Numbered circle for route stops; C = camp, S = counselor. Empty stops use a ring style. */
 const createStopIcon = (
@@ -154,11 +155,11 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
     () =>
       routes
         .map((route) => {
-          const coords = routeCoordinates(route);
+          const coords = routeCoordinates(route, campAddress);
           return `${route.id}:${coords.map(([lng, lat]) => `${lng.toFixed(5)},${lat.toFixed(5)}`).join(";")}`;
         })
         .join("|"),
-    [routes],
+    [routes, campAddress],
   );
 
   const allPoints = useMemo(() => {
@@ -232,7 +233,7 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
     const pathUpdates: Record<number, LatLng[] | null | undefined> = {};
 
     for (const route of currentRoutes) {
-      const coords = routeCoordinates(route);
+      const coords = routeCoordinates(route, campAddress);
       if (coords.length < 2) {
         routeCoordSigRef.current.delete(route.id);
         continue;
