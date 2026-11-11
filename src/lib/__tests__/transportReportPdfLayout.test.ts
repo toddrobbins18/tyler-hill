@@ -17,6 +17,13 @@ describe("transportReportPdfLayout", () => {
     expect(cols.contactRight - cols.contactX).toBeGreaterThanOrEqual(34);
   });
 
+  it("keeps bus-roster am-pm columns from overlapping when barcodes are on", () => {
+    const cols = groupReportRowColumns(215.9, 12, "am-pm", true);
+    expect(cols.contactRight).toBeLessThanOrEqual(cols.barcodeX);
+    expect(cols.barcodeRight).toBeLessThanOrEqual(cols.bubbleX);
+    expect(cols.bubbleRight).toBeLessThanOrEqual(215.9 - 12);
+  });
+
   it("builds a group report with the weekday labels in the circle column", () => {
     const built = buildGroupReportPdf({
       companyName: "North Shore Day Camp",

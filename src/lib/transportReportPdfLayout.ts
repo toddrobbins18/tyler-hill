@@ -11,6 +11,8 @@ export type TransportPdfHeaderOptions = {
   reportTitle: string;
   metaLines: string[];
   subtitle?: string;
+  /** Code 39 payload identifying the sheet (bus vs group) for paper scans. */
+  sheetBarcode?: string;
   logo?: TransportPdfLogo | null;
   printedAt?: Date;
 };
@@ -45,6 +47,12 @@ export async function loadTransportPdfLogo(
 export function sanitizeBarcodePayload(raw: string): string {
   const cleaned = raw.replace(/[^0-9A-Za-z]/g, "").toUpperCase();
   return cleaned.slice(0, 24);
+}
+
+/** Header barcode so a scan can tell Bus 3 from Barcelona. */
+export function encodePaperSheetBarcode(kind: "bus" | "group", label: string): string {
+  const prefix = kind === "bus" ? "B" : "G";
+  return sanitizeBarcodePayload(`${prefix}${label}`);
 }
 
 /** CODE39 patterns (* = narrow/wide unit sequence). */
@@ -197,7 +205,19 @@ export function drawTransportPdfHeader(
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
     doc.text(options.subtitle, margin, y);
-    y += 6;
+    const sheetCode = options.sheetBarcode?.trim();
+    if (sheetCode) {
+      const barW = 42;
+      drawCode39Barcode(doc, pageWidth - margin - barW, y - 7, sheetCode, {
+        heightMm: 7,
+        narrowMm: 0.22,
+        maxWidthMm: barW,
+        label: true,
+      });
+      y += 10;
+    } else {
+      y += 6;
+    }
   }
 
   doc.setDrawColor(40);

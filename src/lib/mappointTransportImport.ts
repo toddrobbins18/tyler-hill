@@ -63,13 +63,110 @@ export type GeocodeCacheEntry = { lat: number; lng: number; provider?: string };
 
 const bundledGeocodeMap = bundledGeocodes2026 as Record<string, BundledGeocode>;
 
+const STREET_SUFFIX: Record<string, string> = {
+  drive: "dr",
+  avenue: "ave",
+  street: "st",
+  road: "rd",
+  lane: "ln",
+  court: "ct",
+  place: "pl",
+  boulevard: "blvd",
+  terrace: "ter",
+  circle: "cir",
+  highway: "hwy",
+  parkway: "pkwy",
+  trail: "trl",
+};
+
+const SNAP_DRIFT_MILES = 0.35;
+
 const normGeocodeKey = (address: string) =>
   address.trim().toLowerCase().replace(/\s+/g, " ");
 
+/** Drive → Dr so CampMinder "Soundview Drive" hits MapPoint "Soundview Dr". */
+export function canonicalizeGeocodeKey(address: string): string {
+  const raw = normGeocodeKey(address).replace(/\./g, "");
+  return raw.replace(
+    /\b(drive|avenue|street|road|lane|court|place|boulevard|terrace|circle|highway|parkway|trail)\b/g,
+    (word) => STREET_SUFFIX[word] ?? word,
+  );
+}
+
+type ParsedStreet = { house: number; street: string; city: string };
+
+function parseCanonicalStreet(address: string): ParsedStreet | null {
+  const parts = canonicalizeGeocodeKey(address).split(",").map((part) => part.trim());
+  const streetPart = parts[0] ?? "";
+  const match = streetPart.match(/^(\d+)\s+(.+)$/);
+  if (!match) return null;
+  return {
+    house: Number(match[1]),
+    street: match[2],
+    city: parts[1] ?? "",
+  };
+}
+
+function milesBetween(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 3958.8;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function interpolateBundledStreetGeocode(address: string): BundledGeocode | null {
+  const parsed = parseCanonicalStreet(address);
+  if (!parsed) return null;
+  const points: { house: number; lat: number; lng: number }[] = [];
+  for (const [key, hit] of Object.entries(bundledGeocodeMap)) {
+    if (hit?.lat == null || hit?.lng == null) continue;
+    const row = parseCanonicalStreet(key);
+    if (!row || row.street !== parsed.street) continue;
+    if (parsed.city && row.city && row.city !== parsed.city) continue;
+    points.push({ house: row.house, lat: hit.lat, lng: hit.lng });
+  }
+  if (!points.length) return null;
+  const exact = points.find((row) => row.house === parsed.house);
+  if (exact) return { lat: exact.lat, lng: exact.lng, provider: "ors" };
+
+  points.sort((a, b) => a.house - b.house);
+  let lower: (typeof points)[number] | undefined;
+  let upper: (typeof points)[number] | undefined;
+  for (const row of points) {
+    if (row.house < parsed.house) lower = row;
+    if (row.house > parsed.house) {
+      upper = row;
+      break;
+    }
+  }
+  if (lower && upper) {
+    const t = (parsed.house - lower.house) / (upper.house - lower.house);
+    return {
+      lat: lower.lat + t * (upper.lat - lower.lat),
+      lng: lower.lng + t * (upper.lng - lower.lng),
+      provider: "ors",
+    };
+  }
+  const nearest = lower ?? upper;
+  if (nearest && Math.abs(nearest.house - parsed.house) <= 20) {
+    return { lat: nearest.lat, lng: nearest.lng, provider: "ors" };
+  }
+  return null;
+}
+
 /** Pre-geocoded MapPoint addresses — instant import, no API calls in production. */
 export function lookupBundledMappointGeocode(address: string): BundledGeocode | null {
-  const hit = bundledGeocodeMap[normGeocodeKey(address)];
-  return hit?.lat != null && hit?.lng != null ? hit : null;
+  const canonical = canonicalizeGeocodeKey(address);
+  const direct = bundledGeocodeMap[canonical] ?? bundledGeocodeMap[normGeocodeKey(address)];
+  if (direct?.lat != null && direct?.lng != null) return direct;
+  for (const [key, hit] of Object.entries(bundledGeocodeMap)) {
+    if (canonicalizeGeocodeKey(key) !== canonical) continue;
+    if (hit?.lat != null && hit?.lng != null) return hit;
+  }
+  return null;
 }
 
 /** Match "121 Salem Rd" to bundled "121 salem rd, roslyn heights, ny 11577". */
@@ -77,18 +174,16 @@ export function lookupBundledMappointGeocodeFuzzy(address: string): BundledGeoco
   const exact = lookupBundledMappointGeocode(address);
   if (exact) return exact;
 
-  const norm = normGeocodeKey(address);
-  if (!norm) return null;
-
-  const streetOnly = norm.split(",")[0]?.trim() ?? norm;
+  const streetOnly = canonicalizeGeocodeKey(address).split(",")[0]?.trim() ?? "";
   if (streetOnly.length < 5) return null;
 
   for (const [key, hit] of Object.entries(bundledGeocodeMap)) {
-    if (key === streetOnly || key.startsWith(`${streetOnly},`)) {
+    const canonicalKey = canonicalizeGeocodeKey(key);
+    if (canonicalKey === streetOnly || canonicalKey.startsWith(`${streetOnly},`)) {
       if (hit?.lat != null && hit?.lng != null) return hit;
     }
   }
-  return null;
+  return interpolateBundledStreetGeocode(address);
 }
 
 /** Resolve from bundled MapPoint cache (377 North Shore AM stops). */
@@ -101,6 +196,25 @@ export function resolveBundledGeocodeResult(address: string): {
   if (!hit) return null;
   const provider = hit.provider === "nominatim" || hit.provider === "census" ? hit.provider : "ors";
   return { lat: hit.lat, lng: hit.lng, provider };
+}
+
+/** If a live geocode drifted (e.g. pin in the bay), snap back to the MapPoint street. */
+export function snapToBundledGeocode(
+  address: string,
+  lat: number,
+  lng: number,
+): { lat: number; lng: number } {
+  const bundled = resolveBundledGeocodeResult(address);
+  if (!bundled) return { lat, lng };
+  const hasCoord =
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    !(Math.abs(lat) < 0.0001 && Math.abs(lng) < 0.0001);
+  if (!hasCoord) return { lat: bundled.lat, lng: bundled.lng };
+  if (milesBetween(lat, lng, bundled.lat, bundled.lng) > SNAP_DRIFT_MILES) {
+    return { lat: bundled.lat, lng: bundled.lng };
+  }
+  return { lat, lng };
 }
 
 export function bundledMappointGeocodeCount() {

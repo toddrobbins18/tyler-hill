@@ -1,3 +1,6 @@
+import type { ChangeSheetAttendanceSource } from "@/lib/paperAttendance";
+import { parseChangeSheetAttendanceSource } from "@/lib/paperAttendance";
+
 /** Global transport board settings (one camp-wide pickup-time knob). */
 export type TransportBoardSettings = {
   /** Add N minutes at each passenger stop when estimating pickup times. */
@@ -7,12 +10,15 @@ export type TransportBoardSettings = {
   includeCounselorInRouteTime: boolean;
   /** Per-route normalized address keys — pinned pickups stay put when optimizing. */
   pinnedStopsByRoute?: Record<number, string[]>;
+  /** Paperless bus attendance vs confirmed paper-scan absents on change sheets. */
+  changeSheetAttendanceSource: ChangeSheetAttendanceSource;
 };
 
 export const DEFAULT_TRANSPORT_BOARD_SETTINGS: TransportBoardSettings = {
   stopPickupMinutes: 2,
   stopPickupEnabled: true,
   includeCounselorInRouteTime: false,
+  changeSheetAttendanceSource: "paperless",
 };
 
 export function normalizeTransportBoardSettings(
@@ -38,6 +44,7 @@ export function normalizeTransportBoardSettings(
       ? Math.round(minutes)
       : DEFAULT_TRANSPORT_BOARD_SETTINGS.stopPickupMinutes,
     pinnedStopsByRoute,
+    changeSheetAttendanceSource: parseChangeSheetAttendanceSource(raw?.changeSheetAttendanceSource),
   };
 }
 

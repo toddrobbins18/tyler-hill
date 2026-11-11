@@ -590,6 +590,7 @@ const persistBoardCache = (companyId: string, season: string, payload: BoardPayl
 const dayCampReports = [
   { name: "Transport Print Reports", desc: "Group reports, bus rosters (incl. PT), and route summary — pick groups and buses", href: "/day-camp/transport-reports" },
   { name: "Master Change Sheet", desc: "Daily changes PDF (CampMinder-style) — buses + PT", href: "/day-camp/change-sheets" },
+  { name: "Conflict Review", desc: "Scan Old School bus + group sheets, confirm absents, toggle change-sheet source", href: "/day-camp/conflict-review" },
   { name: "Group Report", desc: "Weekly Mon–Fri group PDFs — same files as Transport Print Reports", href: "/day-camp/transport-reports#group-reports" },
   { name: "Bus Roster Report", desc: "Weekly AM/PM bus PDFs including PT — pick which buses", href: "/day-camp/transport-reports#bus-rosters" },
   { name: "Bus Route Summary", desc: "Stops table per bus — same as Transport Print Reports", href: "/day-camp/transport-reports#route-summary" },

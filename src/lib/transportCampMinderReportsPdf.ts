@@ -5,6 +5,7 @@ import {
   addTransportPdfFooters,
   drawCode39Barcode,
   drawTransportPdfHeader,
+  encodePaperSheetBarcode,
   type TransportPdfLogo,
 } from "@/lib/transportReportPdfLayout";
 
@@ -37,8 +38,8 @@ export function groupReportRowColumns(
   hasBarcode: boolean,
 ) {
   const gap = 3;
-  const bubbleWidth = bubbleMode === "am-pm" ? 64 : 52;
-  const barcodeSlot = hasBarcode ? 36 : 0;
+  const bubbleWidth = bubbleMode === "am-pm" ? (hasBarcode ? 58 : 64) : 52;
+  const barcodeSlot = hasBarcode ? (bubbleMode === "am-pm" ? 32 : 36) : 0;
   const bubbleX = pageWidth - margin - bubbleWidth;
   const barcodeX = bubbleX - gap - barcodeSlot;
   const textRight = (hasBarcode ? barcodeX : bubbleX) - gap;
@@ -75,7 +76,7 @@ function drawBubbleDayHeader(
   y: number,
   bubbleMode: "daily" | "am-pm",
 ): number {
-  const columns = groupReportRowColumns(pageWidth, margin, bubbleMode, bubbleMode === "daily");
+  const columns = groupReportRowColumns(pageWidth, margin, bubbleMode, true);
   const mode = bubbleMode === "am-pm" ? "am-pm" : "days";
   const width = columns.bubbleRight - columns.bubbleX;
   const centers = bubbleDayCenters(columns.bubbleX, width, mode);
@@ -126,9 +127,8 @@ function drawCamperBlock(
   camper: GroupReportCamper,
   bubbleMode: "daily" | "am-pm",
 ): number {
-  const reserveBarcode = bubbleMode === "daily";
-  const showBarcode = reserveBarcode && !!camper.barcodeValue?.trim();
-  const columns = groupReportRowColumns(pageWidth, margin, bubbleMode, reserveBarcode);
+  const showBarcode = !!camper.barcodeValue?.trim();
+  const columns = groupReportRowColumns(pageWidth, margin, bubbleMode, true);
   const { bubbleX, barcodeX, contactX } = columns;
   const bubbleWidth = columns.bubbleRight - bubbleX;
   const contactW = columns.contactRight - contactX;
@@ -234,6 +234,7 @@ export function buildGroupReportPdf(options: {
     reportTitle: `Group Report · Summer ${options.season}`,
     metaLines: [options.weekDateRange, `Total Campers: ${options.totalCampers}`],
     subtitle: options.groupName.toUpperCase(),
+    sheetBarcode: encodePaperSheetBarcode("group", options.groupName),
     logo: options.logo,
     printedAt,
   });
@@ -315,6 +316,7 @@ export function buildBusRosterReportPdf(options: {
     reportTitle: `Bus Roster Report · Summer ${options.season}`,
     metaLines: meta,
     subtitle: options.bus,
+    sheetBarcode: encodePaperSheetBarcode("bus", options.bus),
     logo: options.logo,
     printedAt,
   });

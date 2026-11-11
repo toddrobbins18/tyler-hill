@@ -17,6 +17,7 @@ import {
   parseMappointAddressesCsv,
   parseMappointRoutesCsv,
   resolveBundledGeocodeResult,
+  snapToBundledGeocode,
   type ParsedMappointRoute,
 } from "@/lib/mappointTransportImport";
 import {
@@ -749,10 +750,9 @@ export function fixBoardAddressesFromEnrollment(options: {
 }
 
 function backfillUnplottedCoordinates(camper: TransportUnplottedCamper): TransportUnplottedCamper {
-  if (isValidRouteCoordinate(camper.lat, camper.lng)) return camper;
-  const bundled = resolveBundledGeocodeResult(camper.address || "");
-  if (!bundled) return camper;
-  return { ...camper, lat: bundled.lat, lng: bundled.lng };
+  const snapped = snapToBundledGeocode(camper.address || "", camper.lat, camper.lng);
+  if (snapped.lat === camper.lat && snapped.lng === camper.lng) return camper;
+  return { ...camper, lat: snapped.lat, lng: snapped.lng };
 }
 
 /** Fill lat/lng from bundled MapPoint geocodes when pins would be missing on the map. */
@@ -879,12 +879,12 @@ export function buildUnplottedFromEnrollment(options: {
     );
     if (kept) {
       const address = syncedAddress || kept.address?.trim() || hint?.address || "";
-      const bundled = address ? resolveBundledGeocodeResult(address) : null;
+      const snapped = snapToBundledGeocode(address, kept.lat, kept.lng);
       out.push({
         ...kept,
         address,
-        lat: kept.lat || bundled?.lat || hint?.lat || 0,
-        lng: kept.lng || bundled?.lng || hint?.lng || 0,
+        lat: snapped.lat || hint?.lat || 0,
+        lng: snapped.lng || hint?.lng || 0,
         age: resolvedAge ?? kept.age,
         session: child.session ?? child.grade ?? kept.session,
       });

@@ -25,6 +25,7 @@ import {
   Briefcase,
   BedDouble,
   Camera,
+  ScanLine,
 } from "lucide-react";
 import type { CampLike } from "@/lib/camps";
 import {
@@ -49,6 +50,7 @@ export const FRONT_OFFICE_TRANSPORT_MENU_IDS = new Set([
   "pending-transport-changes",
   "group-bubble-sheets",
   "transport-reports",
+  "conflict-review",
 ]);
 
 /** Front Office child modules — hidden from sidebar, opened from Front Office dashboard. */
@@ -101,6 +103,7 @@ export function getDayCampPocItems(): DayCampMenuItem[] {
     { title: "Group Bubble Sheets", url: "/day-camp/group-bubble-sheets", icon: Users, menuId: "group-bubble-sheets" },
     { title: "Master Change Sheet", url: "/day-camp/change-sheets", icon: FileText, menuId: "change-sheets" },
     { title: "Transport Print Reports", url: "/day-camp/transport-reports", icon: FileText, menuId: "transport-reports" },
+    { title: "Conflict Review", url: "/day-camp/conflict-review", icon: ScanLine, menuId: "conflict-review" },
     { title: "Pending Changes", url: "/day-camp/pending-transport-changes", icon: Clock, menuId: "pending-transport-changes" },
     { title: "Office Changes", url: "/day-camp/office-changes", icon: ClipboardEdit, menuId: "office-changes" },
     { title: "Swim Program", url: "/day-camp/swim", icon: Waves, menuId: "swim" },
