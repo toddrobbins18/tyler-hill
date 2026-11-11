@@ -68,6 +68,27 @@ describe("transportStopTimes", () => {
     expect(timed[1].pickupTime).toBe("8:17 AM");
   });
 
+  it("does not treat Manorhaven to camp as a 2-minute last leg", () => {
+    const lastHouse = {
+      name: "Emerson Sabbag",
+      address: "96 Barkers Point Rd, Port Washington, NY 11050",
+      lat: 40.8425801,
+      lng: -73.7264324,
+      pickupTime: "",
+      passengers: 1,
+      camperNames: ["Emerson Sabbag"],
+    };
+    const timed = buildAMStops([lastHouse], "8:00 AM", { legMinutes: [1] });
+    const camp = timed[timed.length - 1];
+    expect(timed[0]?.pickupTime).toBe("8:00 AM");
+    expect(camp?.pickupTime).not.toMatch(/^8:0[0-5] AM$/);
+    const campMinutes = parseDepartureToMinutes(camp?.pickupTime);
+    const lastMinutes = parseDepartureToMinutes(timed[0]?.pickupTime);
+    expect(campMinutes).not.toBeNull();
+    expect(lastMinutes).not.toBeNull();
+    expect((campMinutes ?? 0) - (lastMinutes ?? 0)).toBeGreaterThan(15);
+  });
+
   it("does not add passenger dwell after a counselor pickup", () => {
     const timed = assignStopTimesFromLegMinutes(
       [

@@ -1,5 +1,5 @@
 import { normalizeTransportAddress } from "@/lib/transportAddressNormalize";
-import { isValidRouteCoordinate } from "@/lib/transportStopTimes";
+import { CAMP_LOCATION, haversineMiles, isValidRouteCoordinate } from "@/lib/transportStopTimes";
 import type { TransportRouteStop } from "@/lib/transportRoster";
 
 const normRiderKey = (name: string) => name.trim().toLowerCase();
@@ -204,6 +204,49 @@ export type AssignableCamper = {
   lng: number;
 };
 
+function addressHasHouseNumber(address: string): boolean {
+  return /^\d/.test(normalizeTransportAddress(address));
+}
+
+/** Slot a new house into the existing drive, instead of dumping it after the last stop. */
+export function insertStopAlongRoute(
+  stops: TransportRouteStop[],
+  newStop: TransportRouteStop,
+  dest: { lat: number; lng: number } = CAMP_LOCATION,
+): TransportRouteStop[] {
+  if (stops.length === 0) return [newStop];
+  if (!isValidRouteCoordinate(newStop.lat, newStop.lng)) {
+    const last = stops[stops.length - 1];
+    if (last && isValidRouteCoordinate(last.lat, last.lng)) {
+      return [...stops.slice(0, -1), newStop, last];
+    }
+    return [...stops, newStop];
+  }
+
+  let bestIdx = stops.length;
+  let bestExtra = Number.POSITIVE_INFINITY;
+  for (let i = 0; i <= stops.length; i++) {
+    const prev = i === 0 ? null : stops[i - 1];
+    const next = i === stops.length ? dest : stops[i];
+    if (!next || !isValidRouteCoordinate(next.lat, next.lng)) continue;
+    if (prev && !isValidRouteCoordinate(prev.lat, prev.lng)) continue;
+    const throughNew =
+      (prev ? haversineMiles(prev.lat, prev.lng, newStop.lat, newStop.lng) : 0)
+      + haversineMiles(newStop.lat, newStop.lng, next.lat, next.lng);
+    const withoutNew = prev
+      ? haversineMiles(prev.lat, prev.lng, next.lat, next.lng)
+      : 0;
+    const extra = throughNew - withoutNew;
+    if (extra < bestExtra) {
+      bestExtra = extra;
+      bestIdx = i;
+    }
+  }
+  const out = [...stops];
+  out.splice(bestIdx, 0, newStop);
+  return out;
+}
+
 function newStopForCampers(campers: AssignableCamper[]): TransportRouteStop {
   const names = campers.map((c) => c.name);
   return refreshStopRiders(
@@ -225,7 +268,7 @@ function groupCampersByNormalizedAddress(campers: AssignableCamper[]): Assignabl
   const indexByKey = new Map<string, number>();
   for (const camper of campers) {
     const key = normalizeTransportAddress(camper.address || "");
-    if (!key) {
+    if (!key || !addressHasHouseNumber(camper.address || "")) {
       groups.push([camper]);
       continue;
     }
@@ -246,12 +289,13 @@ function mergeOneHouseholdIntoStops(
 ): { next: TransportRouteStop[]; merged: boolean } {
   const camperNorm = normalizeTransportAddress(campers[0]?.address || "");
   const newNames = campers.map((c) => c.name);
-  const idx = camperNorm
+  const canShareStop = Boolean(camperNorm) && addressHasHouseNumber(campers[0]?.address || "");
+  const idx = canShareStop
     ? stops.findIndex((s) => normalizeTransportAddress(s.address) === camperNorm)
     : -1;
 
   if (idx === -1) {
-    return { next: [...stops, newStopForCampers(campers)], merged: false };
+    return { next: insertStopAlongRoute(stops, newStopForCampers(campers)), merged: false };
   }
 
   const existing = stops[idx];

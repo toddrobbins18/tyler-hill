@@ -54,13 +54,35 @@ export const estimateDrivingLegMinutes = (
 /** Haversine-based leg durations for an ordered stop list. */
 export function computeHaversineLegMinutes(stops: TransportRouteStop[]): number[] {
   const legs: number[] = [];
+  let lastValid = stops[0];
   for (let i = 1; i < stops.length; i++) {
-    const prev = stops[i - 1];
     const next = stops[i];
-    legs.push(estimateDrivingLegMinutes(prev.lat, prev.lng, next.lat, next.lng));
+    if (!next || !lastValid || !isValidRouteCoordinate(next.lat, next.lng)) {
+      legs.push(0);
+      continue;
+    }
+    legs.push(estimateDrivingLegMinutes(lastValid.lat, lastValid.lng, next.lat, next.lng));
+    lastValid = next;
   }
   return legs;
-};
+}
+
+const HAVERSINE_LEG_FLOOR_MINUTES = 6;
+const HAVERSINE_LEG_FLOOR_RATIO = 0.4;
+
+/** If road times collapse a long drive (especially last stop → camp), keep the haversine floor. */
+export function coerceLegMinutesForStops(
+  stops: TransportRouteStop[],
+  legs: number[] | null | undefined,
+): number[] {
+  const haver = computeHaversineLegMinutes(stops);
+  if (!legs || legs.length !== haver.length) return haver;
+  return legs.map((ors, i) => {
+    const h = haver[i] ?? 0;
+    if (h >= HAVERSINE_LEG_FLOOR_MINUTES && ors < h * HAVERSINE_LEG_FLOOR_RATIO) return h;
+    return Math.max(ors, 0);
+  });
+}
 
 const isCampStopAddress = (address: string, campAddress: string) => address === campAddress;
 
@@ -161,9 +183,10 @@ export const buildAMStops = (
 ): TransportRouteStop[] => {
   const opts = Array.isArray(options) ? { legMinutes: options } : options;
   const withCamp = [...stops, { ...CAMP_LOCATION, pickupTime: "", passengers: 0 }];
-  const legs = opts?.legMinutes?.length === withCamp.length - 1
+  const rawLegs = opts?.legMinutes?.length === withCamp.length - 1
     ? opts.legMinutes
     : computeHaversineLegMinutes(withCamp);
+  const legs = coerceLegMinutesForStops(withCamp, rawLegs);
   return assignStopTimesFromLegMinutes(withCamp, departureTime, legs, {
     dwellMinutesPerStop: opts?.dwellMinutesPerStop,
   });
@@ -177,9 +200,10 @@ export const buildPMStops = (
 ): TransportRouteStop[] => {
   const opts = Array.isArray(options) ? { legMinutes: options } : options;
   const withCamp = [{ ...CAMP_LOCATION, pickupTime: "", passengers: 0 }, ...stops];
-  const legs = opts?.legMinutes?.length === withCamp.length - 1
+  const rawLegs = opts?.legMinutes?.length === withCamp.length - 1
     ? opts.legMinutes
     : computeHaversineLegMinutes(withCamp);
+  const legs = coerceLegMinutesForStops(withCamp, rawLegs);
   return assignStopTimesFromLegMinutes(withCamp, departureTime, legs, {
     dwellMinutesPerStop: opts?.dwellMinutesPerStop,
   });

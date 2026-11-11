@@ -3,6 +3,7 @@ import { normalizeTransportAddress } from "@/lib/transportAddressNormalize";
 import {
   consolidateRouteStopsByAddress,
   dedupeRidersAcrossRoute,
+  insertStopAlongRoute,
   mergeCampersIntoStops,
 } from "@/lib/transportRouteStops";
 
@@ -168,12 +169,44 @@ describe("mergeCampersIntoStops", () => {
     );
 
     expect(next).toHaveLength(4);
-    expect(next.map((s) => s.camperNames?.[0])).toEqual([
-      "Existing Kid",
-      "Ava Chen",
-      "Ben Ross",
-      "Cara Diaz",
+    const names = next.flatMap((s) => s.camperNames ?? []);
+    expect(names).toEqual(expect.arrayContaining(["Existing Kid", "Ava Chen", "Ben Ross", "Cara Diaz"]));
+    expect(new Set(names).size).toBe(4);
+  });
+
+  it("adds a second circle of houses as new stops, not one clump at the end", () => {
+    const first = mergeCampersIntoStops([], [
+      { name: "Ava Chen", address: "10 Soundview Dr, Port Washington, NY", lat: 40.85, lng: -73.71 },
+      { name: "Ben Ross", address: "22 Cambridge Ave, Port Washington, NY", lat: 40.843, lng: -73.71 },
     ]);
+    expect(first.next).toHaveLength(2);
+
+    const second = mergeCampersIntoStops(first.next, [
+      { name: "Cara Diaz", address: "8 Cedar Ln, Port Washington, NY", lat: 40.841, lng: -73.722 },
+      { name: "Drew Kim", address: "3 Driftwood Dr, Port Washington, NY", lat: 40.84, lng: -73.72 },
+    ]);
+    expect(second.next).toHaveLength(4);
+    expect(second.next.every((s) => (s.camperNames?.length ?? 0) === 1)).toBe(true);
+  });
+
+  it("slots a new house into the route instead of making it the last stop before camp", () => {
+    const nearCamp = stop("Near camp", "1 Crescent Beach Rd, Glen Cove, NY", {
+      lat: 40.879,
+      lng: -73.643,
+    });
+    const farHouse = {
+      name: "Manorhaven",
+      address: "96 Barkers Point Rd, Port Washington, NY",
+      lat: 40.84258,
+      lng: -73.72643,
+      pickupTime: "TBD",
+      passengers: 1,
+      camperNames: ["Manorhaven"],
+    };
+    const ordered = insertStopAlongRoute([nearCamp], farHouse);
+    expect(ordered).toHaveLength(2);
+    expect(ordered[0]?.name).toBe("Manorhaven");
+    expect(ordered[1]?.name).toBe("Near camp");
   });
 
   it("still groups siblings who live at the same house", () => {

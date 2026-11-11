@@ -2468,7 +2468,7 @@ export default function Transport() {
           return { ...prev, added: { ...prev.added, [routeId]: tryAdded.next } };
         }
         const oneAddress =
-          new Set(assignable.map((c) => normalizeAddress(c.address)).filter(Boolean)).size <= 1;
+          new Set(assignable.map((c) => normalizeAddress(c.address)).filter(Boolean)).size === 1;
         const coreMatch = oneAddress
           ? core.find(
               (s) => normalizeAddress(s.address) === normalizeAddress(campers[0].address),
