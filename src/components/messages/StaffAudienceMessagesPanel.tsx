@@ -18,14 +18,18 @@ import { toast } from "sonner";
 import { AudienceMessageThread } from "@/components/messages/AudienceMessageThread";
 import { cn } from "@/lib/utils";
 import {
+  audienceDivisionNames,
+  audienceGroupNames,
   audienceWeekChoices,
   campersForBus,
+  campersForDivision,
   campersForGroup,
   loadAudienceCampers,
   loadBusRosters,
   publishAudienceMessage,
   type AudienceCamper,
   type AudienceKind,
+  type AudienceRosterKind,
   type BusRoster,
 } from "@/lib/audienceMessaging";
 import {
@@ -40,9 +44,10 @@ export function StaffAudienceMessagesPanel({ companyId, kind }: Props) {
   const season = currentSeason ?? new Date().getFullYear().toString();
   const [campers, setCampers] = useState<AudienceCamper[]>([]);
   const [buses, setBuses] = useState<BusRoster[]>([]);
+  const [rosterKind, setRosterKind] = useState<AudienceRosterKind>("group");
   const [target, setTarget] = useState("");
   const [weeks, setWeeks] = useState<number[]>([]);
-  const [everyone, setEveryone] = useState(false);
+  const [everyone, setEveryone] = useState(true);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [loading, setLoading] = useState(true);
@@ -86,22 +91,21 @@ export function StaffAudienceMessagesPanel({ companyId, kind }: Props) {
 
   useEffect(() => {
     setTarget("");
-  }, [kind]);
+    setEveryone(true);
+  }, [kind, rosterKind]);
 
-  const groups = useMemo(() => {
-    const names = new Set<string>();
-    for (const camper of campers) {
-      if (camper.groupName && camper.groupName !== "Unassigned") names.add(camper.groupName);
-    }
-    return [...names].sort((a, b) => a.localeCompare(b));
-  }, [campers]);
+  const rosterNames = useMemo(
+    () => (rosterKind === "division" ? audienceDivisionNames(campers) : audienceGroupNames(campers)),
+    [campers, rosterKind],
+  );
 
   const bus = buses.find((row) => row.id === target);
   const recipients = useMemo(() => {
     if (!target) return [];
-    if (kind === "group") return campersForGroup(campers, target, weeks, everyone);
-    return campersForBus(campers, bus?.camperNames ?? [], weeks, everyone);
-  }, [bus, campers, everyone, kind, target, weeks]);
+    if (kind === "bus") return campersForBus(campers, bus?.camperNames ?? [], weeks, everyone);
+    if (rosterKind === "division") return campersForDivision(campers, target, weeks, everyone);
+    return campersForGroup(campers, target, weeks, everyone);
+  }, [bus, campers, everyone, kind, rosterKind, target, weeks]);
 
   const toggleWeek = (week: number) => {
     setEveryone(false);
@@ -113,13 +117,13 @@ export function StaffAudienceMessagesPanel({ companyId, kind }: Props) {
   const send = async () => {
     if (!target || !body.trim() || recipients.length === 0 || sending) return;
     setSending(true);
-    const label = kind === "group" ? target : bus?.label ?? "Bus";
+    const label = kind === "bus" ? bus?.label ?? "Bus" : target;
     const { error } = await publishAudienceMessage(supabase, {
       companyId,
       season,
-      title: title.trim() || (kind === "group" ? `${target} update` : `${label} update`),
+      title: title.trim() || `${label} update`,
       body: body.trim(),
-      kind,
+      kind: kind === "bus" ? "bus" : "group",
       label,
       weeks,
       everyone,
@@ -153,30 +157,71 @@ export function StaffAudienceMessagesPanel({ companyId, kind }: Props) {
     <div className="grid gap-6 lg:grid-cols-[minmax(320px,1fr)_minmax(280px,380px)]">
       <Card>
         <CardHeader>
-          <CardTitle>{kind === "group" ? "Message a group" : "Message a bus"}</CardTitle>
+          <CardTitle>
+            {kind === "bus" ? "Message a bus" : rosterKind === "division" ? "Message a division" : "Message a group"}
+          </CardTitle>
           <CardDescription>
-            Parents only see this if their camper is included. Pick weeks for who is enrolled, or message everyone on that {kind}.
+            Parents only see this if their camper is included. Pick weeks for who is enrolled, or message everyone in the {kind === "bus" ? "bus" : rosterKind}.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1">
-            <p className="text-sm font-medium">{kind === "group" ? "Group" : "Bus"}</p>
+            {kind === "group" ? (
+              <div className="flex gap-2 pb-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={rosterKind === "group" ? "default" : "outline"}
+                  onClick={() => setRosterKind("group")}
+                >
+                  Groups
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={rosterKind === "division" ? "default" : "outline"}
+                  onClick={() => setRosterKind("division")}
+                >
+                  Divisions
+                </Button>
+              </div>
+            ) : null}
+            <p className="text-sm font-medium">
+              {kind === "bus" ? "Bus" : rosterKind === "division" ? "Division" : "Group"}
+            </p>
             <Select value={target} onValueChange={setTarget} disabled={loading}>
               <SelectTrigger>
-                <SelectValue placeholder={loading ? "Loading…" : kind === "group" ? "Choose a group" : "Choose a bus"} />
+                <SelectValue
+                  placeholder={
+                    loading
+                      ? "Loading…"
+                      : kind === "bus"
+                        ? "Choose a bus"
+                        : rosterKind === "division"
+                          ? "Choose a division"
+                          : "Choose a group"
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
-                {kind === "group"
-                  ? groups.map((name) => (
-                      <SelectItem key={name} value={name}>{name}</SelectItem>
-                    ))
-                  : buses.map((row) => (
+                {kind === "bus"
+                  ? buses.map((row) => (
                       <SelectItem key={row.id} value={row.id}>{row.label}</SelectItem>
+                    ))
+                  : rosterNames.map((name) => (
+                      <SelectItem key={name} value={name}>{name}</SelectItem>
                     ))}
               </SelectContent>
             </Select>
             {kind === "bus" && !loading && buses.length === 0 ? (
               <p className="text-xs text-muted-foreground">No saved bus routes for this season yet.</p>
+            ) : null}
+            {kind === "group" && !loading && rosterNames.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {rosterKind === "division"
+                  ? "No divisions assigned on campers yet."
+                  : "No groups assigned on campers yet."}
+              </p>
             ) : null}
           </div>
 
@@ -189,7 +234,7 @@ export function StaffAudienceMessagesPanel({ companyId, kind }: Props) {
                 variant={everyone ? "default" : "outline"}
                 onClick={() => setEveryone((value) => !value)}
               >
-                Message everyone {kind === "group" ? "in this group" : "on this bus"}
+                Message everyone {kind === "bus" ? "on this bus" : rosterKind === "division" ? "in this division" : "in this group"}
               </Button>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -241,7 +286,7 @@ export function StaffAudienceMessagesPanel({ companyId, kind }: Props) {
           <CardTitle className="text-base">Who gets it</CardTitle>
           <CardDescription>
             {recipients.length} camper{recipients.length === 1 ? "" : "s"}
-            {target ? "" : " — choose a group or bus"}
+            {target ? "" : kind === "bus" ? " — choose a bus" : rosterKind === "division" ? " — choose a division" : " — choose a group"}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 max-h-[28rem] overflow-auto">
