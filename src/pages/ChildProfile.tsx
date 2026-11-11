@@ -25,6 +25,7 @@ import PersonThreeDayOutlook from "@/components/PersonThreeDayOutlook";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { appointmentsEnabledForCompany, isDayCampCompany } from "@/lib/camps";
 import { getTutoringTherapyServiceColor } from "@/lib/tutoringTherapyServiceTypes";
+import { formatTime12Hour } from "@/lib/utils";
 import { format } from "date-fns";
 import { camperAssignmentDisplay, camperAssignmentLabel } from "@/lib/camperGroupDisplay";
 import { resolveEnrolledWeeks } from "@/lib/enrolledWeeks";
@@ -1224,7 +1225,7 @@ export default function ChildProfile() {
                           {enrollment.schedule_periods && enrollment.schedule_periods.length > 0 && (
                             <div className="flex flex-wrap gap-2 mb-2">
                               {enrollment.schedule_periods.map((period: string, idx: number) => (
-                                <Badge key={idx} variant="secondary">{period}</Badge>
+                                <Badge key={idx} variant="secondary">{formatTime12Hour(period) || period}</Badge>
                               ))}
                             </div>
                           )}

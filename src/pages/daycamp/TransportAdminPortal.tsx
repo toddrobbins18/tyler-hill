@@ -48,6 +48,8 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { FrontOfficeBackLink } from "@/components/daycamp/FrontOfficeBackLink";
+import { AmPmTimeInput } from "@/components/ui/AmPmTimeInput";
+import { formatTime12Hour } from "@/lib/utils";
 
 type Camper = { id: string; name: string; group_name: string | null };
 
@@ -268,7 +270,7 @@ export default function TransportAdminPortal() {
                 key={p.id}
                 title={p.camperName}
                 subtitle={`Pickup · ${PICKUP_CHANGE_LABELS[p.change_type] ?? p.change_type}`}
-                detail={[p.familyName, p.pickup_time, p.notes].filter(Boolean).join(" · ")}
+                detail={[p.familyName, formatTime12Hour(p.pickup_time), p.notes].filter(Boolean).join(" · ")}
                 onApprove={() => void approvePickup(p.id)}
               />
             ))}
@@ -277,7 +279,7 @@ export default function TransportAdminPortal() {
                 key={a.id}
                 title={a.camperName}
                 subtitle={`Absence · ${ABSENCE_TYPE_LABELS[a.absence_type] ?? a.absence_type}`}
-                detail={[a.familyName, a.reason].filter(Boolean).join(" · ")}
+                detail={[a.familyName, formatTime12Hour(a.arrival_time), a.reason].filter(Boolean).join(" · ")}
                 onApprove={() => void approveAbsence(a.id)}
               />
             ))}
@@ -718,7 +720,7 @@ function StaffSwimForm({
           />
           <div className="grid grid-cols-2 gap-2">
             <Input type="date" value={lessonDate} onChange={(e) => setLessonDate(e.target.value)} required />
-            <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} required />
+            <AmPmTimeInput value={time} onChange={setTime} />
           </div>
           <Input value={instructor} onChange={(e) => setInstructor(e.target.value)} placeholder="Instructor (optional)" />
           <label className="flex items-center gap-2 text-sm">

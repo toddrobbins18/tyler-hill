@@ -34,6 +34,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
+import { formatTime12Hour } from "@/lib/utils";
 
 export default function FrontOfficeDashboard() {
   const { currentCompany } = useCompany();
@@ -291,7 +292,7 @@ export default function FrontOfficeDashboard() {
                       <p className="text-xs text-amber-800">Pickup · {PICKUP_CHANGE_LABELS[p.change_type] ?? p.change_type}</p>
                       <p className="text-sm text-muted-foreground">
                         {p.familyName}
-                        {p.pickup_time ? ` · ${p.pickup_time}` : ""}
+                        {p.pickup_time ? ` · ${formatTime12Hour(p.pickup_time)}` : ""}
                         {p.pickup_person_name ? ` · ${p.pickup_person_name}` : ""}
                       </p>
                       {p.notes ? <p className="text-xs italic mt-1">{p.notes}</p> : null}
@@ -313,7 +314,7 @@ export default function FrontOfficeDashboard() {
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {a.familyName}
-                        {a.arrival_time ? ` · Arrives ${a.arrival_time}` : ""}
+                        {a.arrival_time ? ` · Arrives ${formatTime12Hour(a.arrival_time)}` : ""}
                         {a.reason ? ` · ${a.reason}` : ""}
                       </p>
                     </div>

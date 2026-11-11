@@ -17,7 +17,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CalendarIcon, Plus, Search, Edit2, Trash2, Clock, User, MapPin, Stethoscope } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatTime12Hour } from "@/lib/utils";
+import { AmPmTimeInput } from "@/components/ui/AmPmTimeInput";
 import { appointmentsEnabledForCompany } from "@/lib/camps";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
 
@@ -440,7 +441,7 @@ export default function Appointments() {
                             {apt.appointment_time && (
                               <span className="text-sm text-muted-foreground flex items-center gap-1">
                                 <Clock className="h-3 w-3" />
-                                {apt.appointment_time}
+                                {formatTime12Hour(apt.appointment_time)}
                               </span>
                             )}
                           </div>
@@ -629,14 +630,12 @@ export default function Appointments() {
 
             <div className="grid grid-cols-2 gap-4">
               {/* Time */}
-              <div className="space-y-2">
-                <Label>Time</Label>
-                <Input
-                  type="time"
-                  value={appointmentTime}
-                  onChange={(e) => setAppointmentTime(e.target.value)}
-                />
-              </div>
+              <AmPmTimeInput
+                label="Time"
+                optional
+                value={appointmentTime}
+                onChange={setAppointmentTime}
+              />
 
               {/* Status */}
               <div className="space-y-2">

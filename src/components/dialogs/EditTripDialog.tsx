@@ -12,6 +12,7 @@ import { StaffMultiSelect } from "@/components/StaffMultiSelect";
 import { notifyStaffAssignment } from "@/lib/notifyStaffAssignment";
 import { useCompany } from "@/contexts/CompanyContext";
 import { toast } from "sonner";
+import { AmPmTimeInput } from "@/components/ui/AmPmTimeInput";
 import TripAttachments from "@/components/TripAttachments";
 
 interface EditTripDialogProps {
@@ -235,25 +236,21 @@ export default function EditTripDialog({ tripId, open, onOpenChange, onSuccess }
           )}
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="departure_time">Departure Time</Label>
-              <Input
-                id="departure_time"
-                type="time"
-                value={formData.departure_time}
-                onChange={(e) => setFormData({ ...formData, departure_time: e.target.value })}
-              />
-            </div>
+            <AmPmTimeInput
+              id="departure_time"
+              label="Departure Time"
+              optional
+              value={formData.departure_time}
+              onChange={(departure_time) => setFormData({ ...formData, departure_time })}
+            />
 
-            <div>
-              <Label htmlFor="return_time">Return Time</Label>
-              <Input
-                id="return_time"
-                type="time"
-                value={formData.return_time}
-                onChange={(e) => setFormData({ ...formData, return_time: e.target.value })}
-              />
-            </div>
+            <AmPmTimeInput
+              id="return_time"
+              label="Return Time"
+              optional
+              value={formData.return_time}
+              onChange={(return_time) => setFormData({ ...formData, return_time })}
+            />
           </div>
 
           <StaffMultiSelect

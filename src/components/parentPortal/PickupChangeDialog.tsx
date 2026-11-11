@@ -27,6 +27,7 @@ import {
   SAME_DAY_CUTOFF_MESSAGE,
 } from "@/lib/parentPortalCutoff";
 import { CHANGE_TYPES, type Camper } from "@/lib/parentPortalConstants";
+import { AmPmTimeInput } from "@/components/ui/AmPmTimeInput";
 
 type PickupChangeDialogProps = {
   companyId: string;
@@ -156,10 +157,12 @@ export function PickupChangeDialog({
               </Select>
             </div>
           </div>
-          <div className="space-y-2">
-            <Label>Pickup time (optional)</Label>
-            <Input type="time" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)} />
-          </div>
+          <AmPmTimeInput
+            label="Pickup time"
+            optional
+            value={pickupTime}
+            onChange={setPickupTime}
+          />
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Person picking up</Label>

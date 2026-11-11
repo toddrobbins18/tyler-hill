@@ -16,6 +16,7 @@ import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
 import { StaffMultiSelect } from "@/components/StaffMultiSelect";
+import { AmPmTimeInput } from "@/components/ui/AmPmTimeInput";
 import { notifyStaffAssignment } from "@/lib/notifyStaffAssignment";
 
 interface AddTripDialogProps {
@@ -261,7 +262,7 @@ export default function AddTripDialog({ onSuccess }: AddTripDialogProps) {
                   <FormItem>
                     <FormLabel>Departure Time</FormLabel>
                     <FormControl>
-                      <Input type="time" {...field} />
+                      <AmPmTimeInput optional value={field.value} onChange={field.onChange} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -275,7 +276,7 @@ export default function AddTripDialog({ onSuccess }: AddTripDialogProps) {
                   <FormItem>
                     <FormLabel>Return Time</FormLabel>
                     <FormControl>
-                      <Input type="time" {...field} />
+                      <AmPmTimeInput optional value={field.value} onChange={field.onChange} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

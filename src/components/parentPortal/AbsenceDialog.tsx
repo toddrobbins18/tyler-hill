@@ -27,6 +27,7 @@ import {
   SAME_DAY_CUTOFF_MESSAGE,
 } from "@/lib/parentPortalCutoff";
 import { ABSENCE_TYPES, type Camper } from "@/lib/parentPortalConstants";
+import { AmPmTimeInput } from "@/components/ui/AmPmTimeInput";
 
 type AbsenceDialogProps = {
   companyId: string;
@@ -149,10 +150,12 @@ export function AbsenceDialog({
             </div>
           </div>
           {(type === "late_arrival" || type === "leaving_early") && (
-            <div className="space-y-2">
-              <Label>{type === "late_arrival" ? "Arrival time" : "Leaving time"}</Label>
-              <Input type="time" value={arrivalTime} onChange={(e) => setArrivalTime(e.target.value)} />
-            </div>
+            <AmPmTimeInput
+              label={type === "late_arrival" ? "Arrival time" : "Leaving time"}
+              optional
+              value={arrivalTime}
+              onChange={setArrivalTime}
+            />
           )}
           <div className="space-y-2">
             <Label>Reason</Label>

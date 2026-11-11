@@ -21,6 +21,7 @@ import { Switch } from "@/components/ui/switch";
 import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, addDays } from 'date-fns';
 import { formatTime12Hour } from "@/lib/utils";
+import { AmPmTimeInput } from "@/components/ui/AmPmTimeInput";
 import { syncLinkedTripsFromFieldTrip } from "@/lib/syncLinkedTripFromFieldTrip";
 import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -976,23 +977,19 @@ export default function ActivitiesFieldTrips() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Depart from Camp (optional)</Label>
-              <Input
-                type="time"
-                value={formData.depart_from_camp}
-                onChange={(e) => setFormData({ ...formData, depart_from_camp: e.target.value })}
-              />
-            </div>
+            <AmPmTimeInput
+              label="Depart from Camp"
+              optional
+              value={formData.depart_from_camp}
+              onChange={(depart_from_camp) => setFormData({ ...formData, depart_from_camp })}
+            />
 
-            <div className="space-y-2">
-              <Label>Depart from Activity (optional)</Label>
-              <Input
-                type="time"
-                value={formData.depart_from_activity}
-                onChange={(e) => setFormData({ ...formData, depart_from_activity: e.target.value })}
-              />
-            </div>
+            <AmPmTimeInput
+              label="Depart from Activity"
+              optional
+              value={formData.depart_from_activity}
+              onChange={(depart_from_activity) => setFormData({ ...formData, depart_from_activity })}
+            />
 
             <div className="space-y-2">
               <Label>Location (optional)</Label>

@@ -6,17 +6,23 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // Convert 24-hour time to 12-hour format with AM/PM
-export function formatTime12Hour(time24: string): string {
-  if (!time24) return '';
-  // If already contains AM/PM, return as is
-  if (time24.toUpperCase().includes('AM') || time24.toUpperCase().includes('PM')) {
+export function formatTime12Hour(time24?: string | null): string {
+  if (!time24) return "";
+  const labeled = time24.trim().match(/^(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?\s*(AM|PM)\s*$/i);
+  if (labeled) {
+    const hour = parseInt(labeled[1], 10);
+    const minute = labeled[2];
+    const period = labeled[3].toUpperCase();
+    return `${hour}:${minute} ${period}`;
+  }
+  if (time24.toUpperCase().includes("AM") || time24.toUpperCase().includes("PM")) {
     return time24;
   }
-  const parts = time24.split(':');
+  const parts = time24.split(":");
   if (parts.length < 2) return time24;
   const hour = parseInt(parts[0], 10);
   if (isNaN(hour)) return time24;
-  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const ampm = hour >= 12 ? "PM" : "AM";
   const hour12 = hour % 12 || 12;
   return `${hour12}:${parts[1]} ${ampm}`;
 }

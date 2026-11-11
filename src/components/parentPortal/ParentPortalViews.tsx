@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { formatCampDateTime } from "@/lib/campTime";
+import { formatTime12Hour } from "@/lib/utils";
 import {
   absenceTypeLabel,
   camperInitials,
@@ -306,7 +307,7 @@ export function ParentPickupsView({
                   </div>
                   <div>
                     <span className="pp-text-muted">Pickup time</span>
-                    <p className="font-medium">{p.pickup_time || "Not specified"}</p>
+                    <p className="font-medium">{formatTime12Hour(p.pickup_time) || "Not specified"}</p>
                   </div>
                   {p.pickup_person_name ? (
                     <div className="sm:col-span-2">
@@ -347,7 +348,7 @@ export function ParentPickupsView({
               <SubmissionCard
                 key={p.id}
                 title={`${camperName(p.camper_id)} · ${changeTypeLabel(p.change_type)}`}
-                meta={`${p.change_date}${p.pickup_time ? ` at ${p.pickup_time}` : ""}${
+                meta={`${p.change_date}${p.pickup_time ? ` at ${formatTime12Hour(p.pickup_time)}` : ""}${
                   p.pickup_person_name ? ` · ${p.pickup_person_name}` : ""
                 }`}
                 detail={p.notes ?? undefined}
@@ -407,7 +408,7 @@ export function ParentAbsencesView({
             <SubmissionCard
               key={a.id}
               title={`${camperName(a.camper_id)} · ${absenceTypeLabel(a.absence_type)}`}
-              meta={`${a.absence_date}${a.arrival_time ? ` · ${a.arrival_time}` : ""}`}
+              meta={`${a.absence_date}${a.arrival_time ? ` · ${formatTime12Hour(a.arrival_time)}` : ""}`}
               detail={a.reason ? `Reason: ${a.reason}` : a.notes ?? undefined}
               status={a.status}
             />

@@ -1,5 +1,5 @@
 import { Bus, Clock, Waves } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatTime12Hour } from "@/lib/utils";
 import {
   absenceTypeLabel,
   changeTypeLabel,
@@ -42,7 +42,7 @@ export function TodayTimeline({
   )) {
     items.push({
       id: `absence-${absence.id}`,
-      timeLabel: absence.arrival_time || "All day",
+      timeLabel: formatTime12Hour(absence.arrival_time) || "All day",
       title: `${camperName(absence.camper_id)} · ${absenceTypeLabel(absence.absence_type)}`,
       detail: absence.reason ?? undefined,
       icon: Clock,
@@ -55,7 +55,7 @@ export function TodayTimeline({
   )) {
     items.push({
       id: `pickup-${pickup.id}`,
-      timeLabel: pickup.pickup_time || "Scheduled",
+      timeLabel: formatTime12Hour(pickup.pickup_time) || "Scheduled",
       title: `${camperName(pickup.camper_id)} · ${changeTypeLabel(pickup.change_type)}`,
       detail: pickup.pickup_person_name
         ? `Pickup by ${pickup.pickup_person_name}`

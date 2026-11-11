@@ -12,6 +12,7 @@ import {
   PARENT_TRANSPORT_CHANGE_SHEET_BUS,
   PARENT_TRANSPORT_STOP_LABEL,
 } from "@/lib/transportParentTransport";
+import { formatTime12Hour } from "@/lib/utils";
 
 export interface TransportRouteStop {
   name: string;
@@ -259,7 +260,7 @@ export async function fetchTransportExceptions(
     const notes = (row as { notes?: string }).notes;
     const pickupTime = (row as { pickup_time?: string }).pickup_time;
     const pickupPerson = (row as { pickup_person_name?: string }).pickup_person_name;
-    const detail = [pickupTime, pickupPerson, notes].filter(Boolean).join(" · ") || undefined;
+    const detail = [formatTime12Hour(pickupTime), pickupPerson, notes].filter(Boolean).join(" · ") || undefined;
     add({
       source: pickupChangeSource(changeType),
       camperName: name,
@@ -397,7 +398,7 @@ export async function fetchTransportExceptionsForReport(
     const notes = (row as { notes?: string }).notes;
     const pickupTime = (row as { pickup_time?: string }).pickup_time;
     const pickupPerson = (row as { pickup_person_name?: string }).pickup_person_name;
-    const detail = [pickupTime, pickupPerson, notes].filter(Boolean).join(" · ") || undefined;
+    const detail = [formatTime12Hour(pickupTime), pickupPerson, notes].filter(Boolean).join(" · ") || undefined;
     add({
       source: pickupChangeSource(changeType),
       camperName: name,

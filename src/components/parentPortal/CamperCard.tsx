@@ -1,5 +1,5 @@
 import { ChevronRight } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatTime12Hour } from "@/lib/utils";
 import {
   camperDisplayGroup,
   camperInitials,
@@ -134,7 +134,7 @@ export function CamperCard({
             <div className="flex justify-between gap-3">
               <dt className="text-slate-500">Pickup change</dt>
               <dd className="text-right font-semibold text-slate-800">
-                {pickup.pickup_time || "Time TBD"}
+                {formatTime12Hour(pickup.pickup_time) || "Time TBD"}
                 {pickup.pickup_person_name ? ` · ${pickup.pickup_person_name}` : ""}
               </dd>
             </div>

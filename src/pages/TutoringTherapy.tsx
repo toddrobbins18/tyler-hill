@@ -13,11 +13,20 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Calendar as CalendarIcon, Plus, Pencil, Trash2, Search, X, Filter } from "lucide-react";
+import { Calendar as CalendarIcon, Plus, Pencil, Trash2, Search, X, Filter, Repeat } from "lucide-react";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useSeasonContext } from "@/contexts/SeasonContext";
 import { sortDivisionsAlternatingGender } from "@/lib/divisionUtils";
 import { usePermissions } from "@/hooks/usePermissions";
+import { isDayCampCompany, isTimberLakeCamp } from "@/lib/camps";
+import {
+  splitTutoringSchedulePeriods,
+  tutoringSchedulePeriodsForSave,
+  TUTORING_WEEKDAYS_ALL,
+  TUTORING_WEEKDAYS_DAY_CAMP,
+} from "@/lib/amPmTime";
+import { formatTime12Hour } from "@/lib/utils";
+import { AmPmTimeInput } from "@/components/ui/AmPmTimeInput";
 import {
   getTutoringTherapyServiceColor,
   getTutoringTherapyServiceTypes,
@@ -29,6 +38,7 @@ interface Enrollment {
   service_type: string;
   instructor: string | null;
   schedule_periods: string[];
+  weekdays: string[] | null;
   start_date: string | null;
   end_date: string | null;
   notes: string | null;
@@ -70,11 +80,16 @@ const TutoringTherapy = () => {
     service_type: "",
     instructor: "",
     schedule_periods: [] as string[],
+    session_time: "",
+    recurring: false,
     weekdays: [] as string[],
     start_date: undefined as Date | undefined,
     end_date: undefined as Date | undefined,
     notes: "",
   });
+  const timberLake = isTimberLakeCamp(currentCompany?.slug);
+  const dayCamp = isDayCampCompany(currentCompany);
+  const weekdayOptions = dayCamp ? TUTORING_WEEKDAYS_DAY_CAMP : TUTORING_WEEKDAYS_ALL;
 
   useEffect(() => {
     fetchEnrollments();
@@ -196,14 +211,23 @@ const TutoringTherapy = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const recurring = timberLake || formData.recurring;
+    if (recurring && formData.weekdays.length === 0) {
+      toast.error("Pick at least one weekday for a repeating enrollment");
+      return;
+    }
 
     try {
         const enrollmentData = {
           child_id: formData.child_id,
           service_type: formData.service_type,
           instructor: formData.instructor || null,
-          schedule_periods: formData.schedule_periods,
-          weekdays: formData.weekdays,
+          schedule_periods: tutoringSchedulePeriodsForSave({
+            useClockTime: dayCamp,
+            clockTime: formData.session_time,
+            periods: formData.schedule_periods,
+          }),
+          weekdays: recurring ? formData.weekdays : [],
           start_date: formData.start_date ? format(formData.start_date, "yyyy-MM-dd") : null,
           end_date: formData.end_date ? format(formData.end_date, "yyyy-MM-dd") : null,
           notes: formData.notes || null,
@@ -239,6 +263,8 @@ const TutoringTherapy = () => {
         service_type: "",
         instructor: "",
         schedule_periods: [],
+        session_time: "",
+        recurring: false,
         weekdays: [],
         start_date: undefined,
         end_date: undefined,
@@ -249,14 +275,17 @@ const TutoringTherapy = () => {
   };
 
   const handleEdit = (enrollment: Enrollment) => {
+    const split = splitTutoringSchedulePeriods(enrollment.schedule_periods || []);
     setFormData({
       child_id: enrollment.child_id,
       service_type: enrollment.service_type,
       instructor: enrollment.instructor || "",
-      schedule_periods: enrollment.schedule_periods || [],
+      schedule_periods: split.periods,
+      session_time: split.time,
+      recurring: (enrollment.weekdays || []).length > 0,
       weekdays: enrollment.weekdays || [],
-      start_date: enrollment.start_date ? new Date(enrollment.start_date) : undefined,
-      end_date: enrollment.end_date ? new Date(enrollment.end_date) : undefined,
+      start_date: enrollment.start_date ? new Date(enrollment.start_date + "T00:00:00") : undefined,
+      end_date: enrollment.end_date ? new Date(enrollment.end_date + "T00:00:00") : undefined,
       notes: enrollment.notes || "",
     });
     setEditingEnrollment(enrollment);
@@ -408,28 +437,37 @@ const TutoringTherapy = () => {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Schedule Periods</Label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {periodOptions.map((period) => (
-                      <Button
-                        key={period}
-                        type="button"
-                        variant={formData.schedule_periods.includes(period) ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => toggleSchedulePeriod(period)}
-                      >
-                        {period}
-                      </Button>
-                    ))}
+                {dayCamp ? (
+                  <AmPmTimeInput
+                    label="Time"
+                    optional
+                    value={formData.session_time}
+                    onChange={(session_time) => setFormData({ ...formData, session_time })}
+                  />
+                ) : (
+                  <div className="space-y-2">
+                    <Label>Schedule Periods</Label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {periodOptions.map((period) => (
+                        <Button
+                          key={period}
+                          type="button"
+                          variant={formData.schedule_periods.includes(period) ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => toggleSchedulePeriod(period)}
+                        >
+                          {period}
+                        </Button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                {currentCompany?.slug === 'timber-lake-camp' ? (
+                {timberLake ? (
                   <div className="space-y-2">
                     <Label>Weekdays</Label>
                     <div className="flex flex-wrap gap-2">
-                      {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day) => (
+                      {TUTORING_WEEKDAYS_ALL.map((day) => (
                         <Badge
                           key={day}
                           variant={formData.weekdays.includes(day) ? "default" : "outline"}
@@ -442,45 +480,88 @@ const TutoringTherapy = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-4">
+                  <>
                     <div className="space-y-2">
-                      <Label>Start Date</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" className="w-full justify-start text-left font-normal">
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {formData.start_date ? format(formData.start_date, "PPP") : "Pick a date"}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <Calendar
-                            mode="single"
-                            selected={formData.start_date}
-                            onSelect={(date) => setFormData({ ...formData, start_date: date })}
-                          />
-                        </PopoverContent>
-                      </Popover>
+                      <Label>Schedule type</Label>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant={!formData.recurring ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setFormData({ ...formData, recurring: false, weekdays: [] })}
+                        >
+                          One-time
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={formData.recurring ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setFormData({ ...formData, recurring: true })}
+                        >
+                          <Repeat className="mr-1.5 h-3.5 w-3.5" />
+                          Repeat weekly
+                        </Button>
+                      </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label>End Date</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" className="w-full justify-start text-left font-normal">
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {formData.end_date ? format(formData.end_date, "PPP") : "Pick a date"}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <Calendar
-                            mode="single"
-                            selected={formData.end_date}
-                            onSelect={(date) => setFormData({ ...formData, end_date: date })}
-                          />
-                        </PopoverContent>
-                      </Popover>
+                    {formData.recurring ? (
+                      <div className="space-y-2">
+                        <Label>Repeats on</Label>
+                        <div className="flex flex-wrap gap-2">
+                          {weekdayOptions.map((day) => (
+                            <Badge
+                              key={day}
+                              variant={formData.weekdays.includes(day) ? "default" : "outline"}
+                              className="cursor-pointer"
+                              onClick={() => toggleWeekday(day)}
+                            >
+                              {day}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>{formData.recurring ? "Starts" : "Date"}</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full justify-start text-left font-normal">
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {formData.start_date ? format(formData.start_date, "PPP") : "Pick a date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
+                            <Calendar
+                              mode="single"
+                              selected={formData.start_date}
+                              onSelect={(date) => setFormData({ ...formData, start_date: date })}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>{formData.recurring ? "Ends" : "End date"}</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full justify-start text-left font-normal">
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {formData.end_date ? format(formData.end_date, "PPP") : formData.recurring ? "Pick a date" : "Optional"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
+                            <Calendar
+                              mode="single"
+                              selected={formData.end_date}
+                              onSelect={(date) => setFormData({ ...formData, end_date: date })}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
                     </div>
-                  </div>
+                  </>
                 )}
 
                 <div className="space-y-2">
@@ -645,15 +726,15 @@ const TutoringTherapy = () => {
                             <div className="flex flex-wrap gap-1">
                               {enrollment.schedule_periods.map((period) => (
                                 <Badge key={period} variant="outline" className="text-xs">
-                                  {period}
+                                  {formatTime12Hour(period) || period}
                                 </Badge>
                               ))}
                             </div>
                           )}
 
-                          {currentCompany?.slug === 'timber-lake-camp' && enrollment.weekdays && enrollment.weekdays.length > 0 && (
+                          {enrollment.weekdays && enrollment.weekdays.length > 0 && (
                             <div className="text-sm text-muted-foreground">
-                              {enrollment.weekdays.join(', ')}
+                              Repeats {enrollment.weekdays.join(", ")}
                             </div>
                           )}
 

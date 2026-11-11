@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Users, Calendar, Clock, UserCheck, Waves, Link2, Trash2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatCampDateTime } from "@/lib/campTime";
+import { formatTime12Hour } from "@/lib/utils";
 import SearchableChildSelect from "@/components/SearchableChildSelect";
 import { approveDismissalSwim, DISMISSAL_REALTIME_TABLES } from "@/lib/dismissalDashboard";
 import { linkFamilyChildrenByGuardianEmail } from "@/lib/parentFamilyLink";
@@ -504,7 +505,7 @@ export default function ParentPortalDashboard() {
                         <TableCell>{p.camperName}</TableCell>
                         <TableCell>{CHANGE_TYPES[p.change_type] ?? p.change_type}</TableCell>
                         <TableCell className="text-sm text-muted-foreground max-w-xs">
-                          {p.pickup_time ? `${p.pickup_time} · ` : ""}
+                          {p.pickup_time ? `${formatTime12Hour(p.pickup_time)} · ` : ""}
                           {p.pickup_person_name ?? ""}
                           {p.notes ? ` · ${p.notes}` : ""}
                         </TableCell>
