@@ -3,6 +3,8 @@ export type TransportBoardSettings = {
   /** Add N minutes at each passenger stop when estimating pickup times. */
   stopPickupMinutes: number;
   stopPickupEnabled: boolean;
+  /** When false, counselor pickup is listed but first camper starts the clock (and TBT). */
+  includeCounselorInRouteTime: boolean;
   /** Per-route normalized address keys — pinned pickups stay put when optimizing. */
   pinnedStopsByRoute?: Record<number, string[]>;
 };
@@ -10,6 +12,7 @@ export type TransportBoardSettings = {
 export const DEFAULT_TRANSPORT_BOARD_SETTINGS: TransportBoardSettings = {
   stopPickupMinutes: 2,
   stopPickupEnabled: true,
+  includeCounselorInRouteTime: false,
 };
 
 export function normalizeTransportBoardSettings(
@@ -30,6 +33,7 @@ export function normalizeTransportBoardSettings(
 
   return {
     stopPickupEnabled: raw?.stopPickupEnabled !== false,
+    includeCounselorInRouteTime: raw?.includeCounselorInRouteTime === true,
     stopPickupMinutes: Number.isFinite(minutes) && minutes >= 0 && minutes <= 15
       ? Math.round(minutes)
       : DEFAULT_TRANSPORT_BOARD_SETTINGS.stopPickupMinutes,

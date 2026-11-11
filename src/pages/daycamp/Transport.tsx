@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { NotePresetButtons } from "@/components/NotePresetButtons";
 import { PARENT_TRANSPORT_NOTE_PRESETS } from "@/lib/transportNotePresets";
 import { TransportRouteMap } from "@/components/TransportRouteMap";
-import { Bus, MapPin, Users, Plus, FileText, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Eye, EyeOff, History, LayoutTemplate, Database, Car, CornerDownRight, Clock, Undo2, FlaskConical, CheckCircle2, Pin, Search } from "lucide-react";
+import { Bus, MapPin, Users, Plus, FileText, Map as MapIcon, Route as RouteIcon, UserRound, Sun, Moon, Upload, Download, UserPlus, X, Sparkles, TrendingDown, ArrowRight, Pencil, Trash2, Maximize2, Minimize2, Eye, EyeOff, History, LayoutTemplate, Database, Car, CornerDownRight, Clock, Undo2, FlaskConical, CheckCircle2, Pin, Search, Printer } from "lucide-react";
 import { pickFirst } from "@/lib/csv";
 import { isSpreadsheetFileName, loadSpreadsheetRowsFromFile } from "@/lib/spreadsheetImport";
 import {
@@ -129,9 +129,18 @@ import {
   isCounselorPickupStop,
   isValidBusCounselorPickup,
   parseBusCounselorPickup,
+  routeStopsForTiming,
   withCounselorPickupStops,
+  withUntimedCounselorDisplay,
   type BusCounselorPickup,
 } from "@/lib/transportCounselorPickup";
+import {
+  buildTurnByTurnPrintHtml,
+  downloadTurnByTurnHtml,
+  formatTurnDistance,
+  formatTurnDuration,
+  openTurnByTurnPrintWindow,
+} from "@/lib/transportTurnByTurnPrint";
 import {
   applyHistoricalAssignments,
   assignCampersDuringOptimize,
@@ -418,7 +427,7 @@ function restoreStopCampersToUnplotted(
 const initialUnplottedCampers: UnplottedCamper[] = [];
 
 const GEOCODE_CACHE_KEY = "transport-geocode-cache-v1";
-const ROUTE_LEG_CACHE_KEY = "transport-route-leg-cache-v2";
+const ROUTE_LEG_CACHE_KEY = "transport-route-leg-cache-v3";
 const OPTIMIZE_UNDO_KEY = "transport-optimize-undo-v1";
 
 type OptimizeUndoSnapshot = {
@@ -1721,19 +1730,35 @@ export default function Transport() {
   };
 
   const handleShowDirections = async (route: Route) => {
-    if (!route.stops || route.stops.length < 2) {
+    const directionStops = routeStopsForTiming(route.stops, boardSettings.includeCounselorInRouteTime)
+      .filter((s) => isValidRouteCoordinate(s.lat, s.lng));
+    if (directionStops.length < 2) {
       toast({ title: "Not enough stops", description: "Add at least two stops to generate directions.", variant: "destructive" });
       return;
     }
+    const stopLabels = directionStops.map((s) => {
+      if (s.address === CAMP_LOCATION.address) return "Camp";
+      if (isCounselorPickupStop(s)) return s.name || "Bus counselor";
+      return s.camperNames?.join(", ") || s.name;
+    });
+    const mapStops = directionStops.map((s) => ({
+      name: s.name,
+      address: s.address,
+      lat: s.lat,
+      lng: s.lng,
+      pickupTime: s.pickupTime,
+      passengers: s.passengers,
+      camperNames: s.camperNames,
+    }));
     setDirectionsDialog({
       open: true, routeId: route.id, routeName: route.name, bus: route.bus, color: route.color,
       loading: true, error: null,
       totalDistanceMi: 0, totalDurationSec: 0, steps: [],
-      stopLabels: route.stops.map(s => s.camperNames?.join(", ") || s.name),
-      mapStops: route.stops.map(s => ({ name: s.name, address: s.address, lat: s.lat, lng: s.lng, pickupTime: s.pickupTime, passengers: s.passengers, camperNames: s.camperNames })),
+      stopLabels,
+      mapStops,
     });
     try {
-      const coordinates = route.stops.map(s => [s.lng, s.lat] as [number, number]);
+      const coordinates = directionStops.map(s => [s.lng, s.lat] as [number, number]);
       const { data, error } = await supabase.functions.invoke("route-optimizer", {
         body: { action: "directions", coordinates },
       });
@@ -1800,10 +1825,15 @@ export default function Transport() {
     toast({ title: "Stop reordered", description: `Moved "${moved.camperNames?.join(", ") || moved.name}" in this route.` });
   };
 
+  const includeCounselorInRouteTime = boardSettings.includeCounselorInRouteTime;
+
   const routeLegMinutesById = useMemo(() => {
     const map = new Map<number, number[]>();
     for (const meta of routeMeta) {
-      const core = withCounselorPickupStops(getEffectiveCore(meta.id), meta.counselorPickup, timeOfDay);
+      const core = routeStopsForTiming(
+        withCounselorPickupStops(getEffectiveCore(meta.id), meta.counselorPickup, timeOfDay),
+        includeCounselorInRouteTime,
+      );
       const orderedStops =
         timeOfDay === "am"
           ? [...core, { ...CAMP_LOCATION, pickupTime: "", passengers: 0 }]
@@ -1817,12 +1847,15 @@ export default function Transport() {
       }
     }
     return map;
-  }, [routeMeta, getEffectiveCore, timeOfDay, routeLegMinutesCache]);
+  }, [routeMeta, getEffectiveCore, timeOfDay, routeLegMinutesCache, includeCounselorInRouteTime]);
 
   const routesNeedingLegDurations = useMemo(() => {
     const pending: { sig: string; coords: [number, number][] }[] = [];
     for (const meta of routeMeta) {
-      const core = withCounselorPickupStops(getEffectiveCore(meta.id), meta.counselorPickup, timeOfDay);
+      const core = routeStopsForTiming(
+        withCounselorPickupStops(getEffectiveCore(meta.id), meta.counselorPickup, timeOfDay),
+        includeCounselorInRouteTime,
+      );
       const orderedStops =
         timeOfDay === "am"
           ? [...core, { ...CAMP_LOCATION, pickupTime: "", passengers: 0 }]
@@ -1847,6 +1880,7 @@ export default function Transport() {
     todayOverrides,
     excludedCampers,
     routeLegMinutesCache,
+    includeCounselorInRouteTime,
   ]);
 
   // Road drive times from ORS (cached). Haversine is only the fallback until this returns.
@@ -1888,12 +1922,21 @@ export default function Transport() {
     };
     return routeMeta.map(meta => {
       const core = getEffectiveCore(meta.id);
-      const routed = withCounselorPickupStops(core, meta.counselorPickup, tod);
+      const forTiming = routeStopsForTiming(
+        withCounselorPickupStops(core, meta.counselorPickup, tod),
+        includeCounselorInRouteTime,
+      );
       const legMinutes = routeLegMinutesById.get(meta.id);
-      const stops =
+      const timed =
         tod === "am"
-          ? buildAMStops(routed, meta.departure, { ...stopTimeOptions, legMinutes })
-          : buildPMStops(routed, meta.departure, { ...stopTimeOptions, legMinutes });
+          ? buildAMStops(forTiming, meta.departure, { ...stopTimeOptions, legMinutes })
+          : buildPMStops(forTiming, meta.departure, { ...stopTimeOptions, legMinutes });
+      const stops = withUntimedCounselorDisplay(
+        timed,
+        meta.counselorPickup,
+        tod,
+        includeCounselorInRouteTime,
+      );
       const campers = core.reduce((sum, s) => sum + s.passengers, 0);
       return {
         ...meta,
@@ -1902,7 +1945,7 @@ export default function Transport() {
         direction: tod === "am" ? "Inbound" : "Outbound",
       };
     });
-  }, [getEffectiveCore, routeMeta, routeLegMinutesById, stopDwellMinutes]);
+  }, [getEffectiveCore, routeMeta, routeLegMinutesById, stopDwellMinutes, includeCounselorInRouteTime]);
 
   const camperEnrollmentLookup = useMemo(
     () => buildCamperEnrollmentLookup(groupRoster),
@@ -4817,6 +4860,22 @@ export default function Transport() {
               />
               <span className="text-[10px] text-muted-foreground">min · all buses</span>
             </div>
+            <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-1.5">
+              <Checkbox
+                id="counselor-in-route-time"
+                checked={boardSettings.includeCounselorInRouteTime}
+                onCheckedChange={(checked) => {
+                  setBoardSettings((prev) => ({
+                    ...prev,
+                    includeCounselorInRouteTime: checked === true,
+                  }));
+                }}
+              />
+              <Label htmlFor="counselor-in-route-time" className="text-xs flex items-center gap-1.5 cursor-pointer">
+                <UserRound className="h-3.5 w-3.5 text-muted-foreground" />
+                Include bus counselor in route time
+              </Label>
+            </div>
             <div className="flex items-center gap-2">
               <Label htmlFor="route-enrollment-week" className="text-xs text-muted-foreground whitespace-nowrap">
                 Enrollment week
@@ -6654,8 +6713,8 @@ export default function Transport() {
               Turn-by-Turn Directions
             </DialogTitle>
             <DialogDescription>
-              {directionsDialog.bus} · {directionsDialog.routeName}
-              {!directionsDialog.loading && !directionsDialog.error && directionsDialog.steps.length > 0 && (
+              {directionsDialog.bus} · {directionsDialog.routeName} · first stop to last stop
+              {!directionsDialog.loading && directionsDialog.steps.length > 0 && (
                 <span className="ml-2">
                   · {directionsDialog.totalDistanceMi.toFixed(1)} mi · ~{Math.round(directionsDialog.totalDurationSec / 60)} min
                 </span>
@@ -6665,18 +6724,19 @@ export default function Transport() {
 
           <div className="flex-1 overflow-y-auto pr-2 space-y-3">
             {directionsDialog.mapStops.length >= 2 && (
-              <div className="rounded-lg overflow-hidden border border-border h-64">
-                <TransportRouteMap
-                  campAddress={CAMP_LOCATION.address}
-                  routes={[{
-                    id: directionsDialog.routeId ?? 0,
-                    name: directionsDialog.routeName,
-                    bus: directionsDialog.bus,
-                    color: directionsDialog.color,
-                    stops: directionsDialog.mapStops,
-                  }]}
-                />
-              </div>
+              <ol className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 space-y-1.5 text-sm">
+                {directionsDialog.mapStops.map((stop, i) => (
+                  <li key={`${stop.address}-${i}`} className="flex items-start justify-between gap-3">
+                    <span>
+                      <span className="font-medium">{directionsDialog.stopLabels[i] || stop.name}</span>
+                      <span className="block text-[11px] text-muted-foreground">{stop.address}</span>
+                    </span>
+                    {stop.pickupTime && stop.pickupTime !== "—" ? (
+                      <span className="shrink-0 text-[11px] text-muted-foreground">{stop.pickupTime}</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ol>
             )}
             {directionsDialog.loading && (
               <div className="text-center py-8 text-sm text-muted-foreground">
@@ -6685,25 +6745,29 @@ export default function Transport() {
             )}
             {directionsDialog.error && (
               <div className="text-sm text-destructive bg-destructive/10 p-3 rounded">
-                Could not load directions: {directionsDialog.error}
+                Could not load street-by-street turns: {directionsDialog.error}. You can still print the stop list.
               </div>
             )}
             {!directionsDialog.loading && !directionsDialog.error && directionsDialog.steps.length > 0 && (
               <ol className="space-y-1.5">
                 {(() => {
-                  // Group steps by segment (each segment ends at a waypoint/stop)
                   const elements: JSX.Element[] = [];
                   let currentSegment = -1;
                   directionsDialog.steps.forEach((step, idx) => {
-                    const seg = (step as any).segmentIndex ?? 0;
+                    const seg = step.segmentIndex ?? 0;
                     if (seg !== currentSegment) {
                       currentSegment = seg;
                       const fromLabel = directionsDialog.stopLabels[seg] || `Stop ${seg + 1}`;
                       const toLabel = directionsDialog.stopLabels[seg + 1] || `Stop ${seg + 2}`;
+                      const segSteps = directionsDialog.steps.filter((s) => (s.segmentIndex ?? 0) === seg);
+                      const segSec = segSteps.reduce((sum, s) => sum + (s.durationSec || 0), 0);
+                      const segMi = segSteps.reduce((sum, s) => sum + (s.distanceMi || 0), 0);
+                      const meta = [formatTurnDistance(segMi), formatTurnDuration(segSec)].filter(Boolean).join(" · ");
                       elements.push(
                         <li key={`hdr-${seg}`} className="mt-3 first:mt-0 pt-2 border-t border-border first:border-t-0 first:pt-0">
                           <div className="text-[11px] font-semibold uppercase tracking-wide text-primary">
                             Leg {seg + 1}: {fromLabel} → {toLabel}
+                            {meta ? <span className="ml-1.5 font-medium normal-case tracking-normal text-muted-foreground">({meta})</span> : null}
                           </div>
                         </li>
                       );
@@ -6718,8 +6782,8 @@ export default function Transport() {
                           )}
                         </div>
                         <div className="text-[11px] text-muted-foreground text-right shrink-0 mt-0.5">
-                          <div>{step.distanceMi < 0.1 ? `${(step.distanceMi * 5280).toFixed(0)} ft` : `${step.distanceMi.toFixed(2)} mi`}</div>
-                          <div>{Math.max(1, Math.round(step.durationSec / 60))} min</div>
+                          <div>{formatTurnDistance(step.distanceMi)}</div>
+                          <div>{formatTurnDuration(step.durationSec)}</div>
                         </div>
                       </li>
                     );
@@ -6734,65 +6798,44 @@ export default function Transport() {
             <Button
               variant="outline"
               onClick={() => {
-                const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                const sections: string[] = [];
-                let curSeg = -1;
-                let legItems: string[] = [];
-                const flushLeg = () => {
-                  if (legItems.length) {
-                    sections.push(`<ol>${legItems.join("")}</ol>`);
-                    legItems = [];
-                  }
-                };
-                directionsDialog.steps.forEach((s, i) => {
-                  const seg = (s as any).segmentIndex ?? 0;
-                  if (seg !== curSeg) {
-                    flushLeg();
-                    curSeg = seg;
-                    const from = directionsDialog.stopLabels[seg] || `Stop ${seg + 1}`;
-                    const to = directionsDialog.stopLabels[seg + 1] || `Stop ${seg + 2}`;
-                    sections.push(`<h2 style="font-family:Arial;font-size:14pt;color:#1f4e79;">Leg ${seg + 1}: ${esc(from)} → ${esc(to)}</h2>`);
-                  }
-                  const dist = s.distanceMi < 0.1 ? `${(s.distanceMi * 5280).toFixed(0)} ft` : `${s.distanceMi.toFixed(2)} mi`;
-                  const onStreet = s.name && s.name !== "-" ? ` <i>(on ${esc(s.name)})</i>` : "";
-                  legItems.push(`<li style="margin-bottom:4pt;">${esc(s.instruction)}${onStreet} — <b>${dist}</b></li>`);
+                const html = buildTurnByTurnPrintHtml({
+                  bus: directionsDialog.bus,
+                  routeName: directionsDialog.routeName,
+                  totalDistanceMi: directionsDialog.totalDistanceMi,
+                  totalDurationSec: directionsDialog.totalDurationSec,
+                  steps: directionsDialog.steps,
+                  stopLabels: directionsDialog.stopLabels,
+                  stops: directionsDialog.mapStops,
                 });
-                flushLeg();
-
-                const html = `<!DOCTYPE html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="utf-8"><title>Directions</title>
-<xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml>
-<style>body{font-family:Arial,sans-serif;font-size:11pt;color:#222;} h1{font-size:18pt;color:#0f3a5f;margin-bottom:4pt;} .meta{color:#555;font-size:10pt;margin-bottom:18pt;}</style>
-</head><body>
-<h1>${esc(directionsDialog.bus)} — ${esc(directionsDialog.routeName)}</h1>
-<div class="meta">Total distance: <b>${directionsDialog.totalDistanceMi.toFixed(1)} mi</b> · Estimated time: <b>~${Math.round(directionsDialog.totalDurationSec / 60)} min</b></div>
-${(() => {
-  const stops = directionsDialog.mapStops;
-  if (stops.length < 2) return "";
-  // Static map: OSM-based, supports markers + polyline
-  const markers = stops.map((s, i) => `markers=${s.lat},${s.lng},lightblue${i + 1}`).join("&");
-  const path = `path=color:0x${(directionsDialog.color || "#3b82f6").replace("#", "")}|weight:4|${stops.map(s => `${s.lat},${s.lng}`).join("|")}`;
-  const staticUrl = `https://staticmap.openstreetmap.de/staticmap.php?size=720x360&maptype=mapnik&${markers}&${path}`;
-  const gmapsUrl = `https://www.google.com/maps/dir/${stops.map(s => `${s.lat},${s.lng}`).join("/")}`;
-  return `<div style="margin-bottom:16pt;"><img src="${staticUrl}" alt="Route map" style="max-width:100%;border:1px solid #ccc;" /><div style="font-size:9pt;color:#555;margin-top:4pt;">Open in Google Maps: <a href="${esc(gmapsUrl)}">${esc(gmapsUrl)}</a></div></div>`;
-})()}
-${sections.join("\n")}
-</body></html>`;
-
-                const blob = new Blob(['\ufeff', html], { type: "application/msword" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `${directionsDialog.bus.replace(/\s+/g, "_")}_directions.doc`;
-                a.click();
-                URL.revokeObjectURL(url);
+                downloadTurnByTurnHtml(html, directionsDialog.bus);
               }}
-              disabled={directionsDialog.loading || !!directionsDialog.error || directionsDialog.steps.length === 0}
+              disabled={directionsDialog.mapStops.length < 2}
             >
               <Download className="h-3 w-3 mr-1" /> Download
             </Button>
-            <Button onClick={() => setDirectionsDialog(prev => ({ ...prev, open: false }))}>Close</Button>
+            <Button
+              onClick={() => {
+                const html = buildTurnByTurnPrintHtml({
+                  bus: directionsDialog.bus,
+                  routeName: directionsDialog.routeName,
+                  totalDistanceMi: directionsDialog.totalDistanceMi,
+                  totalDurationSec: directionsDialog.totalDurationSec,
+                  steps: directionsDialog.steps,
+                  stopLabels: directionsDialog.stopLabels,
+                  stops: directionsDialog.mapStops,
+                });
+                if (!openTurnByTurnPrintWindow(html)) {
+                  downloadTurnByTurnHtml(html, directionsDialog.bus);
+                  toast({
+                    title: "Pop-up blocked",
+                    description: "Saved a directions file instead. Allow pop-ups to print.",
+                  });
+                }
+              }}
+              disabled={directionsDialog.mapStops.length < 2}
+            >
+              <Printer className="h-3 w-3 mr-1" /> Print
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

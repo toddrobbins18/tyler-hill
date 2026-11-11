@@ -123,7 +123,7 @@ export function assignStopTimesFromLegMinutes(
     if (i > 0) {
       cumulativeMin += legMinutes[i - 1] ?? 0;
       const prev = stops[i - 1];
-      if (!isCampStopAddress(prev.address, campAddress)) {
+      if (!isCampStopAddress(prev.address, campAddress) && !isCounselorPickupStop(prev)) {
         cumulativeMin += dwell;
       }
     }

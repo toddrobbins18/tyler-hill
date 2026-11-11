@@ -5,7 +5,9 @@ import {
   coreIndexFromDisplayStops,
   isCounselorPickupStop,
   parseBusCounselorPickup,
+  routeStopsForTiming,
   withCounselorPickupStops,
+  withUntimedCounselorDisplay,
 } from "@/lib/transportCounselorPickup";
 import { buildAMStops, buildPMStops } from "@/lib/transportStopTimes";
 
@@ -47,6 +49,19 @@ describe("transportCounselorPickup", () => {
     expect(pm[0]?.address).toBe(CAMP_LOCATION.address);
     expect(pm[1]?.camperNames).toEqual(["Kid One"]);
     expect(isCounselorPickupStop(pm[2])).toBe(true);
+  });
+
+  it("keeps counselor on the list without putting them on the clock when toggled off", () => {
+    const routed = withCounselorPickupStops([kid], counselor, "am");
+    const forTiming = routeStopsForTiming(routed, false);
+    const timed = buildAMStops(forTiming, "7:00 AM", { legMinutes: [18] });
+    const display = withUntimedCounselorDisplay(timed, counselor, "am", false);
+
+    expect(isCounselorPickupStop(display[0])).toBe(true);
+    expect(display[0]?.pickupTime).toBe("—");
+    expect(display[1]?.camperNames).toEqual(["Kid One"]);
+    expect(display[1]?.pickupTime).toBe("7:00 AM");
+    expect(routeStopsForTiming(display, false)[0]?.camperNames).toEqual(["Kid One"]);
   });
 
   it("maps display indices past camp and counselor onto camper coreStops", () => {

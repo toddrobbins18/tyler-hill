@@ -67,4 +67,17 @@ describe("transportStopTimes", () => {
     expect(timed[0].pickupTime).toBe("8:00 AM");
     expect(timed[1].pickupTime).toBe("8:17 AM");
   });
+
+  it("does not add passenger dwell after a counselor pickup", () => {
+    const timed = assignStopTimesFromLegMinutes(
+      [
+        { name: "Counselor", address: "staff", lat: 40.86, lng: -73.63, pickupTime: "", passengers: 0, stopRole: "counselor" },
+        { name: "Kid", address: "kid", lat: 40.87, lng: -73.64, pickupTime: "", passengers: 1 },
+      ],
+      "7:00 AM",
+      [10],
+    );
+    expect(timed[0].pickupTime).toBe("7:00 AM");
+    expect(timed[1].pickupTime).toBe("7:10 AM");
+  });
 });

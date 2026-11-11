@@ -68,6 +68,26 @@ export function withCounselorPickupStops(
   return period === "am" ? [stop, ...camperStops] : [...camperStops, stop];
 }
 
+/** Drop counselor pickups from the timed / turn-by-turn stop list. */
+export function routeStopsForTiming<T extends { stopRole?: string | null }>(
+  stops: T[],
+  includeCounselor: boolean,
+): T[] {
+  return includeCounselor ? stops : stops.filter((stop) => !isCounselorPickupStop(stop));
+}
+
+/** Keep counselor visible on the bus without putting them on the clock. */
+export function withUntimedCounselorDisplay(
+  timedStops: TransportRouteStop[],
+  pickup: BusCounselorPickup | null | undefined,
+  period: "am" | "pm",
+  includeCounselorInRouteTime: boolean,
+): TransportRouteStop[] {
+  if (includeCounselorInRouteTime || !isValidBusCounselorPickup(pickup)) return timedStops;
+  const stop: TransportRouteStop = { ...counselorPickupToStop(pickup), pickupTime: "—" };
+  return period === "am" ? [stop, ...timedStops] : [...timedStops, stop];
+}
+
 /** Map a displayed stop index (camp + counselor + kids) onto camper coreStops. Null for camp / counselor. */
 export function coreIndexFromDisplayStops(
   stops: { address: string; stopRole?: string | null }[],
