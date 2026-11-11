@@ -656,6 +656,7 @@ export default function Transport() {
   const [routesDraftMode, setRoutesDraftMode] = useState(false);
   const [routesConfirmed, setRoutesConfirmed] = useState(false);
   const [addRouteOpen, setAddRouteOpen] = useState(false);
+  const [pendingLassoCamperIds, setPendingLassoCamperIds] = useState<number[]>([]);
   const [addCamperOpen, setAddCamperOpen] = useState(false);
   const [reportPreview, setReportPreview] = useState<TransportReportPreview | null>(null);
   const [newUnplotted, setNewUnplotted] = useState({ name: "", address: "", age: 10, session: "Session 1" });
@@ -2447,9 +2448,14 @@ export default function Transport() {
     setCoreStops(prev => ({ ...prev, [id]: [] }));
     setVisibleRoutes(prev => [...prev, id]);
     markRoutesConfigured("manual");
+    const pending = [...pendingLassoCamperIds];
+    setPendingLassoCamperIds([]);
     setAddRouteOpen(false);
     setNewRoute({ name: "", bus: "", departure: "", capacity: 50 });
     toast({ title: "Route added", description: `"${newRoute.name}" has been created for both AM and PM runs.` });
+    if (pending.length > 0) {
+      openScopeDialogForAssign(pending, id);
+    }
   };
 
   const executeAssignCampersToRoute = useCallback((
@@ -2622,6 +2628,32 @@ export default function Transport() {
 
     openScopeDialogForAssign([camperId], routeId);
   }, [unplottedCampers, routeMeta, coreStops, todayOverrides, toast, geocodeAddress, openScopeDialogForAssign]);
+
+  const handleAssignCampersToRoute = useCallback((camperIds: number[], routeId: number) => {
+    const uniqueIds = [...new Set(camperIds)];
+    const campers = uniqueIds
+      .map((id) => unplottedCampers.find((c) => c.id === id))
+      .filter((c): c is UnplottedCamper => !!c && isValidRouteCoordinate(c.lat, c.lng));
+    if (campers.length === 0) return;
+
+    const meta = routeMeta.find((r) => r.id === routeId);
+    const currentLoad = (coreStops[routeId] || []).reduce((sum, s) => sum + s.passengers, 0)
+      + (todayOverrides.added[routeId] || []).reduce((sum, s) => sum + s.passengers, 0);
+    if (meta && currentLoad + campers.length > meta.capacity) {
+      toast({
+        title: "Bus over capacity",
+        description: `${meta.bus} is already at ${currentLoad}/${meta.capacity}. Adding ${campers.length} camper${campers.length === 1 ? "" : "s"} will exceed the limit.`,
+        variant: "destructive",
+      });
+    }
+
+    openScopeDialogForAssign(campers.map((c) => c.id), routeId);
+  }, [unplottedCampers, routeMeta, coreStops, todayOverrides, toast, openScopeDialogForAssign]);
+
+  const handleRequestNewRouteForCampers = useCallback((camperIds: number[]) => {
+    setPendingLassoCamperIds(camperIds);
+    setAddRouteOpen(true);
+  }, []);
 
   const handleAddUnplottedCamper = async () => {
     if (!newUnplotted.name.trim() || !newUnplotted.address.trim()) {
@@ -4626,7 +4658,7 @@ export default function Transport() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <Button className="gap-2" onClick={() => setAddRouteOpen(true)}><Plus className="h-4 w-4" /> Add Route</Button>
+          <Button className="gap-2" onClick={() => { setPendingLassoCamperIds([]); setAddRouteOpen(true); }}><Plus className="h-4 w-4" /> Add Route</Button>
         </div>
 
         {draftModeAvailable && routesDraftMode && (
@@ -5397,6 +5429,8 @@ export default function Transport() {
                   onRemoveStop={handleRemoveStop}
                   unplottedCampers={unplottedForWeek}
                   onAssignCamper={handleAssignCamperToRoute}
+                  onAssignCampers={handleAssignCampersToRoute}
+                  onRequestNewRouteForCampers={handleRequestNewRouteForCampers}
                 />
               </div>
             </Card>
@@ -5472,10 +5506,12 @@ export default function Transport() {
                     onRemoveStop={handleRemoveStop}
                     unplottedCampers={unplottedForWeek}
                     onAssignCamper={handleAssignCamperToRoute}
+                    onAssignCampers={handleAssignCampersToRoute}
+                    onRequestNewRouteForCampers={handleRequestNewRouteForCampers}
                   />
                 </div>
                 <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border/50 bg-muted/30 px-4 py-2 text-[11px] text-muted-foreground sm:px-5 sm:text-xs">
-                  <span>Click a numbered stop for camper details, pickup time, and route actions.</span>
+                  <span>Click a numbered stop for details, or Circle to add and draw around purple pins.</span>
                   <span className="hidden shrink-0 items-center gap-1.5 sm:flex">
                     <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#8b5cf6]" />
                     Purple = unassigned camper
@@ -5939,10 +5975,24 @@ export default function Transport() {
       </Tabs>
 
       {/* Add Route Dialog */}
-      <Dialog open={addRouteOpen} onOpenChange={setAddRouteOpen}>
+      <Dialog
+        open={addRouteOpen}
+        onOpenChange={(open) => {
+          setAddRouteOpen(open);
+          if (!open) setPendingLassoCamperIds([]);
+        }}
+      >
         <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Add New Route</DialogTitle></DialogHeader>
-          <p className="text-xs text-muted-foreground">This will create both an AM pickup and PM dropoff run.</p>
+          <DialogHeader>
+            <DialogTitle>
+              {pendingLassoCamperIds.length > 0 ? "New bus for circled campers" : "Add New Route"}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            {pendingLassoCamperIds.length > 0
+              ? `This bus will get ${pendingLassoCamperIds.length} circled camper${pendingLassoCamperIds.length === 1 ? "" : "s"} after you create it (AM pickup and PM dropoff).`
+              : "This will create both an AM pickup and PM dropoff run."}
+          </p>
           <div className="grid gap-4 py-2">
             <div className="space-y-1.5">
               <Label className="text-xs">Route Name</Label>

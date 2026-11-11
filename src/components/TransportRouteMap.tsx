@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { Pencil, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   fetchRoadGeometriesForRoutes,
@@ -11,6 +12,7 @@ import {
 import { isValidRouteCoordinate } from "@/lib/transportStopTimes";
 import { stopRiderNames } from "@/lib/transportWeekView";
 import { BUS_COUNSELOR_STOP_LABEL, isCounselorPickupStop } from "@/lib/transportCounselorPickup";
+import { campersInsideLasso } from "@/lib/transportMapLasso";
 
 interface RouteStop {
   name: string;
@@ -52,6 +54,8 @@ interface TransportRouteMapProps {
   onMoveStop?: (fromRouteId: number, stopIndex: number, toRouteId: number) => void;
   onRemoveStop?: (routeId: number, stopIndex: number) => void;
   onAssignCamper?: (camperId: number, routeId: number) => void;
+  onAssignCampers?: (camperIds: number[], routeId: number) => void;
+  onRequestNewRouteForCampers?: (camperIds: number[]) => void;
 }
 
 declare global {
@@ -131,12 +135,35 @@ interface RouteLayerRefs {
   onRoad?: boolean;
 }
 
-export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], campAddress, layoutReady = true, onMoveStop, onRemoveStop, onAssignCamper }: TransportRouteMapProps) {
+export function TransportRouteMap({
+  routes,
+  allRoutes,
+  unplottedCampers = [],
+  campAddress,
+  layoutReady = true,
+  onMoveStop,
+  onRemoveStop,
+  onAssignCamper,
+  onAssignCampers,
+  onRequestNewRouteForCampers,
+}: TransportRouteMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const leafletMapRef = useRef<L.Map | null>(null);
   const layerGroupRef = useRef<L.LayerGroup | null>(null);
   const routeLayersRef = useRef<Map<number, RouteLayerRefs>>(new Map());
   const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
+  const [lassoMode, setLassoMode] = useState(false);
+  const [lassoHint, setLassoHint] = useState<string | null>(null);
+  const [lassoSelection, setLassoSelection] = useState<UnplottedCamper[] | null>(null);
+  const [lassoRouteId, setLassoRouteId] = useState("");
+  const lassoModeRef = useRef(false);
+  const drawingRef = useRef(false);
+  const lassoPathRef = useRef<L.LatLng[]>([]);
+  const lassoLineRef = useRef<L.Polyline | null>(null);
+  const lassoPolyRef = useRef<L.Polygon | null>(null);
+  const unplottedCampersRef = useRef(unplottedCampers);
+  unplottedCampersRef.current = unplottedCampers;
+  lassoModeRef.current = lassoMode;
   /** undefined = loading, null = failed, LatLng[] = road path ready */
   const [roadPaths, setRoadPaths] = useState<Record<number, LatLng[] | null | undefined>>({});
   const roadPathsRef = useRef(roadPaths);
@@ -209,7 +236,10 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
     }).addTo(map);
     leafletMapRef.current = map;
     layerGroupRef.current = L.layerGroup().addTo(map);
-    map.on("click", () => setSelectedRouteId(null));
+    map.on("click", () => {
+      if (lassoModeRef.current) return;
+      setSelectedRouteId(null);
+    });
     return () => {
       layerGroupRef.current?.clearLayers();
       leafletMapRef.current?.remove();
@@ -584,5 +614,272 @@ export function TransportRouteMap({ routes, allRoutes, unplottedCampers = [], ca
     });
   }, [selectedRouteId]);
 
-  return <div ref={mapRef} className="h-full w-full" />;
+  const clearLassoLayers = useCallback(() => {
+    const map = leafletMapRef.current;
+    if (lassoLineRef.current) {
+      map?.removeLayer(lassoLineRef.current);
+      lassoLineRef.current = null;
+    }
+    if (lassoPolyRef.current) {
+      map?.removeLayer(lassoPolyRef.current);
+      lassoPolyRef.current = null;
+    }
+    lassoPathRef.current = [];
+  }, []);
+
+  const resetLassoSelection = useCallback(() => {
+    clearLassoLayers();
+    setLassoSelection(null);
+    setLassoRouteId("");
+    setLassoHint(null);
+  }, [clearLassoLayers]);
+
+  useEffect(() => {
+    const map = leafletMapRef.current;
+    if (!map) return;
+
+    if (!lassoMode) {
+      map.dragging.enable();
+      map.boxZoom.enable();
+      map.getContainer().style.cursor = "";
+      map.getContainer().style.touchAction = "";
+      return;
+    }
+
+    map.dragging.disable();
+    map.boxZoom.disable();
+    map.getContainer().style.cursor = "crosshair";
+    map.getContainer().style.touchAction = "none";
+    setLassoHint("Draw a loop around purple pins");
+    setLassoSelection(null);
+    setLassoRouteId("");
+    clearLassoLayers();
+
+    const container = map.getContainer();
+
+    const toLatLng = (event: PointerEvent) => {
+      const point = map.mouseEventToContainerPoint(event as unknown as MouseEvent);
+      return map.containerPointToLatLng(point);
+    };
+
+    const onPointerDown = (event: PointerEvent) => {
+      if ((event.target as HTMLElement | null)?.closest(".leaflet-control, .leaflet-popup, [data-lasso-ui]")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      drawingRef.current = true;
+      const latlng = toLatLng(event);
+      lassoPathRef.current = [latlng];
+      if (lassoLineRef.current) map.removeLayer(lassoLineRef.current);
+      if (lassoPolyRef.current) map.removeLayer(lassoPolyRef.current);
+      lassoPolyRef.current = null;
+      lassoLineRef.current = L.polyline([latlng], {
+        color: UNPLOTTED_COLOR,
+        weight: 3,
+        dashArray: "6 4",
+        opacity: 0.95,
+        interactive: false,
+      }).addTo(map);
+      setLassoSelection(null);
+      setLassoHint("Keep drawing — release to close the loop");
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (!drawingRef.current || !lassoLineRef.current) return;
+      event.preventDefault();
+      const latlng = toLatLng(event);
+      lassoPathRef.current.push(latlng);
+      lassoLineRef.current.setLatLngs(lassoPathRef.current);
+    };
+
+    const finishDraw = () => {
+      if (!drawingRef.current) return;
+      drawingRef.current = false;
+      const path = lassoPathRef.current;
+      let pixelLength = 0;
+      for (let i = 1; i < path.length; i++) {
+        pixelLength += map.latLngToContainerPoint(path[i - 1]).distanceTo(map.latLngToContainerPoint(path[i]));
+      }
+      if (path.length < 6 || pixelLength < 40) {
+        clearLassoLayers();
+        setLassoHint("Loop was too small — draw around the addresses");
+        return;
+      }
+      const ring = path.map((p) => ({ lat: p.lat, lng: p.lng }));
+      const found = campersInsideLasso(
+        unplottedCampersRef.current.filter((c) => isValidRouteCoordinate(c.lat, c.lng)),
+        ring,
+      );
+      if (lassoLineRef.current) {
+        map.removeLayer(lassoLineRef.current);
+        lassoLineRef.current = null;
+      }
+      lassoPolyRef.current = L.polygon(path, {
+        color: UNPLOTTED_COLOR,
+        weight: 2,
+        fillColor: UNPLOTTED_COLOR,
+        fillOpacity: 0.18,
+        interactive: false,
+      }).addTo(map);
+      if (found.length === 0) {
+        setLassoSelection(null);
+        setLassoHint("No unassigned campers inside that loop");
+        return;
+      }
+      setLassoSelection(found);
+      setLassoHint(null);
+      setLassoMode(false);
+    };
+
+    const onPointerUp = () => finishDraw();
+
+    container.addEventListener("pointerdown", onPointerDown, { capture: true });
+    window.addEventListener("pointermove", onPointerMove, { capture: true });
+    window.addEventListener("pointerup", onPointerUp, { capture: true });
+    window.addEventListener("pointercancel", onPointerUp, { capture: true });
+
+    return () => {
+      drawingRef.current = false;
+      container.removeEventListener("pointerdown", onPointerDown, { capture: true });
+      window.removeEventListener("pointermove", onPointerMove, { capture: true });
+      window.removeEventListener("pointerup", onPointerUp, { capture: true });
+      window.removeEventListener("pointercancel", onPointerUp, { capture: true });
+      map.dragging.enable();
+      map.boxZoom.enable();
+      map.getContainer().style.cursor = "";
+      map.getContainer().style.touchAction = "";
+    };
+  }, [lassoMode, clearLassoLayers]);
+
+  useEffect(() => {
+    if (!lassoSelection?.length) return;
+    const remaining = lassoSelection.filter((picked) =>
+      unplottedCampers.some((camper) => camper.id === picked.id),
+    );
+    if (remaining.length === 0) {
+      resetLassoSelection();
+      return;
+    }
+    if (remaining.length !== lassoSelection.length) setLassoSelection(remaining);
+  }, [unplottedCampers, lassoSelection, resetLassoSelection]);
+
+  const lassoAddressCount = useMemo(() => {
+    if (!lassoSelection) return 0;
+    return new Set(lassoSelection.map((c) => normAddr(c.address))).size;
+  }, [lassoSelection]);
+
+  const assignLassoToRoute = () => {
+    if (!lassoSelection?.length || !lassoRouteId) return;
+    const routeId = Number(lassoRouteId);
+    const ids = lassoSelection.map((c) => c.id);
+    if (onAssignCampers) onAssignCampers(ids, routeId);
+    else ids.forEach((id) => onAssignCamper?.(id, routeId));
+  };
+
+  const assignLassoToNewRoute = () => {
+    if (!lassoSelection?.length || !onRequestNewRouteForCampers) return;
+    onRequestNewRouteForCampers(lassoSelection.map((c) => c.id));
+  };
+
+  return (
+    <div className="relative h-full w-full">
+      <div ref={mapRef} className="h-full w-full" />
+      <div data-lasso-ui className="absolute left-3 top-3 z-[1100] flex flex-col items-start gap-2 pointer-events-auto">
+        <button
+          type="button"
+          onClick={() => {
+            if (lassoMode) {
+              setLassoMode(false);
+              setLassoHint(null);
+              return;
+            }
+            resetLassoSelection();
+            setLassoMode(true);
+          }}
+          className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium shadow-md backdrop-blur-sm ${
+            lassoMode
+              ? "border-violet-400 bg-violet-600 text-white"
+              : "border-border/50 bg-background/95 text-foreground hover:bg-muted/80"
+          }`}
+          title="Circle unassigned addresses and add them to a bus"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+          {lassoMode ? "Drawing…" : "Circle to add"}
+        </button>
+        {lassoHint && (
+          <div className="max-w-[16rem] rounded-lg border border-violet-200 bg-white/95 px-2.5 py-1.5 text-[11px] leading-snug text-violet-800 shadow-md">
+            {lassoHint}
+          </div>
+        )}
+      </div>
+      {lassoSelection && lassoSelection.length > 0 && (
+        <div
+          data-lasso-ui
+          className="absolute bottom-3 left-3 z-[1100] w-[min(calc(100%-1.5rem),20rem)] rounded-xl border border-border/60 bg-background/95 p-3 shadow-lg backdrop-blur-sm pointer-events-auto"
+        >
+          <div className="mb-2 flex items-start justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                {lassoSelection.length} camper{lassoSelection.length === 1 ? "" : "s"} circled
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {lassoAddressCount} address{lassoAddressCount === 1 ? "" : "es"} · add to a bus
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={resetLassoSelection}
+              className="rounded-md p-1 text-muted-foreground hover:bg-muted"
+              aria-label="Clear circled addresses"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <p className="mb-2 max-h-16 overflow-y-auto text-[11px] leading-snug text-muted-foreground">
+            {lassoSelection.map((c) => c.name).join(", ")}
+          </p>
+          <select
+            value={lassoRouteId}
+            onChange={(e) => setLassoRouteId(e.target.value)}
+            className="mb-2 h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+          >
+            <option value="">Select bus…</option>
+            {availableRoutes.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              disabled={!lassoRouteId}
+              onClick={assignLassoToRoute}
+              className="h-8 rounded-md bg-violet-600 px-2.5 text-xs font-medium text-white disabled:opacity-40"
+            >
+              Add to bus
+            </button>
+            {onRequestNewRouteForCampers && (
+              <button
+                type="button"
+                onClick={assignLassoToNewRoute}
+                className="h-8 rounded-md border border-border bg-background px-2.5 text-xs font-medium"
+              >
+                New bus
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                resetLassoSelection();
+                setLassoMode(true);
+              }}
+              className="h-8 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-muted"
+            >
+              Draw again
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
