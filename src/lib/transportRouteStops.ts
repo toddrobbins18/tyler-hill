@@ -196,3 +196,105 @@ export function dedupeRidersAcrossRoute(stops: TransportRouteStop[]): TransportR
 export function sanitizeRouteStops(stops: TransportRouteStop[]): TransportRouteStop[] {
   return consolidateRouteStopsByAddress(dedupeRidersAcrossRoute(stops));
 }
+
+export type AssignableCamper = {
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+};
+
+function newStopForCampers(campers: AssignableCamper[]): TransportRouteStop {
+  const names = campers.map((c) => c.name);
+  return refreshStopRiders(
+    {
+      name: names[0] ?? "",
+      address: campers[0]?.address ?? "",
+      lat: campers[0]?.lat ?? 0,
+      lng: campers[0]?.lng ?? 0,
+      pickupTime: "TBD",
+      passengers: names.length,
+      camperNames: names,
+    },
+    names,
+  );
+}
+
+function groupCampersByNormalizedAddress(campers: AssignableCamper[]): AssignableCamper[][] {
+  const groups: AssignableCamper[][] = [];
+  const indexByKey = new Map<string, number>();
+  for (const camper of campers) {
+    const key = normalizeTransportAddress(camper.address || "");
+    if (!key) {
+      groups.push([camper]);
+      continue;
+    }
+    const idx = indexByKey.get(key);
+    if (idx == null) {
+      indexByKey.set(key, groups.length);
+      groups.push([camper]);
+      continue;
+    }
+    groups[idx].push(camper);
+  }
+  return groups;
+}
+
+function mergeOneHouseholdIntoStops(
+  stops: TransportRouteStop[],
+  campers: AssignableCamper[],
+): { next: TransportRouteStop[]; merged: boolean } {
+  const camperNorm = normalizeTransportAddress(campers[0]?.address || "");
+  const newNames = campers.map((c) => c.name);
+  const idx = camperNorm
+    ? stops.findIndex((s) => normalizeTransportAddress(s.address) === camperNorm)
+    : -1;
+
+  if (idx === -1) {
+    return { next: [...stops, newStopForCampers(campers)], merged: false };
+  }
+
+  const existing = stops[idx];
+  const existingNames = riderNamesFromStop(existing);
+  const uniqueAdd = newNames.filter(
+    (n) => !existingNames.some((e) => e.trim().toLowerCase() === n.trim().toLowerCase()),
+  );
+  if (uniqueAdd.length === 0) {
+    return { next: stops, merged: true };
+  }
+
+  const next = [...stops];
+  next[idx] = refreshStopRiders(existing, [...existingNames, ...uniqueAdd]);
+  return { next, merged: true };
+}
+
+/** Same house stays one stop. Circled campers on different streets stay separate stops. */
+export function mergeCampersIntoStops(
+  stops: TransportRouteStop[],
+  campers: AssignableCamper[],
+): { merged: boolean; next: TransportRouteStop[]; mergedNames: string[] | null } {
+  if (campers.length === 0) return { merged: false, next: stops, mergedNames: null };
+
+  let next = stops;
+  let anyMerged = false;
+  for (const group of groupCampersByNormalizedAddress(campers)) {
+    const result = mergeOneHouseholdIntoStops(next, group);
+    next = result.next;
+    if (result.merged) anyMerged = true;
+  }
+
+  next = consolidateRouteStopsByAddress(next);
+
+  const newNames = campers.map((c) => c.name);
+  let mergedNames: string[] | null = newNames.length > 1 ? newNames : null;
+  if (!mergedNames && newNames[0]) {
+    const key = newNames[0].trim().toLowerCase();
+    const host = next.find((s) =>
+      riderNamesFromStop(s).some((n) => n.trim().toLowerCase() === key),
+    );
+    const hostNames = host ? riderNamesFromStop(host) : [];
+    mergedNames = hostNames.length > 1 ? hostNames : null;
+  }
+
+  return { merged: anyMerged, next, mergedNames };
+}

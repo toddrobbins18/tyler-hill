@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { normalizeTransportAddress } from "@/lib/transportAddressNormalize";
-import { consolidateRouteStopsByAddress, dedupeRidersAcrossRoute } from "@/lib/transportRouteStops";
+import {
+  consolidateRouteStopsByAddress,
+  dedupeRidersAcrossRoute,
+  mergeCampersIntoStops,
+} from "@/lib/transportRouteStops";
 
 describe("normalizeTransportAddress", () => {
   it("matches abbreviated and full street suffixes", () => {
@@ -135,5 +139,67 @@ describe("consolidateRouteStopsByAddress", () => {
     expect(allNames.filter((n) => n === "Sam Cohen")).toHaveLength(1);
     expect(deduped[0].camperNames).toContain("Sam Cohen");
     expect(deduped[1].camperNames ?? []).not.toContain("Sam Cohen");
+  });
+});
+
+describe("mergeCampersIntoStops", () => {
+  const stop = (
+    name: string,
+    address: string,
+    extra?: { lat?: number; lng?: number; camperNames?: string[] },
+  ) => ({
+    name,
+    address,
+    lat: extra?.lat ?? 40.84,
+    lng: extra?.lng ?? -73.71,
+    pickupTime: "TBD",
+    passengers: extra?.camperNames?.length ?? 1,
+    camperNames: extra?.camperNames ?? [name],
+  });
+
+  it("keeps circled campers on different streets as separate stops", () => {
+    const { next } = mergeCampersIntoStops(
+      [stop("Existing Kid", "1 Main St, Port Washington, NY")],
+      [
+        { name: "Ava Chen", address: "10 Soundview Dr, Port Washington, NY", lat: 40.85, lng: -73.71 },
+        { name: "Ben Ross", address: "22 Cambridge Ave, Port Washington, NY", lat: 40.84, lng: -73.7 },
+        { name: "Cara Diaz", address: "8 Cedar Ln, Port Washington, NY", lat: 40.841, lng: -73.72 },
+      ],
+    );
+
+    expect(next).toHaveLength(4);
+    expect(next.map((s) => s.camperNames?.[0])).toEqual([
+      "Existing Kid",
+      "Ava Chen",
+      "Ben Ross",
+      "Cara Diaz",
+    ]);
+  });
+
+  it("still groups siblings who live at the same house", () => {
+    const { next } = mergeCampersIntoStops([], [
+      { name: "Jack Lovens", address: "2 Sands Ln, Manhasset, NY", lat: 40.83, lng: -73.7 },
+      { name: "Noa Lovens", address: "2 Sands Lane, Manhasset, NY 11030", lat: 40.83, lng: -73.7 },
+    ]);
+
+    expect(next).toHaveLength(1);
+    expect(next[0]?.camperNames).toEqual(["Jack Lovens", "Noa Lovens"]);
+    expect(next[0]?.passengers).toBe(2);
+  });
+
+  it("adds a sibling onto an existing stop without swallowing other circled houses", () => {
+    const { next } = mergeCampersIntoStops(
+      [stop("Jack Lovens", "2 Sands Ln, Manhasset, NY", { camperNames: ["Jack Lovens"] })],
+      [
+        { name: "Noa Lovens", address: "2 Sands Lane, Manhasset, NY", lat: 40.83, lng: -73.7 },
+        { name: "Ava Chen", address: "10 Soundview Dr, Port Washington, NY", lat: 40.85, lng: -73.71 },
+      ],
+    );
+
+    expect(next).toHaveLength(2);
+    const sands = next.find((s) => s.camperNames?.includes("Jack Lovens"));
+    const soundview = next.find((s) => s.camperNames?.includes("Ava Chen"));
+    expect(sands?.camperNames).toEqual(["Jack Lovens", "Noa Lovens"]);
+    expect(soundview?.camperNames).toEqual(["Ava Chen"]);
   });
 });

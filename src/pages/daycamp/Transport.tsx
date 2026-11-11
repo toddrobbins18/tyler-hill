@@ -162,6 +162,7 @@ import {
 import { normalizeTransportAddress as normalizeAddress } from "@/lib/transportAddressNormalize";
 import {
   consolidateRouteStopsByAddress,
+  mergeCampersIntoStops,
   sanitizeRouteStops,
 } from "@/lib/transportRouteStops";
 import { optimizeStopsFromFirstStop, optimizeStopsWithPinned } from "@/lib/transportRouteOptimize";
@@ -327,71 +328,6 @@ function unplottedSiblingsAtAddress(
   return all.filter(
     (c) => c.id !== camper.id && normalizeAddress(c.address) === camperNorm,
   );
-}
-
-function mergeCampersIntoStops(
-  stops: RouteStop[],
-  campers: AssignableCamper[],
-): { merged: boolean; next: RouteStop[]; mergedNames: string[] | null } {
-  if (campers.length === 0) return { merged: false, next: stops, mergedNames: null };
-
-  const address = campers[0].address;
-  const camperNorm = normalizeAddress(address);
-  const newNames = campers.map((c) => c.name);
-  const idx = stops.findIndex((s) => normalizeAddress(s.address) === camperNorm);
-
-  if (idx === -1) {
-    const newStop: RouteStop = {
-      name: newNames.length === 1 ? newNames[0] : `${newNames.length} kids at this stop`,
-      address,
-      lat: campers[0].lat,
-      lng: campers[0].lng,
-      pickupTime: "TBD",
-      passengers: newNames.length,
-      camperNames: newNames,
-    };
-    return {
-      merged: false,
-      next: consolidateRouteStopsByAddress([...stops, newStop]),
-      mergedNames: newNames.length > 1 ? newNames : null,
-    };
-  }
-
-  const existing = stops[idx];
-  const existingNames =
-    existing.camperNames?.length
-      ? existing.camperNames
-      : (existing.passengers ?? 0) > 0
-        ? [existing.name].filter(Boolean)
-        : [];
-  const uniqueAdd = newNames.filter(
-    (n) => !existingNames.some((e) => e.trim().toLowerCase() === n.trim().toLowerCase()),
-  );
-  if (uniqueAdd.length === 0) {
-    return {
-      merged: true,
-      next: consolidateRouteStopsByAddress(stops),
-      mergedNames: existingNames.length > 1 ? existingNames : null,
-    };
-  }
-
-  const mergedNames = [...existingNames, ...uniqueAdd];
-  const updated: RouteStop = {
-    ...existing,
-    passengers: mergedNames.length,
-    camperNames: mergedNames,
-    name:
-      mergedNames.length === 1
-        ? mergedNames[0]
-        : `${mergedNames[0]} +${mergedNames.length - 1}`,
-  };
-  const next = [...stops];
-  next[idx] = updated;
-  return {
-    merged: true,
-    next: consolidateRouteStopsByAddress(next),
-    mergedNames: mergedNames.length > 1 ? mergedNames : null,
-  };
 }
 
 /** Put routed campers back on the unplotted list when a stop is unpinned. */
@@ -2531,9 +2467,13 @@ export default function Transport() {
           mergedNames = tryAdded.mergedNames;
           return { ...prev, added: { ...prev.added, [routeId]: tryAdded.next } };
         }
-        const coreMatch = core.find(
-          (s) => normalizeAddress(s.address) === normalizeAddress(campers[0].address),
-        );
+        const oneAddress =
+          new Set(assignable.map((c) => normalizeAddress(c.address)).filter(Boolean)).size <= 1;
+        const coreMatch = oneAddress
+          ? core.find(
+              (s) => normalizeAddress(s.address) === normalizeAddress(campers[0].address),
+            )
+          : undefined;
         if (coreMatch) {
           const merged = mergeCampersIntoStops([coreMatch], assignable);
           mergedNames = merged.mergedNames ?? (names.length > 1 ? names : null);
@@ -3120,7 +3060,7 @@ export default function Transport() {
         addressHints,
       });
 
-      if (fixed.fixedStopCount === 0 && fixed.fixedUnplottedCount === 0) {
+      if (fixed.fixedStopCount === 0 && fixed.fixedUnplottedCount === 0 && fixed.splitStopCount === 0) {
         fixLogSteps = upsertTransportOpStep(fixLogSteps, {
           id: "apply-text",
           label: "Updating route / unplotted addresses on board",
