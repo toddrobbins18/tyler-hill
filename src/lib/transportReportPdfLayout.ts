@@ -55,6 +55,11 @@ export function encodePaperSheetBarcode(kind: "bus" | "group", label: string): s
   return sanitizeBarcodePayload(`${prefix}${label}`);
 }
 
+/** Per-camper Code 39 from CampMinder person id (or Nest camper id). */
+export function encodeCamperBarcode(personId: string | number | null | undefined): string {
+  return sanitizeBarcodePayload(String(personId ?? ""));
+}
+
 /** CODE39 patterns (* = narrow/wide unit sequence). */
 const CODE39: Record<string, string> = {
   "0": "nnnwwnwnn",

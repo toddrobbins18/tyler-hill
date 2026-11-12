@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { buildGroupReportPdf, groupReportRowColumns } from "@/lib/transportCampMinderReportsPdf";
-import { sanitizeBarcodePayload } from "@/lib/transportReportPdfLayout";
+import { encodeCamperBarcode, sanitizeBarcodePayload } from "@/lib/transportReportPdfLayout";
 
 describe("transportReportPdfLayout", () => {
   it("sanitizeBarcodePayload strips invalid chars", () => {
     expect(sanitizeBarcodePayload("person-123abc")).toBe("PERSON123ABC");
+  });
+
+  it("encodes camper barcodes from person id", () => {
+    expect(encodeCamperBarcode("22032198")).toBe("22032198");
   });
 
   it("keeps group-report columns from overlapping on a letter page", () => {

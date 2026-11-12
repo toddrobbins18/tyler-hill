@@ -125,8 +125,9 @@ function findDarkBlobs(image: GrayImage, x0: number, y0: number, x1: number, y1:
       const bw = maxX - minX + 1;
       const bh = maxY - minY + 1;
       const aspect = bw / Math.max(1, bh);
-      if (area < 8 || area > (w * h) / 40) continue;
-      if (aspect < 0.45 || aspect > 2.2) continue;
+      if (area < 8 || area > (w * h) / 15) continue;
+      if (bh < 3 || bw < 3) continue;
+      if (aspect < 0.3 || aspect > 12) continue;
       blobs.push({
         x: sx / area,
         y: sy / area,
@@ -151,39 +152,89 @@ function clusterYs(values: number[], tol: number): number[] {
   return groups.map((g) => g.reduce((a, b) => a + b, 0) / g.length);
 }
 
-function expectedRowCount(kind: "bus" | "group", camperCount: number): number {
-  return kind === "bus" ? camperCount * 2 : camperCount;
+type CamperSampleY = { y: number; amY: number; pmY: number };
+
+function padYs(ys: number[], expected: number, stepFallback: number): number[] {
+  const out = ys.slice(0, expected);
+  while (out.length < expected) {
+    const step = out.length > 1 ? out[out.length - 1] - out[out.length - 2] : stepFallback;
+    out.push((out[out.length - 1] ?? 0) + step);
+  }
+  return out;
 }
 
-function rowYsForSheet(
+function evenYs(camperCount: number, roiTop: number, roiBottom: number): number[] {
+  const span = roiBottom - roiTop;
+  const ys: number[] = [];
+  for (let i = 0; i < camperCount; i += 1) {
+    ys.push(roiTop + span * ((i + 0.5) / camperCount));
+  }
+  return ys;
+}
+
+function camperSampleRows(
   kind: "bus" | "group",
   camperCount: number,
   blobs: Blob[],
   roiTop: number,
   roiBottom: number,
-): { ys: number[]; usedBlobs: boolean } {
-  const expected = expectedRowCount(kind, camperCount);
+): { rows: CamperSampleY[]; usedBlobs: boolean } {
+  const span = roiBottom - roiTop;
+  const step = span / Math.max(1, camperCount);
   const medianH = blobs.length
     ? [...blobs].sort((a, b) => a.h - b.h)[Math.floor(blobs.length / 2)].h
-    : Math.max(8, (roiBottom - roiTop) / Math.max(1, expected));
-  const clustered = clusterYs(
+    : Math.max(8, step * 0.2);
+  const tight = clusterYs(
     blobs.map((b) => b.y),
     Math.max(4, medianH * 0.7),
   );
-  if (clustered.length >= Math.max(1, Math.round(expected * 0.7))) {
-    const ys = clustered.slice(0, expected);
-    while (ys.length < expected) {
-      const step = ys.length > 1 ? ys[ys.length - 1] - ys[ys.length - 2] : medianH * 2;
-      ys.push(ys[ys.length - 1] + step);
+
+  if (kind === "bus" && tight.length >= camperCount * 1.5) {
+    const rows: CamperSampleY[] = [];
+    for (let i = 0; i < camperCount; i += 1) {
+      const amY = tight[i * 2];
+      const pmY = tight[i * 2 + 1] ?? (amY == null ? 0 : amY + step * 0.25);
+      if (amY == null) break;
+      rows.push({ y: (amY + pmY) / 2, amY, pmY });
     }
-    return { ys, usedBlobs: true };
+    if (rows.length >= Math.max(1, Math.round(camperCount * 0.7))) {
+      while (rows.length < camperCount) {
+        const prev = rows[rows.length - 1];
+        rows.push({
+          y: prev.y + step,
+          amY: prev.amY + step,
+          pmY: prev.pmY + step,
+        });
+      }
+      return { rows, usedBlobs: true };
+    }
   }
-  const span = roiBottom - roiTop;
-  const ys: number[] = [];
-  for (let i = 0; i < expected; i += 1) {
-    ys.push(roiTop + span * ((i + 0.5) / expected));
+
+  const clusteredEnough = tight.length >= Math.max(1, Math.round(camperCount * 0.7));
+  const ys = clusteredEnough ? padYs(tight, camperCount, step) : evenYs(camperCount, roiTop, roiBottom);
+  const split = step * 0.12;
+  return {
+    rows: ys.map((y) => ({
+      y,
+      amY: kind === "bus" ? y - split : y,
+      pmY: kind === "bus" ? y + split : y,
+    })),
+    usedBlobs: clusteredEnough,
+  };
+}
+
+function bubbleSampleX(width: number, kind: "bus" | "group", weekdayIndex: number): number {
+  if (kind === "group") {
+    const x0 = width * 0.62;
+    const colW = (width - x0) / 5;
+    return x0 + colW * weekdayIndex + colW / 2;
   }
-  return { ys, usedBlobs: false };
+  const pageRight = width * 0.945;
+  const bubbleW = width * (58 / 215.9);
+  const bubbleX = pageRight - bubbleW;
+  const gutter = bubbleW * (9 / 58);
+  const colW = (bubbleW - gutter) / 5;
+  return bubbleX + gutter + colW * weekdayIndex + colW / 2;
 }
 
 export function analyzePaperAttendanceImage(
@@ -206,36 +257,42 @@ export function analyzePaperAttendanceImage(
   const y0 = Math.floor(gray.height * 0.12);
   const y1 = Math.floor(gray.height * 0.94);
   const blobs = findDarkBlobs(gray, x0, y0, x1, y1);
-  const { ys, usedBlobs } = rowYsForSheet(options.kind, camperCount, blobs, y0, y1);
-  const colW = (x1 - x0) / 5;
-  const cx = x0 + colW * weekdayIndex + colW / 2;
-  const radius = Math.max(3, Math.min(colW, (y1 - y0) / Math.max(8, ys.length)) * 0.28);
-
-  const sampleRows = ys.map((y) => {
-    const inner = sampleDiskMean(gray, cx, y, radius * 0.7);
-    return { y, filled: isFilled(inner), inner };
-  });
+  const { rows: sampleRows, usedBlobs } = camperSampleRows(
+    options.kind,
+    camperCount,
+    blobs,
+    y0,
+    y1,
+  );
+  const cx = bubbleSampleX(gray.width, options.kind, weekdayIndex);
+  const rowStep =
+    sampleRows.length > 1 ? Math.abs(sampleRows[1].y - sampleRows[0].y) : (y1 - y0) / Math.max(1, camperCount);
+  const radius = Math.max(3, Math.min(gray.width * 0.03, rowStep * 0.22));
 
   const rows: PaperOmrRow[] = [];
   if (options.kind === "group") {
     for (let i = 0; i < camperCount; i += 1) {
       const sample = sampleRows[i];
+      const y = sample?.y ?? 0;
+      const inner = sampleDiskMean(gray, cx, y, radius * 0.7);
       rows.push({
         camperIndex: i,
-        y: sample?.y ?? 0,
-        dailyFilled: sample?.filled ?? false,
-        confidence: sample ? (usedBlobs ? 0.8 : 0.45) : 0.2,
+        y,
+        dailyFilled: isFilled(inner),
+        confidence: usedBlobs ? 0.8 : 0.45,
       });
     }
   } else {
     for (let i = 0; i < camperCount; i += 1) {
-      const am = sampleRows[i * 2];
-      const pm = sampleRows[i * 2 + 1];
+      const sample = sampleRows[i];
+      const y = sample?.y ?? 0;
+      const amInner = sampleDiskMean(gray, cx, sample?.amY ?? y, radius * 0.7);
+      const pmInner = sampleDiskMean(gray, cx, sample?.pmY ?? y, radius * 0.7);
       rows.push({
         camperIndex: i,
-        y: am?.y ?? pm?.y ?? 0,
-        amFilled: am?.filled ?? false,
-        pmFilled: pm?.filled ?? false,
+        y,
+        amFilled: isFilled(amInner),
+        pmFilled: isFilled(pmInner),
         confidence: usedBlobs ? 0.75 : 0.4,
       });
     }
@@ -247,7 +304,7 @@ export function analyzePaperAttendanceImage(
 
   return {
     rows,
-    expectedRows: expectedRowCount(options.kind, camperCount),
+    expectedRows: camperCount,
     detectedRows: clusterYs(blobs.map((b) => b.y), 8).length,
     warning,
   };

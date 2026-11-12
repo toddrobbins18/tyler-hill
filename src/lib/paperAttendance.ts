@@ -86,3 +86,52 @@ export function applyOmrFlagsToRoster<T extends { name: string }>(
     absent: byIndex.get(index) === true,
   }));
 }
+
+export function paperSheetKey(label: string): string {
+  return label.replace(/[^0-9A-Za-z]/g, "").toUpperCase().slice(0, 24);
+}
+
+export function decodePaperSheetBarcode(
+  payload: string,
+): { kind: "bus" | "group"; key: string } | null {
+  const raw = paperSheetKey(payload);
+  if (raw.length < 2) return null;
+  if (raw.startsWith("B")) return { kind: "bus", key: raw.slice(1) };
+  if (raw.startsWith("G")) return { kind: "group", key: raw.slice(1) };
+  return null;
+}
+
+export function matchPaperSheetLabel(
+  payload: string,
+  kind: "bus" | "group",
+  labels: string[],
+): string | null {
+  const decoded = decodePaperSheetBarcode(payload);
+  if (!decoded || decoded.kind !== kind) return null;
+  return labels.find((label) => paperSheetKey(label) === decoded.key) ?? null;
+}
+
+export function missingPaperSheets(expectedLabels: string[], scannedLabels: string[]): string[] {
+  const have = new Set(scannedLabels.map(paperSheetKey));
+  return expectedLabels.filter((label) => !have.has(paperSheetKey(label)));
+}
+
+export function formatPaperScanChecklist(options: {
+  kind: PaperAttendanceListKind;
+  scannedLabels: string[];
+  missingLabels: string[];
+  unreadPages: Array<{ sourceName: string; reason: string }>;
+}): string {
+  const noun = options.kind === "bus" ? "bus" : "group";
+  const parts: string[] = [];
+  parts.push(`Read ${options.scannedLabels.length} ${noun} sheet${options.scannedLabels.length === 1 ? "" : "s"}.`);
+  if (options.missingLabels.length) {
+    parts.push(`Missing: ${options.missingLabels.join(", ")}.`);
+  } else if (options.scannedLabels.length) {
+    parts.push(`Every ${noun} sheet is in.`);
+  }
+  if (options.unreadPages.length) {
+    parts.push(`Could not read: ${options.unreadPages.map((page) => page.sourceName).join(", ")}.`);
+  }
+  return parts.join(" ");
+}

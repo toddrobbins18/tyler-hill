@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ScanLine } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,14 +22,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  formatPaperScanChecklist,
   reviewPaperAttendance,
   weekdayBubbleIndex,
   type ChangeSheetAttendanceSource,
   type PaperAbsentCamper,
   type PaperAttendanceListKind,
 } from "@/lib/paperAttendance";
-import { loadRgbaFromBrowserFile } from "@/lib/paperAttendanceImage";
-import { analyzePaperAttendanceImage, omrRowsToAbsentFlags } from "@/lib/paperAttendanceOmr";
+import { loadRgbaPagesFromBrowserFiles } from "@/lib/paperAttendanceImage";
+import { processPaperAttendancePages } from "@/lib/paperAttendanceScan";
 import {
   loadChangeSheetAttendanceSource,
   loadPaperAttendance,
@@ -67,11 +68,17 @@ export default function ConflictReview() {
   const [groupRoster, setGroupRoster] = useState<GroupRosterCamper[]>([]);
   const [marks, setMarks] = useState<RosterMark[]>([]);
   const [scanWarning, setScanWarning] = useState<string | null>(null);
+  const [scanChecklist, setScanChecklist] = useState<{
+    scannedLabels: string[];
+    missingLabels: string[];
+    unreadPages: Array<{ sourceName: string; reason: string }>;
+  } | null>(null);
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [busAbsents, setBusAbsents] = useState<PaperAbsentCamper[]>([]);
   const [groupAbsents, setGroupAbsents] = useState<PaperAbsentCamper[]>([]);
   const [attendanceSource, setAttendanceSource] = useState<ChangeSheetAttendanceSource>("paperless");
+  const pendingScanAbsents = useRef<Set<string> | null>(null);
 
   useEffect(() => {
     setSheetDate(operationalDateString);
@@ -167,60 +174,118 @@ export default function ConflictReview() {
     if (!sheetOptions.includes(sheetLabel)) setSheetLabel(sheetOptions[0]);
   }, [sheetLabel, sheetOptions]);
 
-  const rosterForSheet = useCallback((): RosterMark[] => {
-    if (!sheetLabel) return [];
-    if (listKind === "group") {
-      return groupRoster
-        .filter((c) => c.groupName === sheetLabel)
-        .map((c) => ({ id: c.id, name: c.name, absent: false }));
-    }
-    if (sheetLabel === PARENT_TRANSPORT_CHANGE_SHEET_BUS) {
-      return parentTransportCampers.map((c, i) => ({
-        id: `pt-${i}-${c.name}`,
+  const rosterForLabel = useCallback(
+    (label: string): RosterMark[] => {
+      if (!label) return [];
+      if (listKind === "group") {
+        return groupRoster
+          .filter((c) => c.groupName === label)
+          .map((c) => ({ id: c.id, name: c.name, absent: false }));
+      }
+      if (label === PARENT_TRANSPORT_CHANGE_SHEET_BUS) {
+        return parentTransportCampers.map((c, i) => ({
+          id: `pt-${i}-${c.name}`,
+          name: c.name,
+          absent: false,
+        }));
+      }
+      const route = routeMeta.find((r) => r.bus === label);
+      if (!route) return [];
+      return campersOnRoute(route.id, coreStops[route.id] ?? []).map((c) => ({
+        id: c.key,
         name: c.name,
         absent: false,
       }));
-    }
-    const route = routeMeta.find((r) => r.bus === sheetLabel);
-    if (!route) return [];
-    return campersOnRoute(route.id, coreStops[route.id] ?? []).map((c) => ({
-      id: c.key,
-      name: c.name,
-      absent: false,
-    }));
-  }, [coreStops, groupRoster, listKind, parentTransportCampers, routeMeta, sheetLabel]);
+    },
+    [coreStops, groupRoster, listKind, parentTransportCampers, routeMeta],
+  );
+
+  const rosterForSheet = useCallback((): RosterMark[] => rosterForLabel(sheetLabel), [rosterForLabel, sheetLabel]);
 
   useEffect(() => {
-    setMarks(rosterForSheet());
-    setScanWarning(null);
+    const base = rosterForSheet();
+    const pending = pendingScanAbsents.current;
+    pendingScanAbsents.current = null;
+    setMarks(
+      pending ? base.map((row) => ({ ...row, absent: pending.has(row.name) })) : base,
+    );
+    if (!pending) setScanWarning(null);
   }, [rosterForSheet]);
 
-  const handleScan = async (file: File | undefined) => {
-    if (!file) return;
+  const handleScan = async (files: FileList | File[] | undefined) => {
+    const list = files ? [...files] : [];
+    if (!list.length) return;
     if (weekdayIndex == null) {
       toast({ title: "Pick a weekday", description: "Bus and group sheets are Monday–Friday.", variant: "destructive" });
       return;
     }
-    if (!marks.length) {
-      toast({ title: "Pick a sheet", description: "Choose the bus or group that matches this page.", variant: "destructive" });
+    if (!sheetOptions.length) {
+      toast({
+        title: `No ${listKind} sheets`,
+        description: listKind === "bus" ? "Open Transportation so buses are on the board." : "No groups in this season.",
+        variant: "destructive",
+      });
       return;
     }
     setScanning(true);
     try {
-      const image = await loadRgbaFromBrowserFile(file);
-      const result = analyzePaperAttendanceImage(image, {
+      const pages = await loadRgbaPagesFromBrowserFiles(list);
+      const batch = processPaperAttendancePages(pages, {
         kind: listKind,
         weekdayIndex,
-        camperCount: marks.length,
+        expectedLabels: sheetOptions,
+        rosterForLabel,
+        fallbackLabel: pages.length === 1 ? sheetLabel : null,
       });
-      const flags = new Map(omrRowsToAbsentFlags(result.rows, listKind).map((row) => [row.camperIndex, row.absent]));
-      setMarks((prev) => prev.map((row, index) => ({ ...row, absent: flags.get(index) === true })));
-      setScanWarning(result.warning ?? null);
-      toast({ title: "Scan read", description: "Check the names, then save to the bus or group list." });
+      if (!companyId) {
+        toast({ title: "Not signed in to a camp", variant: "destructive" });
+        return;
+      }
+      for (const sheet of batch.sheets) {
+        const ok = await savePaperAttendanceSheet(supabase, {
+          companyId,
+          season: currentSeason,
+          attendanceDate: sheetDate,
+          listKind,
+          sheetLabel: sheet.label,
+          absents: sheet.absents,
+          userId: user?.id ?? null,
+        });
+        if (!ok) {
+          toast({ title: `Could not save ${sheet.label}`, variant: "destructive" });
+        }
+      }
+      setScanChecklist({
+        scannedLabels: batch.scannedLabels,
+        missingLabels: batch.missingLabels,
+        unreadPages: batch.unreadPages,
+      });
+      setScanWarning(batch.sheets.find((sheet) => sheet.warning)?.warning ?? null);
+      if (batch.sheets.length === 1) {
+        const sheet = batch.sheets[0];
+        const absents = new Set(sheet.absents.map((row) => row.camperName));
+        if (sheet.label === sheetLabel) {
+          setMarks(rosterForLabel(sheet.label).map((row) => ({ ...row, absent: absents.has(row.name) })));
+        } else {
+          pendingScanAbsents.current = absents;
+          setSheetLabel(sheet.label);
+        }
+      }
+      await loadLists();
+      toast({
+        title: batch.missingLabels.length ? "Scan finished — sheets missing" : "Scan saved",
+        description: formatPaperScanChecklist({
+          kind: listKind,
+          scannedLabels: batch.scannedLabels,
+          missingLabels: batch.missingLabels,
+          unreadPages: batch.unreadPages,
+        }),
+        variant: batch.sheets.length ? "default" : "destructive",
+      });
     } catch (err) {
       toast({
         title: "Could not read that file",
-        description: err instanceof Error ? err.message : "Use a JPG or PNG of the page.",
+        description: err instanceof Error ? err.message : "Use a JPG, PNG, or copier PDF of the pages.",
         variant: "destructive",
       });
     } finally {
@@ -276,8 +341,8 @@ export default function ConflictReview() {
           <ScanLine className="h-6 w-6" /> Conflict Review
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Scan Old School bus and group sheets. Names on both lists are really absent. One-sided marks stay here and
-          are not pushed to change sheets.{" "}
+          Each camper row barcode is that child&apos;s CampMinder ID. The header barcode is the bus or group. Upload
+          one file of every bus sheet, or every group sheet. Names on both lists are really absent.{" "}
           <Link to="/day-camp/change-sheets" className="text-primary underline-offset-2 hover:underline">
             Master Change Sheet
           </Link>
@@ -333,21 +398,31 @@ export default function ConflictReview() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Scan a sheet</CardTitle>
+          <CardTitle className="text-base">Scan all sheets</CardTitle>
           <CardDescription>
-            Print new bus rosters so barcodes print. Fill a bubble only when the camper is absent. Check the names
-            before saving — this does not write paperless attendance.
+            One PDF or photos of every bus roster, or every group report. Header barcodes pick the bus or group.
+            Fill a bubble only when the camper is absent. This does not write paperless attendance.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant={listKind === "bus" ? "default" : "outline"} onClick={() => setListKind("bus")}>
+            <Button
+              size="sm"
+              variant={listKind === "bus" ? "default" : "outline"}
+              onClick={() => {
+                setListKind("bus");
+                setScanChecklist(null);
+              }}
+            >
               Bus roster
             </Button>
             <Button
               size="sm"
               variant={listKind === "group" ? "default" : "outline"}
-              onClick={() => setListKind("group")}
+              onClick={() => {
+                setListKind("group");
+                setScanChecklist(null);
+              }}
             >
               Group report
             </Button>
@@ -369,16 +444,19 @@ export default function ConflictReview() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Photo of the page</Label>
+              <Label className="text-xs">
+                {listKind === "bus" ? "All bus sheets" : "All group sheets"} (PDF or photos)
+              </Label>
               <Input
                 type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="h-8 max-w-[260px] text-xs"
-                disabled={scanning || !marks.length}
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                multiple
+                className="h-8 max-w-[280px] text-xs"
+                disabled={scanning || !sheetOptions.length}
                 onChange={(e) => {
-                  const file = e.target.files?.[0];
+                  const files = e.target.files ? [...e.target.files] : [];
                   e.target.value = "";
-                  void handleScan(file);
+                  void handleScan(files);
                 }}
               />
             </div>
@@ -387,6 +465,36 @@ export default function ConflictReview() {
             </Button>
           </div>
           {scanWarning ? <p className="text-xs text-amber-700">{scanWarning}</p> : null}
+          {scanChecklist ? (
+            <div className="rounded-md border p-3 space-y-2 text-sm">
+              <p>
+                Read {scanChecklist.scannedLabels.length} of {sheetOptions.length} {listKind} sheets.
+              </p>
+              {scanChecklist.missingLabels.length ? (
+                <div>
+                  <p className="text-xs font-medium text-amber-800 mb-1">Missing after this scan</p>
+                  <div className="flex flex-wrap gap-1">
+                    {scanChecklist.missingLabels.map((label) => (
+                      <Badge key={label} variant="outline" className="text-[10px]">
+                        {label}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              ) : scanChecklist.scannedLabels.length ? (
+                <p className="text-xs text-muted-foreground">Every {listKind} sheet is in.</p>
+              ) : null}
+              {scanChecklist.unreadPages.length ? (
+                <div className="text-xs text-amber-800 space-y-0.5">
+                  {scanChecklist.unreadPages.map((page) => (
+                    <p key={page.sourceName}>
+                      {page.sourceName}: {page.reason}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <div className="max-h-[320px] overflow-auto rounded-md border divide-y">
             {marks.length === 0 ? (
               <p className="p-3 text-sm text-muted-foreground">No campers on this sheet.</p>
