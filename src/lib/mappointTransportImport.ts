@@ -79,8 +79,6 @@ const STREET_SUFFIX: Record<string, string> = {
   trail: "trl",
 };
 
-const SNAP_DRIFT_MILES = 0.35;
-
 const normGeocodeKey = (address: string) =>
   address.trim().toLowerCase().replace(/\s+/g, " ");
 
@@ -105,16 +103,6 @@ function parseCanonicalStreet(address: string): ParsedStreet | null {
     street: match[2],
     city: parts[1] ?? "",
   };
-}
-
-function milesBetween(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 3958.8;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function interpolateBundledStreetGeocode(address: string): BundledGeocode | null {
@@ -198,7 +186,7 @@ export function resolveBundledGeocodeResult(address: string): {
   return { lat: hit.lat, lng: hit.lng, provider };
 }
 
-/** If a live geocode drifted (e.g. pin in the bay), snap back to the MapPoint street. */
+/** MapPoint street wins over a saved/live geocode that drifted (bay, wrong block). */
 export function snapToBundledGeocode(
   address: string,
   lat: number,
@@ -206,15 +194,7 @@ export function snapToBundledGeocode(
 ): { lat: number; lng: number } {
   const bundled = resolveBundledGeocodeResult(address);
   if (!bundled) return { lat, lng };
-  const hasCoord =
-    Number.isFinite(lat) &&
-    Number.isFinite(lng) &&
-    !(Math.abs(lat) < 0.0001 && Math.abs(lng) < 0.0001);
-  if (!hasCoord) return { lat: bundled.lat, lng: bundled.lng };
-  if (milesBetween(lat, lng, bundled.lat, bundled.lng) > SNAP_DRIFT_MILES) {
-    return { lat: bundled.lat, lng: bundled.lng };
-  }
-  return { lat, lng };
+  return { lat: bundled.lat, lng: bundled.lng };
 }
 
 export function bundledMappointGeocodeCount() {
@@ -225,13 +205,11 @@ export function seedGeocodeCacheFromBundled(
   cache: Map<string, GeocodeCacheEntry | null>,
 ) {
   for (const [key, hit] of Object.entries(bundledGeocodeMap)) {
-    if (!cache.has(key)) {
-      cache.set(key, {
-        lat: hit.lat,
-        lng: hit.lng,
-        provider: hit.provider || "ors",
-      });
-    }
+    cache.set(key, {
+      lat: hit.lat,
+      lng: hit.lng,
+      provider: hit.provider || "ors",
+    });
   }
 }
 

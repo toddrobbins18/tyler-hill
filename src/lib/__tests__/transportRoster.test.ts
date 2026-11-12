@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import { normCamperNameKey } from "@/lib/routeReferenceWarehouse";
 import {
   applyGeocodeResultsToTransportBoard,
+  backfillRouteStopCoordinates,
   buildMappoint2026AddressHints,
   collectTransportAddressesNeedingGeocode,
   fixBoardAddressesFromEnrollment,
   mergeAddressHintsPreferringBundledMappoint,
   prepareBoardForPersist,
   pruneEmptyPassengerStops,
+  repinTransportBoardCoordinates,
 } from "@/lib/transportRoster";
 import { CAMP_LOCATION } from "@/lib/transportStopTimes";
 
@@ -329,5 +331,43 @@ describe("fixBoardAddressesFromEnrollment", () => {
     const august = stops.find((s) => s.camperNames?.includes("August Meile"));
     expect(amelia?.address).toContain("61 Locust");
     expect(august?.address).toContain("9 Central Drive");
+  });
+});
+
+describe("repinTransportBoardCoordinates", () => {
+  it("moves a saved-but-wrong bus stop onto the MapPoint street", () => {
+    const coreStops = {
+      1: [
+        {
+          name: "Emerson Sabbag",
+          address: "96 Barkers Point Rd, Port Washington, NY 11050",
+          lat: 40.83,
+          lng: -73.69,
+          pickupTime: "7:07 AM",
+          passengers: 1,
+          camperNames: ["Emerson Sabbag"],
+        },
+      ],
+    };
+    const snapped = backfillRouteStopCoordinates(coreStops)[1]?.[0];
+    expect(snapped?.lat).toBeGreaterThan(40.84);
+    expect(snapped?.lng).toBeLessThan(-73.72);
+
+    const board = repinTransportBoardCoordinates({
+      coreStops,
+      unplottedCampers: [
+        {
+          id: 9,
+          name: "Jacob Bruno",
+          address: "121 Soundview Drive, Port Washington, NY 11050",
+          lat: 40.83,
+          lng: -73.69,
+          age: 3,
+          session: "Full 8 Weeks",
+        },
+      ],
+    });
+    expect(board.movedCount).toBeGreaterThanOrEqual(2);
+    expect(board.unplottedCampers[0]?.lat).toBeGreaterThan(40.846);
   });
 });

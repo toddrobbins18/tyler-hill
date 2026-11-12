@@ -172,11 +172,16 @@ export async function normalizeTransportBoardForSeason(
     addressHints: hints,
   });
 
+  const repinned = repinTransportBoardCoordinates({
+    coreStops: addressFixed.coreStops,
+    unplottedCampers: addressFixed.unplottedCampers,
+  });
+
   return {
     ...board,
-    coreStops: backfillRouteStopCoordinates(addressFixed.coreStops),
+    coreStops: repinned.coreStops,
     parentTransportCampers,
-    unplottedCampers: addressFixed.unplottedCampers,
+    unplottedCampers: repinned.unplottedCampers,
   };
 }
 
@@ -755,20 +760,38 @@ function backfillUnplottedCoordinates(camper: TransportUnplottedCamper): Transpo
   return { ...camper, lat: snapped.lat, lng: snapped.lng };
 }
 
-/** Fill lat/lng from bundled MapPoint geocodes when pins would be missing on the map. */
+/** Re-pin every stop/unplotted camper from its street address (MapPoint first). */
+export function repinTransportBoardCoordinates(options: {
+  coreStops: Record<number, TransportRouteStop[]>;
+  unplottedCampers: TransportUnplottedCamper[];
+}): {
+  coreStops: Record<number, TransportRouteStop[]>;
+  unplottedCampers: TransportUnplottedCamper[];
+  movedCount: number;
+} {
+  let movedCount = 0;
+  const coreStops: Record<number, TransportRouteStop[]> = {};
+  for (const [routeId, stops] of Object.entries(options.coreStops)) {
+    coreStops[Number(routeId)] = (stops ?? []).map((stop) => {
+      const snapped = snapToBundledGeocode(stop.address || "", stop.lat, stop.lng);
+      if (snapped.lat === stop.lat && snapped.lng === stop.lng) return stop;
+      movedCount += 1;
+      return { ...stop, lat: snapped.lat, lng: snapped.lng };
+    });
+  }
+  const unplottedCampers = options.unplottedCampers.map((camper) => {
+    const next = backfillUnplottedCoordinates(camper);
+    if (next.lat !== camper.lat || next.lng !== camper.lng) movedCount += 1;
+    return next;
+  });
+  return { coreStops, unplottedCampers, movedCount };
+}
+
+/** Snap route-stop pins to bundled MapPoint geocodes, including saved-but-wrong coords. */
 export function backfillRouteStopCoordinates(
   coreStops: Record<number, TransportRouteStop[]>,
 ): Record<number, TransportRouteStop[]> {
-  const out: Record<number, TransportRouteStop[]> = {};
-  for (const [routeId, stops] of Object.entries(coreStops)) {
-    out[Number(routeId)] = (stops ?? []).map((stop) => {
-      if (isValidRouteCoordinate(stop.lat, stop.lng)) return stop;
-      const bundled = resolveBundledGeocodeResult(stop.address || "");
-      if (!bundled) return stop;
-      return { ...stop, lat: bundled.lat, lng: bundled.lng };
-    });
-  }
-  return out;
+  return repinTransportBoardCoordinates({ coreStops, unplottedCampers: [] }).coreStops;
 }
 
 /** Names currently assigned to any route stop. */

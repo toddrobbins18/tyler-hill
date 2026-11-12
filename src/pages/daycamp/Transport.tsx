@@ -20,6 +20,7 @@ import { isSpreadsheetFileName, loadSpreadsheetRowsFromFile } from "@/lib/spread
 import {
   resolveBundledGeocodeResult,
   seedGeocodeCacheFromBundled,
+  snapToBundledGeocode,
 } from "@/lib/mappointTransportImport";
 import {
   applyRouteOverrides,
@@ -121,6 +122,7 @@ import {
   loadStopsOnlyTemplateFromSeason,
   normalizeTransportBoardForSeason,
   prepareBoardForPersist,
+  repinTransportBoardCoordinates,
   transportBoardSeasonSyncChanged,
   type TransportRoutesSource,
 } from "@/lib/transportRoster";
@@ -1341,14 +1343,14 @@ export default function Transport() {
   };
 
   const geocodeAddress = async (address: string): Promise<GeocodeResult | null> => {
-    const cacheKey = address.trim().toLowerCase();
-    const cached = geocodeCacheRef.current.get(cacheKey);
-    if (cached !== undefined) return cached;
     const bundled = resolveBundledGeocodeResult(address);
     if (bundled) {
       cacheGeocodeResult(address, bundled);
       return bundled;
     }
+    const cacheKey = address.trim().toLowerCase();
+    const cached = geocodeCacheRef.current.get(cacheKey);
+    if (cached !== undefined) return cached;
     // Retry transient errors (404 NOT_FOUND during cold-start, network blips)
     const maxAttempts = 3;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -1388,18 +1390,18 @@ export default function Transport() {
     const pending: { index: number; address: string }[] = [];
 
     addresses.forEach((address, i) => {
-      const cacheKey = address.trim().toLowerCase();
-      const cached = geocodeCacheRef.current.get(cacheKey);
-      if (cached !== undefined) {
-        results[i] = cached;
-        onEach?.(i, cached);
-        return;
-      }
       const bundled = resolveBundledGeocodeResult(address);
       if (bundled) {
         cacheGeocodeResult(address, bundled);
         results[i] = bundled;
         onEach?.(i, bundled);
+        return;
+      }
+      const cacheKey = address.trim().toLowerCase();
+      const cached = geocodeCacheRef.current.get(cacheKey);
+      if (cached !== undefined) {
+        results[i] = cached;
+        onEach?.(i, cached);
         return;
       }
       pending.push({ index: i, address });
@@ -3256,7 +3258,7 @@ export default function Transport() {
       toast({
         title: stillPending.length > 0 ? "Addresses updated — some pins pending" : "CampMinder addresses applied",
         description: stillPending.length > 0
-          ? `${fixed.fixedStopCount} stop text fixed · ${stillPending.length} address(es) still need geocode — click Re-geocode All Placements or retry Fix in a few minutes.`
+          ? `${fixed.fixedStopCount} stop text fixed · ${stillPending.length} address(es) still need geocode — click Reset Map Pins or retry Fix in a few minutes.`
           : `${fixed.fixedStopCount} route stop(s) · ${fixed.fixedUnplottedCount} unplotted camper(s) updated.`,
         variant: stillPending.length > 0 ? "destructive" : "default",
       });
@@ -3306,7 +3308,7 @@ export default function Transport() {
     setRegeocoding(true);
     let regeoSteps: OperationStep[] = [{
       id: "regeo-run",
-      label: "Re-geocoding all placements",
+      label: "Resetting map pins from street addresses",
       status: "running",
       detail: `${addresses.length} unique addresses`,
       at: transportLogAt(),
@@ -3314,65 +3316,78 @@ export default function Transport() {
     setTransportLiveLog({
       visible: true,
       active: true,
-      title: "Re-geocode all placements",
+      title: "Reset map pins",
       steps: regeoSteps,
       progressPct: 15,
-      subtitle: `Calling geocoder · ${transportLogTime()}`,
+      subtitle: `Re-pinning from street addresses · ${transportLogTime()}`,
     });
     geocodeCacheRef.current.clear();
     try { localStorage.removeItem(GEOCODE_CACHE_KEY); } catch { /* ignore */ }
-    toast({ title: "Re-geocoding placements", description: `Checking ${addresses.length} address${addresses.length === 1 ? "" : "es"}…` });
+    seedGeocodeCacheFromBundled(geocodeCacheRef.current);
+    toast({ title: "Resetting map pins", description: `Re-pinning ${addresses.length} address${addresses.length === 1 ? "" : "es"} from the street…` });
 
     try {
-      const results = await geocodeBatch(addresses, 6, (index) => {
-        if (index % 5 !== 0 && index !== addresses.length - 1) return;
-        regeoSteps = upsertTransportOpStep(regeoSteps, {
-          id: "regeo-run",
-          label: "Re-geocoding all placements",
-          status: "running",
-          detail: `${index + 1} / ${addresses.length} addresses`,
-          at: transportLogAt(),
-        });
-        setTransportLiveLog((prev) => prev && {
-          ...prev,
-          steps: [...regeoSteps],
-          progressPct: 15 + Math.round(((index + 1) / addresses.length) * 80),
-          subtitle: `Still running — last update ${transportLogTime()}`,
-        });
+      const snapped = repinTransportBoardCoordinates({
+        coreStops,
+        unplottedCampers,
       });
-      const resolved = new Map<string, { lat: number; lng: number }>();
+      let nextCore = snapped.coreStops;
+      let nextUnplotted = snapped.unplottedCampers;
+      let moved = snapped.movedCount;
       let failed = 0;
-      addresses.forEach((address, i) => {
-        const r = results[i];
-        if (isGeocodePoint(r)) resolved.set(address, { lat: r.lat, lng: r.lng });
-        else failed++;
-      });
 
-      let moved = 0;
-      const changed = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) =>
-        Math.abs(a.lat - b.lat) > 0.0002 || Math.abs(a.lng - b.lng) > 0.0002;
-
-      setUnplottedCampers(prev => prev.map(c => {
-        const hit = resolved.get(c.address);
-        if (hit && changed(c, hit)) { moved++; return { ...c, lat: hit.lat, lng: hit.lng }; }
-        return c;
-      }));
-
-      setCoreStops(prev => {
-        const next: typeof prev = {};
-        Object.entries(prev).forEach(([routeId, stops]) => {
-          next[Number(routeId)] = (stops || []).map(stop => {
+      const leftover = addresses.filter((address) => !resolveBundledGeocodeResult(address));
+      if (leftover.length > 0) {
+        const results = await geocodeBatch(leftover, 6, (index) => {
+          if (index % 5 !== 0 && index !== leftover.length - 1) return;
+          regeoSteps = upsertTransportOpStep(regeoSteps, {
+            id: "regeo-run",
+            label: "Re-geocoding remaining addresses",
+            status: "running",
+            detail: `${index + 1} / ${leftover.length} leftover addresses`,
+            at: transportLogAt(),
+          });
+          setTransportLiveLog((prev) => prev && {
+            ...prev,
+            steps: [...regeoSteps],
+            progressPct: 35 + Math.round(((index + 1) / leftover.length) * 60),
+            subtitle: `Still running — last update ${transportLogTime()}`,
+          });
+        });
+        const resolved = new Map<string, { lat: number; lng: number }>();
+        leftover.forEach((address, i) => {
+          const r = results[i];
+          if (isGeocodePoint(r)) {
+            const pin = snapToBundledGeocode(address, r.lat, r.lng);
+            resolved.set(address, pin);
+          } else {
+            failed++;
+          }
+        });
+        const changed = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) =>
+          Math.abs(a.lat - b.lat) > 0.0002 || Math.abs(a.lng - b.lng) > 0.0002;
+        nextUnplotted = nextUnplotted.map((c) => {
+          const hit = resolved.get(c.address);
+          if (hit && changed(c, hit)) { moved++; return { ...c, lat: hit.lat, lng: hit.lng }; }
+          return c;
+        });
+        const patchedCore: typeof nextCore = {};
+        Object.entries(nextCore).forEach(([routeId, stops]) => {
+          patchedCore[Number(routeId)] = (stops || []).map((stop) => {
             const hit = resolved.get(stop.address);
             if (hit && changed(stop, hit)) { moved++; return { ...stop, lat: hit.lat, lng: hit.lng }; }
             return stop;
           });
         });
-        return next;
-      });
+        nextCore = patchedCore;
+      }
+
+      setUnplottedCampers(nextUnplotted);
+      setCoreStops(nextCore);
 
       regeoSteps = upsertTransportOpStep(regeoSteps, {
         id: "regeo-run",
-        label: "Re-geocoding all placements",
+        label: "Reset map pins",
         status: failed > 0 ? "error" : "done",
         detail: `${moved} pins moved · ${addresses.length - failed} matched${failed ? ` · ${failed} failed` : ""}`,
         at: transportLogAt(),
@@ -3380,15 +3395,15 @@ export default function Transport() {
       setTransportLiveLog({
         visible: true,
         active: false,
-        title: "Re-geocode all placements",
+        title: "Reset map pins",
         steps: regeoSteps,
         progressPct: 100,
         subtitle: `Finished ${transportLogTime()}`,
       });
 
       toast({
-        title: "Re-geocode complete",
-        description: `${moved} pin${moved === 1 ? "" : "s"} repositioned · ${addresses.length - failed} matched${failed ? ` · ${failed} could not be geocoded` : ""}.`,
+        title: "Map pins reset",
+        description: `${moved} pin${moved === 1 ? "" : "s"} moved onto the street address${failed ? ` · ${failed} could not be geocoded` : ""}.`,
       });
     } catch (e: any) {
       regeoSteps = upsertTransportOpStep(regeoSteps, {
@@ -4584,10 +4599,10 @@ export default function Transport() {
             className="gap-2"
             onClick={handleRegeocodeAll}
             disabled={regeocoding || fixingAddresses}
-            title="Re-run every camper and stop address through the latest geocoder"
+            title="Reset every pin from its street address (MapPoint houses first)"
           >
             <MapPin className={`h-4 w-4 ${regeocoding ? "animate-pulse" : ""}`} />
-            {regeocoding ? "Re-geocoding…" : "Re-geocode All Placements"}
+            {regeocoding ? "Resetting pins…" : "Reset Map Pins"}
           </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>

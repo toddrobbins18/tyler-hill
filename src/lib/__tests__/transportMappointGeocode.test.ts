@@ -43,6 +43,17 @@ describe("bundled MapPoint geocode", () => {
     expect(snapped.lng).toBeCloseTo(onStreet.lng, 6);
   });
 
+  it("replaces a slightly drifted saved pin with the MapPoint house", () => {
+    const onStreet = resolveBundledGeocodeResult("111 Soundview Dr, Port Washington, NY 11050")!;
+    const snapped = snapToBundledGeocode(
+      "111 Soundview Dr, Port Washington, NY 11050",
+      onStreet.lat + 0.001,
+      onStreet.lng - 0.001,
+    );
+    expect(snapped.lat).toBeCloseTo(onStreet.lat, 6);
+    expect(snapped.lng).toBeCloseTo(onStreet.lng, 6);
+  });
+
   it("moves Jacob Bruno off a saved bay coordinate when the board rebuilds", () => {
     const rebuilt = buildUnplottedFromEnrollment({
       enrolled: [
