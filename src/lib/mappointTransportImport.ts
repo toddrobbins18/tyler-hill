@@ -79,43 +79,131 @@ const STREET_SUFFIX: Record<string, string> = {
   trail: "trl",
 };
 
+const STREET_DIRECTION: Record<string, string> = {
+  north: "n",
+  south: "s",
+  east: "e",
+  west: "w",
+};
+
 const normGeocodeKey = (address: string) =>
   address.trim().toLowerCase().replace(/\s+/g, " ");
 
+function stripGeocodeUnit(address: string): string {
+  return address
+    .replace(/\s*(?:#|apt\.?|apartment|unit|ste\.?|suite)\s*[a-z0-9-]+/gi, "")
+    .replace(/\b(?:fl|floor)\s+[a-z0-9-]+\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/,\s*,/g, ",")
+    .trim();
+}
+
 /** Drive → Dr so CampMinder "Soundview Drive" hits MapPoint "Soundview Dr". */
 export function canonicalizeGeocodeKey(address: string): string {
-  const raw = normGeocodeKey(address).replace(/\./g, "");
-  return raw.replace(
+  let raw = normGeocodeKey(stripGeocodeUnit(address)).replace(/\./g, "");
+  raw = raw.replace(
     /\b(drive|avenue|street|road|lane|court|place|boulevard|terrace|circle|highway|parkway|trail)\b/g,
     (word) => STREET_SUFFIX[word] ?? word,
   );
+  const parts = raw.split(",").map((part) => part.trim());
+  if (parts[0]) {
+    parts[0] = parts[0].replace(
+      /\b(north|south|east|west)\b/g,
+      (word) => STREET_DIRECTION[word] ?? word,
+    );
+  }
+  return parts.filter(Boolean).join(", ");
 }
 
-type ParsedStreet = { house: number; street: string; city: string };
+type ParsedStreet = { house: number; street: string; city: string; zip: string };
 
 function parseCanonicalStreet(address: string): ParsedStreet | null {
-  const parts = canonicalizeGeocodeKey(address).split(",").map((part) => part.trim());
+  const canonical = canonicalizeGeocodeKey(address);
+  const parts = canonical.split(",").map((part) => part.trim());
   const streetPart = parts[0] ?? "";
-  const match = streetPart.match(/^(\d+)\s+(.+)$/);
+  const match = streetPart.match(
+    /^(\d+)(?:-\d+)?(?:[a-z](?=\s)|(?!\s+[nsew]\b)\s+[a-z]\b)?\s+(.+)$/i,
+  );
   if (!match) return null;
   return {
     house: Number(match[1]),
-    street: match[2],
-    city: parts[1] ?? "",
+    street: match[2].toLowerCase(),
+    city: (parts[1] ?? "").toLowerCase(),
+    zip: canonical.match(/\b(\d{5})\b/)?.[1] ?? "",
   };
+}
+
+function streetsCompatible(a: string, b: string): boolean {
+  if (a === b) return true;
+  const prefix = /^(n|s|e|w) /;
+  if (prefix.test(a) === prefix.test(b)) return false;
+  return a.replace(prefix, "") === b.replace(prefix, "");
+}
+
+function citiesCompatible(a: string, b: string): boolean {
+  if (!a || !b) return true;
+  if (a === b) return true;
+  const strip = (value: string) =>
+    value.replace(/\b(heights|hts|manor|hills|harbor)\b/g, "").replace(/\s+/g, " ").trim();
+  const left = strip(a);
+  const right = strip(b);
+  if (left && right && left === right) return true;
+  return a.startsWith(b) || b.startsWith(a);
+}
+
+function lerpHouse(
+  a: { house: number; lat: number; lng: number },
+  b: { house: number; lat: number; lng: number },
+  house: number,
+): BundledGeocode {
+  const span = b.house - a.house;
+  if (!span) return { lat: a.lat, lng: a.lng, provider: "ors" };
+  const t = (house - a.house) / span;
+  return {
+    lat: a.lat + t * (b.lat - a.lat),
+    lng: a.lng + t * (b.lng - a.lng),
+    provider: "ors",
+  };
+}
+
+function approxMiles(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number },
+): number {
+  const dLat = (b.lat - a.lat) * 69;
+  const dLng = (b.lng - a.lng) * 69 * Math.cos((a.lat * Math.PI) / 180);
+  return Math.hypot(dLat, dLng);
+}
+
+function corridorPointsFor(parsed: ParsedStreet): { house: number; lat: number; lng: number }[] {
+  const sameStreet: { house: number; lat: number; lng: number; city: string; zip: string }[] = [];
+  for (const [key, hit] of Object.entries(bundledGeocodeMap)) {
+    if (hit?.lat == null || hit?.lng == null) continue;
+    const row = parseCanonicalStreet(key);
+    if (!row || !streetsCompatible(row.street, parsed.street)) continue;
+    sameStreet.push({
+      house: row.house,
+      lat: hit.lat,
+      lng: hit.lng,
+      city: row.city,
+      zip: row.zip,
+    });
+  }
+  if (!sameStreet.length) return [];
+  if (parsed.zip) {
+    return sameStreet.filter((row) => !row.zip || row.zip === parsed.zip);
+  }
+  if (parsed.city) {
+    return sameStreet.filter((row) => citiesCompatible(parsed.city, row.city));
+  }
+  const zips = new Set(sameStreet.map((row) => row.zip).filter(Boolean));
+  return zips.size <= 1 ? sameStreet : [];
 }
 
 function interpolateBundledStreetGeocode(address: string): BundledGeocode | null {
   const parsed = parseCanonicalStreet(address);
   if (!parsed) return null;
-  const points: { house: number; lat: number; lng: number }[] = [];
-  for (const [key, hit] of Object.entries(bundledGeocodeMap)) {
-    if (hit?.lat == null || hit?.lng == null) continue;
-    const row = parseCanonicalStreet(key);
-    if (!row || row.street !== parsed.street) continue;
-    if (parsed.city && row.city && row.city !== parsed.city) continue;
-    points.push({ house: row.house, lat: hit.lat, lng: hit.lng });
-  }
+  const points = corridorPointsFor(parsed);
   if (!points.length) return null;
   const exact = points.find((row) => row.house === parsed.house);
   if (exact) return { lat: exact.lat, lng: exact.lng, provider: "ors" };
@@ -130,19 +218,21 @@ function interpolateBundledStreetGeocode(address: string): BundledGeocode | null
       break;
     }
   }
-  if (lower && upper) {
-    const t = (parsed.house - lower.house) / (upper.house - lower.house);
-    return {
-      lat: lower.lat + t * (upper.lat - lower.lat),
-      lng: lower.lng + t * (upper.lng - lower.lng),
-      provider: "ors",
-    };
+  if (lower && upper) return lerpHouse(lower, upper, parsed.house);
+
+  const nearest = points.reduce((best, row) =>
+    Math.abs(row.house - parsed.house) < Math.abs(best.house - parsed.house) ? row : best,
+  );
+  if (points.length >= 2) {
+    const a = parsed.house <= points[0].house ? points[0] : points[points.length - 2];
+    const b = parsed.house <= points[0].house ? points[1] : points[points.length - 1];
+    const geo = lerpHouse(a, b, parsed.house);
+    if (approxMiles(geo, nearest) > 0.6) {
+      return { lat: nearest.lat, lng: nearest.lng, provider: "ors" };
+    }
+    return geo;
   }
-  const nearest = lower ?? upper;
-  if (nearest && Math.abs(nearest.house - parsed.house) <= 20) {
-    return { lat: nearest.lat, lng: nearest.lng, provider: "ors" };
-  }
-  return null;
+  return { lat: nearest.lat, lng: nearest.lng, provider: "ors" };
 }
 
 /** Pre-geocoded MapPoint addresses — instant import, no API calls in production. */

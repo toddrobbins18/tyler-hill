@@ -2646,19 +2646,19 @@ export default function Transport() {
       toast({ title: "Missing info", description: "Name and address are required.", variant: "destructive" });
       return;
     }
-    // Geocode via OpenRouteService; fall back to randomized point if unavailable
-    let lat = 40.85 + (Math.random() - 0.5) * 0.1;
-    let lng = -73.65 + (Math.random() - 0.5) * 0.1;
-    try {
-      const { data } = await supabase.functions.invoke("route-optimizer", {
-        body: { action: "geocode", address: newUnplotted.address.trim() },
-      });
-      if (data?.found) { lat = data.lat; lng = data.lng; }
-    } catch { /* silent fallback */ }
+    const address = newUnplotted.address.trim();
+    let lat = 40.85;
+    let lng = -73.65;
+    const geo = await geocodeAddress(address);
+    if (isGeocodePoint(geo)) {
+      const pin = snapToBundledGeocode(address, geo.lat, geo.lng);
+      lat = pin.lat;
+      lng = pin.lng;
+    }
 
     const id = Math.max(300, ...unplottedCampers.map(c => c.id)) + 1;
     setUnplottedCampers(prev => [...prev, {
-      id, name: newUnplotted.name.trim(), address: newUnplotted.address.trim(),
+      id, name: newUnplotted.name.trim(), address,
       lat, lng,
       age: Number(newUnplotted.age) || 10, session: newUnplotted.session,
     }]);

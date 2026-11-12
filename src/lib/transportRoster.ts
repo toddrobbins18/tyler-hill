@@ -193,7 +193,14 @@ export function transportBoardSeasonSyncChanged(
   if (JSON.stringify(before.coreStops) !== JSON.stringify(after.coreStops)) return true;
   const unplottedKey = (p: TransportBoardPayload) =>
     p.unplottedCampers
-      .map((c) => c.name.trim().toLowerCase())
+      .map((c) =>
+        [
+          c.name.trim().toLowerCase(),
+          (c.address || "").trim().toLowerCase(),
+          Number(c.lat).toFixed(5),
+          Number(c.lng).toFixed(5),
+        ].join("\t"),
+      )
       .sort()
       .join("\0");
   return unplottedKey(before) !== unplottedKey(after);
