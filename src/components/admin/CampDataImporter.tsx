@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { DEFAULT_SEASON } from "@/lib/seasonConstants";
 import { useSeasonContext } from "@/contexts/SeasonContext";
-import { campminderIntegrationEnabled, isNestSandboxCompany, isNorthShoreDayCamp } from "@/lib/camps";
+import { campminderIntegrationEnabled, isDayCampCompany, isNestSandboxCompany } from "@/lib/camps";
 import OperationLivePanel from "@/components/admin/OperationLivePanel";
 import { useSyncJobMonitor } from "@/hooks/useSyncJobMonitor";
 import { syncJobTitle, type OperationStep } from "@/lib/operationLiveLog";
@@ -636,7 +636,7 @@ export default function CampDataImporter() {
                           </>
                         )}
                       </Button>
-                      {isNorthShoreDayCamp(company.slug) && (
+                      {isDayCampCompany(company) && (
                         <>
                           <Button
                             onClick={() => handleCampMinderSync(company.id, company.name, 'addresses')}

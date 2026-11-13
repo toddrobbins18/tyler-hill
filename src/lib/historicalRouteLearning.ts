@@ -34,6 +34,7 @@ import {
   sanitizeRouteStops,
 } from "@/lib/transportRouteStops";
 import { fetchCompanySlug, isSandboxTransportSlug } from "@/lib/nestSandboxTransport";
+import { usesNorthShoreMappoint } from "@/lib/camps";
 
 export const DEFAULT_REFERENCE_SEASON = "2026";
 
@@ -170,6 +171,10 @@ async function loadHistoricalPriorMap(
     }
   }
 
+  if (!usesNorthShoreMappoint(slug)) {
+    return buildCamperPriorMap([]);
+  }
+
   return buildCamperPriorMap(buildPriorsFromBundledMappoint(historicalSeason));
 }
 
@@ -255,6 +260,16 @@ export async function getReferenceDatasetStatus(
         priorCount: priors.length,
       };
     }
+  }
+
+  if (!usesNorthShoreMappoint(slug)) {
+    return {
+      referenceSeason: historicalSeason,
+      loaded: false,
+      source: "nest",
+      stats: null,
+      priorCount: 0,
+    };
   }
 
   const bundled = buildPriorsFromBundledMappoint(historicalSeason);
@@ -378,6 +393,10 @@ export async function syncBundledMapPointToWarehouse(
   companyId: string,
   options?: { userId?: string | null; referenceSeason?: string },
 ): Promise<{ ok: boolean; error?: string; stats?: RouteReferenceImportStats }> {
+  const slug = await fetchCompanySlug(supabase, companyId);
+  if (!usesNorthShoreMappoint(slug)) {
+    return { ok: false, error: "Bundled MapPoint is North Shore only" };
+  }
   const referenceSeason = options?.referenceSeason ?? DEFAULT_REFERENCE_SEASON;
   const payload = buildRouteReferenceFromMappointCsv(getBundledMappointRoutesCsv2026(), {
     referenceSeason,

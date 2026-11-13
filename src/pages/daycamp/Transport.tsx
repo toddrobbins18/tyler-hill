@@ -170,13 +170,12 @@ import {
 import { optimizeStopsFromFirstStop, optimizeStopsWithPinned } from "@/lib/transportRouteOptimize";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
-import { campminderIntegrationEnabled, isNestSandboxCompany } from "@/lib/camps";
+import { campminderIntegrationEnabled, getCampLocation, isNestSandboxCompany, usesNorthShoreMappoint } from "@/lib/camps";
 import { SANDBOX_TRANSPORT_BOARD_SEASON } from "@/lib/nestSandboxTransport";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link, useSearchParams } from "react-router-dom";
 import {
-  CAMP_LOCATION,
   haversineMiles,
   buildAMStops,
   buildPMStops,
@@ -556,6 +555,8 @@ export default function Transport() {
   const { currentSeason } = useSeason();
   const [searchParams, setSearchParams] = useSearchParams();
   const companyId = currentCompany?.id;
+  const campLocation = useMemo(() => getCampLocation(currentCompany?.slug), [currentCompany?.slug]);
+  const useNsMappoint = usesNorthShoreMappoint(currentCompany?.slug);
   const campMinderTransportToolsEnabled = campminderIntegrationEnabled(currentCompany);
   const sandboxTransport = isNestSandboxCompany(currentCompany?.slug);
 
@@ -571,13 +572,13 @@ export default function Transport() {
   }, [setSearchParams]);
   // Core stops are the source of truth (without camp stop)
   const [coreStops, setCoreStops] = useState<Record<number, RouteStop[]>>(
-    () => (currentSeason === "2026" ? initialCoreStops : {}),
+    () => (currentSeason === "2026" && useNsMappoint ? initialCoreStops : {}),
   );
   const [routeMeta, setRouteMeta] = useState<(typeof initialRouteMeta[number] & { counselorPickup?: BusCounselorPickup | null })[]>(
-    () => (currentSeason === "2026" ? initialRouteMeta : []),
+    () => (currentSeason === "2026" && useNsMappoint ? initialRouteMeta : []),
   );
   const [unplottedCampers, setUnplottedCampers] = useState<UnplottedCamper[]>(
-    () => (currentSeason === "2026" ? initialUnplottedCampers : []),
+    () => (currentSeason === "2026" && useNsMappoint ? initialUnplottedCampers : []),
   );
   const [parentTransportCampers, setParentTransportCampers] = useState<ParentTransportCamper[]>([]);
   const [camperBusRunSchedules, setCamperBusRunSchedules] = useState<CamperBusRunSchedules>({});
@@ -951,7 +952,7 @@ export default function Transport() {
             coreStops: marked.coreStops,
             routeMeta: marked.routeMeta,
             userId: userRes.user?.id,
-            excludeAddress: CAMP_LOCATION.address,
+            excludeAddress: campLocation.address,
           });
         } catch (learnErr) {
           console.warn("[Transport] Routing learn sync failed:", learnErr);
@@ -977,7 +978,7 @@ export default function Transport() {
     const coreStops: BoardPayload["coreStops"] = {};
     for (const [routeId, stops] of Object.entries(payload.coreStops ?? {})) {
       const filtered = (stops ?? []).filter((stop) => {
-        if (stop.address === CAMP_LOCATION.address) return true;
+        if (stop.address === campLocation.address) return true;
         if (isValidRouteCoordinate(stop.lat, stop.lng)) return true;
         return !!stop.address?.trim();
       });
@@ -1132,7 +1133,7 @@ export default function Transport() {
             routesConfirmed: saved.routesConfirmed,
           }, "supabase");
         } else if (!(await restoreBoardFromCache()) && lastKnownStopCountRef.current === 0) {
-          const emptyPayload: BoardPayload = currentSeason === "2026"
+          const emptyPayload: BoardPayload = currentSeason === "2026" && useNsMappoint
             ? { coreStops: initialCoreStops, routeMeta: initialRouteMeta, unplottedCampers: initialUnplottedCampers, parentTransportCampers: [] }
             : { coreStops: {}, routeMeta: [], unplottedCampers: [], parentTransportCampers: [] };
           await finalizeBoardForSeason(emptyPayload);
@@ -1331,10 +1332,11 @@ export default function Transport() {
   const geocodeCacheRef = useRef<Map<string, GeocodeResult | null>>(loadPersistedGeocodeCache());
 
   useEffect(() => {
+    if (!useNsMappoint) return;
     seedGeocodeCacheFromBundled(
       geocodeCacheRef.current as Map<string, { lat: number; lng: number; provider?: string } | null>,
     );
-  }, []);
+  }, [useNsMappoint]);
 
   const cacheGeocodeResult = (address: string, result: GeocodeResult | null) => {
     const cacheKey = address.trim().toLowerCase();
@@ -1343,7 +1345,7 @@ export default function Transport() {
   };
 
   const geocodeAddress = async (address: string): Promise<GeocodeResult | null> => {
-    const bundled = resolveBundledGeocodeResult(address);
+    const bundled = useNsMappoint ? resolveBundledGeocodeResult(address) : null;
     if (bundled) {
       cacheGeocodeResult(address, bundled);
       return bundled;
@@ -1390,7 +1392,7 @@ export default function Transport() {
     const pending: { index: number; address: string }[] = [];
 
     addresses.forEach((address, i) => {
-      const bundled = resolveBundledGeocodeResult(address);
+      const bundled = useNsMappoint ? resolveBundledGeocodeResult(address) : null;
       if (bundled) {
         cacheGeocodeResult(address, bundled);
         results[i] = bundled;
@@ -1676,7 +1678,7 @@ export default function Transport() {
       return;
     }
     const stopLabels = directionStops.map((s) => {
-      if (s.address === CAMP_LOCATION.address) return "Camp";
+      if (s.address === campLocation.address) return "Camp";
       if (isCounselorPickupStop(s)) return s.name || "Bus counselor";
       return s.camperNames?.join(", ") || s.name;
     });
@@ -1736,8 +1738,8 @@ export default function Transport() {
     const pickup = routeMeta.find((r) => r.id === routeId)?.counselorPickup;
     const withCounselor = withCounselorPickupStops(core, pickup ?? null, timeOfDay);
     return timeOfDay === "am"
-      ? [...withCounselor, { ...CAMP_LOCATION, pickupTime: "", passengers: 0 }]
-      : [{ ...CAMP_LOCATION, pickupTime: "", passengers: 0 }, ...withCounselor];
+      ? [...withCounselor, { ...campLocation, pickupTime: "", passengers: 0 }]
+      : [{ ...campLocation, pickupTime: "", passengers: 0 }, ...withCounselor];
   };
 
   const handleReorderStop = (routeId: number, fromDisplayIdx: number, toDisplayIdx: number) => {
@@ -1746,8 +1748,8 @@ export default function Transport() {
     if (!effective.length) return;
 
     const displayStops = displayStopsForCoreIndex(routeId);
-    const fromCore = coreIndexFromDisplayStops(displayStops, fromDisplayIdx, CAMP_LOCATION.address);
-    const toCore = coreIndexFromDisplayStops(displayStops, toDisplayIdx, CAMP_LOCATION.address);
+    const fromCore = coreIndexFromDisplayStops(displayStops, fromDisplayIdx, campLocation.address);
+    const toCore = coreIndexFromDisplayStops(displayStops, toDisplayIdx, campLocation.address);
     if (fromCore == null || toCore == null || fromCore >= effective.length || toCore >= effective.length) return;
 
     const next = [...effective];
@@ -1775,8 +1777,8 @@ export default function Transport() {
       );
       const orderedStops =
         timeOfDay === "am"
-          ? [...core, { ...CAMP_LOCATION, pickupTime: "", passengers: 0 }]
-          : [{ ...CAMP_LOCATION, pickupTime: "", passengers: 0 }, ...core];
+          ? [...core, { ...campLocation, pickupTime: "", passengers: 0 }]
+          : [{ ...campLocation, pickupTime: "", passengers: 0 }, ...core];
       const validStops = orderedStops.filter((s) => isValidRouteCoordinate(s.lat, s.lng));
       if (validStops.length < 2) continue;
       const sig = `${meta.id}-${timeOfDay}-${routeStopCoordinateSignature(validStops)}`;
@@ -1797,8 +1799,8 @@ export default function Transport() {
       );
       const orderedStops =
         timeOfDay === "am"
-          ? [...core, { ...CAMP_LOCATION, pickupTime: "", passengers: 0 }]
-          : [{ ...CAMP_LOCATION, pickupTime: "", passengers: 0 }, ...core];
+          ? [...core, { ...campLocation, pickupTime: "", passengers: 0 }]
+          : [{ ...campLocation, pickupTime: "", passengers: 0 }, ...core];
       const validStops = orderedStops.filter((s) => isValidRouteCoordinate(s.lat, s.lng));
       if (validStops.length < 2) continue;
 
@@ -1858,6 +1860,7 @@ export default function Transport() {
   const buildRoutes = useCallback((tod: "am" | "pm"): Route[] => {
     const stopTimeOptions = {
       dwellMinutesPerStop: stopDwellMinutes,
+      campLocation,
     };
     return routeMeta.map(meta => {
       const core = getEffectiveCore(meta.id);
@@ -1884,7 +1887,7 @@ export default function Transport() {
         direction: tod === "am" ? "Inbound" : "Outbound",
       };
     });
-  }, [getEffectiveCore, routeMeta, routeLegMinutesById, stopDwellMinutes, includeCounselorInRouteTime]);
+  }, [getEffectiveCore, routeMeta, routeLegMinutesById, stopDwellMinutes, includeCounselorInRouteTime, campLocation]);
 
   const camperEnrollmentLookup = useMemo(
     () => buildCamperEnrollmentLookup(groupRoster),
@@ -1945,15 +1948,17 @@ export default function Transport() {
   );
 
   const displayRoutes = useMemo(() => {
-    const seasonFiltered = applySeasonRosterToRoutes(routes, seasonRosterNames);
+    const seasonFiltered = applySeasonRosterToRoutes(routes, seasonRosterNames, campLocation.address);
     const withoutPtOnStops = applyParentTransportExclusionToRoutes(
       seasonFiltered,
       parentTransportCampers,
+      campLocation.address,
     );
     const filtered = applyEnrollmentWeekToRoutes(
       withoutPtOnStops,
       activeRouteEnrollmentWeek,
       camperEnrollmentLookup,
+      campLocation.address,
     );
     return filtered.map((route) => {
       const pt = countParentTransportOnRoute(route.id, parentTransportCampers, {
@@ -1963,7 +1968,7 @@ export default function Transport() {
         enrollmentLookup: camperEnrollmentLookup,
       });
       const busStopCampers = route.stops
-        .filter((s) => s.address !== CAMP_LOCATION.address)
+        .filter((s) => s.address !== campLocation.address)
         .reduce((sum, s) => sum + (s.passengers || 0), 0);
       return { ...route, campers: busStopCampers + pt };
     });
@@ -1975,6 +1980,7 @@ export default function Transport() {
     parentTransportCampers,
     overrideDate,
     timeOfDay,
+    campLocation.address,
   ]);
 
   const displayedRoutes = useMemo(
@@ -1995,11 +2001,11 @@ export default function Transport() {
   const mapDisplayedRoutes = useMemo(
     () =>
       filterRoutesForMapDisplay(displayedRoutes, {
-        campAddress: CAMP_LOCATION.address,
+        campAddress: campLocation.address,
         showBlankOpenStops,
         pendingNamesByAddress,
       }),
-    [displayedRoutes, showBlankOpenStops, pendingNamesByAddress],
+    [displayedRoutes, showBlankOpenStops, pendingNamesByAddress, campLocation.address],
   );
 
   type SidebarCamperHit = {
@@ -2016,7 +2022,7 @@ export default function Transport() {
     const hits: SidebarCamperHit[] = [];
     for (const route of displayRoutes) {
       for (const stop of route.stops) {
-        if (stop.address === CAMP_LOCATION.address) continue;
+        if (stop.address === campLocation.address) continue;
         const riders = stopRiderNames(stop);
         if (riders.length === 0) continue;
         const address = stop.address?.trim() ?? "";
@@ -2230,7 +2236,7 @@ export default function Transport() {
         board.unplottedCampers,
         board.coreStops,
         resultsByAddress,
-        CAMP_LOCATION.address,
+        campLocation.address,
       );
       if (applied.updatedCount > 0) {
         setUnplottedCampers(applied.unplotted);
@@ -2257,7 +2263,7 @@ export default function Transport() {
     const pending = collectTransportAddressesNeedingGeocode(
       unplottedCampers,
       coreStops,
-      CAMP_LOCATION.address,
+      campLocation.address,
     );
     if (pending.length === 0) return;
 
@@ -2464,7 +2470,7 @@ export default function Transport() {
       setTodayOverrides((prev) => {
         const existingAdded = prev.added[routeId] || [];
         const core = coreStops[routeId] || [];
-        const tryAdded = mergeCampersIntoStops(existingAdded, assignable);
+        const tryAdded = mergeCampersIntoStops(existingAdded, assignable, campLocation);
         if (tryAdded.merged) {
           mergedNames = tryAdded.mergedNames;
           return { ...prev, added: { ...prev.added, [routeId]: tryAdded.next } };
@@ -2477,7 +2483,7 @@ export default function Transport() {
             )
           : undefined;
         if (coreMatch) {
-          const merged = mergeCampersIntoStops([coreMatch], assignable);
+          const merged = mergeCampersIntoStops([coreMatch], assignable, campLocation);
           mergedNames = merged.mergedNames ?? (names.length > 1 ? names : null);
           const excludedAddrs = [...(prev.excluded[routeId] ?? [])];
           if (!excludedAddrs.includes(coreMatch.address)) {
@@ -2486,7 +2492,7 @@ export default function Transport() {
           const addedBase = existingAdded.filter(
             (s) => normalizeAddress(s.address) !== normalizeAddress(coreMatch.address),
           );
-          const added = mergeCampersIntoStops([...addedBase, ...merged.next], []).next;
+          const added = mergeCampersIntoStops([...addedBase, ...merged.next], [], campLocation).next;
           return {
             ...prev,
             excluded: { ...prev.excluded, [routeId]: excludedAddrs },
@@ -2514,7 +2520,7 @@ export default function Transport() {
       let mergedNames: string[] | null = null;
       markRoutesConfigured("manual");
       setCoreStops((cs) => {
-        const { next, mergedNames: mn } = mergeCampersIntoStops(cs[routeId] || [], assignable);
+        const { next, mergedNames: mn } = mergeCampersIntoStops(cs[routeId] || [], assignable, campLocation);
         mergedNames = mn;
         return { ...cs, [routeId]: next };
       });
@@ -2647,11 +2653,11 @@ export default function Transport() {
       return;
     }
     const address = newUnplotted.address.trim();
-    let lat = 40.85;
-    let lng = -73.65;
+    let lat = campLocation.lat;
+    let lng = campLocation.lng;
     const geo = await geocodeAddress(address);
     if (isGeocodePoint(geo)) {
-      const pin = snapToBundledGeocode(address, geo.lat, geo.lng);
+      const pin = useNsMappoint ? snapToBundledGeocode(address, geo.lat, geo.lng) : geo;
       lat = pin.lat;
       lng = pin.lng;
     }
@@ -2905,12 +2911,18 @@ export default function Transport() {
         templateStops = fromSeed.coreStops;
         templateMeta = fromSeed.routeMeta;
         templateDescription = `${templateMeta.length} demo buses restored from sandbox seed (stops only). MapPoint / North Shore templates are disabled here.`;
-      } else {
+      } else if (useNsMappoint) {
         const mappoint = build2026MappointRouteTemplate(ROUTE_COLORS);
         templateStops = mappoint.coreStops;
         templateMeta = mappoint.routeMeta;
         routesSource = "mappoint2026";
         templateDescription = `${templateMeta.length} buses loaded (stops only). Click "Place Using Prior Routes" when you want returning campers assigned.`;
+      } else {
+        toast({
+          title: "Add this camp's buses",
+          description: "North Shore MapPoint is not used here. Add buses on this board or import this camp's own MapPoint file.",
+        });
+        return;
       }
 
       const normalized = await normalizeTransportBoardForSeason(
@@ -3096,7 +3108,7 @@ export default function Transport() {
       const addresses = collectTransportAddressesNeedingGeocode(
         nextUnplotted,
         nextCoreStops,
-        CAMP_LOCATION.address,
+        campLocation.address,
       );
 
       fixLogSteps = upsertTransportOpStep(fixLogSteps, {
@@ -3134,7 +3146,7 @@ export default function Transport() {
       });
 
       if (addresses.length > 0) {
-        seedGeocodeCacheFromBundled(geocodeCacheRef.current);
+        if (useNsMappoint) seedGeocodeCacheFromBundled(geocodeCacheRef.current);
         fixLogSteps = upsertTransportOpStep(fixLogSteps, {
           id: "geocode",
           label: "Geocoding map pins (slow mode)",
@@ -3181,7 +3193,7 @@ export default function Transport() {
             nextUnplotted,
             nextCoreStops,
             resolved,
-            CAMP_LOCATION.address,
+            campLocation.address,
           );
           nextUnplotted = applied.unplotted;
           nextCoreStops = applied.coreStops;
@@ -3235,7 +3247,7 @@ export default function Transport() {
       const stillPending = collectTransportAddressesNeedingGeocode(
         nextUnplotted,
         nextCoreStops,
-        CAMP_LOCATION.address,
+        campLocation.address,
       );
       fixLogSteps = upsertTransportOpStep(fixLogSteps, {
         id: "complete",
@@ -3292,7 +3304,7 @@ export default function Transport() {
   const handleRegeocodeAll = async () => {
     const stopEntries = Object.entries(coreStops).flatMap(([routeId, stops]) =>
       (stops || []).map((stop, index) => ({ routeId: Number(routeId), index, address: stop.address }))
-    ).filter(e => e.address && e.address !== CAMP_LOCATION.address);
+    ).filter(e => e.address && e.address !== campLocation.address);
     const camperEntries = unplottedCampers.filter(c => c.address);
 
     const addresses = Array.from(new Set([
@@ -3323,20 +3335,21 @@ export default function Transport() {
     });
     geocodeCacheRef.current.clear();
     try { localStorage.removeItem(GEOCODE_CACHE_KEY); } catch { /* ignore */ }
-    seedGeocodeCacheFromBundled(geocodeCacheRef.current);
+    if (useNsMappoint) seedGeocodeCacheFromBundled(geocodeCacheRef.current);
     toast({ title: "Resetting map pins", description: `Re-pinning ${addresses.length} address${addresses.length === 1 ? "" : "es"} from the street…` });
 
     try {
       const snapped = repinTransportBoardCoordinates({
         coreStops,
         unplottedCampers,
+        useBundledMappoint: useNsMappoint,
       });
       let nextCore = snapped.coreStops;
       let nextUnplotted = snapped.unplottedCampers;
       let moved = snapped.movedCount;
       let failed = 0;
 
-      const leftover = addresses.filter((address) => !resolveBundledGeocodeResult(address));
+      const leftover = addresses.filter((address) => !useNsMappoint || !resolveBundledGeocodeResult(address));
       if (leftover.length > 0) {
         const results = await geocodeBatch(leftover, 6, (index) => {
           if (index % 5 !== 0 && index !== leftover.length - 1) return;
@@ -3358,7 +3371,7 @@ export default function Transport() {
         leftover.forEach((address, i) => {
           const r = results[i];
           if (isGeocodePoint(r)) {
-            const pin = snapToBundledGeocode(address, r.lat, r.lng);
+            const pin = useNsMappoint ? snapToBundledGeocode(address, r.lat, r.lng) : r;
             resolved.set(address, pin);
           } else {
             failed++;
@@ -3434,7 +3447,7 @@ export default function Transport() {
 
     for (const stops of Object.values(coreStops)) {
       for (const stop of stops ?? []) {
-        if (stop.address === CAMP_LOCATION.address) continue;
+        if (stop.address === campLocation.address) continue;
         const before = nextUnplotted.length;
         nextUnplotted = [
           ...nextUnplotted,
@@ -3467,7 +3480,7 @@ export default function Transport() {
     const coreIndex = coreIndexFromDisplayStops(
       displayStopsForCoreIndex(fromRouteId),
       stopIndex,
-      CAMP_LOCATION.address,
+      campLocation.address,
     );
     if (coreIndex == null || coreIndex >= effective.length) return;
     const stop = effective[coreIndex];
@@ -3526,7 +3539,7 @@ export default function Transport() {
     const coreIndex = coreIndexFromDisplayStops(
       displayStopsForCoreIndex(routeId),
       stopIndex,
-      CAMP_LOCATION.address,
+      campLocation.address,
     );
     if (coreIndex == null || coreIndex >= effective.length) return;
     const stop = effective[coreIndex];
@@ -3630,7 +3643,7 @@ export default function Transport() {
   // AM: stops → camp. PM: camp → stops (same order). Core order is shared for both runs.
   const routeMiles = (stops: RouteStop[]): number => {
     if (stops.length === 0) return 0;
-    const seq = [...stops, { lat: CAMP_LOCATION.lat, lng: CAMP_LOCATION.lng } as any];
+    const seq = [...stops, { lat: campLocation.lat, lng: campLocation.lng } as any];
     let total = 0;
     let prev = seq[0];
     for (let i = 1; i < seq.length; i++) {
@@ -3645,8 +3658,8 @@ export default function Transport() {
     if (stops.length <= 1) return [...stops];
     const remaining = [...stops];
     const ordered: RouteStop[] = [];
-    let curLat = CAMP_LOCATION.lat;
-    let curLng = CAMP_LOCATION.lng;
+    let curLat = campLocation.lat;
+    let curLng = campLocation.lng;
     while (remaining.length) {
       let bestIdx = 0;
       let bestDist = Infinity;
@@ -4188,7 +4201,7 @@ export default function Transport() {
         const route = displayRoutes.find((r) => r.id === routeId);
         if (!route) return [];
         return route.stops
-          .filter((s) => s.address !== CAMP_LOCATION.address)
+          .filter((s) => s.address !== campLocation.address)
           .map((s) => ({ name: s.name, camperNames: s.camperNames }));
       };
       const summaries = summarizeCarSeatsByBus(
@@ -4242,7 +4255,7 @@ export default function Transport() {
       );
       const rows = buildDigitalBusAttendanceCsvRows(
         displayRoutes,
-        CAMP_LOCATION.address,
+        campLocation.address,
         loaded.records,
         loaded.busSubmissions,
         { date: overrideDate, runPeriod: timeOfDay },
@@ -4324,7 +4337,7 @@ export default function Transport() {
         rows.push(["Camper Name", "Route", "Care Type", "Time", "Notes"]);
         routes.forEach(r => {
           r.stops.forEach(s => {
-            if (s.address === CAMP_LOCATION.address) return;
+            if (s.address === campLocation.address) return;
             (s.camperNames || [s.name]).forEach(name => {
               rows.push([name, r.name, "After-care", s.pickupTime, ""]);
             });
@@ -4498,7 +4511,9 @@ export default function Transport() {
             title={
               sandboxTransport
                 ? "Restore 4 demo buses from sandbox seed — never North Shore MapPoint"
-                : "Load starter bus routes (stops only, no campers)"
+                : useNsMappoint
+                  ? "Load starter bus routes (stops only, no campers)"
+                  : "Add this camp's own buses — North Shore MapPoint is not used here"
             }
           >
             <LayoutTemplate className={`h-4 w-4 ${applyingTemplate ? "animate-pulse" : ""}`} />
@@ -4506,7 +4521,9 @@ export default function Transport() {
               ? "Applying template…"
               : sandboxTransport
                 ? "Reset sandbox routes (4 buses)"
-                : "Apply Route Template"}
+                : useNsMappoint
+                  ? "Apply Route Template"
+                  : "Add buses"}
           </Button>
           <Button
             variant="outline"
@@ -4779,8 +4796,8 @@ export default function Transport() {
             </div>
             <span className="text-[10px] text-muted-foreground">
               {timeOfDay === "am"
-                ? "Routes end at 85 Crescent Beach Rd, Glen Cove"
-                : "Routes start at 85 Crescent Beach Rd, Glen Cove"}
+                ? `Routes end at ${campLocation.address}`
+                : `Routes start at ${campLocation.address}`}
             </span>
             <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-1.5">
               <Checkbox
@@ -4923,7 +4940,7 @@ export default function Transport() {
                             collectTransportAddressesNeedingGeocode(
                               unplottedCampers,
                               coreStops,
-                              CAMP_LOCATION.address,
+                              campLocation.address,
                             ),
                           );
                         }}
@@ -5226,7 +5243,7 @@ export default function Transport() {
                           onClick={(e) => e.stopPropagation()}
                         >
                           {r.stops.map((stop, i) => {
-                            const isCamp = stop.address === CAMP_LOCATION.address;
+                            const isCamp = stop.address === campLocation.address;
                             const isCounselor = isCounselorPickupStop(stop);
                             const isFixedStop = isCamp || isCounselor;
                             const stopLines = routeStopListLines(stop, {
@@ -5438,7 +5455,7 @@ export default function Transport() {
                 <TransportRouteMap
                   routes={mapDisplayedRoutes}
                   allRoutes={routes}
-                  campAddress={CAMP_LOCATION.address}
+                  campAddress={campLocation.address}
                   layoutReady={!boardLoading && !companyLoading && !authLoading}
                   onMoveStop={handleMoveStop}
                   onRemoveStop={handleRemoveStop}
@@ -5515,7 +5532,7 @@ export default function Transport() {
                   <TransportRouteMap
                     routes={mapDisplayedRoutes}
                     allRoutes={routes}
-                    campAddress={CAMP_LOCATION.address}
+                    campAddress={campLocation.address}
                     layoutReady={!boardLoading && !companyLoading && !authLoading && mapFullscreen}
                     onMoveStop={handleMoveStop}
                     onRemoveStop={handleRemoveStop}
@@ -6606,7 +6623,7 @@ export default function Transport() {
                   ) : null}
                   <div className="space-y-2">
                     {selectedRoute.stops.map((stop, i) => {
-                      const isCamp = stop.address === CAMP_LOCATION.address;
+                      const isCamp = stop.address === campLocation.address;
                       const stopLines = routeStopListLines(stop, { isCamp });
                       if (!showBlankOpenStops && !isCamp && isBlankOpenRouteStop(stopLines)) {
                         return null;

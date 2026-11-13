@@ -59,11 +59,64 @@ export function campminderIntegrationEnabled(company: CampLike): boolean {
   return true;
 }
 
-/** Day camps use CampHub-style UI (North Shore first; Hampton/Southampton later). */
+/** Day camps use the same Nest modules as North Shore, with data scoped to company_id. */
 export function isDayCampCompany(company: CampLike): boolean {
   if (!company) return false;
   if (company.camp_type === "day_camp") return true;
-  return isNorthShoreDayCamp(company.slug);
+  return (
+    isNorthShoreDayCamp(company.slug) ||
+    isHamptonCountryDayCamp(company.slug) ||
+    isSouthamptonCampClub(company.slug) ||
+    isNestSandboxCompany(company.slug)
+  );
+}
+
+/** Bundled 2026 MapPoint streets / bus templates belong to North Shore only. */
+export function usesNorthShoreMappoint(slug: string | null | undefined): boolean {
+  return isNorthShoreDayCamp(slug);
+}
+
+export type DayCampCampusLocation = {
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+  pickupTime: string;
+  passengers: number;
+};
+
+export const NORTH_SHORE_CAMP_LOCATION: DayCampCampusLocation = {
+  name: "Camp — 85 Crescent Beach Rd",
+  address: "85 Crescent Beach Road, Glen Cove, NY 11542",
+  lat: 40.879993,
+  lng: -73.642634,
+  pickupTime: "",
+  passengers: 0,
+};
+
+export const HAMPTON_CAMP_LOCATION: DayCampCampusLocation = {
+  name: "Camp — Hampton Country Day Camp",
+  address: "Bridgehampton, NY 11932",
+  lat: 40.9376,
+  lng: -72.3009,
+  pickupTime: "",
+  passengers: 0,
+};
+
+export const SOUTHAMPTON_CAMP_LOCATION: DayCampCampusLocation = {
+  name: "Camp — Southampton Camp & Club",
+  address: "Southampton, NY 11968",
+  lat: 40.8843,
+  lng: -72.3895,
+  pickupTime: "",
+  passengers: 0,
+};
+
+/** Camp pin / routing destination for the selected day camp. */
+export function getCampLocation(slug: string | null | undefined): DayCampCampusLocation {
+  if (isHamptonCountryDayCamp(slug)) return HAMPTON_CAMP_LOCATION;
+  if (isSouthamptonCampClub(slug)) return SOUTHAMPTON_CAMP_LOCATION;
+  return NORTH_SHORE_CAMP_LOCATION;
 }
 
 /** Day-camp bus transport modules — empty per camp; not used by overnight camps. */

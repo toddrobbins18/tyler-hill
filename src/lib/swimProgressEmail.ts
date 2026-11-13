@@ -58,7 +58,7 @@ export function buildSwimProgressEmail(params: {
   if (!def) return null;
 
   const childName = params.childName.trim() || "your child";
-  const campName = params.campName.trim() || "North Shore Day Camp";
+  const campName = params.campName.trim() || "The Nest";
 
   const groupHtml = def.groups.map((g) => renderGroup(g, params.levels)).join("");
   const exitHtml =

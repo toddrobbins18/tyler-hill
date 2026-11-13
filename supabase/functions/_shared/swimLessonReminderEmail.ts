@@ -13,7 +13,7 @@ export function buildSwimLessonConfirmationReminder(params: {
   campName?: string;
 }): { subject: string; html: string; plainText: string } {
   const name = params.childName.trim() || "your child";
-  const camp = params.campName?.trim() || "North Shore Day Camp";
+  const camp = params.campName?.trim() || "The Nest";
   const subject = "🏊 Swim Lesson Confirmation";
   const html = `
     <div style="font-family:system-ui,sans-serif;font-size:14px;color:#1f2937;line-height:1.5;max-width:640px;">

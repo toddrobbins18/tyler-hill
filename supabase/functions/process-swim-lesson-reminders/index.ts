@@ -60,7 +60,7 @@ serve(async (req) => {
     const dayEnd = `${targetDay}T23:59:59.999Z`;
 
     const { data: companyRow } = await supabase.from("companies").select("name").eq("id", company_id).maybeSingle();
-    const campName = companyRow?.name ?? "North Shore Day Camp";
+    const campName = companyRow?.name ?? "The Nest";
 
     const { data: lessons, error: lessonError } = await supabase
       .from("swim_lessons")

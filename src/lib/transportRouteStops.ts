@@ -286,6 +286,7 @@ function groupCampersByNormalizedAddress(campers: AssignableCamper[]): Assignabl
 function mergeOneHouseholdIntoStops(
   stops: TransportRouteStop[],
   campers: AssignableCamper[],
+  dest: { lat: number; lng: number } = CAMP_LOCATION,
 ): { next: TransportRouteStop[]; merged: boolean } {
   const camperNorm = normalizeTransportAddress(campers[0]?.address || "");
   const newNames = campers.map((c) => c.name);
@@ -295,7 +296,7 @@ function mergeOneHouseholdIntoStops(
     : -1;
 
   if (idx === -1) {
-    return { next: insertStopAlongRoute(stops, newStopForCampers(campers)), merged: false };
+    return { next: insertStopAlongRoute(stops, newStopForCampers(campers), dest), merged: false };
   }
 
   const existing = stops[idx];
@@ -316,13 +317,14 @@ function mergeOneHouseholdIntoStops(
 export function mergeCampersIntoStops(
   stops: TransportRouteStop[],
   campers: AssignableCamper[],
+  dest: { lat: number; lng: number } = CAMP_LOCATION,
 ): { merged: boolean; next: TransportRouteStop[]; mergedNames: string[] | null } {
   if (campers.length === 0) return { merged: false, next: stops, mergedNames: null };
 
   let next = stops;
   let anyMerged = false;
   for (const group of groupCampersByNormalizedAddress(campers)) {
-    const result = mergeOneHouseholdIntoStops(next, group);
+    const result = mergeOneHouseholdIntoStops(next, group, dest);
     next = result.next;
     if (result.merged) anyMerged = true;
   }

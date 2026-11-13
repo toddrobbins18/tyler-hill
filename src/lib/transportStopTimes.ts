@@ -1,14 +1,9 @@
 import type { TransportRouteStop } from "@/lib/transportRoster";
 import { BUS_COUNSELOR_STOP_LABEL, isCounselorPickupStop } from "@/lib/transportCounselorPickup";
+import { NORTH_SHORE_CAMP_LOCATION } from "@/lib/camps";
 
-export const CAMP_LOCATION = {
-  name: "Camp — 85 Crescent Beach Rd",
-  address: "85 Crescent Beach Road, Glen Cove, NY 11542",
-  lat: 40.879993,
-  lng: -73.642634,
-  pickupTime: "",
-  passengers: 0,
-};
+/** Default camp pin (North Shore). Use `getCampLocation(slug)` for the active camp. */
+export const CAMP_LOCATION = NORTH_SHORE_CAMP_LOCATION;
 
 /** Reject null island and other coordinates that break routing / map lines. */
 export function isValidRouteCoordinate(lat: number, lng: number): boolean {
@@ -173,6 +168,7 @@ export function assignStopTimesFromLegMinutes(
 export type BuildRouteStopsOptions = {
   legMinutes?: number[] | null;
   dwellMinutesPerStop?: number;
+  campLocation?: typeof CAMP_LOCATION;
 };
 
 /** AM routes: stops → camp (camp is last stop). */
@@ -182,13 +178,15 @@ export const buildAMStops = (
   options?: BuildRouteStopsOptions | number[] | null,
 ): TransportRouteStop[] => {
   const opts = Array.isArray(options) ? { legMinutes: options } : options;
-  const withCamp = [...stops, { ...CAMP_LOCATION, pickupTime: "", passengers: 0 }];
+  const camp = opts?.campLocation ?? CAMP_LOCATION;
+  const withCamp = [...stops, { ...camp, pickupTime: "", passengers: 0 }];
   const rawLegs = opts?.legMinutes?.length === withCamp.length - 1
     ? opts.legMinutes
     : computeHaversineLegMinutes(withCamp);
   const legs = coerceLegMinutesForStops(withCamp, rawLegs);
   return assignStopTimesFromLegMinutes(withCamp, departureTime, legs, {
     dwellMinutesPerStop: opts?.dwellMinutesPerStop,
+    campAddress: camp.address,
   });
 };
 
@@ -199,13 +197,15 @@ export const buildPMStops = (
   options?: BuildRouteStopsOptions | number[] | null,
 ): TransportRouteStop[] => {
   const opts = Array.isArray(options) ? { legMinutes: options } : options;
-  const withCamp = [{ ...CAMP_LOCATION, pickupTime: "", passengers: 0 }, ...stops];
+  const camp = opts?.campLocation ?? CAMP_LOCATION;
+  const withCamp = [{ ...camp, pickupTime: "", passengers: 0 }, ...stops];
   const rawLegs = opts?.legMinutes?.length === withCamp.length - 1
     ? opts.legMinutes
     : computeHaversineLegMinutes(withCamp);
   const legs = coerceLegMinutesForStops(withCamp, rawLegs);
   return assignStopTimesFromLegMinutes(withCamp, departureTime, legs, {
     dwellMinutesPerStop: opts?.dwellMinutesPerStop,
+    campAddress: camp.address,
   });
 };
 

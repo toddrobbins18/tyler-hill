@@ -54,7 +54,7 @@ export async function trySendM365Email(
     return { configured: true, sent: false, error: "Failed to authenticate with Microsoft 365" };
   }
 
-  const campName = params.fromName ?? "North Shore Day Camp";
+  const campName = params.fromName ?? "The Nest";
   const message: Record<string, unknown> = {
     subject: params.subject,
     body: { contentType: "HTML", content: params.html },

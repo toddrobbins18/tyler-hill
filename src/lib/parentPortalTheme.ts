@@ -48,6 +48,8 @@ export function parentPortalMainBackdropStyle(
 export function resolveParentPortalHeroImageUrl(companySlug?: string | null): string | null {
   switch (companySlug) {
     case CAMP_SLUG.NORTH_SHORE_DAY_CAMP:
+    case CAMP_SLUG.HAMPTON_COUNTRY_DAY_CAMP:
+    case CAMP_SLUG.SOUTHAMPTON_CAMP_CLUB:
       return NORTH_SHORE_PARENT_PORTAL_HERO_URL;
     case CAMP_SLUG.TYLER_HILL_CAMP:
       return tylerHillDashboardBg;
@@ -81,7 +83,15 @@ export function resolveParentPortalThemeColor(
 ): string {
   const trimmed = themeColor?.trim();
   if (trimmed && /^#[0-9a-fA-F]{3,8}$/.test(trimmed)) return trimmed;
-  if (companySlug === CAMP_SLUG.NORTH_SHORE_DAY_CAMP) return NORTH_SHORE_THEME_COLOR;
+  if (
+    companySlug === CAMP_SLUG.NORTH_SHORE_DAY_CAMP ||
+    companySlug === CAMP_SLUG.HAMPTON_COUNTRY_DAY_CAMP ||
+    companySlug === CAMP_SLUG.SOUTHAMPTON_CAMP_CLUB
+  ) {
+    if (companySlug === CAMP_SLUG.HAMPTON_COUNTRY_DAY_CAMP) return "#2E7D32";
+    if (companySlug === CAMP_SLUG.SOUTHAMPTON_CAMP_CLUB) return "#0277BD";
+    return NORTH_SHORE_THEME_COLOR;
+  }
   return DEFAULT_PARENT_PORTAL_THEME;
 }
 
