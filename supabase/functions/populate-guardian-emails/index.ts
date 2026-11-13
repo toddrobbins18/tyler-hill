@@ -162,7 +162,7 @@ function extractPersonContact(person: any): {
 }
 
 async function fetchPersonById(personId: string, token: string, subscriptionKey: string, clientId: string): Promise<any> {
-  const url = `${CM_PERSONS_URL}/${personId}?clientid=${clientId}`;
+  const url = `${CM_PERSONS_URL}/${personId}?clientid=${clientId}&includecontactdetails=true&includerelatives=true`;
   
   try {
     const response = await rateLimitedFetch(url, {
