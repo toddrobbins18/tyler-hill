@@ -796,6 +796,33 @@ async function failStaleCampminderSyncJobs(
   return ids.length;
 }
 
+/** Close running/pending CampMinder jobs so a new invoke can start. */
+async function supersedeInFlightCampminderJobs(
+  supabase: any,
+  companyId: string,
+): Promise<number> {
+  const { data, error } = await supabase
+    .from("sync_jobs")
+    .update({
+      status: "failed",
+      completed_at: new Date().toISOString(),
+      error_message: "Superseded by a new sync request.",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("company_id", companyId)
+    .eq("entity_type", "campminder")
+    .in("status", ["running", "pending"])
+    .select("id");
+
+  if (error) {
+    console.error("supersedeInFlightCampminderJobs:", error);
+    return 0;
+  }
+  const n = data?.length ?? 0;
+  if (n) console.log(`[Sync] Superseded ${n} in-flight job(s) for company ${companyId}`);
+  return n;
+}
+
 interface ChangeRecord {
   person_id: string;
   name: string;
@@ -2334,14 +2361,40 @@ async function performFullSync(
           },
         });
 
-        const customFields = await loadDayCampCamperCustomFields(
-          enrolledPersonIdArray,
-          season,
-          token,
-          subscriptionKey,
-          clientId,
-          acquireRateLimitSlot,
-        );
+        let customFields: Awaited<ReturnType<typeof loadDayCampCamperCustomFields>>;
+        try {
+          customFields = await Promise.race([
+            loadDayCampCamperCustomFields(
+              enrolledPersonIdArray,
+              season,
+              token,
+              subscriptionKey,
+              clientId,
+              acquireRateLimitSlot,
+            ),
+            new Promise<never>((_, reject) =>
+              setTimeout(
+                () => reject(new Error("Camp Grade custom fields timed out after 90s")),
+                90_000,
+              ),
+            ),
+          ]);
+        } catch (err) {
+          console.warn(
+            "[Day Camp] Skipping Camp Grade custom-field crawl so camper import can continue:",
+            err instanceof Error ? err.message : err,
+          );
+          customFields = {
+            fullSummerGroupByPerson: new Map(),
+            ageGroupByPerson: new Map(),
+            matchedFields: {},
+            debug: {
+              fieldDefCount: 0,
+              fieldDefSample: [],
+              dataFetchErrors: [err instanceof Error ? err.message : String(err)],
+            },
+          };
+        }
 
         let mergedCampGradeCount = 0;
         for (const [pid, label] of customFields.ageGroupByPerson) {
@@ -3807,7 +3860,7 @@ serve(async (req: Request) => {
 
   try {
   const body = await req.json().catch(() => ({}));
-  const { company_id, incremental, sync_type } = body;
+  const { company_id, incremental, sync_type, force } = body;
   const season_id = body.season_id != null && body.season_id !== ''
     ? body.season_id
     : DEFAULT_SYNC_SEASON;
@@ -3902,7 +3955,10 @@ serve(async (req: Request) => {
           throw new Error('No client ID returned from CampMinder');
         }
 
-        const staleClosed = await failStaleCampminderSyncJobs(supabase, company.id, 120);
+        const superseded = force === true
+          ? await supersedeInFlightCampminderJobs(supabase, company.id)
+          : 0;
+        const staleClosed = superseded + await failStaleCampminderSyncJobs(supabase, company.id, 120);
 
         const { data: inFlightJobs, error: inFlightErr } = await supabase
           .from('sync_jobs')

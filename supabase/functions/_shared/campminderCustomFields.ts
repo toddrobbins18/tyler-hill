@@ -790,9 +790,15 @@ async function loadPersonsCustomFieldMaps(
   let personsFetched = 0;
   let cursor = 0;
   const concurrency = 8;
+  const deadlineMs = Date.now() + 45_000;
+  let stoppedForDeadline = false;
 
   const workers = Array.from({ length: Math.min(concurrency, personIds.length) }, async () => {
     while (true) {
+      if (Date.now() > deadlineMs) {
+        stoppedForDeadline = true;
+        break;
+      }
       const index = cursor++;
       if (index >= personIds.length) break;
 
@@ -831,6 +837,14 @@ async function loadPersonsCustomFieldMaps(
   });
 
   await Promise.all(workers);
+  if (stoppedForDeadline) {
+    dataFetchErrors.push(
+      `stopped after 45s (${personsFetched}/${personIds.length} persons) so camper import can continue`,
+    );
+    console.warn(
+      `[Custom Fields] Person crawl stopped at ${personsFetched}/${personIds.length} so the roster sync can finish`,
+    );
+  }
   return { fullSummerGroupByPerson, ageGroupByPerson, personsFetched, dataFetchErrors };
 }
 
