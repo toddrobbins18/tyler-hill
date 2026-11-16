@@ -348,7 +348,7 @@ export default function ConflictReview() {
           <ScanLine className="h-6 w-6" /> Conflict Review
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Upload <strong>one PDF of every bus roster</strong>, or <strong>one PDF of every group list</strong>. Nest
+          Upload <strong>one PDF for all buses</strong>, or <strong>one PDF for all groups</strong>. Nest
           searches that file for each bus or group on this camp and lists anything missing. Header barcodes still pick
           the sheet for attendance bubbles.{" "}
           <Link to="/day-camp/change-sheets" className="text-primary underline-offset-2 hover:underline">
@@ -409,7 +409,7 @@ export default function ConflictReview() {
           <CardTitle className="text-base">Missing-sheet checklist</CardTitle>
           <CardDescription>
             Season {currentSeason}: {sheetOptions.length} {listKind === "bus" ? "buses" : "groups"} on this camp.
-            Upload one combined PDF and Nest lists any that are missing.
+            Upload one PDF for all {listKind === "bus" ? "buses" : "groups"} and Nest lists any that are missing.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -435,42 +435,25 @@ export default function ConflictReview() {
               Group report
             </Button>
           </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="space-y-1">
-              <Label className="text-xs">{listKind === "bus" ? "Bus" : "Group"}</Label>
-              <Select value={sheetLabel} onValueChange={setSheetLabel}>
-                <SelectTrigger className="h-8 w-[200px] text-xs">
-                  <SelectValue placeholder="Select sheet" />
-                </SelectTrigger>
-                <SelectContent>
-                  {sheetOptions.map((name) => (
-                    <SelectItem key={name} value={name}>
-                      {name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">
-                {listKind === "bus" ? "Upload one bus PDF" : "Upload one group PDF"}
-              </Label>
-              <Input
-                type="file"
-                accept="image/jpeg,image/png,image/webp,application/pdf"
-                multiple
-                className="h-8 max-w-[280px] text-xs"
-                disabled={scanning || !sheetOptions.length}
-                onChange={(e) => {
-                  const files = e.target.files ? [...e.target.files] : [];
-                  e.target.value = "";
-                  void handleScan(files);
-                }}
-              />
-            </div>
-            <Button size="sm" onClick={() => void saveSheet()} disabled={saving || !sheetLabel}>
-              {saving ? "Saving…" : `Save ${listKind} list`}
-            </Button>
+          <div className="space-y-1">
+            <Label className="text-xs">
+              {listKind === "bus"
+                ? "One PDF for all buses"
+                : "One PDF for all groups"}
+            </Label>
+            <Input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              multiple
+              className="h-8 max-w-[320px] text-xs"
+              disabled={scanning || !sheetOptions.length}
+              onChange={(e) => {
+                const files = e.target.files ? [...e.target.files] : [];
+                e.target.value = "";
+                void handleScan(files);
+              }}
+            />
+            {scanning ? <p className="text-xs text-muted-foreground">Reading the PDF…</p> : null}
           </div>
           {scanWarning ? <p className="text-xs text-amber-700">{scanWarning}</p> : null}
           <div className="rounded-md border p-3 space-y-2 text-sm bg-amber-50/40">
@@ -537,6 +520,28 @@ export default function ConflictReview() {
                   : "No groups on this camp yet."}
               </p>
             )}
+          </div>
+          <div className="flex flex-wrap items-end gap-2 pt-2">
+            <div className="space-y-1">
+              <Label className="text-xs">
+                {listKind === "bus" ? "Camper list for this bus" : "Camper list for this group"}
+              </Label>
+              <Select value={sheetLabel} onValueChange={setSheetLabel}>
+                <SelectTrigger className="h-8 w-[200px] text-xs">
+                  <SelectValue placeholder="Select sheet" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sheetOptions.map((name) => (
+                    <SelectItem key={name} value={name}>
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button size="sm" onClick={() => void saveSheet()} disabled={saving || !sheetLabel}>
+              {saving ? "Saving…" : `Save ${listKind} list`}
+            </Button>
           </div>
           <div className="max-h-[320px] overflow-auto rounded-md border divide-y">
             {marks.length === 0 ? (
