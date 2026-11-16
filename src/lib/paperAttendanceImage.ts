@@ -43,6 +43,29 @@ async function rgbaFromBlob(blob: Blob): Promise<RgbaImage> {
   return { width: image.width, height: image.height, data: image.data };
 }
 
+function isPagePhoto(image: RgbaImage): boolean {
+  return Math.min(image.width, image.height) >= 400 && Math.max(image.width, image.height) >= 600;
+}
+
+async function decodePdfJpegPages(
+  jpegs: Uint8Array[],
+  fileName: string,
+): Promise<PaperScanPage[]> {
+  const pages: PaperScanPage[] = [];
+  let n = 0;
+  for (const jpeg of jpegs) {
+    n += 1;
+    try {
+      const image = await rgbaFromBlob(new Blob([jpeg], { type: "image/jpeg" }));
+      if (!isPagePhoto(image)) continue;
+      pages.push({ image, sourceName: `${fileName} page ${n}` });
+    } catch {
+      /* Nest PDFs often contain logo bytes that look like JPEGs but are not page photos. */
+    }
+  }
+  return pages;
+}
+
 export async function loadRgbaFromBrowserFile(file: File): Promise<RgbaImage> {
   if (isPdfFile(file)) {
     throw new Error("Use Scan all sheets for a multi-page PDF.");
@@ -55,13 +78,17 @@ export type PaperScanFileInput = {
   documentText: string;
 };
 
+async function loadPdfJsDocument(buf: Uint8Array) {
+  const pdfjs = await import("pdfjs-dist");
+  pdfjs.GlobalWorkerOptions.workerSrc = `${window.location.origin}/pdf.worker.min.mjs`;
+  return pdfjs.getDocument({ data: buf, disableWorker: true }).promise;
+}
+
 async function renderPdfPagesWithPdfJs(
   buf: Uint8Array,
   fileName: string,
 ): Promise<PaperScanPage[]> {
-  const pdfjs = await import("pdfjs-dist");
-  pdfjs.GlobalWorkerOptions.workerSrc = `${window.location.origin}/pdf.worker.min.mjs`;
-  const pdf = await pdfjs.getDocument({ data: buf, disableWorker: true }).promise;
+  const pdf = await loadPdfJsDocument(buf);
   const pages: PaperScanPage[] = [];
   for (let n = 1; n <= pdf.numPages; n += 1) {
     const page = await pdf.getPage(n);
@@ -97,34 +124,32 @@ export async function loadPaperScanInputFromBrowserFiles(files: File[]): Promise
       const buf = new Uint8Array(await file.arrayBuffer());
       const documentText = extractPdfLiteralStrings(buf);
       if (documentText.trim()) texts.push(documentText);
-      const jpegs = extractJpegBuffersFromPdf(buf);
-      if (jpegs.length) {
-        let n = 0;
-        for (const jpeg of jpegs) {
-          n += 1;
-          const blob = new Blob([jpeg], { type: "image/jpeg" });
-          pages.push({
-            image: await rgbaFromBlob(blob),
-            sourceName: `${file.name} page ${n}`,
-          });
+      let rendered: PaperScanPage[] = [];
+      try {
+        rendered = await renderPdfPagesWithPdfJs(buf.slice(), file.name || "roster.pdf");
+      } catch {
+        rendered = [];
+      }
+      if (rendered.length) {
+        pages.push(...rendered);
+        for (const page of rendered) {
+          if (page.pageText?.trim()) texts.push(page.pageText);
         }
         continue;
       }
-      if (documentText.trim()) continue;
-      try {
-        const rendered = await renderPdfPagesWithPdfJs(buf.slice(), file.name || "roster.pdf");
-        pages.push(...rendered);
-        continue;
-      } catch {
-        /* Nest print PDFs still work from literal text even if page photos are missing. */
-        continue;
-      }
+      const jpegPages = await decodePdfJpegPages(extractJpegBuffersFromPdf(buf), file.name || "roster.pdf");
+      pages.push(...jpegPages);
+      continue;
     }
-    pages.push({ image: await rgbaFromBlob(file), sourceName: file.name || "photo" });
+    try {
+      pages.push({ image: await rgbaFromBlob(file), sourceName: file.name || "photo" });
+    } catch {
+      throw new Error("Could not read that file. Use one PDF for all buses, one PDF for all groups, or photos of the pages.");
+    }
   }
   const documentText = texts.join("\n");
   if (!pages.length && !documentText.trim()) {
-    throw new Error("No pages in that file.");
+    throw new Error("Could not read that PDF. Use one PDF for all buses or one PDF for all groups.");
   }
   return { pages, documentText };
 }

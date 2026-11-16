@@ -31,6 +31,7 @@ import {
   type PaperAttendanceListKind,
 } from "@/lib/paperAttendance";
 import { loadPaperScanInputFromBrowserFiles } from "@/lib/paperAttendanceImage";
+import { ocrPaperScanPages } from "@/lib/paperAttendanceOcr";
 import { processPaperAttendancePages } from "@/lib/paperAttendanceScan";
 import {
   loadChangeSheetAttendanceSource,
@@ -227,7 +228,15 @@ export default function ConflictReview() {
     setScanning(true);
     try {
       const input = await loadPaperScanInputFromBrowserFiles(list);
-      const foundInPdf = findPaperSheetLabelsInText(input.documentText, sheetOptions, listKind);
+      let foundInPdf = findPaperSheetLabelsInText(input.documentText, sheetOptions, listKind);
+      if (foundInPdf.length < sheetOptions.length) {
+        const ocrText = await ocrPaperScanPages(input.pages, sheetOptions, listKind);
+        foundInPdf = findPaperSheetLabelsInText(
+          [input.documentText, ocrText, ...input.pages.map((page) => page.pageText ?? "")].join("\n"),
+          sheetOptions,
+          listKind,
+        );
+      }
       if (!input.pages.length && !foundInPdf.length) {
         toast({
           title: "Could not read that PDF",

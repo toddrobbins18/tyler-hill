@@ -62,12 +62,14 @@ export function processPaperAttendancePages(
       || fromText
       || (pages.length === 1 ? options.fallbackLabel?.trim() || "" : "");
     if (!label) {
-      unreadPages.push({
-        sourceName: page.sourceName,
-        reason: payload
-          ? `Header barcode ${payload} is not a ${options.kind} sheet in this season.`
-          : "Could not read the bus/group title on this page.",
-      });
+      if (!(options.extraFoundLabels ?? []).length) {
+        unreadPages.push({
+          sourceName: page.sourceName,
+          reason: payload
+            ? `Header barcode ${payload} is not a ${options.kind} sheet in this season.`
+            : "Could not read the bus/group title on this page.",
+        });
+      }
       continue;
     }
     identifiedLabels.push(label);
