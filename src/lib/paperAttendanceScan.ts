@@ -1,6 +1,8 @@
 import {
   applyOmrFlagsToRoster,
+  findPaperSheetLabelsInText,
   matchPaperSheetLabel,
+  mergePaperScannedLabels,
   missingPaperSheets,
   type PaperAbsentCamper,
   type PaperAttendanceListKind,
@@ -19,6 +21,12 @@ export type PaperScannedSheet = {
   sourceName: string;
 };
 
+export type PaperScanPage = {
+  image?: RgbaImage;
+  pageText?: string;
+  sourceName: string;
+};
+
 export type PaperBatchScanResult = {
   sheets: PaperScannedSheet[];
   unreadPages: PaperScanUnreadPage[];
@@ -27,39 +35,58 @@ export type PaperBatchScanResult = {
 };
 
 export function processPaperAttendancePages(
-  pages: Array<{ image: RgbaImage; sourceName: string }>,
+  pages: PaperScanPage[],
   options: {
     kind: PaperAttendanceListKind;
-    weekdayIndex: number;
+    weekdayIndex: number | null;
     expectedLabels: string[];
     rosterForLabel: (label: string) => PaperScanRosterCamper[];
     fallbackLabel?: string | null;
+    extraFoundLabels?: string[];
   },
 ): PaperBatchScanResult {
   const sheets: PaperScannedSheet[] = [];
   const unreadPages: PaperScanUnreadPage[] = [];
+  const identifiedLabels: string[] = [];
 
   for (const page of pages) {
-    const payload = decodePaperSheetBarcodeFromImage(page.image);
-    const matched = payload
+    const payload = page.image ? decodePaperSheetBarcodeFromImage(page.image) : null;
+    const fromBarcode = payload
       ? matchPaperSheetLabel(payload, options.kind, options.expectedLabels)
       : null;
+    const fromText = page.pageText
+      ? findPaperSheetLabelsInText(page.pageText, options.expectedLabels, options.kind)[0] ?? null
+      : null;
     const label =
-      matched || (pages.length === 1 ? options.fallbackLabel?.trim() || "" : "");
+      fromBarcode
+      || fromText
+      || (pages.length === 1 ? options.fallbackLabel?.trim() || "" : "");
     if (!label) {
       unreadPages.push({
         sourceName: page.sourceName,
         reason: payload
           ? `Header barcode ${payload} is not a ${options.kind} sheet in this season.`
-          : "Could not read the header barcode.",
+          : "Could not read the bus/group title on this page.",
       });
       continue;
     }
+    identifiedLabels.push(label);
     const roster = options.rosterForLabel(label);
-    if (!roster.length) {
-      unreadPages.push({
+    if (!page.image || options.weekdayIndex == null) {
+      sheets.push({
+        label,
         sourceName: page.sourceName,
-        reason: `No campers on ${label}.`,
+        absents: [],
+        warning: page.image ? undefined : "Found this sheet in the PDF. Mark absents by hand if bubbles were not scanned.",
+      });
+      continue;
+    }
+    if (!roster.length) {
+      sheets.push({
+        label,
+        sourceName: page.sourceName,
+        absents: [],
+        warning: `No campers on ${label}.`,
       });
       continue;
     }
@@ -87,7 +114,11 @@ export function processPaperAttendancePages(
   const lastByLabel = new Map<string, PaperScannedSheet>();
   for (const sheet of sheets) lastByLabel.set(sheet.label, sheet);
   const uniqueSheets = [...lastByLabel.values()];
-  const scannedLabels = uniqueSheets.map((sheet) => sheet.label);
+  const scannedLabels = mergePaperScannedLabels(
+    uniqueSheets.map((sheet) => sheet.label),
+    identifiedLabels,
+    options.extraFoundLabels ?? [],
+  );
 
   return {
     sheets: uniqueSheets,

@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  findPaperSheetLabelsInText,
   formatPaperScanChecklist,
   reviewPaperAttendance,
   weekdayBubbleIndex,
@@ -29,7 +30,7 @@ import {
   type PaperAbsentCamper,
   type PaperAttendanceListKind,
 } from "@/lib/paperAttendance";
-import { loadRgbaPagesFromBrowserFiles } from "@/lib/paperAttendanceImage";
+import { loadPaperScanInputFromBrowserFiles } from "@/lib/paperAttendanceImage";
 import { processPaperAttendancePages } from "@/lib/paperAttendanceScan";
 import {
   loadChangeSheetAttendanceSource,
@@ -215,10 +216,6 @@ export default function ConflictReview() {
   const handleScan = async (files: FileList | File[] | undefined) => {
     const list = files ? [...files] : [];
     if (!list.length) return;
-    if (weekdayIndex == null) {
-      toast({ title: "Pick a weekday", description: "Bus and group sheets are Monday–Friday.", variant: "destructive" });
-      return;
-    }
     if (!sheetOptions.length) {
       toast({
         title: `No ${listKind} sheets`,
@@ -229,13 +226,23 @@ export default function ConflictReview() {
     }
     setScanning(true);
     try {
-      const pages = await loadRgbaPagesFromBrowserFiles(list);
-      const batch = processPaperAttendancePages(pages, {
+      const input = await loadPaperScanInputFromBrowserFiles(list);
+      const foundInPdf = findPaperSheetLabelsInText(input.documentText, sheetOptions, listKind);
+      if (!input.pages.length && !foundInPdf.length) {
+        toast({
+          title: "Could not read that PDF",
+          description: "Use the Nest bus/group PDF, or a copier scan of those pages.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const batch = processPaperAttendancePages(input.pages, {
         kind: listKind,
         weekdayIndex,
         expectedLabels: sheetOptions,
         rosterForLabel,
-        fallbackLabel: pages.length === 1 ? sheetLabel : null,
+        fallbackLabel: input.pages.length === 1 ? sheetLabel : null,
+        extraFoundLabels: foundInPdf,
       });
       if (!companyId) {
         toast({ title: "Not signed in to a camp", variant: "destructive" });
@@ -285,7 +292,7 @@ export default function ConflictReview() {
     } catch (err) {
       toast({
         title: "Could not read that file",
-        description: err instanceof Error ? err.message : "Use a JPG, PNG, or copier PDF of the pages.",
+        description: err instanceof Error ? err.message : "Use one bus-roster PDF, one group-list PDF, or photos of the pages.",
         variant: "destructive",
       });
     } finally {
@@ -341,8 +348,9 @@ export default function ConflictReview() {
           <ScanLine className="h-6 w-6" /> Conflict Review
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Each camper row barcode is that child&apos;s CampMinder ID. The header barcode is the bus or group. Upload
-          one file of every bus sheet, or every group sheet. Names on both lists are really absent.{" "}
+          Upload <strong>one PDF of every bus roster</strong>, or <strong>one PDF of every group list</strong>. Nest
+          searches that file for each bus or group on this camp and lists anything missing. Header barcodes still pick
+          the sheet for attendance bubbles.{" "}
           <Link to="/day-camp/change-sheets" className="text-primary underline-offset-2 hover:underline">
             Master Change Sheet
           </Link>
@@ -400,8 +408,8 @@ export default function ConflictReview() {
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Scan all sheets</CardTitle>
           <CardDescription>
-            One PDF or photos of every bus roster, or every group report. Header barcodes pick the bus or group.
-            Fill a bubble only when the camper is absent. This does not write paperless attendance.
+            One PDF for all buses, then one PDF for all groups. Nest checks that every bus or group on this camp is in
+            the file and lists the missing ones. Fill a bubble only when the camper is absent.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -467,22 +475,37 @@ export default function ConflictReview() {
           {scanWarning ? <p className="text-xs text-amber-700">{scanWarning}</p> : null}
           {scanChecklist ? (
             <div className="rounded-md border p-3 space-y-2 text-sm">
-              <p>
-                Read {scanChecklist.scannedLabels.length} of {sheetOptions.length} {listKind} sheets.
+              <p className="font-medium">
+                Read {scanChecklist.scannedLabels.length} of {sheetOptions.length}{" "}
+                {listKind === "bus" ? "buses" : "groups"}.
               </p>
+              {scanChecklist.scannedLabels.length ? (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">In this PDF</p>
+                  <div className="flex flex-wrap gap-1">
+                    {scanChecklist.scannedLabels.map((label) => (
+                      <Badge key={label} variant="secondary" className="text-[10px]">
+                        {label}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               {scanChecklist.missingLabels.length ? (
                 <div>
-                  <p className="text-xs font-medium text-amber-800 mb-1">Missing after this scan</p>
+                  <p className="text-xs font-medium text-amber-800 mb-1">Missing from this PDF</p>
                   <div className="flex flex-wrap gap-1">
                     {scanChecklist.missingLabels.map((label) => (
-                      <Badge key={label} variant="outline" className="text-[10px]">
+                      <Badge key={label} variant="outline" className="text-[10px] border-amber-700 text-amber-900">
                         {label}
                       </Badge>
                     ))}
                   </div>
                 </div>
               ) : scanChecklist.scannedLabels.length ? (
-                <p className="text-xs text-muted-foreground">Every {listKind} sheet is in.</p>
+                <p className="text-xs text-muted-foreground">
+                  Every {listKind === "bus" ? "bus" : "group"} on this camp is in the file.
+                </p>
               ) : null}
               {scanChecklist.unreadPages.length ? (
                 <div className="text-xs text-amber-800 space-y-0.5">

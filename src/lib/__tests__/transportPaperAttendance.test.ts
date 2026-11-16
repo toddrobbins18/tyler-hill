@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { jsPDF } from "jspdf";
 import {
   applyOmrFlagsToRoster,
   decodePaperSheetBarcode,
+  findPaperSheetLabelsInText,
   formatPaperScanChecklist,
   matchPaperSheetLabel,
   missingPaperSheets,
@@ -11,6 +13,7 @@ import {
 } from "@/lib/paperAttendance";
 import { decodePaperSheetBarcodeFromImage, rasterCode39 } from "@/lib/paperAttendanceBarcode";
 import { extractJpegBuffersFromPdf } from "@/lib/paperAttendanceImage";
+import { extractPdfLiteralStrings } from "@/lib/paperAttendancePdfText";
 import { processPaperAttendancePages } from "@/lib/paperAttendanceScan";
 import { encodeCamperBarcode, encodePaperSheetBarcode } from "@/lib/transportReportPdfLayout";
 import { groupReportRowColumns } from "@/lib/transportCampMinderReportsPdf";
@@ -119,6 +122,67 @@ describe("paper attendance", () => {
     const header = makeWhite(480, 90);
     rasterCode39(header, 200, 20, "BBUS3", { narrow: 1, height: 28 });
     expect(decodePaperSheetBarcodeFromImage(header)).toBe("BBUS3");
+  });
+
+  it("searches a combined PDF for every bus or group title", () => {
+    const text = "Bus Roster Report Bus 1 · Bus 12 · Barcelona · Bus 3";
+    expect(findPaperSheetLabelsInText(text, ["Bus 1", "Bus 3", "Bus 5", "Bus 12"], "bus").sort()).toEqual([
+      "Bus 1",
+      "Bus 12",
+      "Bus 3",
+    ]);
+    expect(findPaperSheetLabelsInText(text, ["Barcelona", "Koalas"], "group")).toEqual(["Barcelona"]);
+    const pdf = new TextEncoder().encode("%PDF-1.4\nBT (Bus 7) Tj (Bus 9) Tj ET");
+    expect(extractPdfLiteralStrings(pdf)).toContain("Bus 7");
+    expect(findPaperSheetLabelsInText(extractPdfLiteralStrings(pdf), ["Bus 7", "Bus 8"], "bus")).toEqual(["Bus 7"]);
+    expect(findPaperSheetLabelsInText("B u s 1  B u s 1 2", ["Bus 1", "Bus 12"], "bus").sort()).toEqual([
+      "Bus 1",
+      "Bus 12",
+    ]);
+  });
+
+  it("lists missing buses after searching one combined roster PDF", () => {
+    const expected = Array.from({ length: 39 }, (_, i) => `Bus ${i + 1}`);
+    const inPdf = expected.filter((label) => label !== "Bus 17" && label !== "Bus 39");
+    const found = findPaperSheetLabelsInText(`Bus Roster Report · ${inPdf.join(" · ")}`, expected, "bus");
+    const batch = processPaperAttendancePages([], {
+      kind: "bus",
+      weekdayIndex: 0,
+      expectedLabels: expected,
+      rosterForLabel: () => [],
+      extraFoundLabels: found,
+    });
+    expect(batch.scannedLabels).toHaveLength(37);
+    expect(batch.missingLabels).toEqual(["Bus 17", "Bus 39"]);
+  });
+
+  it("lists missing groups after searching one combined group PDF", () => {
+    const expected = ["Barcelona", "Koalas", "Penguins", "Tigers"];
+    const found = findPaperSheetLabelsInText("Group List · Barcelona · Penguins · Tigers", expected, "group");
+    const batch = processPaperAttendancePages([], {
+      kind: "group",
+      weekdayIndex: 0,
+      expectedLabels: expected,
+      rosterForLabel: () => [],
+      extraFoundLabels: found,
+    });
+    expect(batch.scannedLabels.sort()).toEqual(["Barcelona", "Penguins", "Tigers"]);
+    expect(batch.missingLabels).toEqual(["Koalas"]);
+  });
+
+  it("reads Nest jsPDF bus titles out of one file", () => {
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
+    doc.text("Bus Roster Report · Bus 1", 12, 18);
+    doc.text("BBUS1", 12, 24);
+    doc.addPage();
+    doc.text("Bus Roster Report · Bus 12", 12, 18);
+    const buf = new Uint8Array(doc.output("arraybuffer"));
+    const found = findPaperSheetLabelsInText(
+      extractPdfLiteralStrings(buf),
+      ["Bus 1", "Bus 5", "Bus 12"],
+      "bus",
+    );
+    expect(found.sort()).toEqual(["Bus 1", "Bus 12"]);
   });
 
   it("lists missing sheets after a combined scan", () => {
@@ -239,6 +303,22 @@ describe("paper attendance", () => {
       "Bus 3 camper",
     ]);
     expect(batch.sheets.find((s) => s.label === "Bus 7")?.absents).toEqual([]);
+  });
+
+  it("counts a bus as present from PDF text even with no campers", () => {
+    const batch = processPaperAttendancePages(
+      [{ sourceName: "rosters.pdf page 1", pageText: "Bus Roster Report · Bus 5" }],
+      {
+        kind: "bus",
+        weekdayIndex: 2,
+        expectedLabels: ["Bus 5", "Bus 8"],
+        rosterForLabel: () => [],
+        extraFoundLabels: ["Bus 5"],
+      },
+    );
+    expect(batch.scannedLabels).toEqual(["Bus 5"]);
+    expect(batch.missingLabels).toEqual(["Bus 8"]);
+    expect(batch.unreadPages).toEqual([]);
   });
 
   it("pulls page JPEGs out of a copier PDF", () => {

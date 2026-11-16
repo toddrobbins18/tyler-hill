@@ -1,4 +1,6 @@
 import type { RgbaImage } from "@/lib/paperAttendanceOmr";
+import { extractPdfLiteralStrings } from "@/lib/paperAttendancePdfText";
+import type { PaperScanPage } from "@/lib/paperAttendanceScan";
 
 const MAX_SIDE = 1200;
 
@@ -48,32 +50,89 @@ export async function loadRgbaFromBrowserFile(file: File): Promise<RgbaImage> {
   return rgbaFromBlob(file);
 }
 
-export async function loadRgbaPagesFromBrowserFiles(
-  files: File[],
-): Promise<Array<{ image: RgbaImage; sourceName: string }>> {
-  const pages: Array<{ image: RgbaImage; sourceName: string }> = [];
+export type PaperScanFileInput = {
+  pages: PaperScanPage[];
+  documentText: string;
+};
+
+async function renderPdfPagesWithPdfJs(
+  buf: Uint8Array,
+  fileName: string,
+): Promise<PaperScanPage[]> {
+  const pdfjs = await import("pdfjs-dist");
+  pdfjs.GlobalWorkerOptions.workerSrc = `${window.location.origin}/pdf.worker.min.mjs`;
+  const pdf = await pdfjs.getDocument({ data: buf, disableWorker: true }).promise;
+  const pages: PaperScanPage[] = [];
+  for (let n = 1; n <= pdf.numPages; n += 1) {
+    const page = await pdf.getPage(n);
+    const textItems = await page.getTextContent();
+    const pageText = textItems.items
+      .map((item) => ("str" in item ? item.str : ""))
+      .join(" ");
+    const viewport = page.getViewport({ scale: 1.6 });
+    const long = Math.max(viewport.width, viewport.height);
+    const scale = long > MAX_SIDE ? MAX_SIDE / long : 1;
+    const fit = page.getViewport({ scale: 1.6 * scale });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(fit.width));
+    canvas.height = Math.max(1, Math.round(fit.height));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) continue;
+    await page.render({ canvasContext: ctx, viewport: fit }).promise;
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    pages.push({
+      image: { width: image.width, height: image.height, data: image.data },
+      pageText,
+      sourceName: `${fileName} page ${n}`,
+    });
+  }
+  return pages;
+}
+
+export async function loadPaperScanInputFromBrowserFiles(files: File[]): Promise<PaperScanFileInput> {
+  const pages: PaperScanPage[] = [];
+  const texts: string[] = [];
   for (const file of files) {
     if (isPdfFile(file)) {
       const buf = new Uint8Array(await file.arrayBuffer());
+      const documentText = extractPdfLiteralStrings(buf);
+      if (documentText.trim()) texts.push(documentText);
       const jpegs = extractJpegBuffersFromPdf(buf);
-      if (!jpegs.length) {
-        throw new Error(
-          "That PDF has no page photos in it. Scan the printed sheets at the copier, or upload JPG/PNG photos of every page.",
-        );
+      if (jpegs.length) {
+        let n = 0;
+        for (const jpeg of jpegs) {
+          n += 1;
+          const blob = new Blob([jpeg], { type: "image/jpeg" });
+          pages.push({
+            image: await rgbaFromBlob(blob),
+            sourceName: `${file.name} page ${n}`,
+          });
+        }
+        continue;
       }
-      let n = 0;
-      for (const jpeg of jpegs) {
-        n += 1;
-        const blob = new Blob([jpeg], { type: "image/jpeg" });
-        pages.push({
-          image: await rgbaFromBlob(blob),
-          sourceName: `${file.name} page ${n}`,
-        });
+      if (documentText.trim()) continue;
+      try {
+        const rendered = await renderPdfPagesWithPdfJs(buf.slice(), file.name || "roster.pdf");
+        pages.push(...rendered);
+        continue;
+      } catch {
+        /* Nest print PDFs still work from literal text even if page photos are missing. */
+        continue;
       }
-      continue;
     }
     pages.push({ image: await rgbaFromBlob(file), sourceName: file.name || "photo" });
   }
-  if (!pages.length) throw new Error("No pages in that file.");
-  return pages;
+  const documentText = texts.join("\n");
+  if (!pages.length && !documentText.trim()) {
+    throw new Error("No pages in that file.");
+  }
+  return { pages, documentText };
+}
+
+export async function loadRgbaPagesFromBrowserFiles(
+  files: File[],
+): Promise<Array<{ image: RgbaImage; sourceName: string }>> {
+  const { pages } = await loadPaperScanInputFromBrowserFiles(files);
+  return pages.filter((page): page is PaperScanPage & { image: RgbaImage } => !!page.image)
+    .map((page) => ({ image: page.image, sourceName: page.sourceName }));
 }

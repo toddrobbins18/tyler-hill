@@ -116,6 +116,55 @@ export function missingPaperSheets(expectedLabels: string[], scannedLabels: stri
   return expectedLabels.filter((label) => !have.has(paperSheetKey(label)));
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** True when a bus/group title or its header barcode appears in PDF/page text. */
+export function textContainsPaperSheetLabel(
+  text: string,
+  label: string,
+  kind: PaperAttendanceListKind = "bus",
+): boolean {
+  const visible = label.trim();
+  if (!visible) return false;
+  const hay = text.replace(/\s+/g, " ");
+  const compact = hay.replace(/[^0-9A-Za-z]/g, "").toUpperCase();
+  const key = paperSheetKey(visible);
+  if (!key) return false;
+  const barcode = `${kind === "bus" ? "B" : "G"}${key}`;
+  const barcodeRe = new RegExp(`(?:^|[^A-Z0-9])${escapeRegExp(barcode)}(?:[^A-Z0-9]|$)`);
+  if (barcodeRe.test(compact)) return true;
+  const compactTail = /\d$/.test(key) ? "(?![0-9])" : "(?![0-9A-Z])";
+  if (new RegExp(`${escapeRegExp(key)}${compactTail}`).test(compact)) return true;
+  const body = escapeRegExp(visible).replace(/\\s+/g, "\\s+");
+  const tail = /\d$/.test(visible) ? "(?:$|[^0-9A-Za-z])" : "(?:$|[^A-Za-z0-9])";
+  return new RegExp(`(?:^|[^A-Za-z0-9])${body}${tail}`, "i").test(hay);
+}
+
+export function findPaperSheetLabelsInText(
+  text: string,
+  labels: string[],
+  kind: PaperAttendanceListKind = "bus",
+): string[] {
+  if (!text.trim()) return [];
+  return labels.filter((label) => textContainsPaperSheetLabel(text, label, kind));
+}
+
+export function mergePaperScannedLabels(...groups: string[][]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const group of groups) {
+    for (const label of group) {
+      const key = paperSheetKey(label);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(label);
+    }
+  }
+  return out;
+}
+
 export function formatPaperScanChecklist(options: {
   kind: PaperAttendanceListKind;
   scannedLabels: string[];
