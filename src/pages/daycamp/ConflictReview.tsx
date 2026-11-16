@@ -593,16 +593,18 @@ export default function ConflictReview() {
             <CardTitle className="text-base">Bus list</CardTitle>
             <CardDescription>{busAbsents.length} absent from scanned bus rosters</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-1 text-sm">
+          <CardContent className="text-sm">
             {busAbsents.length === 0 ? (
               <p className="text-muted-foreground">None yet.</p>
             ) : (
-              busAbsents.map((row) => (
-                <div key={`bus-${row.camperName}`} className="flex justify-between gap-2">
-                  <span>{row.camperName}</span>
-                  <span className="text-xs text-muted-foreground">{row.sheetLabel}</span>
-                </div>
-              ))
+              <div className="max-h-[240px] overflow-y-auto space-y-1 pr-1">
+                {busAbsents.map((row) => (
+                  <div key={`bus-${row.camperName}`} className="flex justify-between gap-2">
+                    <span>{row.camperName}</span>
+                    <span className="text-xs text-muted-foreground">{row.sheetLabel}</span>
+                  </div>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -611,16 +613,18 @@ export default function ConflictReview() {
             <CardTitle className="text-base">Group list</CardTitle>
             <CardDescription>{groupAbsents.length} absent from scanned group reports</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-1 text-sm">
+          <CardContent className="text-sm">
             {groupAbsents.length === 0 ? (
               <p className="text-muted-foreground">None yet.</p>
             ) : (
-              groupAbsents.map((row) => (
-                <div key={`group-${row.camperName}`} className="flex justify-between gap-2">
-                  <span>{row.camperName}</span>
-                  <span className="text-xs text-muted-foreground">{row.sheetLabel}</span>
-                </div>
-              ))
+              <div className="max-h-[240px] overflow-y-auto space-y-1 pr-1">
+                {groupAbsents.map((row) => (
+                  <div key={`group-${row.camperName}`} className="flex justify-between gap-2">
+                    <span>{row.camperName}</span>
+                    <span className="text-xs text-muted-foreground">{row.sheetLabel}</span>
+                  </div>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -632,13 +636,15 @@ export default function ConflictReview() {
             <CardTitle className="text-base">Confirmed absent</CardTitle>
             <CardDescription>On both lists — these can feed change sheets when Paper scan is on</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-1 text-sm">
+          <CardContent className="text-sm">
             {review.confirmed.length === 0 ? (
               <p className="text-muted-foreground">No matches yet.</p>
             ) : (
-              review.confirmed.map((row) => (
-                <div key={`ok-${row.camperName}`}>{row.camperName}</div>
-              ))
+              <div className="max-h-[240px] overflow-y-auto space-y-1 pr-1">
+                {review.confirmed.map((row) => (
+                  <div key={`ok-${row.camperName}`}>{row.camperName}</div>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -647,11 +653,11 @@ export default function ConflictReview() {
             <CardTitle className="text-base">Conflicts</CardTitle>
             <CardDescription>Only one list marked them — leave these here</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-1 text-sm">
+          <CardContent className="text-sm">
             {review.busOnly.length === 0 && review.groupOnly.length === 0 ? (
               <p className="text-muted-foreground">No conflicts.</p>
             ) : (
-              <>
+              <div className="max-h-[240px] overflow-y-auto space-y-1 pr-1">
                 {review.busOnly.map((row) => (
                   <div key={`bo-${row.camperName}`} className="flex justify-between gap-2">
                     <span>{row.camperName}</span>
@@ -668,7 +674,7 @@ export default function ConflictReview() {
                     </Badge>
                   </div>
                 ))}
-              </>
+              </div>
             )}
           </CardContent>
         </Card>
