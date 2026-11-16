@@ -36,6 +36,19 @@ export function weekdayBubbleIndex(isoDate: string): number | null {
   return day - 1;
 }
 
+/** US label so the date is not read as day/month. */
+export function formatUsAttendanceDate(isoDate: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate.trim());
+  if (!match) return isoDate;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0);
+  if (Number.isNaN(date.getTime())) return isoDate;
+  return date.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 export function uniquePaperAbsents(rows: PaperAbsentCamper[]): PaperAbsentCamper[] {
   const seen = new Set<string>();
   const out: PaperAbsentCamper[] = [];

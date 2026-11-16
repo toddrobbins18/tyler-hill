@@ -24,6 +24,7 @@ import {
 import {
   findPaperSheetLabelsInText,
   formatPaperScanChecklist,
+  formatUsAttendanceDate,
   reviewPaperAttendance,
   weekdayBubbleIndex,
   type ChangeSheetAttendanceSource,
@@ -411,13 +412,14 @@ export default function ConflictReview() {
           onChange={(e) => setSheetDate(e.target.value || operationalDateString)}
           className="h-8 w-[140px] text-xs"
         />
+        <span className="text-xs text-muted-foreground">{formatUsAttendanceDate(sheetDate)}</span>
         {weekdayIndex == null ? (
           <Badge variant="outline" className="text-[10px]">
             Weekend — no bubbles
           </Badge>
         ) : (
           <Badge variant="outline" className="text-[10px]">
-            {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"][weekdayIndex]} column
+            Reads {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"][weekdayIndex]} only
           </Badge>
         )}
         <Button

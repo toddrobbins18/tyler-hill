@@ -5,6 +5,7 @@ import {
   decodePaperSheetBarcode,
   findPaperSheetLabelsInText,
   formatPaperScanChecklist,
+  formatUsAttendanceDate,
   matchPaperSheetLabel,
   missingPaperSheets,
   parseChangeSheetAttendanceSource,
@@ -86,6 +87,10 @@ describe("paper attendance", () => {
   it("maps weekdays to bubble columns", () => {
     expect(weekdayBubbleIndex("2026-07-08")).toBe(2);
     expect(weekdayBubbleIndex("2026-07-11")).toBeNull();
+    expect(weekdayBubbleIndex("2026-11-16")).toBe(0);
+    expect(weekdayBubbleIndex("2026-11-17")).toBe(1);
+    expect(formatUsAttendanceDate("2026-11-17")).toMatch(/Nov 17/);
+    expect(formatUsAttendanceDate("2026-11-17")).toMatch(/Tue/);
   });
 
   it("treats both lists as confirmed and one-sided as conflicts", () => {
@@ -333,6 +338,44 @@ describe("paper attendance", () => {
       false,
       false,
     ]);
+  });
+
+  it("uses the same weekly sheet: Monday fill stays Monday, Tuesday fill is Tuesday", () => {
+    const image = makeWhite(420, 360);
+    rasterCode39(image, 40, 12, "BLV", { narrow: 1, height: 28 });
+    const pageRight = 420 * 0.945;
+    const bubbleW = 420 * (58 / 215.9);
+    const bubbleX = pageRight - bubbleW;
+    const gutter = bubbleW * (9 / 58);
+    const colW = (bubbleW - gutter) / 5;
+    for (let c = 0; c < 5; c += 1) {
+      const cx = bubbleX + gutter + colW * c + colW / 2;
+      if (c === 0) fillCircle(image, cx, 82, 7, 0);
+      else strokeCircle(image, cx, 82, 7);
+      strokeCircle(image, cx, 102, 7);
+      if (c === 1) fillCircle(image, cx, 162, 7, 0);
+      else strokeCircle(image, cx, 162, 7);
+      strokeCircle(image, cx, 182, 7);
+    }
+    const roster = [
+      { id: "aria", name: "Aria Zachary" },
+      { id: "gema", name: "Gema Escoto" },
+    ];
+    const options = {
+      kind: "bus" as const,
+      expectedLabels: ["LV"],
+      rosterForLabel: () => roster,
+    };
+    const monday = processPaperAttendancePages(
+      [{ image, sourceName: "lv", pageText: "Bus Roster Report · LV" }],
+      { ...options, weekdayIndex: 0 },
+    );
+    const tuesday = processPaperAttendancePages(
+      [{ image, sourceName: "lv", pageText: "Bus Roster Report · LV" }],
+      { ...options, weekdayIndex: 1 },
+    );
+    expect(monday.sheets[0]?.absents.map((row) => row.camperName)).toEqual(["Aria Zachary"]);
+    expect(tuesday.sheets[0]?.absents.map((row) => row.camperName)).toEqual(["Gema Escoto"]);
   });
 
   it("merges absents from a continued bus sheet and skips blank pages", () => {
