@@ -325,9 +325,11 @@ describe("paper attendance", () => {
       weekdayIndex: 1,
       camperCount: 3,
     });
-    expect(tuesdayRead.usedWeekdayIndex).toBe(0);
+    expect(tuesdayRead.usedWeekdayIndex).toBe(1);
+    expect(tuesdayRead.warning).toMatch(/Tuesday/i);
+    expect(tuesdayRead.warning).toMatch(/Monday/i);
     expect(omrRowsToAbsentFlags(tuesdayRead.rows, "bus").map((row) => row.absent)).toEqual([
-      true,
+      false,
       false,
       false,
     ]);

@@ -34,6 +34,7 @@ import { loadPaperScanInputFromBrowserFiles } from "@/lib/paperAttendanceImage";
 import { ocrPaperScanPages } from "@/lib/paperAttendanceOcr";
 import { processPaperAttendancePages } from "@/lib/paperAttendanceScan";
 import {
+  clearPaperAttendanceForDate,
   loadChangeSheetAttendanceSource,
   loadPaperAttendance,
   saveChangeSheetAttendanceSource,
@@ -77,6 +78,7 @@ export default function ConflictReview() {
   } | null>(null);
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [busAbsents, setBusAbsents] = useState<PaperAbsentCamper[]>([]);
   const [groupAbsents, setGroupAbsents] = useState<PaperAbsentCamper[]>([]);
   const [attendanceSource, setAttendanceSource] = useState<ChangeSheetAttendanceSource>("paperless");
@@ -344,6 +346,30 @@ export default function ConflictReview() {
     }
   };
 
+  const clearDay = async () => {
+    if (!companyId) return;
+    const okToClear = window.confirm(
+      `Clear all scanned bus and group absents for ${sheetDate}? You can scan the PDF again after.`,
+    );
+    if (!okToClear) return;
+    setClearing(true);
+    try {
+      const ok = await clearPaperAttendanceForDate(supabase, companyId, currentSeason, sheetDate);
+      if (!ok) {
+        toast({ title: "Could not clear this day", variant: "destructive" });
+        return;
+      }
+      setBusAbsents([]);
+      setGroupAbsents([]);
+      setScanChecklist(null);
+      setScanWarning(null);
+      setMarks((rows) => rows.map((row) => ({ ...row, absent: false })));
+      toast({ title: `Cleared ${sheetDate}` });
+    } finally {
+      setClearing(false);
+    }
+  };
+
   const setSource = async (source: ChangeSheetAttendanceSource) => {
     setAttendanceSource(source);
     if (!companyId) return;
@@ -394,6 +420,15 @@ export default function ConflictReview() {
             {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"][weekdayIndex]} column
           </Badge>
         )}
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 text-xs"
+          disabled={clearing || (!busAbsents.length && !groupAbsents.length)}
+          onClick={() => void clearDay()}
+        >
+          {clearing ? "Clearing…" : "Clear this day"}
+        </Button>
       </div>
 
       <Card>

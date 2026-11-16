@@ -455,20 +455,17 @@ export function analyzePaperAttendanceImage(
   const samplesByDay = [0, 1, 2, 3, 4].map((col) => weekdaySamples(col));
   const emptyByDay = samplesByDay.map((samples) => emptyInnerFor(samples, paper));
   const filledByDay = samplesByDay.map((samples, col) => countFilled(samples, paper, emptyByDay[col]));
-  let usedWeekday = weekdayIndex;
   const selectedFilled = filledByDay[weekdayIndex] ?? 0;
   const otherFilled = filledByDay
     .map((count, col) => ({ col, count }))
     .filter((row) => row.col !== weekdayIndex && row.count > 0);
   let warning: string | undefined;
-  if (selectedFilled === 0 && otherFilled.length === 1) {
-    usedWeekday = otherFilled[0].col;
-    warning = `Filled bubbles are in the ${WEEKDAY_NAMES[usedWeekday]} column.`;
-  } else if (selectedFilled === 0 && otherFilled.length > 1) {
-    warning = `No ${WEEKDAY_NAMES[weekdayIndex]} marks. Other days have marks — check the date.`;
+  if (selectedFilled === 0 && otherFilled.length > 0) {
+    const otherDays = otherFilled.map((row) => WEEKDAY_NAMES[row.col]).join(", ");
+    warning = `No ${WEEKDAY_NAMES[weekdayIndex]} marks. Filled bubbles are on ${otherDays}.`;
   }
 
-  const emptyInner = emptyByDay[usedWeekday] ?? paper;
+  const emptyInner = emptyByDay[weekdayIndex] ?? paper;
   const rows: PaperOmrRow[] = [];
   for (let i = 0; i < camperCount; i += 1) {
     const sample = rowsToRead[i];
@@ -484,7 +481,7 @@ export function analyzePaperAttendanceImage(
       continue;
     }
     if (options.kind === "group") {
-      const bubble = sampleAt(usedWeekday, sample.y);
+      const bubble = sampleAt(weekdayIndex, sample.y);
       rows.push({
         camperIndex: i,
         y: sample.y,
@@ -492,8 +489,8 @@ export function analyzePaperAttendanceImage(
         confidence: 0.86,
       });
     } else {
-      const am = sampleAt(usedWeekday, sample.amY);
-      const pm = sampleAt(usedWeekday, sample.pmY);
+      const am = sampleAt(weekdayIndex, sample.amY);
+      const pm = sampleAt(weekdayIndex, sample.pmY);
       rows.push({
         camperIndex: i,
         y: sample.y,
@@ -512,7 +509,7 @@ export function analyzePaperAttendanceImage(
     rows,
     expectedRows: camperCount,
     detectedRows: useCount,
-    usedWeekdayIndex: usedWeekday,
+    usedWeekdayIndex: weekdayIndex,
     warning,
   };
 }

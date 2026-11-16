@@ -98,6 +98,26 @@ export async function savePaperAttendanceSheet(
   return true;
 }
 
+export async function clearPaperAttendanceForDate(
+  supabase: SupabaseClient,
+  companyId: string,
+  season: string,
+  attendanceDate: string,
+): Promise<boolean> {
+  const { error } = await supabase
+    .from(TABLE)
+    .delete()
+    .eq("company_id", companyId)
+    .eq("season", season)
+    .eq("attendance_date", attendanceDate);
+
+  if (error) {
+    console.error("[PaperAttendance] clear failed:", error.message);
+    return false;
+  }
+  return true;
+}
+
 export async function loadChangeSheetAttendanceSource(
   supabase: SupabaseClient,
   companyId: string,
