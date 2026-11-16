@@ -277,25 +277,33 @@ export default function ConflictReview() {
         unreadPages: batch.unreadPages,
       });
       setScanWarning(batch.sheets.find((sheet) => sheet.warning)?.warning ?? null);
-      if (batch.sheets.length === 1) {
-        const sheet = batch.sheets[0];
-        const absents = new Set(sheet.absents.map((row) => row.camperName));
-        if (sheet.label === sheetLabel) {
-          setMarks(rosterForLabel(sheet.label).map((row) => ({ ...row, absent: absents.has(row.name) })));
+      const withAbsents = batch.sheets.filter((sheet) => sheet.absents.length);
+      const focus =
+        batch.sheets.find((sheet) => sheet.label === sheetLabel)
+        ?? withAbsents[0]
+        ?? batch.sheets[0];
+      if (focus) {
+        const absents = new Set(focus.absents.map((row) => row.camperName));
+        if (focus.label === sheetLabel) {
+          setMarks(rosterForLabel(focus.label).map((row) => ({ ...row, absent: absents.has(row.name) })));
         } else {
           pendingScanAbsents.current = absents;
-          setSheetLabel(sheet.label);
+          setSheetLabel(focus.label);
         }
       }
       await loadLists();
+      const absentLine = withAbsents
+        .flatMap((sheet) => sheet.absents.map((row) => `${row.camperName} (${sheet.label})`))
+        .join(", ");
+      const checklist = formatPaperScanChecklist({
+        kind: listKind,
+        scannedLabels: batch.scannedLabels,
+        missingLabels: batch.missingLabels,
+        unreadPages: batch.unreadPages,
+      });
       toast({
         title: batch.missingLabels.length ? "Scan finished — sheets missing" : "Scan saved",
-        description: formatPaperScanChecklist({
-          kind: listKind,
-          scannedLabels: batch.scannedLabels,
-          missingLabels: batch.missingLabels,
-          unreadPages: batch.unreadPages,
-        }),
+        description: absentLine ? `${checklist} Absent: ${absentLine}.` : checklist,
         variant: batch.sheets.length ? "default" : "destructive",
       });
     } catch (err) {
@@ -358,8 +366,8 @@ export default function ConflictReview() {
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
           Upload <strong>one PDF for all buses</strong>, or <strong>one PDF for all groups</strong>. Nest
-          searches that file for each bus or group on this camp and lists anything missing. Header barcodes still pick
-          the sheet for attendance bubbles.{" "}
+          searches that file for each bus or group on this camp and lists anything missing. Filled bubbles on that date
+          mark those campers absent.{" "}
           <Link to="/day-camp/change-sheets" className="text-primary underline-offset-2 hover:underline">
             Master Change Sheet
           </Link>

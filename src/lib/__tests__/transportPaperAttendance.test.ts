@@ -270,6 +270,115 @@ describe("paper attendance", () => {
     expect(roster.map((r) => r.absent)).toEqual([true, false, true]);
   });
 
+  it("does not mark empty rings as absent", () => {
+    const image = makeWhite(240, 360);
+    const pageRight = 240 * 0.945;
+    const bubbleW = 240 * (58 / 215.9);
+    const bubbleX = pageRight - bubbleW;
+    const gutter = bubbleW * (9 / 58);
+    const colW = (bubbleW - gutter) / 5;
+    for (const top of [70, 150, 230]) {
+      for (let c = 0; c < 5; c += 1) {
+        const cx = bubbleX + gutter + colW * c + colW / 2;
+        strokeCircle(image, cx, top + 12, 6);
+        strokeCircle(image, cx, top + 32, 6);
+      }
+    }
+    const result = analyzePaperAttendanceImage(image, {
+      kind: "bus",
+      weekdayIndex: 0,
+      camperCount: 3,
+    });
+    expect(omrRowsToAbsentFlags(result.rows, "bus").every((row) => !row.absent)).toBe(true);
+  });
+
+  it("reads a blue Monday AM fill and ignores the Tuesday column", () => {
+    const image = makeWhite(240, 360);
+    const pageRight = 240 * 0.945;
+    const bubbleW = 240 * (58 / 215.9);
+    const bubbleX = pageRight - bubbleW;
+    const gutter = bubbleW * (9 / 58);
+    const colW = (bubbleW - gutter) / 5;
+    const blocks = [70, 150, 230];
+    for (const top of blocks) {
+      for (let c = 0; c < 5; c += 1) {
+        const cx = bubbleX + gutter + colW * c + colW / 2;
+        strokeCircle(image, cx, top + 12, 6);
+        strokeCircle(image, cx, top + 32, 6);
+      }
+    }
+    const monday = bubbleX + gutter + colW * 0 + colW / 2;
+    fillCircle(image, monday, 82, 6, 40);
+    const mondayRead = analyzePaperAttendanceImage(image, {
+      kind: "bus",
+      weekdayIndex: 0,
+      camperCount: 3,
+      camperNames: ["Arla Zachary", "Gema Escoto", "Gisela Orlowsky"],
+    });
+    expect(omrRowsToAbsentFlags(mondayRead.rows, "bus").map((row) => row.absent)).toEqual([
+      true,
+      false,
+      false,
+    ]);
+    const tuesdayRead = analyzePaperAttendanceImage(image, {
+      kind: "bus",
+      weekdayIndex: 1,
+      camperCount: 3,
+    });
+    expect(tuesdayRead.usedWeekdayIndex).toBe(0);
+    expect(omrRowsToAbsentFlags(tuesdayRead.rows, "bus").map((row) => row.absent)).toEqual([
+      true,
+      false,
+      false,
+    ]);
+  });
+
+  it("merges absents from a continued bus sheet and skips blank pages", () => {
+    const blank = makeWhite(420, 360);
+    const batch = processPaperAttendancePages(
+      [
+        {
+          image: (() => {
+            const image = makeWhite(420, 360);
+            rasterCode39(image, 40, 12, "BLV", { narrow: 1, height: 28 });
+            const pageRight = 420 * 0.945;
+            const bubbleW = 420 * (58 / 215.9);
+            const bubbleX = pageRight - bubbleW;
+            const gutter = bubbleW * (9 / 58);
+            const colW = (bubbleW - gutter) / 5;
+            for (let c = 0; c < 5; c += 1) {
+              const cx = bubbleX + gutter + colW * c + colW / 2;
+              if (c === 0) fillCircle(image, cx, 82, 7, 0);
+              else strokeCircle(image, cx, 82, 7);
+              strokeCircle(image, cx, 102, 7);
+              strokeCircle(image, cx, 162, 7);
+              strokeCircle(image, cx, 182, 7);
+            }
+            return image;
+          })(),
+          sourceName: "page-lv",
+          pageText: "Bus Roster Report · LV",
+        },
+        { image: blank, sourceName: "blank" },
+      ],
+      {
+        kind: "bus",
+        weekdayIndex: 0,
+        expectedLabels: ["LV", "Bus 1"],
+        rosterForLabel: (label) =>
+          label === "LV"
+            ? [
+                { id: "arla", name: "Arla Zachary" },
+                { id: "gema", name: "Gema Escoto" },
+              ]
+            : [],
+      },
+    );
+    expect(batch.scannedLabels).toEqual(["LV"]);
+    expect(batch.unreadPages).toEqual([]);
+    expect(batch.sheets[0]?.absents.map((row) => row.camperName)).toEqual(["Arla Zachary"]);
+  });
+
   it("reads header barcodes and flags a missing bus sheet", () => {
     const makePage = (payload: string, fillFirst: boolean) => {
       const image = makeWhite(420, 360);
@@ -279,10 +388,12 @@ describe("paper attendance", () => {
       const bubbleX = pageRight - bubbleW;
       const gutter = bubbleW * (9 / 58);
       const colW = (bubbleW - gutter) / 5;
-      const cx = bubbleX + gutter + colW * 2 + colW / 2;
-      if (fillFirst) fillCircle(image, cx, 82, 7, 0);
-      else strokeCircle(image, cx, 82, 7);
-      strokeCircle(image, cx, 102, 7);
+      for (let c = 0; c < 5; c += 1) {
+        const cx = bubbleX + gutter + colW * c + colW / 2;
+        if (fillFirst && c === 2) fillCircle(image, cx, 82, 7, 0);
+        else strokeCircle(image, cx, 82, 7);
+        strokeCircle(image, cx, 102, 7);
+      }
       return image;
     };
     const batch = processPaperAttendancePages(
@@ -302,6 +413,7 @@ describe("paper attendance", () => {
     expect(batch.sheets.find((s) => s.label === "Bus 3")?.absents.map((r) => r.camperName)).toEqual([
       "Bus 3 camper",
     ]);
+    expect(batch.sheets.find((s) => s.label === "Bus 7")?.absents).toEqual([]);
     expect(batch.sheets.find((s) => s.label === "Bus 7")?.absents).toEqual([]);
   });
 

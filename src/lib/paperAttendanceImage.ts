@@ -1,8 +1,8 @@
-import type { RgbaImage } from "@/lib/paperAttendanceOmr";
+import type { PaperTextItem, RgbaImage } from "@/lib/paperAttendanceOmr";
 import { extractPdfLiteralStrings } from "@/lib/paperAttendancePdfText";
 import type { PaperScanPage } from "@/lib/paperAttendanceScan";
 
-const MAX_SIDE = 1200;
+const MAX_SIDE = 1600;
 
 export function extractJpegBuffersFromPdf(buf: Uint8Array): Uint8Array[] {
   const out: Uint8Array[] = [];
@@ -92,14 +92,21 @@ async function renderPdfPagesWithPdfJs(
   const pages: PaperScanPage[] = [];
   for (let n = 1; n <= pdf.numPages; n += 1) {
     const page = await pdf.getPage(n);
-    const textItems = await page.getTextContent();
-    const pageText = textItems.items
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items
       .map((item) => ("str" in item ? item.str : ""))
       .join(" ");
     const viewport = page.getViewport({ scale: 1.6 });
     const long = Math.max(viewport.width, viewport.height);
     const scale = long > MAX_SIDE ? MAX_SIDE / long : 1;
     const fit = page.getViewport({ scale: 1.6 * scale });
+    const positioned: PaperTextItem[] = [];
+    for (const item of textContent.items) {
+      if (!("str" in item) || !item.str.trim() || !("transform" in item)) continue;
+      const transform = item.transform as number[];
+      const [x, y] = fit.convertToViewportPoint(transform[4], transform[5]);
+      positioned.push({ str: item.str, x, y });
+    }
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(fit.width));
     canvas.height = Math.max(1, Math.round(fit.height));
@@ -110,6 +117,7 @@ async function renderPdfPagesWithPdfJs(
     pages.push({
       image: { width: image.width, height: image.height, data: image.data },
       pageText,
+      textItems: positioned,
       sourceName: `${fileName} page ${n}`,
     });
   }
