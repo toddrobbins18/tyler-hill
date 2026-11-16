@@ -406,10 +406,10 @@ export default function ConflictReview() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Scan all sheets</CardTitle>
+          <CardTitle className="text-base">Missing-sheet checklist</CardTitle>
           <CardDescription>
-            One PDF for all buses, then one PDF for all groups. Nest checks that every bus or group on this camp is in
-            the file and lists the missing ones. Fill a bubble only when the camper is absent.
+            Season {currentSeason}: {sheetOptions.length} {listKind === "bus" ? "buses" : "groups"} on this camp.
+            Upload one combined PDF and Nest lists any that are missing.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -453,7 +453,7 @@ export default function ConflictReview() {
             </div>
             <div className="space-y-1">
               <Label className="text-xs">
-                {listKind === "bus" ? "All bus sheets" : "All group sheets"} (PDF or photos)
+                {listKind === "bus" ? "Upload one bus PDF" : "Upload one group PDF"}
               </Label>
               <Input
                 type="file"
@@ -473,51 +473,71 @@ export default function ConflictReview() {
             </Button>
           </div>
           {scanWarning ? <p className="text-xs text-amber-700">{scanWarning}</p> : null}
-          {scanChecklist ? (
-            <div className="rounded-md border p-3 space-y-2 text-sm">
-              <p className="font-medium">
-                Read {scanChecklist.scannedLabels.length} of {sheetOptions.length}{" "}
-                {listKind === "bus" ? "buses" : "groups"}.
-              </p>
-              {scanChecklist.scannedLabels.length ? (
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground mb-1">In this PDF</p>
-                  <div className="flex flex-wrap gap-1">
-                    {scanChecklist.scannedLabels.map((label) => (
-                      <Badge key={label} variant="secondary" className="text-[10px]">
-                        {label}
-                      </Badge>
+          <div className="rounded-md border p-3 space-y-2 text-sm bg-amber-50/40">
+            <p className="font-medium">
+              {scanChecklist
+                ? `Read ${scanChecklist.scannedLabels.length} of ${sheetOptions.length} ${listKind === "bus" ? "buses" : "groups"}.`
+                : `Waiting for one PDF · ${sheetOptions.length} ${listKind === "bus" ? "buses" : "groups"} to check`}
+            </p>
+            {scanChecklist ? (
+              <>
+                {scanChecklist.scannedLabels.length ? (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">In this PDF</p>
+                    <div className="flex flex-wrap gap-1">
+                      {scanChecklist.scannedLabels.map((label) => (
+                        <Badge key={label} variant="secondary" className="text-[10px]">
+                          {label}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {scanChecklist.missingLabels.length ? (
+                  <div>
+                    <p className="text-xs font-medium text-amber-800 mb-1">Missing from this PDF</p>
+                    <div className="flex flex-wrap gap-1">
+                      {scanChecklist.missingLabels.map((label) => (
+                        <Badge key={label} variant="outline" className="text-[10px] border-amber-700 text-amber-900">
+                          {label}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                ) : scanChecklist.scannedLabels.length ? (
+                  <p className="text-xs text-muted-foreground">
+                    Every {listKind === "bus" ? "bus" : "group"} on this camp is in the file.
+                  </p>
+                ) : null}
+                {scanChecklist.unreadPages.length ? (
+                  <div className="text-xs text-amber-800 space-y-0.5">
+                    {scanChecklist.unreadPages.map((page) => (
+                      <p key={page.sourceName}>
+                        {page.sourceName}: {page.reason}
+                      </p>
                     ))}
                   </div>
-                </div>
-              ) : null}
-              {scanChecklist.missingLabels.length ? (
-                <div>
-                  <p className="text-xs font-medium text-amber-800 mb-1">Missing from this PDF</p>
-                  <div className="flex flex-wrap gap-1">
-                    {scanChecklist.missingLabels.map((label) => (
-                      <Badge key={label} variant="outline" className="text-[10px] border-amber-700 text-amber-900">
-                        {label}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              ) : scanChecklist.scannedLabels.length ? (
-                <p className="text-xs text-muted-foreground">
-                  Every {listKind === "bus" ? "bus" : "group"} on this camp is in the file.
-                </p>
-              ) : null}
-              {scanChecklist.unreadPages.length ? (
-                <div className="text-xs text-amber-800 space-y-0.5">
-                  {scanChecklist.unreadPages.map((page) => (
-                    <p key={page.sourceName}>
-                      {page.sourceName}: {page.reason}
-                    </p>
+                ) : null}
+              </>
+            ) : sheetOptions.length ? (
+              <div>
+                <p className="text-xs font-medium text-amber-800 mb-1">Not in a PDF yet</p>
+                <div className="flex flex-wrap gap-1">
+                  {sheetOptions.map((label) => (
+                    <Badge key={label} variant="outline" className="text-[10px] border-amber-700 text-amber-900">
+                      {label}
+                    </Badge>
                   ))}
                 </div>
-              ) : null}
-            </div>
-          ) : null}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {listKind === "bus"
+                  ? "No buses on this camp yet. Open Transportation to add them."
+                  : "No groups on this camp yet."}
+              </p>
+            )}
+          </div>
           <div className="max-h-[320px] overflow-auto rounded-md border divide-y">
             {marks.length === 0 ? (
               <p className="p-3 text-sm text-muted-foreground">No campers on this sheet.</p>
