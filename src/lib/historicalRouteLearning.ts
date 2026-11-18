@@ -26,6 +26,7 @@ import type {
   TransportUnplottedCamper,
 } from "@/lib/transportRoster";
 import { normalizeTransportAddress } from "@/lib/transportAddressNormalize";
+import { haversineMiles } from "@/lib/transportStopTimes";
 import {
   consolidateRouteStopsByAddress,
   dedupeRidersAcrossRoute,
@@ -738,6 +739,71 @@ export function getHistoricalRouteSuggestion(
     priorBusNumber: prior.busNumber,
     priorRouteName: prior.routeName,
     referenceSeason: prior.referenceSeason,
+  };
+}
+
+const STREET_BUS_SPREAD_MILES = 1.5;
+
+export type StreetBusSuggestion = {
+  busNumber: number;
+  routeName: string;
+  street: string;
+  riderCount: number;
+  sampleNames: string[];
+  farFromBus: boolean;
+};
+
+function streetNameKey(address: string): string {
+  return normalizeTransportAddress(address).replace(/^\d+[a-z]?\s+/i, "");
+}
+
+/** New camper on a street that already has riders → that bus, not a new route. */
+export function suggestBusForStreet(
+  address: string,
+  priors: CamperRoutingPrior[],
+): StreetBusSuggestion | null {
+  const street = streetNameKey(address);
+  if (street.length < 3) return null;
+
+  const matches = priors.filter(
+    (prior) => prior.direction === "AM" && streetNameKey(prior.address || "") === street,
+  );
+  if (!matches.length) return null;
+
+  const byBus = new Map<number, CamperRoutingPrior[]>();
+  for (const prior of matches) {
+    const list = byBus.get(prior.busNumber) ?? [];
+    list.push(prior);
+    byBus.set(prior.busNumber, list);
+  }
+  const ranked = [...byBus.entries()].sort((a, b) => b[1].length - a[1].length);
+  const [busNumber, riders] = ranked[0];
+  const pin = resolveBundledGeocodeResult(address);
+  let farFromBus = false;
+  if (pin) {
+    const others = priors.filter(
+      (prior) =>
+        prior.direction === "AM"
+        && prior.busNumber === busNumber
+        && prior.lat != null
+        && prior.lng != null
+        && streetNameKey(prior.address || "") !== street,
+    );
+    if (others.length) {
+      const nearest = Math.min(
+        ...others.map((prior) => haversineMiles(pin.lat, pin.lng, prior.lat!, prior.lng!)),
+      );
+      farFromBus = nearest > STREET_BUS_SPREAD_MILES;
+    }
+  }
+
+  return {
+    busNumber,
+    routeName: riders[0].routeName,
+    street,
+    riderCount: riders.length,
+    sampleNames: riders.slice(0, 4).map((rider) => rider.camperName),
+    farFromBus,
   };
 }
 

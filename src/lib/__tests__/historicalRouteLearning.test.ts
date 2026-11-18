@@ -3,6 +3,7 @@ import {
   applyHistoricalAssignments,
   assignUnplottedByAddressToOpenStops,
   buildPriorsFromBundledMappoint,
+  suggestBusForStreet,
   buildRouteReferenceFromTransportBoard,
   getHistoricalRouteSuggestion,
   lookupCamperPrior,
@@ -20,6 +21,20 @@ describe("historicalRouteLearning", () => {
 
   it("builds priors from bundled MapPoint", () => {
     expect(priors.length).toBeGreaterThan(300);
+  });
+
+  it("puts a new house on the bus that already serves that street", () => {
+    const known = priors.find((prior) =>
+      prior.address.toLowerCase().includes("soundview"),
+    );
+    expect(known).toBeTruthy();
+    const suggestion = suggestBusForStreet(
+      "45 Soundview Drive, Port Washington, NY 11050",
+      priors,
+    );
+    expect(suggestion?.busNumber).toBe(known!.busNumber);
+    expect(suggestion?.riderCount).toBeGreaterThan(0);
+    expect(suggestion?.farFromBus).toBe(false);
   });
 
   it("places camper on historical bus when route exists", () => {
