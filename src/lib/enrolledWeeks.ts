@@ -76,3 +76,33 @@ export function formatEnrolledWeeksLabel(weeks: number[]): string {
   if (isFullEnrollment(weeks)) return "Full (Weeks 1–8)";
   return weeks.map((w) => `Week ${w}`).join(", ");
 }
+
+/** Collapse 3,4,5,6 into "Weeks 3–6". */
+export function formatWeekRangeLabel(weeks: number[]): string {
+  if (!weeks.length) return "";
+  if (isFullEnrollment(weeks)) return "Full 8 Weeks";
+  const sorted = [...weeks].sort((a, b) => a - b);
+  const ranges: string[] = [];
+  let start = sorted[0];
+  let prev = sorted[0];
+  for (let i = 1; i <= sorted.length; i++) {
+    const next = sorted[i];
+    if (next === prev + 1) {
+      prev = next;
+      continue;
+    }
+    ranges.push(start === prev ? String(start) : `${start}–${prev}`);
+    start = next;
+    prev = next;
+  }
+  return `Weeks ${ranges.join(", ")}`;
+}
+
+/** One camper's session, readable on a group report. */
+export function formatSessionReportLabel(session: string | null | undefined): string {
+  const trimmed = session?.trim() ?? "";
+  if (!trimmed) return "";
+  const weeks = parseEnrolledWeeksFromSession(trimmed);
+  if (!weeks.length) return trimmed;
+  return formatWeekRangeLabel(weeks);
+}

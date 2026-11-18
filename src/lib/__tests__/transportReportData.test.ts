@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { reportCampersForBusRoster, type TransportReportChildRow } from "@/lib/transportReportData";
+import {
+  childToGroupReportCamper,
+  reportCampersForBusRoster,
+  sessionSummaryForCampers,
+  type TransportReportChildRow,
+} from "@/lib/transportReportData";
 
 const child: TransportReportChildRow = {
   id: "1",
@@ -50,5 +55,22 @@ describe("reportCampersForBusRoster", () => {
       programLine: "Stop 2",
       transportLine: "Bus 1",
     });
+  });
+
+  it("prints 2027 campers one grade ahead of the stored 2026 grade", () => {
+    const row = childToGroupReportCamper(child, "", "2027");
+    expect(row.demographicsLine).toContain("1st");
+    expect(row.demographicsLine).not.toContain("Kindergarten");
+    expect(childToGroupReportCamper(child, "", "2026").demographicsLine).toContain("Kindergarten");
+  });
+
+  it("keeps mixed sessions as separate labels", () => {
+    expect(
+      sessionSummaryForCampers([
+        { session: "Full 8 Weeks" },
+        { session: "3, 4, 5, 6" },
+        { session: "2, 3, 4, 5, 6, 7, 8" },
+      ]),
+    ).toBe("Full 8 Weeks · Weeks 3–6 · Weeks 2–8");
   });
 });

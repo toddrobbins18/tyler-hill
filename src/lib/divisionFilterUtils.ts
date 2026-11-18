@@ -134,6 +134,31 @@ export function normalizeDayCampGradeKey(value?: string | null): DayCampGradeSor
   return null;
 }
 
+/** Move a stored camp grade forward. 2027 prints one year ahead of the 2026 grade. */
+export function advanceDayCampGradeLabel(value?: string | null, years = 1): string | null {
+  const raw = value?.trim() ?? "";
+  if (!raw || years <= 0) return raw || null;
+  const key = normalizeDayCampGradeKey(raw);
+  if (!key) return raw;
+  const idx = DAY_CAMP_GRADE_SORT_KEYS.indexOf(key);
+  if (idx < 0) return raw;
+  const next = DAY_CAMP_GRADE_SORT_KEYS[Math.min(idx + years, DAY_CAMP_GRADE_SORT_KEYS.length - 1)];
+  return DAY_CAMP_GRADE_DISPLAY[next];
+}
+
+/** 2026 reports keep the stored grade. 2027 reports show the next grade. */
+export function gradeLabelForReportSeason(
+  grade?: string | null,
+  season?: string | null,
+): string {
+  const raw = grade?.trim() ?? "";
+  if (!raw) return "";
+  if (String(season ?? "").trim() === "2027") {
+    return advanceDayCampGradeLabel(raw, 1) ?? raw;
+  }
+  return raw;
+}
+
 export function getDayCampGradeSortIndex(value?: string | null): number {
   const key = normalizeDayCampGradeKey(value);
   if (!key) return 9999;

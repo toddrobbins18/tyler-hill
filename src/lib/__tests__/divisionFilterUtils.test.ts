@@ -4,6 +4,7 @@ import {
   getDayCampGradeSortIndex,
   getDayCampProgramDivisionSortIndex,
   isCoedYoungDayCampGrade,
+  advanceDayCampGradeLabel,
   normalizeDayCampGradeKey,
   resolveDayCampGradeSortLabel,
   resolveDayCampProgramDivisionKey,
@@ -34,6 +35,12 @@ describe("divisionFilterUtils day-camp grades", () => {
     expect(
       compareDayCampGradesByLabels("Milan", "Kindergarten", "Paris", "Pre - K"),
     ).toBeGreaterThan(0);
+  });
+
+  it("moves Kindergarten up to 1st for the next summer", () => {
+    expect(advanceDayCampGradeLabel("Kindergarten")).toBe("1st");
+    expect(advanceDayCampGradeLabel("Pre - K")).toBe("Kindergarten");
+    expect(advanceDayCampGradeLabel("1st")).toBe("2nd");
   });
 
   it("treats youngest grades as coed for bunking", () => {

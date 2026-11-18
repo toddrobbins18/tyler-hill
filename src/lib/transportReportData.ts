@@ -12,6 +12,8 @@ import { withCounselorPickupStops } from "@/lib/transportCounselorPickup";
 import { loadRouteReferenceAssignments } from "@/lib/routeReferenceWarehouse";
 import type { BubbleSheetCamper } from "@/lib/transportBubbleSheetPdf";
 import type { GroupReportCamper } from "@/lib/transportCampMinderReportsPdf";
+import { gradeLabelForReportSeason } from "@/lib/divisionFilterUtils";
+import { formatSessionReportLabel } from "@/lib/enrolledWeeks";
 import { encodeCamperBarcode } from "@/lib/transportReportPdfLayout";
 
 export type TransportReportChildRow = {
@@ -97,9 +99,13 @@ export function formatReportGenderLetter(gender: string | null): string {
   return "—";
 }
 
-export function formatReportGenderAgeGrade(row: TransportReportChildRow): string {
+export function formatReportGenderAgeGrade(
+  row: TransportReportChildRow,
+  season?: string | null,
+): string {
   const letter = formatReportGenderLetter(row.gender);
-  const gradeOrAge = row.grade?.trim() || (row.age != null ? String(row.age) : "");
+  const gradeOrAge =
+    gradeLabelForReportSeason(row.grade, season) || (row.age != null ? String(row.age) : "");
   if (letter === "—" && !gradeOrAge) return "";
   return `(${letter}|${gradeOrAge || "—"})`;
 }
@@ -218,6 +224,7 @@ export function reportCampersForBusRoster(
   parentTransportCampers: ParentTransportCamper[],
   schedules: CamperBusRunSchedules,
   busLabel: string,
+  season?: string | null,
 ): GroupReportCamper[] {
   return bubbleCampers.map((bc) => {
     const child = children.find((c) => c.name.trim().toLowerCase() === bc.name.trim().toLowerCase());
@@ -234,6 +241,7 @@ export function reportCampersForBusRoster(
       ...childToGroupReportCamper(
         child,
         resolveCamperTransportLine(child.name, routeMeta, coreStops, parentTransportCampers, schedules),
+        season,
       ),
       transportLine: "",
     };
@@ -272,11 +280,13 @@ export type RouteSummaryStopRow = {
 export function childToGroupReportCamper(
   child: TransportReportChildRow,
   transportLine: string,
+  season?: string | null,
 ): GroupReportCamper {
   const barcodeValue = encodeCamperBarcode(child.personId ?? child.id);
+  const sessionLine = formatSessionReportLabel(child.session) || undefined;
   return {
     name: child.name,
-    demographicsLine: formatReportGenderAgeGrade(child),
+    demographicsLine: formatReportGenderAgeGrade(child, season),
     programLine: formatReportProgramLine(child),
     transportLine,
     contactsBlock: formatReportParentContacts(child),
@@ -284,15 +294,17 @@ export function childToGroupReportCamper(
     addressLine: child.homeAddress?.trim() || undefined,
     divisionLine: child.divisionName?.trim() || undefined,
     town: townFromHomeAddress(child.homeAddress) || undefined,
-    sessionLine: child.session?.trim() || undefined,
+    sessionLine,
   };
 }
 
 export function sessionSummaryForCampers(children: { session: string | null }[]): string | null {
-  const sessions = [...new Set(children.map((child) => child.session?.trim()).filter(Boolean))] as string[];
+  const sessions = [
+    ...new Set(children.map((child) => formatSessionReportLabel(child.session)).filter(Boolean)),
+  ];
   if (!sessions.length) return null;
   if (sessions.length === 1) return sessions[0];
-  return sessions.slice(0, 3).join(", ");
+  return sessions.join(" · ");
 }
 
 export function buildRouteSummaryRows(

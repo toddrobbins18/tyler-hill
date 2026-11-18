@@ -310,6 +310,7 @@ export default function BusAttendance() {
           board.parentTransportCampers,
           board.camperBusRunSchedules,
           route.bus,
+          currentSeason,
         ),
         bubbleCampers: bubbleRoute.campers,
         logo: branding.logo,

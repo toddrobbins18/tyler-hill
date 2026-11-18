@@ -214,6 +214,7 @@ export default function TransportPrintReports() {
           parentTransportCampers,
           schedules,
         ),
+        currentSeason,
       ),
       transportLine: "",
     }));
@@ -273,6 +274,7 @@ export default function TransportPrintReports() {
         parentTransportCampers,
         schedules,
         PARENT_TRANSPORT_CHANGE_SHEET_BUS,
+        currentSeason,
       );
       const built = buildBusRosterReportPdf({
         companyName: branding.companyName,
@@ -319,6 +321,7 @@ export default function TransportPrintReports() {
       parentTransportCampers,
       schedules,
       route.bus,
+      currentSeason,
     );
 
     const built = buildBusRosterReportPdf({

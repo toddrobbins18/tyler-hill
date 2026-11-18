@@ -209,7 +209,7 @@ export default function GroupBubbleSheets() {
       staffNames,
       sessionSummary: sessionSummaryForCampers(groupKids),
       campers: groupKids.map((child) => ({
-        ...childToGroupReportCamper(child, ""),
+        ...childToGroupReportCamper(child, "", currentSeason),
         transportLine: "",
       })),
       logo: branding.logo,
