@@ -8,8 +8,6 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useCampOperationalDate } from "@/hooks/useCampOperationalDate";
-import { usesNorthShoreMappoint } from "@/lib/camps";
-
 const quickActions = [
   {
     title: "Sunshine Report",
@@ -132,11 +130,6 @@ export default function DayCampDashboard() {
           </Card>
         ))}
       </div>
-      {usesNorthShoreMappoint(currentCompany?.slug) ? (
-        <Button variant="link" className="w-fit px-0" onClick={() => navigate("/day-camp/route-lab")}>
-          Route lab
-        </Button>
-      ) : null}
     </div>
   );
 }

@@ -84,7 +84,7 @@ export default function Roster() {
   const CAMPERS_PAGE_SIZE = 1000;
 
   const fetchChildren = async () => {
-    setLoading(true);
+    if (children.length === 0) setLoading(true);
     
     if (!currentCompany?.id) {
       setChildren([]);
@@ -540,7 +540,7 @@ export default function Roster() {
         </Button>
       </div>
 
-      {loading ? (
+      {loading && children.length === 0 ? (
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
@@ -549,6 +549,7 @@ export default function Roster() {
           <div className="flex justify-between items-center text-sm text-muted-foreground mb-4">
             <span>
               Showing {filteredChildren.length === 0 ? 0 : startIndex + 1}-{Math.min(endIndex, filteredChildren.length)} of {filteredChildren.length} campers
+              {loading ? " · refreshing" : ""}
             </span>
           </div>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
