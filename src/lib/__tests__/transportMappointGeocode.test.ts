@@ -34,6 +34,15 @@ describe("bundled MapPoint geocode", () => {
     );
   });
 
+  it("places 121 Soundview Drive on the Port Washington street when the city is not comma-separated", () => {
+    const pin = resolveBundledGeocodeResult("121 Soundview Drive Port Washington NY 11050");
+    expect(pin).not.toBeNull();
+    expect(pin!.lat).toBeGreaterThan(40.846);
+    expect(pin!.lat).toBeLessThan(40.851);
+    expect(pin!.lng).toBeGreaterThan(-73.704);
+    expect(pin!.lng).toBeLessThan(-73.699);
+  });
+
   it("places 121 Soundview Drive on the Port Washington street, not the bay", () => {
     const pin = resolveBundledGeocodeResult("121 Soundview Drive, Port Washington, NY 11050");
     expect(pin).not.toBeNull();

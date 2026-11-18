@@ -472,10 +472,6 @@ function lookupAddressHint(
   return hints.get(normCamperNameKey(camperName));
 }
 
-function normAddressCompareKeyForMerge(address: string): string {
-  return address.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
 /** MapPoint / route-reference hint vs CampMinder — use hint when they disagree (stale CM household). */
 function resolveTransportHomeAddress(
   camperName: string,
@@ -498,23 +494,25 @@ function resolveTransportHomeAddress(
   return fromRow || hintAddress;
 }
 
-/** Warehouse geocode can drift; bundled 2026 MapPoint CSV wins when both exist and differ. */
+/** Warehouse geocode can drift. The MapPoint street coordinate wins whenever both exist. */
 export function mergeAddressHintsPreferringBundledMappoint(
   warehouse: Map<string, AddressHint>,
   bundled: Map<string, AddressHint>,
 ): Map<string, AddressHint> {
   const merged = new Map<string, AddressHint>(warehouse);
   for (const [key, bundledValue] of bundled) {
-    const existing = merged.get(key);
-    if (!existing) {
-      merged.set(key, bundledValue);
-      continue;
-    }
-    if (
-      normAddressCompareKeyForMerge(existing.address) !== normAddressCompareKeyForMerge(bundledValue.address)
-    ) {
-      merged.set(key, bundledValue);
-    }
+    const pin = resolveBundledGeocodeResult(bundledValue.address);
+    merged.set(key, {
+      address: bundledValue.address,
+      lat: pin?.lat ?? bundledValue.lat,
+      lng: pin?.lng ?? bundledValue.lng,
+    });
+  }
+  for (const [key, existing] of merged) {
+    if (bundled.has(key)) continue;
+    const pin = resolveBundledGeocodeResult(existing.address);
+    if (!pin) continue;
+    merged.set(key, { ...existing, lat: pin.lat, lng: pin.lng });
   }
   return merged;
 }
@@ -632,16 +630,12 @@ function buildRouteStopForRiders(
   const bundled = resolveBundledGeocodeResult(address);
   let lat = template.lat;
   let lng = template.lng;
-  if (addressChanged) {
-    lat = bundled?.lat ?? lat;
-    lng = bundled?.lng ?? lng;
-    if (!isValidRouteCoordinate(lat, lng)) {
-      lat = 0;
-      lng = 0;
-    }
-  } else if (!isValidRouteCoordinate(lat, lng) && bundled) {
+  if (bundled) {
     lat = bundled.lat;
     lng = bundled.lng;
+  } else if (addressChanged && !isValidRouteCoordinate(lat, lng)) {
+    lat = 0;
+    lng = 0;
   }
 
   if (names.length === 0) {

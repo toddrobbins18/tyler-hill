@@ -12,6 +12,7 @@ import {
   routeIdForPriorBus,
 } from "@/lib/historicalRouteLearning";
 import { buildCamperPriorMap } from "@/lib/routeReferenceWarehouse";
+import { resolveBundledGeocodeResult } from "@/lib/mappointTransportImport";
 
 describe("historicalRouteLearning", () => {
   const priors = buildPriorsFromBundledMappoint("2026");
@@ -219,6 +220,41 @@ describe("historicalRouteLearning", () => {
       expect(result.placed.length, name).toBe(1);
       expect(result.placed[0].busNumber, name).toBe(busNumber);
     }
+  });
+
+  it("pins a new stop on the MapPoint street instead of Nest's saved geocode", () => {
+    const address = "91 Remsen Ave, Roslyn, NY 11576";
+    const pin = resolveBundledGeocodeResult(address);
+    expect(pin).not.toBeNull();
+    const result = applyHistoricalAssignments({
+      coreStops: { 28: [] },
+      routeMeta: [
+        {
+          id: 28,
+          name: "Flower Hill 2 · Bus 28",
+          bus: "Bus 28",
+          departure: "7:00 AM",
+          status: "Confirmed",
+          color: "#000",
+          capacity: 22,
+        },
+      ],
+      unplottedCampers: [
+        {
+          id: 1,
+          name: "Aaron Weissler",
+          address,
+          lat: 40.83,
+          lng: -73.55,
+          age: 8,
+          session: "Full 8 Weeks",
+        },
+      ],
+      priorMap,
+    });
+    expect(result.placed).toHaveLength(1);
+    expect(result.coreStops[28]?.[0]?.lat).toBeCloseTo(pin!.lat, 5);
+    expect(result.coreStops[28]?.[0]?.lng).toBeCloseTo(pin!.lng, 5);
   });
 
   it("places returning campers using bundled 2026 priors when roster uses first last", () => {

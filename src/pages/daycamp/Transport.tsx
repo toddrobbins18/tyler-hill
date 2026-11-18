@@ -18,6 +18,7 @@ import { Bus, MapPin, Users, Plus, FileText, Map as MapIcon, Route as RouteIcon,
 import { pickFirst } from "@/lib/csv";
 import { isSpreadsheetFileName, loadSpreadsheetRowsFromFile } from "@/lib/spreadsheetImport";
 import {
+  pinAtBundledStreet,
   resolveBundledGeocodeResult,
   seedGeocodeCacheFromBundled,
   snapToBundledGeocode,
@@ -1720,15 +1721,16 @@ export default function Transport() {
 
   // Compute the effective core stops for a given route, applying manual + external exceptions
   const getEffectiveCore = useCallback((routeId: number): RouteStop[] => {
-    return consolidateRouteStopsByAddress(
-      applyRouteOverrides(
-        coreStops[routeId] || [],
-        routeId,
-        todayOverrides,
-        excludedCampers,
-      ),
+    const stops = applyRouteOverrides(
+      coreStops[routeId] || [],
+      routeId,
+      todayOverrides,
+      excludedCampers,
     );
-  }, [coreStops, todayOverrides, excludedCampers]);
+    return consolidateRouteStopsByAddress(
+      useNsMappoint ? stops.map((stop) => pinAtBundledStreet(stop)) : stops,
+    );
+  }, [coreStops, todayOverrides, excludedCampers, useNsMappoint]);
 
   // Drag-to-reorder stops within a single route
   const [reorderDrag, setReorderDrag] = useState<{ routeId: number; displayIndex: number } | null>(null);
@@ -1990,8 +1992,10 @@ export default function Transport() {
 
   const unplottedForWeek = useMemo(() => {
     const onSeasonRoster = filterUnplottedToSeasonRoster(unplottedCampers, seasonRosterNames);
-    return filterUnplottedForWeek(onSeasonRoster, activeRouteEnrollmentWeek, camperEnrollmentLookup);
-  }, [unplottedCampers, seasonRosterNames, activeRouteEnrollmentWeek, camperEnrollmentLookup]);
+    const week = filterUnplottedForWeek(onSeasonRoster, activeRouteEnrollmentWeek, camperEnrollmentLookup);
+    if (!useNsMappoint) return week;
+    return week.map((camper) => pinAtBundledStreet(camper));
+  }, [unplottedCampers, seasonRosterNames, activeRouteEnrollmentWeek, camperEnrollmentLookup, useNsMappoint]);
 
   const pendingNamesByAddress = useMemo(
     () => buildPendingNamesByAddress(unplottedForWeek),
@@ -2456,12 +2460,15 @@ export default function Transport() {
       .filter((c): c is UnplottedCamper => !!c);
     if (campers.length === 0) return;
 
-    const assignable: AssignableCamper[] = campers.map((c) => ({
-      name: c.name,
-      address: c.address,
-      lat: c.lat,
-      lng: c.lng,
-    }));
+    const assignable: AssignableCamper[] = campers.map((c) => {
+      const pin = useNsMappoint ? snapToBundledGeocode(c.address, c.lat, c.lng) : c;
+      return {
+        name: c.name,
+        address: c.address,
+        lat: pin.lat,
+        lng: pin.lng,
+      };
+    });
     const names = campers.map((c) => c.name);
     const idSet = new Set(camperIds);
 
@@ -2539,7 +2546,7 @@ export default function Transport() {
         toast({ title: "Camper assigned", description: `${names[0]} added permanently (AM & PM).` });
       }
     }
-  }, [unplottedCampers, coreStops, toast, markRoutesConfigured]);
+  }, [unplottedCampers, coreStops, toast, markRoutesConfigured, useNsMappoint]);
 
   const openScopeDialogForAssign = useCallback((camperIds: number[], routeId: number) => {
     const names = camperIds
@@ -2595,6 +2602,11 @@ export default function Transport() {
         ),
       );
     }
+    if (useNsMappoint) {
+      const pin = snapToBundledGeocode(address, lat, lng);
+      lat = pin.lat;
+      lng = pin.lng;
+    }
 
     const siblings = unplottedSiblingsAtAddress(camper, unplottedCampers);
     if (siblings.length > 0) {
@@ -2619,7 +2631,7 @@ export default function Transport() {
     }
 
     openScopeDialogForAssign([camperId], routeId);
-  }, [unplottedCampers, routeMeta, coreStops, todayOverrides, toast, geocodeAddress, openScopeDialogForAssign]);
+  }, [unplottedCampers, routeMeta, coreStops, todayOverrides, toast, geocodeAddress, openScopeDialogForAssign, useNsMappoint]);
 
   const handleAssignCampersToRoute = useCallback((camperIds: number[], routeId: number) => {
     const uniqueIds = [...new Set(camperIds)];
@@ -2775,14 +2787,14 @@ export default function Transport() {
         const age = parseInt(pickFirst(r, ["age"]) || "10", 10) || 10;
         const session = pickFirst(r, ["session"]) || "Session 1";
 
-        let lat = 40.85 + (Math.random() - 0.5) * 0.1;
-        let lng = -73.65 + (Math.random() - 0.5) * 0.1;
-        try {
-          const { data } = await supabase.functions.invoke("route-optimizer", {
-            body: { action: "geocode", address },
-          });
-          if (data?.found) { lat = data.lat; lng = data.lng; }
-        } catch { /* fall back to random */ }
+        let lat = campLocation.lat;
+        let lng = campLocation.lng;
+        const geo = await geocodeAddress(address);
+        if (isGeocodePoint(geo)) {
+          const pin = useNsMappoint ? snapToBundledGeocode(address, geo.lat, geo.lng) : geo;
+          lat = pin.lat;
+          lng = pin.lng;
+        }
 
         nextId++;
         newOnes.push({ id: nextId, name, address, lat, lng, age, session });

@@ -560,7 +560,17 @@ export async function enrichUnplottedCampersForHistoricalPlacement(
     const address = camper.address?.trim() || prior?.address?.trim() || "";
 
     if (isValidRouteCoordinate(camper.lat, camper.lng)) {
-      out.push(address && !camper.address?.trim() ? { ...camper, address } : camper);
+      const bundled = address ? resolveBundledGeocodeResult(address) : null;
+      if (bundled) {
+        out.push({
+          ...camper,
+          address: address || camper.address,
+          lat: bundled.lat,
+          lng: bundled.lng,
+        });
+      } else {
+        out.push(address && !camper.address?.trim() ? { ...camper, address } : camper);
+      }
       continue;
     }
 
@@ -572,25 +582,23 @@ export async function enrichUnplottedCampersForHistoricalPlacement(
     let lat = camper.lat;
     let lng = camper.lng;
 
-    if (prior && isValidRouteCoordinate(prior.lat ?? 0, prior.lng ?? 0)) {
+    const bundled = resolveBundledGeocodeResult(address);
+    if (bundled) {
+      lat = bundled.lat;
+      lng = bundled.lng;
+    } else if (prior && isValidRouteCoordinate(prior.lat ?? 0, prior.lng ?? 0)) {
       lat = prior.lat!;
       lng = prior.lng!;
     } else {
-      const bundled = resolveBundledGeocodeResult(address);
-      if (bundled) {
-        lat = bundled.lat;
-        lng = bundled.lng;
-      } else {
-        const batched = batchGeocodes.get(addressLookupKey(address));
-        if (batched) {
-          lat = batched.lat;
-          lng = batched.lng;
-        } else if (options?.geocodeOne) {
-          const geo = await options.geocodeOne(address);
-          if (geo) {
-            lat = geo.lat;
-            lng = geo.lng;
-          }
+      const batched = batchGeocodes.get(addressLookupKey(address));
+      if (batched) {
+        lat = batched.lat;
+        lng = batched.lng;
+      } else if (options?.geocodeOne) {
+        const geo = await options.geocodeOne(address);
+        if (geo) {
+          lat = geo.lat;
+          lng = geo.lng;
         }
       }
     }
@@ -649,22 +657,24 @@ export function applyHistoricalAssignments(options: {
 
     // Template stop already has coordinates — no API geocode needed to assign camper.
     if (stopIdx >= 0) {
+      const onStop = resolveBundledGeocodeResult(stops[stopIdx].address || address);
+      if (onStop) {
+        const next = [...stops];
+        next[stopIdx] = { ...next[stopIdx], lat: onStop.lat, lng: onStop.lng };
+        coreStops[routeId] = next;
+      }
       assignCamperToBusStop(coreStops, routeId, stopIdx, camper.name);
       placed.push({ name: camper.name, busNumber: routeId, address });
       continue;
     }
 
-    if (!isValidRouteCoordinate(lat, lng)) {
-      if (isValidRouteCoordinate(prior.lat ?? 0, prior.lng ?? 0)) {
-        lat = prior.lat!;
-        lng = prior.lng!;
-      } else {
-        const bundled = resolveBundledGeocodeResult(address);
-        if (bundled) {
-          lat = bundled.lat;
-          lng = bundled.lng;
-        }
-      }
+    const bundledPin = resolveBundledGeocodeResult(address);
+    if (bundledPin) {
+      lat = bundledPin.lat;
+      lng = bundledPin.lng;
+    } else if (!isValidRouteCoordinate(lat, lng) && isValidRouteCoordinate(prior.lat ?? 0, prior.lng ?? 0)) {
+      lat = prior.lat!;
+      lng = prior.lng!;
     }
 
     if (!isValidRouteCoordinate(lat, lng)) {

@@ -191,6 +191,20 @@ describe("mergeAddressHintsPreferringBundledMappoint", () => {
     const merged = mergeAddressHintsPreferringBundledMappoint(warehouse, bundled);
     expect(merged.get(normCamperNameKey("Harris Goldberg"))?.address).toContain("121 Salem");
   });
+
+  it("keeps the MapPoint coordinate when the warehouse street text already matches", () => {
+    const bundled = buildMappoint2026AddressHints();
+    const key = normCamperNameKey("Ava Greene");
+    const hint = bundled.get(key);
+    expect(hint?.address).toContain("Cambridge");
+    const warehouse = new Map([
+      [key, { address: hint!.address, lat: 40.7, lng: -73.4 }],
+    ]);
+    const merged = mergeAddressHintsPreferringBundledMappoint(warehouse, bundled);
+    expect(merged.get(key)?.lat).toBeCloseTo(hint!.lat, 5);
+    expect(merged.get(key)?.lng).toBeCloseTo(hint!.lng, 5);
+    expect(merged.get(key)?.lat).not.toBeCloseTo(40.7, 2);
+  });
 });
 
 describe("fixBoardAddressesFromEnrollment", () => {

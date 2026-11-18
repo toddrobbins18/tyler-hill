@@ -200,10 +200,46 @@ function corridorPointsFor(parsed: ParsedStreet): { house: number; lat: number; 
   return zips.size <= 1 ? sameStreet : [];
 }
 
+let knownStreetNamesCache: string[] | null = null;
+
+function knownStreetNames(): string[] {
+  if (knownStreetNamesCache) return knownStreetNamesCache;
+  const names = new Set<string>();
+  for (const key of Object.keys(bundledGeocodeMap)) {
+    const row = parseCanonicalStreet(key);
+    if (row?.street) names.add(row.street);
+  }
+  knownStreetNamesCache = [...names];
+  return knownStreetNamesCache;
+}
+
+/** "121 soundview dr port washington ny 11050" → the MapPoint street "soundview dr". */
+function recoverKnownStreet(street: string): string | null {
+  const tokens = street.split(" ").filter(Boolean);
+  for (let n = tokens.length; n >= 1; n--) {
+    const candidate = tokens.slice(0, n).join(" ");
+    if (candidate.length < 3) continue;
+    let directional: string | null = null;
+    for (const known of knownStreetNames()) {
+      if (candidate === known) return known;
+      if (!directional && streetsCompatible(candidate, known)) directional = known;
+    }
+    if (directional) return directional;
+  }
+  return null;
+}
+
 function interpolateBundledStreetGeocode(address: string): BundledGeocode | null {
-  const parsed = parseCanonicalStreet(address);
+  let parsed = parseCanonicalStreet(address);
   if (!parsed) return null;
-  const points = corridorPointsFor(parsed);
+  let points = corridorPointsFor(parsed);
+  if (!points.length) {
+    const street = recoverKnownStreet(parsed.street);
+    if (street && street !== parsed.street) {
+      parsed = { ...parsed, street };
+      points = corridorPointsFor(parsed);
+    }
+  }
   if (!points.length) return null;
   const exact = points.find((row) => row.house === parsed.house);
   if (exact) return { lat: exact.lat, lng: exact.lng, provider: "ors" };
@@ -255,12 +291,18 @@ export function lookupBundledMappointGeocodeFuzzy(address: string): BundledGeoco
   const streetOnly = canonicalizeGeocodeKey(address).split(",")[0]?.trim() ?? "";
   if (streetOnly.length < 5) return null;
 
+  const wanted = parseCanonicalStreet(address);
+  const matches: BundledGeocode[] = [];
   for (const [key, hit] of Object.entries(bundledGeocodeMap)) {
+    if (hit?.lat == null || hit?.lng == null) continue;
     const canonicalKey = canonicalizeGeocodeKey(key);
-    if (canonicalKey === streetOnly || canonicalKey.startsWith(`${streetOnly},`)) {
-      if (hit?.lat != null && hit?.lng != null) return hit;
-    }
+    if (!(canonicalKey === streetOnly || canonicalKey.startsWith(`${streetOnly},`))) continue;
+    const row = parseCanonicalStreet(key);
+    if (wanted?.zip && row?.zip === wanted.zip) return hit;
+    if (wanted?.city && row && citiesCompatible(wanted.city, row.city)) return hit;
+    matches.push(hit);
   }
+  if (matches.length === 1 && !wanted?.city && !wanted?.zip) return matches[0];
   return interpolateBundledStreetGeocode(address);
 }
 
@@ -285,6 +327,17 @@ export function snapToBundledGeocode(
   const bundled = resolveBundledGeocodeResult(address);
   if (!bundled) return { lat, lng };
   return { lat: bundled.lat, lng: bundled.lng };
+}
+
+/** Keep the MapPoint street coordinate when Nest already stored a different lookup. */
+export function pinAtBundledStreet<T extends { address?: string | null; lat: number; lng: number }>(
+  point: T,
+): T {
+  const address = point.address?.trim() || "";
+  if (!address) return point;
+  const pin = snapToBundledGeocode(address, point.lat, point.lng);
+  if (pin.lat === point.lat && pin.lng === point.lng) return point;
+  return { ...point, lat: pin.lat, lng: pin.lng };
 }
 
 export function bundledMappointGeocodeCount() {
