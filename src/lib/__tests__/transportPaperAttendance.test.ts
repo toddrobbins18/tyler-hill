@@ -12,7 +12,11 @@ import {
   reviewPaperAttendance,
   weekdayBubbleIndex,
 } from "@/lib/paperAttendance";
-import { decodePaperSheetBarcodeFromImage, rasterCode39 } from "@/lib/paperAttendanceBarcode";
+import {
+  decodePaperSheetBarcodeFromImage,
+  rasterCode39,
+  uprightPaperScanImage,
+} from "@/lib/paperAttendanceBarcode";
 import { extractJpegBuffersFromPdf } from "@/lib/paperAttendanceImage";
 import { extractPdfLiteralStrings } from "@/lib/paperAttendancePdfText";
 import { processPaperAttendancePages } from "@/lib/paperAttendanceScan";
@@ -20,6 +24,7 @@ import { encodeCamperBarcode, encodePaperSheetBarcode } from "@/lib/transportRep
 import { groupReportRowColumns } from "@/lib/transportCampMinderReportsPdf";
 import {
   analyzePaperAttendanceImage,
+  flipRgbaVertical,
   omrRowsToAbsentFlags,
   type RgbaImage,
 } from "@/lib/paperAttendanceOmr";
@@ -66,6 +71,44 @@ function strokeCircle(image: RgbaImage, cx: number, cy: number, r: number) {
       image.data[i + 3] = 255;
     }
   }
+}
+
+function inkPixel(image: RgbaImage, x: number, y: number) {
+  if (x < 0 || y < 0 || x >= image.width || y >= image.height) return;
+  const i = (y * image.width + x) * 4;
+  image.data[i] = 0;
+  image.data[i + 1] = 0;
+  image.data[i + 2] = 0;
+  image.data[i + 3] = 255;
+}
+
+function drawX(image: RgbaImage, cx: number, cy: number, r: number) {
+  for (let i = -r + 1; i <= r - 1; i += 1) {
+    for (const t of [-1, 0, 1]) {
+      inkPixel(image, Math.round(cx + i + t), Math.round(cy + i));
+      inkPixel(image, Math.round(cx + i + t), Math.round(cy - i));
+    }
+  }
+}
+
+function drawCheck(image: RgbaImage, cx: number, cy: number, r: number) {
+  for (let i = 0; i <= Math.round(r * 0.7); i += 1) {
+    inkPixel(image, Math.round(cx - r * 0.4 + i), Math.round(cy + i * 0.45));
+    inkPixel(image, Math.round(cx - r * 0.4 + i), Math.round(cy + i * 0.45) + 1);
+  }
+  for (let i = 0; i <= Math.round(r * 1.2); i += 1) {
+    inkPixel(image, Math.round(cx - 1 + i * 0.55), Math.round(cy + r * 0.35 - i * 0.65));
+    inkPixel(image, Math.round(cx - 1 + i * 0.55), Math.round(cy + r * 0.35 - i * 0.65) + 1);
+  }
+}
+
+function nestBusCols(width: number) {
+  const pageRight = width * 0.945;
+  const bubbleW = width * (58 / 215.9);
+  const bubbleX = pageRight - bubbleW;
+  const gutter = bubbleW * (9 / 58);
+  const colW = (bubbleW - gutter) / 5;
+  return [0, 1, 2, 3, 4].map((c) => bubbleX + gutter + colW * c + colW / 2);
 }
 
 const routeMeta = [{ id: 3, name: "Route East", bus: "Bus 3" }];
@@ -127,6 +170,15 @@ describe("paper attendance", () => {
     const header = makeWhite(480, 90);
     rasterCode39(header, 200, 20, "BBUS3", { narrow: 1, height: 28 });
     expect(decodePaperSheetBarcodeFromImage(header)).toBe("BBUS3");
+  });
+
+  it("recognizes Parent Transport from the printed title or header barcode", () => {
+    const labels = ["Bus 3", "Parent Transport (PT)", "Bus 7"];
+    expect(findPaperSheetLabelsInText("Parent Transport (PT) · Total Passengers: 5", labels, "bus")).toEqual([
+      "Parent Transport (PT)",
+    ]);
+    expect(findPaperSheetLabelsInText("BPARENTTRANSPORTPT", labels, "bus")).toEqual(["Parent Transport (PT)"]);
+    expect(encodePaperSheetBarcode("bus", "Parent Transport (PT)")).toBe("BPARENTTRANSPORTPT");
   });
 
   it("searches a combined PDF for every bus or group title", () => {
@@ -275,6 +327,119 @@ describe("paper attendance", () => {
     expect(roster.map((r) => r.absent)).toEqual([true, false, true]);
   });
 
+  it("reads the first-page Tuesday fill even when the bus roster is longer than the page", () => {
+    const width = 240;
+    const height = 360;
+    const image = makeWhite(width, height);
+    const pageRight = width * 0.945;
+    const bubbleW = width * (58 / 215.9);
+    const bubbleX = pageRight - bubbleW;
+    const gutter = bubbleW * (9 / 58);
+    const colW = (bubbleW - gutter) / 5;
+    const tops = [70, 150, 230];
+    for (const top of tops) {
+      for (let c = 0; c < 5; c += 1) {
+        const cx = bubbleX + gutter + colW * c + colW / 2;
+        if (c === 1 && top === 70) fillCircle(image, cx, top + 12, 6, 40);
+        else strokeCircle(image, cx, top + 12, 6);
+        strokeCircle(image, cx, top + 32, 6);
+      }
+    }
+    const names = Array.from({ length: 23 }, (_, i) => (i === 0 ? "Alex Rubel" : `Camper ${i}`));
+    const result = analyzePaperAttendanceImage(image, {
+      kind: "bus",
+      weekdayIndex: 1,
+      camperCount: names.length,
+      camperNames: names,
+    });
+    const flags = omrRowsToAbsentFlags(result.rows, "bus");
+    expect(flags[0]?.absent).toBe(true);
+    expect(flags.slice(1, 3).every((row) => !row.absent)).toBe(true);
+  });
+
+  it("treats an X or a check in the Tuesday circle as absent", () => {
+    const width = 240;
+    const height = 360;
+    const image = makeWhite(width, height);
+    const cols = nestBusCols(width);
+    for (const top of [70, 150, 230]) {
+      for (const cx of cols) {
+        strokeCircle(image, cx, top + 12, 6);
+        strokeCircle(image, cx, top + 32, 6);
+      }
+    }
+    drawX(image, cols[1], 82, 5);
+    drawCheck(image, cols[1], 162, 5);
+    const result = analyzePaperAttendanceImage(image, {
+      kind: "bus",
+      weekdayIndex: 1,
+      camperCount: 3,
+    });
+    expect(omrRowsToAbsentFlags(result.rows, "bus").map((row) => row.absent)).toEqual([true, true, false]);
+    const monday = analyzePaperAttendanceImage(image, {
+      kind: "bus",
+      weekdayIndex: 0,
+      camperCount: 3,
+    });
+    expect(omrRowsToAbsentFlags(monday.rows, "bus").every((row) => !row.absent)).toBe(true);
+  });
+
+  it("keeps a Tuesday mark on the printed name when the Nest list is in a different order", () => {
+    const image = makeWhite(240, 360);
+    const cols = nestBusCols(240);
+    for (const top of [70, 150, 230]) {
+      for (const cx of cols) {
+        strokeCircle(image, cx, top + 12, 6);
+        strokeCircle(image, cx, top + 32, 6);
+      }
+    }
+    fillCircle(image, cols[1], 162, 6, 40);
+    const names = ["Andi Robbins", "Cali Robbins", "Alina Haynes"];
+    const result = analyzePaperAttendanceImage(image, {
+      kind: "bus",
+      weekdayIndex: 1,
+      camperCount: names.length,
+      camperNames: names,
+      textItems: [
+        { str: "Alina Haynes", x: 20, y: 92 },
+        { str: "Andi Robbins", x: 20, y: 172 },
+      ],
+    });
+    expect(omrRowsToAbsentFlags(result.rows, "bus").map((row) => row.absent)).toEqual([
+      true,
+      false,
+      false,
+    ]);
+  });
+
+  it("still marks Alex when his row is read and other names are printed lower", () => {
+    const image = makeWhite(240, 360);
+    const cols = nestBusCols(240);
+    for (const top of [70, 150, 230]) {
+      for (const cx of cols) {
+        strokeCircle(image, cx, top + 12, 6);
+        strokeCircle(image, cx, top + 32, 6);
+      }
+    }
+    fillCircle(image, cols[1], 82, 6, 40);
+    const names = ["Alex Rubel", "Asher Cohan", "Audrey Anteby"];
+    const result = analyzePaperAttendanceImage(image, {
+      kind: "bus",
+      weekdayIndex: 1,
+      camperCount: names.length,
+      camperNames: names,
+      textItems: [
+        { str: "Asher Cohan", x: 20, y: 172 },
+        { str: "Audrey Anteby", x: 20, y: 252 },
+      ],
+    });
+    expect(omrRowsToAbsentFlags(result.rows, "bus").map((row) => row.absent)).toEqual([
+      true,
+      false,
+      false,
+    ]);
+  });
+
   it("does not mark empty rings as absent", () => {
     const image = makeWhite(240, 360);
     const pageRight = 240 * 0.945;
@@ -293,6 +458,35 @@ describe("paper attendance", () => {
       kind: "bus",
       weekdayIndex: 0,
       camperCount: 3,
+    });
+    expect(omrRowsToAbsentFlags(result.rows, "bus").every((row) => !row.absent)).toBe(true);
+  });
+
+  it("does not invent absents on an unmarked bus page", () => {
+    const image = makeWhite(240, 720);
+    const cols = nestBusCols(240);
+    for (let r = 0; r < 8; r += 1) {
+      const top = 70 + r * 78;
+      for (const cx of cols) {
+        strokeCircle(image, cx, top + 12, 6);
+        strokeCircle(image, cx, top + 32, 6);
+      }
+    }
+    const names = [
+      "Aidan Sardelli",
+      "Alexandra Simon",
+      "Cade Wallack",
+      "Charlotte Simon",
+      "Hannah Smolinsky",
+      "Harper Barash",
+      "Hudson Wein",
+      "Isla Valsamopoulos",
+    ];
+    const result = analyzePaperAttendanceImage(image, {
+      kind: "bus",
+      weekdayIndex: 1,
+      camperCount: names.length,
+      camperNames: names,
     });
     expect(omrRowsToAbsentFlags(result.rows, "bus").every((row) => !row.absent)).toBe(true);
   });
@@ -376,6 +570,46 @@ describe("paper attendance", () => {
     );
     expect(monday.sheets[0]?.absents.map((row) => row.camperName)).toEqual(["Aria Zachary"]);
     expect(tuesday.sheets[0]?.absents.map((row) => row.camperName)).toEqual(["Gema Escoto"]);
+  });
+
+  it("flips an upside-down copier page and reads Tuesday, not Monday", () => {
+    const image = makeWhite(420, 360);
+    rasterCode39(image, 250, 12, "BBUS3", { narrow: 1, height: 28 });
+    const pageRight = 420 * 0.945;
+    const bubbleW = 420 * (58 / 215.9);
+    const bubbleX = pageRight - bubbleW;
+    const gutter = bubbleW * (9 / 58);
+    const colW = (bubbleW - gutter) / 5;
+    for (let c = 0; c < 5; c += 1) {
+      const cx = bubbleX + gutter + colW * c + colW / 2;
+      if (c === 1) fillCircle(image, cx, 82, 7, 0);
+      else strokeCircle(image, cx, 82, 7);
+      strokeCircle(image, cx, 102, 7);
+      strokeCircle(image, cx, 162, 7);
+      strokeCircle(image, cx, 182, 7);
+    }
+    const flipped = flipRgbaVertical(image);
+    expect(uprightPaperScanImage(flipped).flipped).toBe(true);
+    const roster = [
+      { id: "alex", name: "Alex Rubel" },
+      { id: "asher", name: "Asher Cohan" },
+    ];
+    const options = {
+      kind: "bus" as const,
+      expectedLabels: ["Bus 3"],
+      rosterForLabel: () => roster,
+    };
+    const tuesday = processPaperAttendancePages(
+      [{ image: flipped, sourceName: "upside-down-bus3" }],
+      { ...options, weekdayIndex: 1 },
+    );
+    const monday = processPaperAttendancePages(
+      [{ image: flipped, sourceName: "upside-down-bus3" }],
+      { ...options, weekdayIndex: 0 },
+    );
+    expect(tuesday.scannedLabels).toEqual(["Bus 3"]);
+    expect(tuesday.sheets[0]?.absents.map((row) => row.camperName)).toEqual(["Alex Rubel"]);
+    expect(monday.sheets[0]?.absents).toEqual([]);
   });
 
   it("merges absents from a continued bus sheet and skips blank pages", () => {

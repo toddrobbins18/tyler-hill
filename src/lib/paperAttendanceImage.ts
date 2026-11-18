@@ -132,6 +132,11 @@ export async function loadPaperScanInputFromBrowserFiles(files: File[]): Promise
       const buf = new Uint8Array(await file.arrayBuffer());
       const documentText = extractPdfLiteralStrings(buf);
       if (documentText.trim()) texts.push(documentText);
+      const jpegPages = await decodePdfJpegPages(extractJpegBuffersFromPdf(buf), file.name || "roster.pdf");
+      if (jpegPages.length) {
+        pages.push(...jpegPages);
+        continue;
+      }
       let rendered: PaperScanPage[] = [];
       try {
         rendered = await renderPdfPagesWithPdfJs(buf.slice(), file.name || "roster.pdf");
@@ -143,10 +148,7 @@ export async function loadPaperScanInputFromBrowserFiles(files: File[]): Promise
         for (const page of rendered) {
           if (page.pageText?.trim()) texts.push(page.pageText);
         }
-        continue;
       }
-      const jpegPages = await decodePdfJpegPages(extractJpegBuffersFromPdf(buf), file.name || "roster.pdf");
-      pages.push(...jpegPages);
       continue;
     }
     try {

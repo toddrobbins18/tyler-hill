@@ -118,6 +118,28 @@ export async function clearPaperAttendanceForDate(
   return true;
 }
 
+export async function clearPaperAttendanceForKind(
+  supabase: SupabaseClient,
+  companyId: string,
+  season: string,
+  attendanceDate: string,
+  listKind: PaperAttendanceListKind,
+): Promise<boolean> {
+  const { error } = await supabase
+    .from(TABLE)
+    .delete()
+    .eq("company_id", companyId)
+    .eq("season", season)
+    .eq("attendance_date", attendanceDate)
+    .eq("list_kind", listKind);
+
+  if (error) {
+    console.error("[PaperAttendance] clear kind failed:", error.message);
+    return false;
+  }
+  return true;
+}
+
 export async function loadChangeSheetAttendanceSource(
   supabase: SupabaseClient,
   companyId: string,

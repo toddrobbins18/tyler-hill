@@ -1,4 +1,8 @@
-import { rgbaToGray, type RgbaImage } from "@/lib/paperAttendanceOmr";
+import {
+  flipRgbaVertical,
+  rgbaToGray,
+  type RgbaImage,
+} from "@/lib/paperAttendanceOmr";
 
 /** CODE39 patterns (* = narrow/wide unit sequence). */
 const CODE39: Record<string, string> = {
@@ -200,4 +204,39 @@ export function decodePaperSheetBarcodeFromImage(image: RgbaImage): string | nul
     if (text) return text;
   }
   return null;
+}
+
+/** Horizontal bar transitions in the header barcode corner (top-right vs bottom-right). */
+function headerBarcodeEnergy(image: RgbaImage, fromBottom: boolean): number {
+  const src = rgbaToGray(image);
+  const band = Math.max(8, Math.round(src.height * 0.16));
+  const y0 = fromBottom ? src.height - band : 0;
+  const x0 = Math.round(src.width * 0.62);
+  let best = 0;
+  for (let y = y0; y < y0 + band; y += 2) {
+    const row: number[] = [];
+    for (let x = x0; x < src.width; x += 1) row.push(src.gray[y * src.width + x]);
+    if (row.length < 20) continue;
+    const mid = row.reduce((a, b) => a + b, 0) / row.length;
+    let transitions = 0;
+    let prev = row[0] < mid - 12 ? 1 : 0;
+    for (let i = 1; i < row.length; i += 1) {
+      const bit = row[i] < mid - 12 ? 1 : 0;
+      if (bit !== prev) transitions += 1;
+      prev = bit;
+    }
+    if (transitions > best) best = transitions;
+  }
+  return best;
+}
+
+/** Copier jobs often feed the sheet upside-down. Flip so Monday stays the left column. */
+export function uprightPaperScanImage(image: RgbaImage): { image: RgbaImage; flipped: boolean } {
+  if (decodePaperSheetBarcodeFromImage(image)) return { image, flipped: false };
+  const flipped = flipRgbaVertical(image);
+  if (decodePaperSheetBarcodeFromImage(flipped)) return { image: flipped, flipped: true };
+  const top = headerBarcodeEnergy(image, false);
+  const bottom = headerBarcodeEnergy(image, true);
+  if (bottom >= 30 && bottom > top + 12) return { image: flipped, flipped: true };
+  return { image, flipped: false };
 }

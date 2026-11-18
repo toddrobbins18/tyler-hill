@@ -4,11 +4,15 @@ import {
   matchPaperSheetLabel,
   mergePaperScannedLabels,
   missingPaperSheets,
+  paperSheetKey,
   uniquePaperAbsents,
   type PaperAbsentCamper,
   type PaperAttendanceListKind,
 } from "@/lib/paperAttendance";
-import { decodePaperSheetBarcodeFromImage } from "@/lib/paperAttendanceBarcode";
+import {
+  decodePaperSheetBarcodeFromImage,
+  uprightPaperScanImage,
+} from "@/lib/paperAttendanceBarcode";
 import {
   analyzePaperAttendanceImage,
   isMostlyBlankImage,
@@ -41,6 +45,18 @@ export type PaperBatchScanResult = {
   scannedLabels: string[];
   missingLabels: string[];
 };
+
+export function orientPaperScanPage(page: PaperScanPage): PaperScanPage {
+  if (!page.image) return page;
+  const { image, flipped } = uprightPaperScanImage(page.image);
+  if (!flipped) return page;
+  const height = page.image.height;
+  return {
+    ...page,
+    image,
+    textItems: page.textItems?.map((item) => ({ ...item, y: height - item.y })),
+  };
+}
 
 function pageLabel(
   page: PaperScanPage,
@@ -90,13 +106,19 @@ export function processPaperAttendancePages(
   const usedByLabel = new Map<string, number>();
   let lastLabel = "";
 
-  for (const page of pages) {
+  for (const rawPage of pages) {
+    const page = orientPaperScanPage(rawPage);
     const blank = page.image ? isMostlyBlankImage(page.image) : !page.pageText?.trim();
     const found = pageLabel(page, options.kind, options.expectedLabels);
+    const otherSheet = findPaperSheetLabelsInText(
+      page.pageText ?? "",
+      options.expectedLabels,
+      options.kind,
+    ).some((hit) => lastLabel && paperSheetKey(hit) !== paperSheetKey(lastLabel));
     const label =
       found.label
       || (pages.length === 1 ? options.fallbackLabel?.trim() || "" : "")
-      || (!blank && lastLabel ? lastLabel : "");
+      || (!blank && lastLabel && !otherSheet ? lastLabel : "");
     if (!label) {
       if (blank) continue;
       if (!(options.extraFoundLabels ?? []).length) {

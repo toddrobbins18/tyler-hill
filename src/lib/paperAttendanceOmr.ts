@@ -51,6 +51,24 @@ export function rgbaToGray(image: RgbaImage): GrayImage {
   return { width: image.width, height: image.height, gray };
 }
 
+function copyRgbaData(image: RgbaImage): Uint8ClampedArray | Uint8Array {
+  return image.data instanceof Uint8ClampedArray
+    ? new Uint8ClampedArray(image.data.length)
+    : new Uint8Array(image.data.length);
+}
+
+/** Copier scans often come in flipped; this restores header-at-top. */
+export function flipRgbaVertical(image: RgbaImage): RgbaImage {
+  const { width, height, data } = image;
+  const next = copyRgbaData(image);
+  const row = width * 4;
+  for (let y = 0; y < height; y += 1) {
+    const src = y * row;
+    next.set(data.subarray(src, src + row), (height - 1 - y) * row);
+  }
+  return { width, height, data: next };
+}
+
 function downsampleGray(src: GrayImage, maxSide: number): GrayImage {
   const long = Math.max(src.width, src.height);
   if (long <= maxSide) return src;
@@ -158,12 +176,34 @@ function columnSets(width: number, kind: "bus" | "group"): number[][] {
   return [nestCenters(width, 52, 0), legacyGroupCenters(width)];
 }
 
-type BubbleSample = { inner: number; ring: number };
+type BubbleSample = { inner: number; ring: number; ink: number };
+
+function sampleInkFraction(image: GrayImage, cx: number, cy: number, radius: number): number {
+  const r = Math.max(1, radius);
+  const r2 = r * r;
+  let dark = 0;
+  let count = 0;
+  const x0 = clamp(Math.floor(cx - r), 0, image.width - 1);
+  const x1 = clamp(Math.ceil(cx + r), 0, image.width - 1);
+  const y0 = clamp(Math.floor(cy - r), 0, image.height - 1);
+  const y1 = clamp(Math.ceil(cy + r), 0, image.height - 1);
+  for (let y = y0; y <= y1; y += 1) {
+    const dy = y - cy;
+    for (let x = x0; x <= x1; x += 1) {
+      const dx = x - cx;
+      if (dx * dx + dy * dy > r2) continue;
+      count += 1;
+      if (image.gray[y * image.width + x] < 205) dark += 1;
+    }
+  }
+  return count ? dark / count : 0;
+}
 
 function sampleBubble(image: GrayImage, cx: number, cy: number, radius: number): BubbleSample {
   return {
     inner: sampleDiskMean(image, cx, cy, radius * 0.42),
     ring: sampleAnnulusMean(image, cx, cy, radius * 0.72, radius * 1.18),
+    ink: sampleInkFraction(image, cx, cy, radius * 0.42),
   };
 }
 
@@ -197,7 +237,11 @@ function looksLikeCircle(
   sample: BubbleSample,
   paper: number,
 ): boolean {
-  return looksLikeEmptyCircle(sample, paper) || looksLikeFilledCircle(image, cx, cy, radius, sample, paper);
+  return (
+    looksLikeEmptyCircle(sample, paper)
+    || looksLikeFilledCircle(image, cx, cy, radius, sample, paper)
+    || sample.ink >= 0.16
+  );
 }
 
 function percentile(values: number[], p: number): number {
@@ -208,10 +252,25 @@ function percentile(values: number[], p: number): number {
 }
 
 function isFilledBubble(sample: BubbleSample, paper: number, emptyInner: number): boolean {
-  if (isHollowCircle(sample, paper)) return false;
-  if (emptyInner - sample.inner < 50) return false;
-  if (sample.inner > 160) return false;
-  return paper - sample.inner > 60;
+  // Hollow circle with any interior ink (fill, X, check, scribble) is absent.
+  if (isHollowCircle(sample, paper)) return sample.ink >= 0.2;
+  if (sample.ink >= 0.28) return true;
+  if (emptyInner - sample.inner < 32) return false;
+  if (sample.inner > 190) return false;
+  return paper - sample.inner > 48;
+}
+
+function isMarkedVsPeers(
+  selected: BubbleSample,
+  peers: BubbleSample[],
+  paper: number,
+  emptyInner: number,
+): boolean {
+  if (!isFilledBubble(selected, paper, emptyInner)) return false;
+  if (peers.length < 2) return true;
+  const medInk = percentile(peers.map((s) => s.ink), 0.5);
+  const medInner = percentile(peers.map((s) => s.inner), 0.5);
+  return selected.ink >= medInk + 0.12 || medInner - selected.inner >= 35;
 }
 
 function nonMaxima(scores: Float32Array, y0: number, y1: number, minSep: number): number[] {
@@ -238,7 +297,7 @@ function scoreRows(
   radius: number,
   paper: number,
 ): { ys: number[]; score: number } {
-  const y0 = Math.floor(image.height * 0.22);
+  const y0 = Math.floor(image.height * 0.16);
   const y1 = Math.floor(image.height * 0.97);
   const scores = new Float32Array(image.height);
   const xShift = Math.max(2, Math.round(radius * 0.8));
@@ -281,45 +340,84 @@ function pickRadiusAndColumns(
     6,
     7,
   ])].filter((r) => r >= 3 && r <= image.width * 0.06);
-  const expected = kind === "bus" ? camperCount * 2 : camperCount;
-  let best: { xs: number[]; radius: number; ys: number[]; rank: number } | null = null;
+  const pageCap = kind === "bus" ? 10 : 14;
+  const expected = Math.min(Math.max(camperCount, 1), pageCap) * (kind === "bus" ? 2 : 1);
+  let best: { xs: number[]; radius: number; ys: number[]; rank: number; score: number } | null = null;
   for (const xs of columnSets(image.width, kind)) {
     for (const radius of radii) {
       const found = scoreRows(image, xs, radius, paper);
-      const err = Math.abs(found.ys.length - expected);
-      const rank = found.score / Math.max(1, err + 1) - err * 40;
-      if (!best || rank > best.rank) best = { xs, radius, ys: found.ys, rank };
+      const extra = Math.max(0, found.ys.length - expected);
+      const rank = found.score / Math.max(1, found.ys.length) - extra * 8;
+      if (!best || rank > best.rank) best = { xs, radius, ys: found.ys, rank, score: found.score };
     }
   }
-  return best ?? { xs: columnSets(image.width, kind)[0], radius: Math.max(4, Math.round(image.width * 0.02)), ys: [] };
+  const picked = best ?? {
+    xs: columnSets(image.width, kind)[0],
+    radius: Math.max(4, Math.round(image.width * 0.02)),
+    ys: [] as number[],
+    rank: 0,
+    score: 0,
+  };
+  if (image.width >= 800) {
+    const printed = Math.max(4, Math.round(image.width * (2 / PAGE_W_MM)));
+    const nest = columnSets(image.width, kind)[0];
+    const found = scoreRows(image, nest, printed, paper);
+    if (found.ys.length >= 4) {
+      picked.xs = nest;
+      picked.ys = found.ys;
+      picked.radius = printed;
+      picked.rank = found.score;
+      picked.score = found.score;
+    }
+  }
+  return picked;
 }
 
 function dropHeaderArtifact<T extends { y: number }>(rows: T[]): T[] {
-  if (rows.length < 3) return rows;
-  const gaps = rows.slice(1).map((row, i) => row.y - rows[i].y);
-  const sorted = [...gaps].sort((a, b) => a - b);
-  const med = sorted[Math.floor(sorted.length / 2)] ?? 0;
-  if (med > 0 && gaps[0] < med * 0.72) return rows.slice(1);
-  return rows;
+  let next = rows;
+  for (let pass = 0; pass < 2 && next.length >= 4; pass += 1) {
+    const gaps = next.slice(1).map((row, i) => row.y - next[i].y);
+    const sorted = [...gaps].sort((a, b) => a - b);
+    const med = sorted[Math.floor(sorted.length / 2)] ?? 0;
+    if (!(med > 0 && gaps[0] < med * 0.85)) break;
+    next = next.slice(1);
+  }
+  return next;
 }
 
 function pairBusRows(ys: number[], radius: number): Array<{ y: number; amY: number; pmY: number }> {
   const pairMax = radius * 5.2;
   const pairMin = radius * 1.7;
-  const rows: Array<{ y: number; amY: number; pmY: number }> = [];
-  let i = 0;
-  while (i < ys.length) {
-    const a = ys[i];
-    const b = ys[i + 1];
-    if (b != null && b - a >= pairMin && b - a <= pairMax) {
-      rows.push({ y: (a + b) / 2, amY: a, pmY: b });
-      i += 2;
-    } else {
-      rows.push({ y: a, amY: a, pmY: a + radius * 2.8 });
-      i += 1;
+  const canPair = (a: number, b: number | undefined) => b != null && b - a >= pairMin && b - a <= pairMax;
+  const build = (start: number) => {
+    const rows: Array<{ y: number; amY: number; pmY: number }> = [];
+    let pairs = 0;
+    const gaps: number[] = [];
+    let i = start;
+    while (i < ys.length) {
+      const a = ys[i];
+      const b = ys[i + 1];
+      if (canPair(a, b)) {
+        rows.push({ y: (a + b) / 2, amY: a, pmY: b });
+        gaps.push(b - a);
+        pairs += 1;
+        i += 2;
+      } else {
+        rows.push({ y: a, amY: a, pmY: a + radius * 2.8 });
+        i += 1;
+      }
     }
-  }
-  return rows;
+    const mean = gaps.length ? gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length : pairMax;
+    const variance = gaps.length
+      ? gaps.reduce((sum, gap) => sum + (gap - mean) ** 2, 0) / gaps.length
+      : pairMax * pairMax;
+    return { rows, pairs, variance };
+  };
+  const first = build(0);
+  const second = ys.length > 2 ? build(1) : first;
+  if (second.pairs > first.pairs) return second.rows;
+  if (second.pairs === first.pairs && second.variance < first.variance) return second.rows;
+  return first.rows;
 }
 
 function nameYs(
@@ -385,8 +483,53 @@ export function analyzePaperAttendanceImage(
   const geometry = pickRadiusAndColumns(gray, options.kind, camperCount, paper);
   const { xs, radius } = geometry;
   let rowYs = options.kind === "bus"
-    ? dropHeaderArtifact(pairBusRows(geometry.ys, radius))
-    : dropHeaderArtifact(geometry.ys.map((y) => ({ y, amY: y, pmY: y })));
+    ? pairBusRows(geometry.ys, radius)
+    : geometry.ys.map((y) => ({ y, amY: y, pmY: y }));
+  if (options.kind === "bus") {
+    rowYs = rowYs.filter((row) => row.y >= gray.height * 0.16);
+  }
+  rowYs = dropHeaderArtifact(rowYs);
+  const pageCap = options.kind === "bus" ? 10 : 14;
+  if (rowYs.length > pageCap) rowYs = rowYs.slice(0, pageCap);
+
+  const xShift = Math.max(2, Math.round(radius * 0.8));
+  const sampleAt = (col: number, y: number): BubbleSample => {
+    const baseX = xs[col] ?? xs[0];
+    let best = sampleBubble(gray, baseX, y, radius);
+    for (const x of [baseX - xShift, baseX + xShift]) {
+      const sample = sampleBubble(gray, x, y, radius);
+      if (paper - sample.ring > paper - best.ring) best = sample;
+    }
+    return best;
+  };
+  const daySamplesAt = (y: number): BubbleSample[] => [0, 1, 2, 3, 4].map((col) => sampleAt(col, y));
+  const columnPitch = Math.abs((xs[1] ?? xs[0] + 20) - xs[0]);
+  const xReach = Math.max(2, Math.round(columnPitch * 0.22));
+  const bandSample = (col: number, y0: number, y1: number): BubbleSample => {
+    const center = xs[col] ?? xs[0];
+    let best = sampleBubble(gray, center, y0, radius);
+    const step = Math.max(2, Math.round(radius * 0.5));
+    const xsToTry = [center];
+    for (let dx = 2; dx <= xReach; dx += 2) xsToTry.push(center - dx, center + dx);
+    for (let y = y0; y <= y1; y += step) {
+      for (const x of xsToTry) {
+        const sample = sampleBubble(gray, x, y, radius);
+        if (sample.ink > best.ink || (sample.ink === best.ink && sample.inner < best.inner)) best = sample;
+      }
+    }
+    return best;
+  };
+  const rowSpan = (row: { y: number; amY: number; pmY: number }) => {
+    const top = Math.min(row.amY, row.pmY, row.y);
+    const bottom = Math.max(row.amY, row.pmY, row.y);
+    const pad = Math.max(radius * 1.5, 4);
+    return { y0: top - pad, y1: bottom + pad };
+  };
+  while (rowYs.length >= 2 && rowYs[0].y < gray.height * 0.18) {
+    const days = daySamplesAt(rowYs[0].amY);
+    if (countFilled(days, paper, emptyInnerFor(days, paper)) < 3) break;
+    rowYs = rowYs.slice(1);
+  }
 
   const names = options.camperNames ?? [];
   const items = (options.textItems ?? []).map((item) => ({
@@ -395,19 +538,87 @@ export function analyzePaperAttendanceImage(
     y: item.y * scaleY,
   }));
   const fromNames = names.length ? nameYs(names, items, gray.width) : [];
+  type AlignedRow = { y: number; amY: number; pmY: number };
+  const rowTargetY = (row: AlignedRow) => (options.kind === "bus" ? (row.amY + row.y) / 2 : row.y);
+  const rowHasSelectedMark = (row: AlignedRow) => {
+    const span = rowSpan(row);
+    const bubbles = [0, 1, 2, 3, 4].map((col) => bandSample(col, span.y0, span.y1));
+    const empty = emptyInnerFor(bubbles, paper);
+    return isMarkedVsPeers(
+      bubbles[weekdayIndex],
+      bubbles.filter((_, col) => col !== weekdayIndex),
+      paper,
+      empty,
+    );
+  };
+  let aligned: Array<AlignedRow | null> = names.length ? names.map(() => null) : [...rowYs];
   const namedCount = fromNames.filter((y) => y != null).length;
-  if (namedCount >= Math.max(1, Math.round(camperCount * 0.6))) {
-    const pmShift = gray.height * (6 / PAGE_H_MM);
-    rowYs = fromNames.map((y, i) => {
-      const fallback = rowYs[i]?.y ?? (y ?? 0);
-      const cy = y ?? fallback;
-      return {
-        y: cy,
-        amY: cy,
-        pmY: options.kind === "bus" ? cy + pmShift : cy,
-      };
+  if (names.length && namedCount >= 1) {
+    const band = Math.max(radius * 9, gray.height * 0.075);
+    const usedRows = new Set<number>();
+    const pairs: Array<{ nameI: number; rowI: number; dist: number }> = [];
+    fromNames.forEach((ny, nameI) => {
+      if (ny == null) return;
+      rowYs.forEach((row, rowI) => {
+        const dist = Math.abs(rowTargetY(row) - ny);
+        if (dist <= band) pairs.push({ nameI, rowI, dist });
+      });
     });
+    pairs.sort((a, b) => a.dist - b.dist);
+    for (const { nameI, rowI } of pairs) {
+      if (aligned[nameI] != null || usedRows.has(rowI)) continue;
+      aligned[nameI] = rowYs[rowI];
+      usedRows.add(rowI);
+    }
+    rowYs.forEach((row, rowI) => {
+      if (usedRows.has(rowI) || !rowHasSelectedMark(row)) return;
+      let bestI = -1;
+      let bestD = gray.height * 0.09;
+      fromNames.forEach((ny, nameI) => {
+        if (ny == null || aligned[nameI] != null) return;
+        const dist = Math.abs(rowTargetY(row) - ny);
+        if (dist < bestD) {
+          bestD = dist;
+          bestI = nameI;
+        }
+      });
+      if (bestI >= 0) {
+        aligned[bestI] = row;
+        usedRows.add(rowI);
+        return;
+      }
+      if (rowI < names.length && aligned[rowI] == null && fromNames[rowI] == null) {
+        aligned[rowI] = row;
+        usedRows.add(rowI);
+      }
+    });
+  } else if (names.length) {
+    aligned = names.map((_, i) => rowYs[i] ?? null);
   }
+  rowYs.forEach((row) => {
+    if (!rowHasSelectedMark(row) || aligned.some((item) => item === row)) return;
+    let bestI = -1;
+    let bestD = Number.POSITIVE_INFINITY;
+    fromNames.forEach((ny, nameI) => {
+      if (ny == null) return;
+      const current = aligned[nameI];
+      if (current && rowHasSelectedMark(current)) return;
+      const dist = Math.abs(rowTargetY(row) - ny);
+      if (dist < bestD) {
+        bestD = dist;
+        bestI = nameI;
+      }
+    });
+    if (bestI >= 0) {
+      aligned[bestI] = row;
+      return;
+    }
+    const rowI = rowYs.indexOf(row);
+    if (rowI >= 0 && rowI < names.length) {
+      const current = aligned[rowI];
+      if (!current || !rowHasSelectedMark(current)) aligned[rowI] = row;
+    }
+  });
 
   if (!rowYs.length) {
     return {
@@ -426,23 +637,12 @@ export function analyzePaperAttendanceImage(
     };
   }
 
-  const useCount = Math.min(camperCount, rowYs.length);
-  const rowsToRead = rowYs.slice(0, useCount);
-  const xShift = Math.max(2, Math.round(radius * 0.8));
-
-  const sampleAt = (col: number, y: number): BubbleSample => {
-    const baseX = xs[col] ?? xs[0];
-    let best = sampleBubble(gray, baseX, y, radius);
-    for (const x of [baseX - xShift, baseX + xShift]) {
-      const sample = sampleBubble(gray, x, y, radius);
-      if (paper - sample.ring > paper - best.ring) best = sample;
-    }
-    return best;
-  };
+  const useCount = aligned.filter((row) => row).length;
 
   const weekdaySamples = (col: number): BubbleSample[] => {
     const out: BubbleSample[] = [];
-    for (const row of rowsToRead) {
+    for (const row of aligned) {
+      if (!row) continue;
       if (options.kind === "bus") {
         out.push(sampleAt(col, row.amY), sampleAt(col, row.pmY));
       } else {
@@ -454,21 +654,11 @@ export function analyzePaperAttendanceImage(
 
   const samplesByDay = [0, 1, 2, 3, 4].map((col) => weekdaySamples(col));
   const emptyByDay = samplesByDay.map((samples) => emptyInnerFor(samples, paper));
-  const filledByDay = samplesByDay.map((samples, col) => countFilled(samples, paper, emptyByDay[col]));
-  const selectedFilled = filledByDay[weekdayIndex] ?? 0;
-  const otherFilled = filledByDay
-    .map((count, col) => ({ col, count }))
-    .filter((row) => row.col !== weekdayIndex && row.count > 0);
-  let warning: string | undefined;
-  if (selectedFilled === 0 && otherFilled.length > 0) {
-    const otherDays = otherFilled.map((row) => WEEKDAY_NAMES[row.col]).join(", ");
-    warning = `No ${WEEKDAY_NAMES[weekdayIndex]} marks. Filled bubbles are on ${otherDays}.`;
-  }
-
   const emptyInner = emptyByDay[weekdayIndex] ?? paper;
   const rows: PaperOmrRow[] = [];
+  const filledByDay = [0, 0, 0, 0, 0];
   for (let i = 0; i < camperCount; i += 1) {
-    const sample = rowsToRead[i];
+    const sample = aligned[i];
     if (!sample) {
       rows.push({
         camperIndex: i,
@@ -481,27 +671,59 @@ export function analyzePaperAttendanceImage(
       continue;
     }
     if (options.kind === "group") {
-      const bubble = sampleAt(weekdayIndex, sample.y);
+      const bubbles = daySamplesAt(sample.y);
+      const marked = bubbles.map((bubble, col) =>
+        isMarkedVsPeers(
+          bubble,
+          bubbles.filter((_, other) => other !== col),
+          paper,
+          emptyByDay[col] ?? emptyInner,
+        ),
+      );
+      marked.forEach((on, col) => {
+        if (on) filledByDay[col] += 1;
+      });
       rows.push({
         camperIndex: i,
         y: sample.y,
-        dailyFilled: isFilledBubble(bubble, paper, emptyInner),
+        dailyFilled: marked[weekdayIndex],
         confidence: 0.86,
       });
     } else {
-      const am = sampleAt(weekdayIndex, sample.amY);
-      const pm = sampleAt(weekdayIndex, sample.pmY);
+      const span = rowSpan(sample);
+      const bubbles = [0, 1, 2, 3, 4].map((col) => bandSample(col, span.y0, span.y1));
+      const marked = bubbles.map((bubble, col) =>
+        isMarkedVsPeers(
+          bubble,
+          bubbles.filter((_, other) => other !== col),
+          paper,
+          emptyByDay[col] ?? emptyInner,
+        ),
+      );
+      [0, 1, 2, 3, 4].forEach((col) => {
+        if (marked[col]) filledByDay[col] += 1;
+      });
       rows.push({
         camperIndex: i,
         y: sample.y,
-        amFilled: isFilledBubble(am, paper, emptyInner),
-        pmFilled: isFilledBubble(pm, paper, emptyInner),
+        amFilled: marked[weekdayIndex],
+        pmFilled: false,
         confidence: 0.86,
       });
     }
   }
 
-  if (useCount < camperCount && !warning) {
+  const selectedFilled = filledByDay[weekdayIndex] ?? 0;
+  const otherFilled = filledByDay
+    .map((count, col) => ({ col, count }))
+    .filter((row) => row.col !== weekdayIndex && row.count > 0);
+  let warning: string | undefined;
+  if (selectedFilled === 0 && otherFilled.length > 0) {
+    const otherDays = otherFilled.map((row) => WEEKDAY_NAMES[row.col]).join(", ");
+    warning = `No ${WEEKDAY_NAMES[weekdayIndex]} marks. Filled bubbles are on ${otherDays}.`;
+  }
+
+  if (useCount < 2 && camperCount >= 2 && !warning) {
     warning = "Could not line up every row. Check the marked names.";
   }
 

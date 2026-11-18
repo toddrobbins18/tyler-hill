@@ -32,10 +32,11 @@ import {
   type PaperAttendanceListKind,
 } from "@/lib/paperAttendance";
 import { loadPaperScanInputFromBrowserFiles } from "@/lib/paperAttendanceImage";
-import { ocrPaperScanPages } from "@/lib/paperAttendanceOcr";
-import { processPaperAttendancePages } from "@/lib/paperAttendanceScan";
+import { ocrPaperCamperNames, ocrPaperScanPages } from "@/lib/paperAttendanceOcr";
+import { orientPaperScanPage, processPaperAttendancePages } from "@/lib/paperAttendanceScan";
 import {
   clearPaperAttendanceForDate,
+  clearPaperAttendanceForKind,
   loadChangeSheetAttendanceSource,
   loadPaperAttendance,
   saveChangeSheetAttendanceSource,
@@ -61,7 +62,13 @@ export default function ConflictReview() {
   const companyId = currentCompany?.id;
   const { operationalDateString } = useCampOperationalDate();
 
-  const [sheetDate, setSheetDate] = useState(operationalDateString);
+  const [sheetDate, setSheetDate] = useState(() => {
+    try {
+      return sessionStorage.getItem("nest-paper-scan-date") || operationalDateString;
+    } catch {
+      return operationalDateString;
+    }
+  });
   const [listKind, setListKind] = useState<PaperAttendanceListKind>("bus");
   const [sheetLabel, setSheetLabel] = useState("");
   const [routeMeta, setRouteMeta] = useState<TransportRouteMeta[]>([]);
@@ -84,10 +91,15 @@ export default function ConflictReview() {
   const [groupAbsents, setGroupAbsents] = useState<PaperAbsentCamper[]>([]);
   const [attendanceSource, setAttendanceSource] = useState<ChangeSheetAttendanceSource>("paperless");
   const pendingScanAbsents = useRef<Set<string> | null>(null);
+  const scanInFlight = useRef(false);
 
   useEffect(() => {
-    setSheetDate(operationalDateString);
-  }, [operationalDateString]);
+    try {
+      sessionStorage.setItem("nest-paper-scan-date", sheetDate);
+    } catch {
+      /* private browsing */
+    }
+  }, [sheetDate]);
 
   const weekdayIndex = weekdayBubbleIndex(sheetDate);
   const review = useMemo(
@@ -211,11 +223,14 @@ export default function ConflictReview() {
     const base = rosterForSheet();
     const pending = pendingScanAbsents.current;
     pendingScanAbsents.current = null;
-    setMarks(
-      pending ? base.map((row) => ({ ...row, absent: pending.has(row.name) })) : base,
+    const saved = new Set(
+      (listKind === "bus" ? busAbsents : groupAbsents)
+        .filter((row) => row.sheetLabel === sheetLabel)
+        .map((row) => row.camperName),
     );
-    if (!pending) setScanWarning(null);
-  }, [rosterForSheet]);
+    const selected = pending ?? saved;
+    setMarks(base.map((row) => ({ ...row, absent: selected.has(row.name) })));
+  }, [busAbsents, groupAbsents, listKind, rosterForSheet, sheetLabel]);
 
   const handleScan = async (files: FileList | File[] | undefined) => {
     const list = files ? [...files] : [];
@@ -228,9 +243,12 @@ export default function ConflictReview() {
       });
       return;
     }
+    if (scanInFlight.current) return;
+    scanInFlight.current = true;
     setScanning(true);
     try {
       const input = await loadPaperScanInputFromBrowserFiles(list);
+      input.pages = input.pages.map(orientPaperScanPage);
       let foundInPdf = findPaperSheetLabelsInText(input.documentText, sheetOptions, listKind);
       if (foundInPdf.length < sheetOptions.length) {
         const ocrText = await ocrPaperScanPages(input.pages, sheetOptions, listKind);
@@ -240,6 +258,7 @@ export default function ConflictReview() {
           listKind,
         );
       }
+      await ocrPaperCamperNames(input.pages);
       if (!input.pages.length && !foundInPdf.length) {
         toast({
           title: "Could not read that PDF",
@@ -260,6 +279,13 @@ export default function ConflictReview() {
         toast({ title: "Not signed in to a camp", variant: "destructive" });
         return;
       }
+      await clearPaperAttendanceForKind(
+        supabase,
+        companyId,
+        currentSeason,
+        sheetDate,
+        listKind,
+      );
       for (const sheet of batch.sheets) {
         const ok = await savePaperAttendanceSheet(supabase, {
           companyId,
@@ -285,6 +311,8 @@ export default function ConflictReview() {
         batch.sheets.find((sheet) => sheet.label === sheetLabel)
         ?? withAbsents[0]
         ?? batch.sheets[0];
+      if (listKind === "bus") setBusAbsents(batch.sheets.flatMap((sheet) => sheet.absents));
+      else setGroupAbsents(batch.sheets.flatMap((sheet) => sheet.absents));
       if (focus) {
         const absents = new Set(focus.absents.map((row) => row.camperName));
         if (focus.label === sheetLabel) {
@@ -298,6 +326,10 @@ export default function ConflictReview() {
       const absentLine = withAbsents
         .flatMap((sheet) => sheet.absents.map((row) => `${row.camperName} (${sheet.label})`))
         .join(", ");
+      const dayName = weekdayIndex == null
+        ? "the weekend"
+        : ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"][weekdayIndex];
+      const dayWarning = batch.sheets.find((sheet) => sheet.warning)?.warning;
       const checklist = formatPaperScanChecklist({
         kind: listKind,
         scannedLabels: batch.scannedLabels,
@@ -306,7 +338,12 @@ export default function ConflictReview() {
       });
       toast({
         title: batch.missingLabels.length ? "Scan finished — sheets missing" : "Scan saved",
-        description: absentLine ? `${checklist} Absent: ${absentLine}.` : checklist,
+        description: [
+          `Read ${dayName}.`,
+          absentLine ? `Absent: ${absentLine}.` : `No ${dayName} marks.`,
+          dayWarning,
+          checklist,
+        ].filter(Boolean).join(" "),
         variant: batch.sheets.length ? "default" : "destructive",
       });
     } catch (err) {
@@ -316,6 +353,7 @@ export default function ConflictReview() {
         variant: "destructive",
       });
     } finally {
+      scanInFlight.current = false;
       setScanning(false);
     }
   };

@@ -148,6 +148,9 @@ export function textContainsPaperSheetLabel(
   const barcode = `${kind === "bus" ? "B" : "G"}${key}`;
   const barcodeRe = new RegExp(`(?:^|[^A-Z0-9])${escapeRegExp(barcode)}(?:[^A-Z0-9]|$)`);
   if (barcodeRe.test(compact)) return true;
+  if (kind === "bus" && key.includes("PARENTTRANSPORT")) {
+    if (compact.includes("PARENTTRANSPOR") || compact.includes("BPARENTTRANSPORT")) return true;
+  }
   const compactTail = /\d$/.test(key) ? "(?![0-9])" : "(?![0-9A-Z])";
   if (new RegExp(`${escapeRegExp(key)}${compactTail}`).test(compact)) return true;
   const body = escapeRegExp(visible).replace(/\\s+/g, "\\s+");
