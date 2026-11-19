@@ -19,11 +19,14 @@ import {
   toggleSwimTestNote,
   SWIM_TEST_NOTE_OPTIONS,
   swimLevelColumnVisible,
+  SWIM_RC_VIEW_SKILL_BANDS,
+  RC_PROGRESS_SKILL_LENGTHS,
   type BraceletColor,
   type SwimLevelReportView,
   type BraceletRecord,
   type LevelRecord,
   type LevelStatus,
+  type RcProgressSkillField,
   type SkillStatus,
   type SwimHistoryReportRow,
   type SwimImportProgress,
@@ -42,7 +45,7 @@ import {
 } from "@/lib/swimProgram";
 import { sendSwimProgressEmail } from "@/lib/swimProgressApi";
 import { sendSwimBraceletEmail } from "@/lib/swimBraceletApi";
-import { buildSwimProgressPdf } from "@/lib/swimProgressPdf";
+import { buildSwimProgressPdf, swimChartPublicPath } from "@/lib/swimProgressPdf";
 import {
   SWIM_BRACELET_PRINT_PRESETS,
   buildSwimBraceletReportPdf,
@@ -843,7 +846,7 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
 
   const updateSkill = (
     id: string,
-    group: "goldfish" | "minnow" | "tadpole" | "exit",
+    group: "goldfish" | "minnow" | "tadpole" | "exit" | RcProgressSkillField,
     idx: number,
     value: SkillStatus,
   ) => {
@@ -853,11 +856,47 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
         next[idx] = value;
         return { exitSkills: next };
       }
+      if (group in RC_PROGRESS_SKILL_LENGTHS) {
+        const field = group as RcProgressSkillField;
+        const next = [...r[field]];
+        next[idx] = value;
+        return { [field]: next } as Partial<LevelRecord>;
+      }
       const next = [...r[group]];
       next[idx] = value;
       const levelKey = `${group}Level` as "goldfishLevel" | "minnowLevel" | "tadpoleLevel";
       return { [group]: next, [levelKey]: levelFromSkills(next) } as Partial<LevelRecord>;
     });
+  };
+
+  const handleDownloadProgressChart = async (record: LevelRecord) => {
+    if (levelReportView === "all" || !swimProgressEmailSupported(levelReportView)) return;
+    if (progressEmailSendingId) return;
+
+    setProgressEmailSendingId(record.id);
+    try {
+      const pdf = await buildSwimProgressPdf({
+        levelId: levelReportView,
+        levels: record,
+        childName: record.name,
+      });
+      if (!pdf.ready) {
+        toast({ title: "Chart PDF not ready", description: pdf.reason, variant: "destructive" });
+        return;
+      }
+      const binary = atob(pdf.base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      triggerBlobDownload(new Blob([bytes], { type: pdf.mimeType }), pdf.filename);
+    } catch (err) {
+      toast({
+        title: "Chart PDF failed",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setProgressEmailSendingId(null);
+    }
   };
 
   const handleSendProgressEmail = async (record: LevelRecord) => {
@@ -1662,8 +1701,19 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
               </div>
               {levelReportView !== "all" && swimProgressEmailSupported(levelReportView) ? (
                 <p className="text-xs text-muted-foreground">
-                  Send Progress Email goes to the parent on file with Achieved / Working Toward skills in the body, plus the
-                  NSDC skills chart PDF with green checkmarks on mastered skills.
+                  This table is A / W marks, not the picture.{" "}
+                  {swimChartPublicPath(levelReportView) ? (
+                    <a
+                      href={swimChartPublicPath(levelReportView)!}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-medium text-primary underline-offset-2 hover:underline"
+                    >
+                      Open the skills chart
+                    </a>
+                  ) : null}{" "}
+                  to see the sheet. Chart on a row downloads a PDF with green checks on Achieved skills. Send emails that PDF
+                  to the parent.
                 </p>
               ) : null}
             </CardHeader>
@@ -1730,6 +1780,19 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                     {swimLevelColumnVisible(levelReportView, "tadpoleLevel") ? (
                       <SortableHeader label="Tadpole Level" sortKey="tadpoleLevel" currentSort={levelSort} onSort={requestLevelSort} />
                     ) : null}
+                    {(SWIM_RC_VIEW_SKILL_BANDS[levelReportView] ?? []).flatMap((band) =>
+                      Array.from({ length: RC_PROGRESS_SKILL_LENGTHS[band.field] }, (_, i) =>
+                        swimLevelColumnVisible(levelReportView, `${band.field}-${i}`) ? (
+                          <SortableHeader
+                            key={`${band.field}-${i}`}
+                            label={band.header(i)}
+                            sortKey={`${band.field}.${i}`}
+                            currentSort={levelSort}
+                            onSort={requestLevelSort}
+                          />
+                        ) : null,
+                      ),
+                    )}
                     {swimLevelColumnVisible(levelReportView, "redCross") ? (
                       <SortableHeader label="Red Cross Level 1" sortKey="redCross" currentSort={levelSort} onSort={requestLevelSort} />
                     ) : null}
@@ -1749,7 +1812,7 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                       <SortableHeader label="Last Modified" sortKey="lastModified" currentSort={levelSort} onSort={requestLevelSort} />
                     ) : null}
                     {levelReportView !== "all" && swimProgressEmailSupported(levelReportView) ? (
-                      <TableCell className="font-semibold whitespace-nowrap">Progress Email</TableCell>
+                      <TableCell className="font-semibold whitespace-nowrap">Chart / Email</TableCell>
                     ) : null}
                   </TableRow>
                 </TableHeader>
@@ -1809,6 +1872,15 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                           <LevelSelect value={r.tadpoleLevel} onChange={(v) => updateLevel(r.id, { tadpoleLevel: v })} />
                         </TableCell>
                       ) : null}
+                      {(SWIM_RC_VIEW_SKILL_BANDS[levelReportView] ?? []).flatMap((band) =>
+                        r[band.field].map((s, i) =>
+                          swimLevelColumnVisible(levelReportView, `${band.field}-${i}`) ? (
+                            <TableCell key={`${r.id}-${band.field}-${i}`}>
+                              <SkillToggle value={s} onChange={(v) => updateSkill(r.id, band.field, i, v)} />
+                            </TableCell>
+                          ) : null,
+                        ),
+                      )}
                       {swimLevelColumnVisible(levelReportView, "redCross") ? (
                         <TableCell>
                           <LevelSelect value={r.redCross} onChange={(v) => updateLevel(r.id, { redCross: v })} />
@@ -1839,23 +1911,42 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                       ) : null}
                       {levelReportView !== "all" && swimProgressEmailSupported(levelReportView) ? (
                         <TableCell>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs"
-                            disabled={progressEmailSendingId === r.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void handleSendProgressEmail(r);
-                            }}
-                          >
-                            {progressEmailSendingId === r.id ? (
-                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                            ) : (
-                              <Mail className="h-3 w-3 mr-1" />
-                            )}
-                            Send
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              disabled={progressEmailSendingId === r.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleDownloadProgressChart(r);
+                              }}
+                            >
+                              {progressEmailSendingId === r.id ? (
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              ) : (
+                                <Download className="h-3 w-3 mr-1" />
+                              )}
+                              Chart
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              disabled={progressEmailSendingId === r.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleSendProgressEmail(r);
+                              }}
+                            >
+                              {progressEmailSendingId === r.id ? (
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              ) : (
+                                <Mail className="h-3 w-3 mr-1" />
+                              )}
+                              Send
+                            </Button>
+                          </div>
                         </TableCell>
                       ) : null}
                     </TableRow>
@@ -2044,6 +2135,25 @@ export default function SwimProgram({ defaultTab = "bracelets" }: SwimProgramPro
                     ))}
                   </div>
                 </div>
+                {Object.values(SWIM_RC_VIEW_SKILL_BANDS)
+                  .flat()
+                  .filter((band) => {
+                    const inView = (SWIM_RC_VIEW_SKILL_BANDS[levelReportView] ?? []).some((b) => b.field === band.field);
+                    return inView || selectedLevel[band.field].some((s) => s !== "—");
+                  })
+                  .map((band) => (
+                    <div key={band.field} className="rounded-lg border bg-card/50 p-3">
+                      <h4 className="text-sm font-semibold mb-2">{band.title}</h4>
+                      <div className="grid grid-cols-3 gap-2">
+                        {selectedLevel[band.field].map((s, i) => (
+                          <div key={i} className="flex items-center justify-between rounded bg-muted/30 px-2 py-1.5 text-xs">
+                            <span className="text-muted-foreground">{band.header(i)}</span>
+                            <SkillCell status={s} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
                   <AlertCircle className="h-3 w-3" /> Last modified {selectedLevel.lastModified}
                 </p>

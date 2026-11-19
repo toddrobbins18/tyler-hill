@@ -25,6 +25,7 @@ import {
   swimHistorySeasonHasMarks,
   mergeSwimHistoryBracelet,
   mergeSwimHistoryLevels,
+  emptyRcProgressSkills,
   type RosterChild,
   type BraceletRecord,
   type LevelRecord,
@@ -138,8 +139,12 @@ describe("swimProgram", () => {
   it("filters level report columns by Red Cross view", () => {
     expect(swimLevelColumnVisible("red-cross-1", "goldfish-0")).toBe(true);
     expect(swimLevelColumnVisible("red-cross-1", "minnow-0")).toBe(false);
-    expect(swimLevelColumnVisible("red-cross-3", "frog")).toBe(true);
+    expect(swimLevelColumnVisible("red-cross-2", "rc2Frog-0")).toBe(true);
+    expect(swimLevelColumnVisible("red-cross-2", "goldfish-0")).toBe(false);
+    expect(swimLevelColumnVisible("red-cross-3", "rc3Perch-0")).toBe(true);
+    expect(swimLevelColumnVisible("red-cross-3", "frog")).toBe(false);
     expect(swimLevelColumnVisible("all", "redCross4")).toBe(true);
+    expect(swimLevelColumnVisible("all", "rc2Frog-0")).toBe(false);
   });
 
   it("includes Red Cross / Frog-only rows in prior-season history eligibility", () => {
@@ -160,6 +165,7 @@ describe("swimProgram", () => {
       redCross4: "—",
       frog: "—",
       exitSkills: ["—", "—"],
+      ...emptyRcProgressSkills(),
       lastModified: "Imported",
     };
     expect(swimHistoryRecordHasData(null, levelsOnlyRedCross)).toBe(true);
@@ -211,6 +217,7 @@ describe("swimProgram", () => {
       redCross4: "—",
       frog: "—",
       exitSkills: ["—", "—"],
+      ...emptyRcProgressSkills(),
       lastModified: "Imported",
     };
     const emptyLevels: LevelRecord = {

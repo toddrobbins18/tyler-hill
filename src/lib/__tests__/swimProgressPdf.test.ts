@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { RED_CROSS_1_CHECKBOXES, listAchievedSkillIds } from "@/lib/swimProgressPdf";
-import type { LevelRecord } from "@/lib/swimProgram";
+import {
+  RED_CROSS_1_CHECKBOXES,
+  RED_CROSS_2_CHECKBOXES,
+  RED_CROSS_3_CHECKBOXES,
+  RED_CROSS_4_CHECKBOXES,
+  getChartCheckboxes,
+  listAchievedSkillIds,
+} from "@/lib/swimProgressPdf";
+import { emptyRcProgressSkills, type LevelRecord } from "@/lib/swimProgram";
 
 const baseLevel = (): LevelRecord => ({
   id: "c1",
@@ -19,6 +26,7 @@ const baseLevel = (): LevelRecord => ({
   redCross4: "—",
   frog: "—",
   exitSkills: ["A", "—"],
+  ...emptyRcProgressSkills(),
   lastModified: "—",
 });
 
@@ -47,5 +55,21 @@ describe("swimProgressPdf", () => {
 
   it("lists achieved skill ids from A/W data", () => {
     expect(listAchievedSkillIds("red-cross-1", baseLevel())).toEqual(["1A1", "1B1", "1B2", "EXIT1"]);
+  });
+
+  it("maps RC2–4 skills onto chart checkbox layouts", () => {
+    expect(getChartCheckboxes("red-cross-2")).toHaveLength(18);
+    expect(getChartCheckboxes("red-cross-3")).toHaveLength(21);
+    expect(getChartCheckboxes("red-cross-4")).toHaveLength(17);
+    expect(RED_CROSS_2_CHECKBOXES.map((b) => b.skillId).slice(0, 5)).toEqual(["2A1", "2A2", "2A3", "2A4", "2A5"]);
+    expect(RED_CROSS_3_CHECKBOXES.at(-1)?.skillId).toBe("EXIT2");
+    expect(RED_CROSS_4_CHECKBOXES.at(-1)?.skillId).toBe("EXIT4");
+  });
+
+  it("lists achieved RC2 skill ids from Nest A/W arrays", () => {
+    const rc2 = baseLevel();
+    rc2.rc2Frog = ["A", "W", "—", "A", "—"];
+    rc2.rc2Exit = ["A", "—", "W"];
+    expect(listAchievedSkillIds("red-cross-2", rc2)).toEqual(["2A1", "2A4", "EXIT1"]);
   });
 });

@@ -77,6 +77,37 @@ function buildRedCross1Checkboxes(): SwimChartCheckbox[] {
 
 export const RED_CROSS_1_CHECKBOXES = buildRedCross1Checkboxes();
 
+function boxesAt(skillIds: string[], x: number, centersY: number[], offset = 8): SwimChartCheckbox[] {
+  return skillIds.map((skillId, index) => ({
+    skillId,
+    x: x - offset,
+    y: centersY[index]! - offset,
+  }));
+}
+
+/** Calibrated against `public/swim-charts/red-cross-2.jpg` (960×1242). */
+export const RED_CROSS_2_CHECKBOXES: SwimChartCheckbox[] = [
+  ...boxesAt(["2A1", "2A2", "2A3", "2A4", "2A5"], 416, [340, 377, 415, 454, 490]),
+  ...boxesAt(["2B1", "2B2", "2B3", "2B4", "2B5"], 416, [549, 584, 619, 654, 689]),
+  ...boxesAt(["2C1", "2C2", "2C3", "2C4", "2C5"], 416, [751, 782, 814, 846, 883]),
+  ...boxesAt(["EXIT1", "EXIT2", "EXIT3"], 84, [970, 1031, 1076]),
+];
+
+/** Calibrated against `public/swim-charts/red-cross-3.jpg` (960×1242). */
+export const RED_CROSS_3_CHECKBOXES: SwimChartCheckbox[] = [
+  ...boxesAt(["3A1", "3A2", "3A3", "3A4", "3A5", "3A6"], 416, [302, 338, 373, 413, 447, 485]),
+  ...boxesAt(["3B1", "3B2", "3B3", "3B4", "3B5", "3B6"], 416, [547, 580, 618, 653, 686, 715]),
+  ...boxesAt(["3C1", "3C2", "3C3", "3C4", "3C5", "3C6", "3C7"], 416, [778, 811, 837, 870, 903, 935, 966]),
+  ...boxesAt(["EXIT1", "EXIT2"], 84, [1031, 1109]),
+];
+
+/** Calibrated against `public/swim-charts/red-cross-4.jpg` (960×1242). */
+export const RED_CROSS_4_CHECKBOXES: SwimChartCheckbox[] = [
+  ...boxesAt(["4A1", "4A2", "4A3", "4A4", "4A5", "4A6"], 416, [382, 420, 456, 489, 528, 563]),
+  ...boxesAt(["4B1", "4B2", "4B3", "4B4", "4B5", "4B6", "4B7"], 416, [633, 668, 702, 736, 774, 807, 841]),
+  ...boxesAt(["EXIT1", "EXIT2", "EXIT3", "EXIT4"], 92, [935, 992, 1030, 1082]),
+];
+
 export function swimChartPublicPath(levelId: SwimProgressReportLevel): string | null {
   const def = getSwimProgressLevelDef(levelId);
   if (!def) return null;
@@ -102,6 +133,9 @@ export function listAchievedSkillIds(levelId: SwimProgressReportLevel, levels: L
 
 export function getChartCheckboxes(levelId: SwimProgressReportLevel): SwimChartCheckbox[] {
   if (levelId === "red-cross-1") return RED_CROSS_1_CHECKBOXES;
+  if (levelId === "red-cross-2") return RED_CROSS_2_CHECKBOXES;
+  if (levelId === "red-cross-3") return RED_CROSS_3_CHECKBOXES;
+  if (levelId === "red-cross-4") return RED_CROSS_4_CHECKBOXES;
   return [];
 }
 

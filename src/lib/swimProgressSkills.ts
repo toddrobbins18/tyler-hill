@@ -13,7 +13,18 @@ export type SwimProgressNestKey =
   | `goldfish:${number}`
   | `minnow:${number}`
   | `tadpole:${number}`
-  | `exit:${number}`;
+  | `exit:${number}`
+  | `rc2Frog:${number}`
+  | `rc2Toad:${number}`
+  | `rc2Bullfrog:${number}`
+  | `rc2Exit:${number}`
+  | `rc3Perch:${number}`
+  | `rc3Trout:${number}`
+  | `rc3Bass:${number}`
+  | `rc3Exit:${number}`
+  | `rc4Wahoo:${number}`
+  | `rc4Barracuda:${number}`
+  | `rc4Exit:${number}`;
 
 export type SwimProgressSkillDef = {
   id: string;
@@ -100,150 +111,199 @@ export const RED_CROSS_1_PROGRESS: SwimProgressLevelDef = {
   ],
 };
 
-/** Red Cross 2 — Frog / Toad / Bullfrog (Airtable automations). */
+/** Red Cross 2 — Frog 2A / Toad 2B / Bullfrog 2C (`public/swim-charts/red-cross-2.jpg`). */
 export const RED_CROSS_2_PROGRESS: SwimProgressLevelDef = {
   levelId: "red-cross-2",
-  emailSubject: "Swim Progress Report",
-  chartTitle: "Red Cross Level 2",
-  chartAssetFile: "red-cross-2.png",
+  emailSubject: "Swim Progress Report — Red Cross Level 2",
+  chartTitle: "Red Cross Level 2 – Fundamental Aquatic Skills",
+  chartAssetFile: "red-cross-2.jpg",
   introParagraph:
-    'We use "Animal Levels" to represent the specific Red Cross level your child is working toward mastering.',
+    'We use "Animal Levels" to represent the specific Red Cross swim level your child is working toward mastering.',
   attachmentBlurb:
-    "We've attached a blank skills sheet for Red Cross Level 2, so you can see all the skills required to complete this level.",
+    "We've attached a skills sheet for Red Cross Level 2, so you can see all the skills required to complete this level.",
   groups: [
     {
       id: "frog",
-      title: "FROG LEVEL",
+      title: "FROG LEVEL 2A",
       skills: [
-        { id: "F1", label: "Enter by stepping or jumping from the side" },
-        { id: "F2", label: "Exit using ladder, steps or side" },
-        { id: "F3", label: "Full submerge and hold breath, 10 seconds" },
-        { id: "F4", label: "Bobbing, 10 times" },
-        { id: "F5", label: "Open eyes under water to retrieve submerged object" },
-        { id: "F6", label: "FROG Level" },
+        { id: "2A1", label: "Enter by stepping or jumping from the side", nestKey: "rc2Frog:0" },
+        { id: "2A2", label: "Exit using ladder, steps, or side", nestKey: "rc2Frog:1" },
+        { id: "2A3", label: "Fully submerge and hold breath, 10 seconds", nestKey: "rc2Frog:2" },
+        { id: "2A4", label: "Bobbing, 10 times", nestKey: "rc2Frog:3" },
+        { id: "2A5", label: "Open eyes underwater to retrieve submerged object", nestKey: "rc2Frog:4" },
       ],
     },
     {
       id: "toad",
-      title: "TOAD LEVEL",
+      title: "TOAD LEVEL 2B",
       skills: [
-        { id: "TD1", label: "Superman float with glide, 2 body lengths" },
-        { id: "TD2", label: "Recover from front float to a standing position" },
-        { id: "TD3", label: "Back float, 15 seconds" },
-        { id: "TD4", label: "Recover from back to a standing position" },
-        { id: "TD5", label: "Roll from front to back and back to front" },
-        { id: "TD6", label: "TOAD Level" },
+        { id: "2B1", label: "Superman float with glide, 2 body lengths", nestKey: "rc2Toad:0" },
+        { id: "2B2", label: "Recover from front float to a standing position", nestKey: "rc2Toad:1" },
+        { id: "2B3", label: "Back float, 15 seconds", nestKey: "rc2Toad:2" },
+        { id: "2B4", label: "Recover from back to a standing position", nestKey: "rc2Toad:3" },
+        { id: "2B5", label: "Roll from front to back and back to front", nestKey: "rc2Toad:4" },
       ],
     },
     {
       id: "bullfrog",
-      title: "BULLFROG LEVEL",
+      title: "BULLFROG LEVEL 2C",
       skills: [
-        { id: "BF1", label: "Rotary breathing with beginning arm action, 5 times" },
-        { id: "BF2", label: "Back glide, 2 body lengths" },
-        { id: "BF3", label: "Tread water, 15 seconds" },
-        { id: "BF4", label: "Combined arm and leg action on front for 5 body lengths" },
-        { id: "BF5", label: "Combined arm and leg action on back for 5 body lengths" },
-        { id: "BF6", label: "BULLFROG Level" },
+        { id: "2C1", label: "Rotary breathing with beginning arm action, 5 times", nestKey: "rc2Bullfrog:0" },
+        { id: "2C2", label: "Back glide, 2 body lengths", nestKey: "rc2Bullfrog:1" },
+        { id: "2C3", label: "Tread water, 15 seconds", nestKey: "rc2Bullfrog:2" },
+        { id: "2C4", label: "Combined arm and leg action on front for 5 body lengths", nestKey: "rc2Bullfrog:3" },
+        { id: "2C5", label: "Combined arm and leg action on back for 5 body lengths", nestKey: "rc2Bullfrog:4" },
       ],
+    },
+  ],
+  exitSkills: [
+    {
+      id: "EXIT1",
+      label:
+        "Step from side into chest-deep water, push off the bottom, move into a treading or floating position for at least 15 seconds, swim on front or back for 5 body lengths, then exit the water.",
+      nestKey: "rc2Exit:0",
+    },
+    {
+      id: "EXIT2",
+      label: "Move into a back float for 15 seconds, roll to front, then recover to a vertical position.",
+      nestKey: "rc2Exit:1",
+    },
+    {
+      id: "EXIT3",
+      label:
+        "Push off and swim using combined arm and leg actions on front for 5 body lengths, roll to back float for 15 seconds, roll to the front, then continue swimming for 5 body lengths.",
+      nestKey: "rc2Exit:2",
     },
   ],
 };
 
-/** Red Cross 4 — Wahoo / Barracuda (Airtable automations). */
-export const RED_CROSS_4_PROGRESS: SwimProgressLevelDef = {
-  levelId: "red-cross-4",
-  emailSubject: "Swim Progress Report",
-  chartTitle: "Red Cross Level 4",
-  chartAssetFile: "red-cross-4.png",
-  introParagraph:
-    'We use "Animal Levels" to represent the specific Red Cross level your child is working toward mastering.',
-  attachmentBlurb:
-    "We've attached a blank skills sheet for Red Cross Level 4, so you can see all the skills required to complete this level.",
-  groups: [
-    {
-      id: "wahoo",
-      title: "WAHOO LEVEL",
-      skills: [
-        { id: "W1", label: "Headfirst entry, compact & stride positions" },
-        { id: "W2", label: "Underwater swim for 3 to 5 body lengths" },
-        { id: "W3", label: "Front crawl for 25 yards" },
-        { id: "W4", label: "Back crawl for 15 yards" },
-        { id: "W5", label: "Elementary backstroke for 25 yards" },
-        { id: "W6", label: "Perform open turns" },
-        { id: "W7", label: "WAHOO Level" },
-      ],
-    },
-    {
-      id: "barracuda",
-      title: "BARRACUDA LEVEL",
-      skills: [
-        { id: "BR1", label: "Tread water for 2 minutes" },
-        { id: "BR2", label: "Feet first surface dive" },
-        { id: "BR3", label: "Breaststroke for 15 yards" },
-        { id: "BR4", label: "Butterfly for 15 yards" },
-        { id: "BR5", label: "Sidestroke for 15 yards" },
-        { id: "BR6", label: "Survival swimming in deep water for 1 minute" },
-        {
-          id: "BR7",
-          label: "Push off in streamline position on back and dolphin kick for 3-5 body lengths",
-        },
-        { id: "BR8", label: "BARRACUDA Level" },
-      ],
-    },
-  ],
-};
-
-/** Red Cross 3 — email body skills (Perch / Trout / Bass). Nest skill entry UI coming later. */
+/** Red Cross 3 — Perch 3A / Trout 3B / Bass 3C (`public/swim-charts/red-cross-3.jpg`). */
 export const RED_CROSS_3_PROGRESS: SwimProgressLevelDef = {
   levelId: "red-cross-3",
-  emailSubject: "Swim Progress Report",
-  chartTitle: "Red Cross Level 3",
-  chartAssetFile: "red-cross-3.png",
+  emailSubject: "Swim Progress Report — Red Cross Level 3",
+  chartTitle: "Red Cross Level 3 – Stroke Development",
+  chartAssetFile: "red-cross-3.jpg",
   introParagraph:
-    'We use "Animal Levels" to represent the specific Red Cross swim level your child is working toward mastering (i.e. Level 2 includes Frog, Toad and Bullfrog).',
+    'We use "Animal Levels" to represent the specific Red Cross swim level your child is working toward mastering.',
   attachmentBlurb:
-    "We've attached a blank skills sheet for Red Cross Level 3, so you can see all the skills required to complete this level.",
+    "We've attached a skills sheet for Red Cross Level 3, so you can see all the skills required to complete this level.",
   groups: [
     {
       id: "perch",
-      title: "PERCH LEVEL",
+      title: "PERCH LEVEL 3A",
       skills: [
-        { id: "P1", label: "Jump in, recover to surface, and return to side of pool" },
-        { id: "P2", label: "Superman push off with flutter kick for 3 body lengths" },
-        { id: "P3", label: "Back float for 15 seconds" },
-        { id: "P4", label: "Tread water for 15 seconds" },
-        { id: "P5", label: "Elementary backstroke arm action" },
-        { id: "P6", label: "Bobbing while moving toward safety, 15 times" },
-        { id: "P7", label: "PERCH Level" },
+        { id: "3A1", label: "Jump in, recover to surface, and return to side of pool", nestKey: "rc3Perch:0" },
+        { id: "3A2", label: "Superman push off with flutter kick for 3 body lengths", nestKey: "rc3Perch:1" },
+        { id: "3A3", label: "Back float for 15 seconds", nestKey: "rc3Perch:2" },
+        { id: "3A4", label: "Tread water for 15 seconds", nestKey: "rc3Perch:3" },
+        { id: "3A5", label: "Elementary backstroke arm action", nestKey: "rc3Perch:4" },
+        { id: "3A6", label: "Bobbing while moving toward safety, 15 times", nestKey: "rc3Perch:5" },
       ],
     },
     {
       id: "trout",
-      title: "TROUT LEVEL",
+      title: "TROUT LEVEL 3B",
       skills: [
-        { id: "T1", label: "Headfirst sitting entry" },
-        { id: "T2", label: "Superman push off with dolphin kick for 3 body lengths" },
-        { id: "T3", label: "Back float for 30 seconds" },
-        { id: "T4", label: "Tread water for 30 seconds" },
-        { id: "T5", label: "Survival float on front, 30 seconds" },
-        { id: "T6", label: "Elementary backstroke leg action" },
-        { id: "T7", label: "TROUT Level" },
+        { id: "3B1", label: "Headfirst sitting entry", nestKey: "rc3Trout:0" },
+        { id: "3B2", label: "Superman push off with dolphin kick for 3 body lengths", nestKey: "rc3Trout:1" },
+        { id: "3B3", label: "Back float for 30 seconds", nestKey: "rc3Trout:2" },
+        { id: "3B4", label: "Tread water for 30 seconds", nestKey: "rc3Trout:3" },
+        { id: "3B5", label: "Survival float on front, 30 seconds", nestKey: "rc3Trout:4" },
+        { id: "3B6", label: "Elementary backstroke leg action", nestKey: "rc3Trout:5" },
       ],
     },
     {
       id: "bass",
-      title: "BASS LEVEL",
+      title: "BASS LEVEL 3C",
       skills: [
-        { id: "B1", label: "Headfirst kneeling entry" },
-        { id: "B2", label: "Back float for 1 minute" },
-        { id: "B3", label: "Tread water for 1 minute" },
-        { id: "B4", label: "Elementary backstroke for 15 yards" },
-        { id: "B5", label: "Front crawl with rotary breathing for 15 yards" },
-        { id: "B6", label: "Breaststroke kick for 15 yards" },
-        { id: "B7", label: "Scissor kick for 15 yards" },
-        { id: "B8", label: "BASS Level" },
+        { id: "3C1", label: "Headfirst kneeling entry", nestKey: "rc3Bass:0" },
+        { id: "3C2", label: "Back float for 1 minute", nestKey: "rc3Bass:1" },
+        { id: "3C3", label: "Tread water for 1 minute", nestKey: "rc3Bass:2" },
+        { id: "3C4", label: "Elementary backstroke for 15 yards", nestKey: "rc3Bass:3" },
+        { id: "3C5", label: "Front crawl with rotary breathing for 15 yards", nestKey: "rc3Bass:4" },
+        { id: "3C6", label: "Breaststroke kick for 15 yards", nestKey: "rc3Bass:5" },
+        { id: "3C7", label: "Scissor kick for 15 yards", nestKey: "rc3Bass:6" },
       ],
+    },
+  ],
+  exitSkills: [
+    {
+      id: "EXIT1",
+      label:
+        "Jump into deep water from the side, recover to the surface, maintain position by treading or floating for 1 minute, rotate one full turn then turn as necessary to orient to an exit point, level off, swim front crawl and/or elementary backstroke for 25 yards, then exit the water.",
+      nestKey: "rc3Exit:0",
+    },
+    {
+      id: "EXIT2",
+      label:
+        "Push off in a streamlined position then swim front crawl for 15 yards, change position and direction as necessary, swim elementary backstroke for 15 yards, then exit the water.",
+      nestKey: "rc3Exit:1",
+    },
+  ],
+};
+
+/** Red Cross 4 — Wahoo 4A / Barracuda 4B (`public/swim-charts/red-cross-4.jpg`). */
+export const RED_CROSS_4_PROGRESS: SwimProgressLevelDef = {
+  levelId: "red-cross-4",
+  emailSubject: "Swim Progress Report — Red Cross Level 4",
+  chartTitle: "Red Cross Level 4 – Stroke Improvement",
+  chartAssetFile: "red-cross-4.jpg",
+  introParagraph:
+    'We use "Animal Levels" to represent the specific Red Cross swim level your child is working toward mastering.',
+  attachmentBlurb:
+    "We've attached a skills sheet for Red Cross Level 4, so you can see all the skills required to complete this level.",
+  groups: [
+    {
+      id: "wahoo",
+      title: "WAHOO LEVEL 4A",
+      skills: [
+        { id: "4A1", label: "Headfirst entry, compact & stride positions", nestKey: "rc4Wahoo:0" },
+        { id: "4A2", label: "Underwater swim for 3-5 body lengths", nestKey: "rc4Wahoo:1" },
+        { id: "4A3", label: "Front crawl for 25 yards", nestKey: "rc4Wahoo:2" },
+        { id: "4A4", label: "Back crawl for 15 yards", nestKey: "rc4Wahoo:3" },
+        { id: "4A5", label: "Elementary backstroke for 25 yards", nestKey: "rc4Wahoo:4" },
+        { id: "4A6", label: "Perform open turns", nestKey: "rc4Wahoo:5" },
+      ],
+    },
+    {
+      id: "barracuda",
+      title: "BARRACUDA LEVEL 4B",
+      skills: [
+        { id: "4B1", label: "Tread water for 2 minutes", nestKey: "rc4Barracuda:0" },
+        { id: "4B2", label: "Feet first surface dive", nestKey: "rc4Barracuda:1" },
+        { id: "4B3", label: "Breaststroke for 15 yards", nestKey: "rc4Barracuda:2" },
+        { id: "4B4", label: "Butterfly for 15 yards", nestKey: "rc4Barracuda:3" },
+        { id: "4B5", label: "Sidestroke for 15 yards", nestKey: "rc4Barracuda:4" },
+        { id: "4B6", label: "Survival swimming in deep water for 1 minute", nestKey: "rc4Barracuda:5" },
+        {
+          id: "4B7",
+          label: "Push off in streamline position on back and dolphin kick for 3-5 body lengths",
+          nestKey: "rc4Barracuda:6",
+        },
+      ],
+    },
+  ],
+  exitSkills: [
+    {
+      id: "EXIT1",
+      label:
+        "Perform a feet-first entry into deep water, swim front crawl for 25 yards, change position to swim elementary backstroke for 25 yards",
+      nestKey: "rc4Exit:0",
+    },
+    {
+      id: "EXIT2",
+      label: "Swim breaststroke for 15 yards, change position, and swim back crawl for 15 yards",
+      nestKey: "rc4Exit:1",
+    },
+    {
+      id: "EXIT3",
+      label: "Submerge and swim a distance of 3 to 5 body lengths underwater, return to surface, then exit the water.",
+      nestKey: "rc4Exit:2",
+    },
+    {
+      id: "EXIT4",
+      label: "Understand all 4 safety topics presented in this level",
+      nestKey: "rc4Exit:3",
     },
   ],
 };
@@ -269,22 +329,41 @@ export function readNestSkillStatus(
     minnow: SkillStatus[];
     tadpole: SkillStatus[];
     exitSkills?: SkillStatus[];
+    rc2Frog?: SkillStatus[];
+    rc2Toad?: SkillStatus[];
+    rc2Bullfrog?: SkillStatus[];
+    rc2Exit?: SkillStatus[];
+    rc3Perch?: SkillStatus[];
+    rc3Trout?: SkillStatus[];
+    rc3Bass?: SkillStatus[];
+    rc3Exit?: SkillStatus[];
+    rc4Wahoo?: SkillStatus[];
+    rc4Barracuda?: SkillStatus[];
+    rc4Exit?: SkillStatus[];
   },
   nestKey?: SwimProgressNestKey,
 ): SkillStatus {
   if (!nestKey) return "—";
   const [group, indexStr] = nestKey.split(":") as [string, string];
   const index = Number(indexStr);
-  const arr =
-    group === "goldfish"
-      ? levels.goldfish
-      : group === "minnow"
-        ? levels.minnow
-        : group === "tadpole"
-          ? levels.tadpole
-          : group === "exit"
-            ? levels.exitSkills
-            : null;
+  const byGroup: Record<string, SkillStatus[] | undefined> = {
+    goldfish: levels.goldfish,
+    minnow: levels.minnow,
+    tadpole: levels.tadpole,
+    exit: levels.exitSkills,
+    rc2Frog: levels.rc2Frog,
+    rc2Toad: levels.rc2Toad,
+    rc2Bullfrog: levels.rc2Bullfrog,
+    rc2Exit: levels.rc2Exit,
+    rc3Perch: levels.rc3Perch,
+    rc3Trout: levels.rc3Trout,
+    rc3Bass: levels.rc3Bass,
+    rc3Exit: levels.rc3Exit,
+    rc4Wahoo: levels.rc4Wahoo,
+    rc4Barracuda: levels.rc4Barracuda,
+    rc4Exit: levels.rc4Exit,
+  };
+  const arr = byGroup[group];
   if (!arr || !Number.isFinite(index)) return "—";
   return arr[index] ?? "—";
 }
