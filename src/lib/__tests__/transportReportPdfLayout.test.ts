@@ -28,6 +28,29 @@ describe("transportReportPdfLayout", () => {
     expect(cols.bubbleRight).toBeLessThanOrEqual(215.9 - 12);
   });
 
+  it("wraps a long Unassigned sessions line inside the page", () => {
+    const sessions = Array.from({ length: 12 }, (_, i) => `Weeks 1, ${i + 2}-8`).join(" · ");
+    const built = buildGroupReportPdf({
+      companyName: "North Shore Day Camp",
+      season: "2027",
+      weekDateRange: "Week 1 (Jun 28 - Jul 2, 2027)",
+      groupName: "Unassigned",
+      totalCampers: 367,
+      sessionSummary: sessions,
+      campers: [
+        {
+          name: "Aayhan Kazmi",
+          demographicsLine: "(M|1st)",
+          programLine: "",
+          transportLine: "",
+          contactsBlock: "",
+        },
+      ],
+    });
+    expect(built).not.toBeNull();
+    expect(built!.blob.size).toBeGreaterThan(800);
+  });
+
   it("builds a group report with the weekday labels in the circle column", () => {
     const built = buildGroupReportPdf({
       companyName: "North Shore Day Camp",

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { triggerBlobDownload } from "@/lib/transportBubbleSheetPdf";
+import { downloadTransportPdfs, triggerBlobDownload } from "@/lib/transportBubbleSheetPdf";
 import type { TransportRouteMeta, TransportRouteStop } from "@/lib/transportRoster";
 import { consolidateRouteStopsByAddress } from "@/lib/transportRouteStops";
 import { getEffectiveCoreStops, loadTransportRunBoard, type TransportRunBoard } from "@/lib/transportRunBoard";
@@ -195,10 +195,16 @@ export default function TransportPrintReports() {
       openPreview(files[0].built, "Bus Route Summary", files[0].bus);
       return;
     }
-    for (const file of files) {
-      triggerBlobDownload(file.built.blob, file.built.filename);
-    }
-    toast({ title: `Downloaded ${files.length} route summaries`, description: `${files.length} PDF(s), one per bus.` });
+    const mode = await downloadTransportPdfs(
+      files.map((file) => file.built),
+      `bus-route-summaries.zip`,
+    );
+    toast({
+      title: `Downloaded ${files.length} route summaries`,
+      description: mode === "zip"
+        ? `${files.length} PDFs in one zip, one per bus.`
+        : `${files.length} PDF(s), one per bus.`,
+    });
   };
 
   const handleGroupReport = async (groupName: string, downloadOnly = false): Promise<boolean> => {
@@ -250,13 +256,47 @@ export default function TransportPrintReports() {
       await handleGroupReport(names[0]);
       return;
     }
-    let downloaded = 0;
+    const files: { blob: Blob; filename: string }[] = [];
     for (const name of names) {
-      if (await handleGroupReport(name, true)) downloaded += 1;
+      const groupKids = children.filter((c) => c.groupName === name);
+      if (!groupKids.length) continue;
+      const campers = groupKids.map((c) => ({
+        ...childToGroupReportCamper(
+          c,
+          resolveCamperTransportLine(
+            c.name,
+            routeMeta,
+            coreStops,
+            parentTransportCampers,
+            schedules,
+          ),
+          currentSeason,
+        ),
+        transportLine: "",
+      }));
+      const branding = await resolveTransportPdfBranding(currentCompany);
+      const staffNames = companyId
+        ? await loadGroupStaffNames(supabase, companyId, currentSeason, name)
+        : [];
+      const built = buildGroupReportPdf({
+        companyName: branding.companyName,
+        season: currentSeason,
+        weekDateRange: weekRangeLabel,
+        groupName: name,
+        totalCampers: groupKids.length,
+        staffNames,
+        sessionSummary: sessionSummaryForCampers(groupKids),
+        campers,
+        logo: branding.logo,
+        printedAt: branding.printedAt,
+      });
+      if (built) files.push(built);
     }
+    const mode = await downloadTransportPdfs(files, "group-reports.zip");
     toast({
-      title: downloaded ? `Downloaded ${downloaded} group PDF${downloaded === 1 ? "" : "s"}` : "Nothing to export",
-      variant: downloaded ? "default" : "destructive",
+      title: files.length ? `Downloaded ${files.length} group PDF${files.length === 1 ? "" : "s"}` : "Nothing to export",
+      description: mode === "zip" ? `${files.length} PDFs in one zip.` : undefined,
+      variant: files.length ? "default" : "destructive",
     });
   };
 
@@ -381,15 +421,15 @@ export default function TransportPrintReports() {
         toast({ title: "No campers on the selected buses for this week", variant: "destructive" });
         return;
       }
-      for (const file of files) {
-        triggerBlobDownload(file.blob, file.filename);
-      }
+      const mode = await downloadTransportPdfs(files, "bus-roster-reports.zip");
       if (files.length === 1) {
         openPreview(files[0], "Bus Roster Report", files[0].label);
       }
       toast({
         title: `Downloaded ${files.length} bus roster PDF${files.length === 1 ? "" : "s"}`,
-        description: files.map((file) => file.label).join(", "),
+        description: mode === "zip"
+          ? `${files.length} PDFs in one zip: ${files.map((file) => file.label).join(", ")}`
+          : files.map((file) => file.label).join(", "),
       });
     } finally {
       setExporting(false);

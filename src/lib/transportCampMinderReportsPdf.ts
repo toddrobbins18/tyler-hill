@@ -250,12 +250,10 @@ export function buildGroupReportPdf(options: {
     y += 4;
   }
   const sessionSummary = options.sessionSummary?.trim();
-  doc.text(
-    `Total Campers: ${options.totalCampers}${sessionSummary ? `; Sessions: ${sessionSummary}` : ""}`,
-    margin,
-    y,
-  );
-  y += 5;
+  const sessionLine = `Total Campers: ${options.totalCampers}${sessionSummary ? `; Sessions: ${sessionSummary}` : ""}`;
+  const sessionLines = doc.splitTextToSize(sessionLine, pageWidth - margin * 2) as string[];
+  doc.text(sessionLines, margin, y);
+  y += sessionLines.length * 3.6 + 1.4;
   y = drawBubbleDayHeader(doc, margin, pageWidth, y, "daily");
 
   for (const camper of options.campers) {

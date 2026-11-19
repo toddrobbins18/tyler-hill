@@ -27,7 +27,7 @@ import {
 import { campersOnRouteForWeek, weekContextForNumber } from "@/lib/transportBusRunContext";
 import { formatEnrollmentWeekLabel } from "@/lib/enrollmentWeekCalendar";
 import { buildBusBubbleSheetRoutes } from "@/lib/transportCamperBusRun";
-import { triggerBlobDownload } from "@/lib/transportBubbleSheetPdf";
+import { downloadTransportPdfs } from "@/lib/transportBubbleSheetPdf";
 import { buildBusRosterReportPdf } from "@/lib/transportCampMinderReportsPdf";
 import {
   loadBusCounselorForRoute,
@@ -384,14 +384,16 @@ export default function BusAttendance() {
       const built = await buildRosterPdfForRoute(route, kids);
       if (built) files.push(built);
     }
-    for (const file of files) {
-      triggerBlobDownload(file.blob, file.filename);
-    }
+    const mode = await downloadTransportPdfs(files, "bus-roster-reports.zip");
     toast({
       title: files.length
         ? `Downloaded ${files.length} bus roster PDF${files.length === 1 ? "" : "s"}`
         : "No campers on the selected buses for this week",
-      description: files.length ? `${files.length} file${files.length === 1 ? "" : "s"}.` : undefined,
+      description: files.length
+        ? mode === "zip"
+          ? `${files.length} PDFs in one zip.`
+          : `${files.length} file${files.length === 1 ? "" : "s"}.`
+        : undefined,
       variant: files.length ? "default" : "destructive",
     });
   }, [

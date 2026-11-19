@@ -221,6 +221,16 @@ describe("paper attendance", () => {
     ]);
   });
 
+  it("does not treat Bus 1 plus 6 campers as Bus 16", () => {
+    const text = "Bus Roster Report Bus 1 6 campers 6 AM Bus 12 Total Passengers: 16";
+    expect(findPaperSheetLabelsInText(text, ["Bus 1", "Bus 6", "Bus 12", "Bus 16"], "bus").sort()).toEqual([
+      "Bus 1",
+      "Bus 12",
+    ]);
+    expect(findPaperSheetLabelsInText("BBUS16", ["Bus 1", "Bus 16"], "bus")).toEqual(["Bus 16"]);
+    expect(findPaperSheetLabelsInText("Bus 16 · 8 campers", ["Bus 1", "Bus 16", "Bus 8"], "bus")).toEqual(["Bus 16"]);
+  });
+
   it("lists missing buses after searching one combined roster PDF", () => {
     const expected = Array.from({ length: 39 }, (_, i) => `Bus ${i + 1}`);
     const inPdf = expected.filter((label) => label !== "Bus 17" && label !== "Bus 39");
@@ -446,6 +456,31 @@ describe("paper attendance", () => {
     const flags = omrRowsToAbsentFlags(result.rows, "bus");
     expect(flags[0]?.absent).toBe(true);
     expect(flags.slice(1, 3).every((row) => !row.absent)).toBe(true);
+  });
+
+  it("reads an X on Aidan when OCR prints Aiden Sardelli", () => {
+    const image = makeWhite(240, 360);
+    const cols = nestBusCols(240);
+    for (const top of [70, 150, 230]) {
+      for (const cx of cols) {
+        strokeCircle(image, cx, top + 12, 6);
+        strokeCircle(image, cx, top + 32, 6);
+      }
+    }
+    drawX(image, cols[1], 82, 5);
+    const names = ["Aidan Sardelli", "Alexandra Simon", "Cade Wallack"];
+    const result = analyzePaperAttendanceImage(image, {
+      kind: "bus",
+      weekdayIndex: 1,
+      camperCount: names.length,
+      camperNames: names,
+      textItems: [
+        { str: "Aiden Sardelli", x: 20, y: 82 },
+        { str: "Alexandra Simon", x: 20, y: 162 },
+        { str: "Cade Wallack", x: 20, y: 242 },
+      ],
+    });
+    expect(omrRowsToAbsentFlags(result.rows, "bus").map((row) => row.absent)).toEqual([true, false, false]);
   });
 
   it("treats an X or a check in the Tuesday circle as absent", () => {
@@ -893,7 +928,7 @@ describe("paper attendance", () => {
     });
   });
 
-  it("does not auto-push paperless absents when the source is paper scan", () => {
+  it("sends paperless absents to change sheets even if a paper scan is also in use", () => {
     const rows = buildApprovedChangeSheetRows({
       overrideDate: "2026-07-08",
       runPeriod: "am",
@@ -908,6 +943,25 @@ describe("paper attendance", () => {
         [attendanceRecordKey(3, "Jamie Smith")]: "absent",
       },
     });
-    expect(rows.filter((r) => r.camper === "Jamie Smith")).toHaveLength(0);
+    expect(rows.find((r) => r.camper === "Jamie Smith")?.source).toBe("Bus attendance");
+  });
+
+  it("sends a paper bus-sheet absent to change sheets without a group scan", () => {
+    const rows = buildApprovedChangeSheetRows({
+      overrideDate: "2026-07-08",
+      runPeriod: "am",
+      exceptions: [],
+      manual: { excluded: {}, added: {} },
+      routeMeta,
+      coreStops,
+      selectedRouteIds: [3],
+      paperBusAbsents: [{ camperName: "Jamie Smith" }],
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      camper: "Jamie Smith",
+      source: "Paper scan",
+      description: "Marked absent on paper bus sheet",
+    });
   });
 });

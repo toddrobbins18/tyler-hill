@@ -27,7 +27,6 @@ import {
   formatUsAttendanceDate,
   reviewPaperAttendance,
   weekdayBubbleIndex,
-  type ChangeSheetAttendanceSource,
   type PaperAbsentCamper,
   type PaperAttendanceListKind,
 } from "@/lib/paperAttendance";
@@ -37,9 +36,7 @@ import { orientPaperScanPage, processPaperAttendancePages } from "@/lib/paperAtt
 import {
   clearPaperAttendanceForDate,
   clearPaperAttendanceForKind,
-  loadChangeSheetAttendanceSource,
   loadPaperAttendance,
-  saveChangeSheetAttendanceSource,
   savePaperAttendanceSheet,
 } from "@/lib/paperAttendanceStore";
 import { campersOnRoute } from "@/lib/transportBusAttendance";
@@ -89,7 +86,6 @@ export default function ConflictReview() {
   const [clearing, setClearing] = useState(false);
   const [busAbsents, setBusAbsents] = useState<PaperAbsentCamper[]>([]);
   const [groupAbsents, setGroupAbsents] = useState<PaperAbsentCamper[]>([]);
-  const [attendanceSource, setAttendanceSource] = useState<ChangeSheetAttendanceSource>("paperless");
   const pendingScanAbsents = useRef<Set<string> | null>(null);
   const scanInFlight = useRef(false);
 
@@ -161,13 +157,9 @@ export default function ConflictReview() {
 
   const loadLists = useCallback(async () => {
     if (!companyId) return;
-    const [paper, source] = await Promise.all([
-      loadPaperAttendance(supabase, companyId, currentSeason, sheetDate),
-      loadChangeSheetAttendanceSource(supabase, companyId, currentSeason),
-    ]);
+    const paper = await loadPaperAttendance(supabase, companyId, currentSeason, sheetDate);
     setBusAbsents(paper.bus);
     setGroupAbsents(paper.group);
-    setAttendanceSource(source);
   }, [companyId, currentSeason, sheetDate]);
 
   useEffect(() => {
@@ -409,19 +401,6 @@ export default function ConflictReview() {
     }
   };
 
-  const setSource = async (source: ChangeSheetAttendanceSource) => {
-    setAttendanceSource(source);
-    if (!companyId) return;
-    const ok = await saveChangeSheetAttendanceSource(supabase, companyId, currentSeason, source);
-    if (!ok) {
-      toast({
-        title: "Could not save the change-sheet toggle",
-        description: "Open Transportation once so the board exists, then try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
   return (
     <div className="space-y-6">
       <FrontOfficeBackLink />
@@ -475,25 +454,10 @@ export default function ConflictReview() {
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Change sheet absents</CardTitle>
           <CardDescription>
-            Paperless uses Bus Attendance. Paper scan uses only names confirmed on both lists below.
+            Master Change Sheet uses Bus Attendance marks and paper bus scans together.
+            A name marked absent on the paper bus roster goes on the change sheet even if the group sheet was not scanned.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant={attendanceSource === "paperless" ? "default" : "outline"}
-            onClick={() => void setSource("paperless")}
-          >
-            Paperless
-          </Button>
-          <Button
-            size="sm"
-            variant={attendanceSource === "paper_scan" ? "default" : "outline"}
-            onClick={() => void setSource("paper_scan")}
-          >
-            Paper scan
-          </Button>
-        </CardContent>
       </Card>
 
       <Card>
@@ -709,7 +673,7 @@ export default function ConflictReview() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Confirmed absent</CardTitle>
-            <CardDescription>On both lists — these can feed change sheets when Paper scan is on</CardDescription>
+            <CardDescription>On both lists. Bus-sheet absents also go on the Master Change Sheet.</CardDescription>
           </CardHeader>
           <CardContent className="text-sm">
             {review.confirmed.length === 0 ? (
@@ -726,7 +690,7 @@ export default function ConflictReview() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Conflicts</CardTitle>
-            <CardDescription>Only one list marked them — leave these here</CardDescription>
+            <CardDescription>Group-only marks stay here. Bus-only marks still go on the change sheet.</CardDescription>
           </CardHeader>
           <CardContent className="text-sm">
             {review.busOnly.length === 0 && review.groupOnly.length === 0 ? (

@@ -15,7 +15,6 @@ import {
   PARENT_TRANSPORT_CHANGE_SHEET_BUS,
   PARENT_TRANSPORT_STOP_LABEL,
 } from "./transportParentTransport";
-import type { ChangeSheetAttendanceSource } from "./paperAttendance";
 import { normPaperCamperName } from "./paperAttendance";
 
 export { PARENT_TRANSPORT_CHANGE_SHEET_BUS };
@@ -263,6 +262,7 @@ export function buildPaperScanAbsentRows(options: {
   coreStops: Record<number, TransportRouteStop[]>;
   parentTransportCampers?: ChangeSheetParentTransportCamper[];
   selectedRouteIds: number[];
+  description?: string;
 }): TransportChangeSheetRow[] {
   const {
     overrideDate,
@@ -272,6 +272,7 @@ export function buildPaperScanAbsentRows(options: {
     coreStops,
     parentTransportCampers = [],
     selectedRouteIds,
+    description = "Confirmed absent (bus + group)",
   } = options;
 
   const rows: TransportChangeSheetRow[] = [];
@@ -301,7 +302,7 @@ export function buildPaperScanAbsentRows(options: {
       run: runPeriod.toUpperCase(),
       camper: camperName,
       source: "Paper scan",
-      description: "Confirmed absent (bus + group)",
+      description,
       status: "saved",
       route: isPt && meta ? `${meta.name} · PT` : meta?.name ?? "",
       bus: isPt ? PARENT_TRANSPORT_CHANGE_SHEET_BUS : meta?.bus ?? "",
@@ -326,6 +327,7 @@ export function buildApprovedChangeSheetRows(options: {
   parentTransportCampers?: ChangeSheetParentTransportCamper[];
   attendanceSource?: "paperless" | "paper_scan";
   paperConfirmedAbsents?: { camperName: string }[];
+  paperBusAbsents?: { camperName: string }[];
 }): TransportChangeSheetRow[] {
   const {
     overrideDate,
@@ -338,8 +340,8 @@ export function buildApprovedChangeSheetRows(options: {
     includeParentTransport = true,
     busAttendance,
     parentTransportCampers = [],
-    attendanceSource = "paperless",
     paperConfirmedAbsents = [],
+    paperBusAbsents = [],
   } = options;
 
   const selectionFilter: ChangeSheetSelectionFilter = {
@@ -381,16 +383,8 @@ export function buildApprovedChangeSheetRows(options: {
     ),
   );
 
-  if (attendanceSource === "paper_scan") {
-    const attendanceRows = buildPaperScanAbsentRows({
-      overrideDate,
-      runPeriod,
-      camperNames: paperConfirmedAbsents.map((row) => row.camperName),
-      routeMeta,
-      coreStops,
-      parentTransportCampers,
-      selectedRouteIds,
-    }).filter((row) =>
+  const filterAttendance = (rows: TransportChangeSheetRow[]) =>
+    rows.filter((row) =>
       rowMatchesChangeSheetFilter(
         row,
         selectionFilter,
@@ -399,30 +393,51 @@ export function buildApprovedChangeSheetRows(options: {
         parentTransportCampers,
       ),
     );
-    return mergeChangeSheetRows(dataRows, attendanceRows);
+
+  if (busAttendance && Object.keys(busAttendance).length) {
+    dataRows = mergeChangeSheetRows(
+      dataRows,
+      filterAttendance(
+        buildBusAttendanceAbsentRows({
+          overrideDate,
+          runPeriod,
+          busAttendance,
+          routeMeta,
+          coreStops,
+          parentTransportCampers,
+          selectedRouteIds,
+        }),
+      ),
+    );
   }
 
-  if (!busAttendance || !Object.keys(busAttendance).length) return dataRows;
-
-  const attendanceRows = buildBusAttendanceAbsentRows({
-    overrideDate,
-    runPeriod,
-    busAttendance,
-    routeMeta,
-    coreStops,
-    parentTransportCampers,
-    selectedRouteIds,
-  }).filter((row) =>
-    rowMatchesChangeSheetFilter(
-      row,
-      selectionFilter,
+  const paperConfirmedRows = filterAttendance(
+    buildPaperScanAbsentRows({
+      overrideDate,
+      runPeriod,
+      camperNames: paperConfirmedAbsents.map((row) => row.camperName),
       routeMeta,
       coreStops,
       parentTransportCampers,
-    ),
+      selectedRouteIds,
+      description: "Confirmed absent (bus + group)",
+    }),
   );
-
-  return mergeChangeSheetRows(dataRows, attendanceRows);
+  const paperBusRows = filterAttendance(
+    buildPaperScanAbsentRows({
+      overrideDate,
+      runPeriod,
+      camperNames: paperBusAbsents.map((row) => row.camperName),
+      routeMeta,
+      coreStops,
+      parentTransportCampers,
+      selectedRouteIds,
+      description: "Marked absent on paper bus sheet",
+    }),
+  );
+  dataRows = mergeChangeSheetRows(dataRows, paperConfirmedRows);
+  dataRows = mergeChangeSheetRows(dataRows, paperBusRows);
+  return dataRows;
 }
 
 export function buildPendingChangeSheetRows(options: {

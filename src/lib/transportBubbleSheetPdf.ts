@@ -633,6 +633,47 @@ export function triggerBlobDownload(blob: Blob, filename: string) {
   }, 2000);
 }
 
+function uniqueZipEntryName(filename: string, used: Set<string>): string {
+  const safe = filename.replace(/[/\\]/g, "-") || "report.pdf";
+  if (!used.has(safe)) {
+    used.add(safe);
+    return safe;
+  }
+  const dot = safe.lastIndexOf(".");
+  const stem = dot > 0 ? safe.slice(0, dot) : safe;
+  const ext = dot > 0 ? safe.slice(dot) : "";
+  let n = 2;
+  let next = `${stem}-${n}${ext}`;
+  while (used.has(next)) {
+    n += 1;
+    next = `${stem}-${n}${ext}`;
+  }
+  used.add(next);
+  return next;
+}
+
+/** Chrome keeps only one file from a rapid a.click() loop. Zip when there are several. */
+export async function downloadTransportPdfs(
+  files: Array<{ blob: Blob; filename: string }>,
+  zipName: string,
+): Promise<"none" | "single" | "zip"> {
+  if (!files.length) return "none";
+  if (files.length === 1) {
+    const only = files[0];
+    if (only) triggerBlobDownload(only.blob, only.filename);
+    return "single";
+  }
+  const { zipSync } = await import("fflate");
+  const entries: Record<string, Uint8Array> = {};
+  const used = new Set<string>();
+  for (const file of files) {
+    entries[uniqueZipEntryName(file.filename, used)] = new Uint8Array(await file.blob.arrayBuffer());
+  }
+  const zipped = zipSync(entries, { level: 1 });
+  triggerBlobDownload(new Blob([zipped], { type: "application/zip" }), zipName);
+  return "zip";
+}
+
 export function buildBusBubbleSheetsPdf(options: {
   companyName: string;
   enrollmentWeek: number;

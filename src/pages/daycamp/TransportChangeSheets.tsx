@@ -30,12 +30,8 @@ import {
   sortChangeSheetRowsByBus,
   type TransportChangeSheetRow,
 } from "@/lib/transportChangeSheets";
-import { reviewPaperAttendance, type ChangeSheetAttendanceSource } from "@/lib/paperAttendance";
-import {
-  loadChangeSheetAttendanceSource,
-  loadPaperAttendance,
-  saveChangeSheetAttendanceSource,
-} from "@/lib/paperAttendanceStore";
+import { reviewPaperAttendance, uniquePaperAbsents } from "@/lib/paperAttendance";
+import { loadPaperAttendance } from "@/lib/paperAttendanceStore";
 import { normalizeTransportBoardForSeason, type TransportRouteMeta, type TransportRouteStop } from "@/lib/transportRoster";
 import { ROUTE_COLORS } from "@/lib/transportRunBoard";
 import { resolveTransportPdfBranding } from "@/lib/transportReportPdfBranding";
@@ -58,7 +54,6 @@ export default function TransportChangeSheets() {
   const [camperMetaLookup, setCamperMetaLookup] = useState(() => new Map());
   const [totalCampers, setTotalCampers] = useState<number | undefined>(undefined);
   const [reportPreview, setReportPreview] = useState<TransportReportPreview | null>(null);
-  const [attendanceSource, setAttendanceSource] = useState<ChangeSheetAttendanceSource>("paperless");
 
   const routeIdsKey = useMemo(() => routeMeta.map((r) => r.id).join(","), [routeMeta]);
 
@@ -115,16 +110,14 @@ export default function TransportChangeSheets() {
         setRows([]);
         return;
       }
-      const [exceptions, manual, amAttendance, pmAttendance, paper, source] = await Promise.all([
+      const [exceptions, manual, amAttendance, pmAttendance, paper] = await Promise.all([
         fetchTransportExceptions(supabase, currentCompany.id, sheetDate),
         loadManualOverrides(supabase, currentCompany.id, currentSeason, sheetDate),
         loadBusAttendance(supabase, currentCompany.id, currentSeason, sheetDate, "am"),
         loadBusAttendance(supabase, currentCompany.id, currentSeason, sheetDate, "pm"),
         loadPaperAttendance(supabase, currentCompany.id, currentSeason, sheetDate),
-        loadChangeSheetAttendanceSource(supabase, currentCompany.id, currentSeason),
       ]);
-      setAttendanceSource(source);
-      const confirmed = reviewPaperAttendance(paper.bus, paper.group).confirmed;
+      const paperReview = reviewPaperAttendance(paper.bus, paper.group);
       const shared = {
         overrideDate: sheetDate,
         exceptions,
@@ -134,19 +127,19 @@ export default function TransportChangeSheets() {
         selectedRouteIds,
         includeParentTransport,
         parentTransportCampers,
-        attendanceSource: source,
-        paperConfirmedAbsents: confirmed,
+        paperConfirmedAbsents: paperReview.confirmed,
+        paperBusAbsents: uniquePaperAbsents(paper.bus),
       };
       const built = mergeDailyChangeSheets(
         buildApprovedChangeSheetRows({
           ...shared,
           runPeriod: "am",
-          busAttendance: source === "paper_scan" ? undefined : amAttendance.records,
+          busAttendance: amAttendance.records,
         }),
         buildApprovedChangeSheetRows({
           ...shared,
           runPeriod: "pm",
-          busAttendance: source === "paper_scan" ? undefined : pmAttendance.records,
+          busAttendance: pmAttendance.records,
         }),
       );
       const filtered = built.filter((r) => !r.camper.startsWith("(No transport"));
@@ -315,47 +308,11 @@ export default function TransportChangeSheets() {
           <CardTitle className="text-base">Date</CardTitle>
           <CardDescription>
             One daily sheet for every bus and parent transport (PT). AM and PM changes are combined.
+            Absents come from Bus Attendance and from paper scans, together.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
           <Input type="date" value={sheetDate} onChange={(e) => setSheetDate(e.target.value)} className="w-auto" />
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground">Absents from</span>
-            <Button
-              size="sm"
-              variant={attendanceSource === "paperless" ? "default" : "outline"}
-              onClick={() => {
-                setAttendanceSource("paperless");
-                if (currentCompany?.id) {
-                  void saveChangeSheetAttendanceSource(
-                    supabase,
-                    currentCompany.id,
-                    currentSeason,
-                    "paperless",
-                  ).then(() => void loadSheet());
-                }
-              }}
-            >
-              Paperless
-            </Button>
-            <Button
-              size="sm"
-              variant={attendanceSource === "paper_scan" ? "default" : "outline"}
-              onClick={() => {
-                setAttendanceSource("paper_scan");
-                if (currentCompany?.id) {
-                  void saveChangeSheetAttendanceSource(
-                    supabase,
-                    currentCompany.id,
-                    currentSeason,
-                    "paper_scan",
-                  ).then(() => void loadSheet());
-                }
-              }}
-            >
-              Paper scan
-            </Button>
-          </div>
         </CardContent>
       </Card>
 

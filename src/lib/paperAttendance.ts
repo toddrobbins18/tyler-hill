@@ -133,6 +133,30 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function busNumberFromLabel(label: string): string | null {
+  const key = paperSheetKey(label);
+  const match = /^(?:BUS)?(\d+)$/.exec(key);
+  return match?.[1] ?? null;
+}
+
+/** Bus numbers actually printed as titles, not "Bus 1" glued to a later 6. */
+export function busNumbersInText(text: string): Set<string> {
+  const found = new Set<string>();
+  const hay = text.replace(/\s+/g, " ");
+  for (const match of hay.matchAll(/(?:^|[^A-Za-z0-9])Bus\s*(\d+)(?![0-9])/gi)) {
+    if (match[1]) found.add(match[1]);
+  }
+  for (const match of hay.matchAll(/(?:^|[^A-Za-z0-9])B\s+u\s+s\s+(\d(?:\s+\d)*)(?!\s*\d)/gi)) {
+    const n = (match[1] ?? "").replace(/\s+/g, "");
+    if (n) found.add(n);
+  }
+  const compact = hay.replace(/[^0-9A-Za-z]/g, "").toUpperCase();
+  for (const match of compact.matchAll(/BBUS(\d+)(?![0-9])/g)) {
+    if (match[1]) found.add(match[1]);
+  }
+  return found;
+}
+
 /** True when a bus/group title or its header barcode appears in PDF/page text. */
 export function textContainsPaperSheetLabel(
   text: string,
@@ -151,8 +175,12 @@ export function textContainsPaperSheetLabel(
   if (kind === "bus" && key.includes("PARENTTRANSPORT")) {
     if (compact.includes("PARENTTRANSPOR") || compact.includes("BPARENTTRANSPORT")) return true;
   }
+  const busNum = kind === "bus" ? busNumberFromLabel(visible) : null;
+  if (busNum != null) return busNumbersInText(text).has(busNum);
   const compactTail = /\d$/.test(key) ? "(?![0-9])" : "(?![0-9A-Z])";
-  if (new RegExp(`${escapeRegExp(key)}(?:CONTINUED)?${compactTail}`).test(compact)) return true;
+  if (new RegExp(`(?:^|[^0-9A-Z])${escapeRegExp(key)}(?:CONTINUED)?${compactTail}`).test(compact)) {
+    return true;
+  }
   const body = escapeRegExp(visible).replace(/\\s+/g, "\\s+");
   const tail = /\d$/.test(visible) ? "(?:$|[^0-9A-Za-z])" : "(?:$|[^A-Za-z0-9])";
   return new RegExp(`(?:^|[^A-Za-z0-9])${body}${tail}`, "i").test(hay);

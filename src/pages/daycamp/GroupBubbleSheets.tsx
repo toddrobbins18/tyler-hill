@@ -24,7 +24,7 @@ import {
 } from "@/lib/enrollmentWeekCalendar";
 import { loadGroupRoster, type GroupRosterCamper } from "@/lib/transportGroupAttendance";
 import { buildGroupReportPdf } from "@/lib/transportCampMinderReportsPdf";
-import { triggerBlobDownload } from "@/lib/transportBubbleSheetPdf";
+import { downloadTransportPdfs, triggerBlobDownload } from "@/lib/transportBubbleSheetPdf";
 import {
   childToGroupReportCamper,
   loadGroupStaffNames,
@@ -252,15 +252,15 @@ export default function GroupBubbleSheets() {
       const built = await buildGroupPdf(groupName);
       if (built) files.push(built);
     }
-    for (const file of files) {
-      triggerBlobDownload(file.blob, file.filename);
-    }
+    const mode = await downloadTransportPdfs(files, "group-bubble-sheets.zip");
     toast({
       title: files.length
         ? `Downloaded ${files.length} group PDF${files.length === 1 ? "" : "s"}`
         : "Nothing to export",
       description: files.length
-        ? `${files.length} file${files.length === 1 ? "" : "s"} — one PDF per group.`
+        ? mode === "zip"
+          ? `${files.length} PDFs in one zip — one per group.`
+          : `${files.length} file${files.length === 1 ? "" : "s"} — one PDF per group.`
         : undefined,
       variant: files.length ? "default" : "destructive",
     });

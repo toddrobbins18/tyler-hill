@@ -176,7 +176,7 @@ function columnSets(width: number, kind: "bus" | "group"): number[][] {
   return [nestCenters(width, 52, 0), legacyGroupCenters(width)];
 }
 
-type BubbleSample = { inner: number; ring: number; ink: number };
+type BubbleSample = { inner: number; ring: number; ink: number; wideInk: number };
 
 function sampleInkFraction(image: GrayImage, cx: number, cy: number, radius: number): number {
   const r = Math.max(1, radius);
@@ -204,6 +204,7 @@ function sampleBubble(image: GrayImage, cx: number, cy: number, radius: number):
     inner: sampleDiskMean(image, cx, cy, radius * 0.42),
     ring: sampleAnnulusMean(image, cx, cy, radius * 0.72, radius * 1.18),
     ink: sampleInkFraction(image, cx, cy, radius * 0.42),
+    wideInk: sampleInkFraction(image, cx, cy, radius * 0.58),
   };
 }
 
@@ -252,12 +253,12 @@ function percentile(values: number[], p: number): number {
 }
 
 function isFilledBubble(sample: BubbleSample, paper: number, emptyInner: number): boolean {
-  // Hollow circle with any interior ink (fill, X, check, scribble) is absent.
-  if (isHollowCircle(sample, paper)) return sample.ink >= 0.2;
-  if (sample.ink >= 0.28) return true;
-  if (emptyInner - sample.inner < 32) return false;
-  if (sample.inner > 190) return false;
-  return paper - sample.inner > 48;
+  // Hollow circle with fill, X, check, or scribble is absent.
+  if (isHollowCircle(sample, paper)) return sample.ink >= 0.08 || sample.wideInk >= 0.1;
+  if (sample.ink >= 0.18) return true;
+  if (emptyInner - sample.inner < 24) return false;
+  if (sample.inner > 205) return false;
+  return paper - sample.inner > 36;
 }
 
 function isMarkedVsPeers(
@@ -270,7 +271,7 @@ function isMarkedVsPeers(
   if (peers.length < 2) return true;
   const medInk = percentile(peers.map((s) => s.ink), 0.5);
   const medInner = percentile(peers.map((s) => s.inner), 0.5);
-  return selected.ink >= medInk + 0.12 || medInner - selected.inner >= 35;
+  return selected.ink >= medInk + 0.05 || medInner - selected.inner >= 22;
 }
 
 function nonMaxima(scores: Float32Array, y0: number, y1: number, minSep: number): number[] {
@@ -422,12 +423,45 @@ function pairBusRows(ys: number[], radius: number): Array<{ y: number; amY: numb
   return first.rows;
 }
 
+function firstNamesClose(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.startsWith(b) || b.startsWith(a)) return a.length >= 3 && b.length >= 3;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  if (a.length === b.length) {
+    let diffs = 0;
+    for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) diffs += 1;
+    return diffs === 1;
+  }
+  const longer = a.length > b.length ? a : b;
+  const shorter = a.length > b.length ? b : a;
+  let i = 0;
+  let j = 0;
+  let skip = 0;
+  while (i < longer.length && j < shorter.length) {
+    if (longer[i] === shorter[j]) {
+      i += 1;
+      j += 1;
+      continue;
+    }
+    skip += 1;
+    i += 1;
+    if (skip > 1) return false;
+  }
+  return true;
+}
+
 function nameYs(
   names: string[],
   items: PaperTextItem[],
   width: number,
 ): Array<number | null> {
   const left = items.filter((item) => item.x < width * 0.58 && item.str.trim());
+  const lastCounts = new Map<string, number>();
+  for (const name of names) {
+    const last = normName(name).split(" ").at(-1) ?? "";
+    if (last.length >= 4) lastCounts.set(last, (lastCounts.get(last) ?? 0) + 1);
+  }
   return names.map((name) => {
     const n = normName(name);
     if (!n) return null;
@@ -439,9 +473,14 @@ function nameYs(
     for (const item of left) {
       const s = normName(item.str);
       if (!s) continue;
+      const printed = s.split(" ");
+      const printedFirst = printed[0] ?? "";
+      const printedLast = printed[printed.length - 1] ?? "";
       let score = 0;
       if (s.includes(n) || (n.includes(s) && s.length >= 8)) score = 4;
       else if (last.length >= 3 && first.length >= 2 && s.includes(last) && s.includes(first)) score = 3;
+      else if (last.length >= 4 && s.includes(last) && firstNamesClose(first, printedFirst)) score = 3;
+      else if (last.length >= 4 && printedLast === last && (lastCounts.get(last) ?? 0) === 1) score = 3;
       else if (last.length >= 4 && s.includes(last)) score = 1;
       if (score > best) {
         best = score;
