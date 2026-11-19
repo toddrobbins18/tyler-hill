@@ -4,6 +4,7 @@ import {
   applyOmrFlagsToRoster,
   decodePaperSheetBarcode,
   findPaperSheetLabelsInText,
+  unreadPaperSheetReason,
   formatPaperScanChecklist,
   formatUsAttendanceDate,
   matchPaperSheetLabel,
@@ -17,7 +18,11 @@ import {
   rasterCode39,
   uprightPaperScanImage,
 } from "@/lib/paperAttendanceBarcode";
-import { extractJpegBuffersFromPdf } from "@/lib/paperAttendanceImage";
+import {
+  extractFlateDctJpegBuffers,
+  extractJpegBuffersFromPdf,
+  pdfUsesMixedRasterContent,
+} from "@/lib/paperAttendanceImage";
 import { extractPdfLiteralStrings } from "@/lib/paperAttendancePdfText";
 import { processPaperAttendancePages } from "@/lib/paperAttendanceScan";
 import { encodeCamperBarcode, encodePaperSheetBarcode } from "@/lib/transportReportPdfLayout";
@@ -111,6 +116,13 @@ function nestBusCols(width: number) {
   return [0, 1, 2, 3, 4].map((c) => bubbleX + gutter + colW * c + colW / 2);
 }
 
+function nestGroupCols(width: number) {
+  const bubbleW = width * (52 / 215.9);
+  const bubbleX = width * ((215.9 - 12 - 52) / 215.9);
+  const colW = bubbleW / 5;
+  return [0, 1, 2, 3, 4].map((c) => bubbleX + colW * c + colW / 2);
+}
+
 const routeMeta = [{ id: 3, name: "Route East", bus: "Bus 3" }];
 const coreStops = {
   3: [
@@ -189,6 +201,17 @@ describe("paper attendance", () => {
       "Bus 3",
     ]);
     expect(findPaperSheetLabelsInText(text, ["Barcelona", "Koalas"], "group")).toEqual(["Barcelona"]);
+    expect(findPaperSheetLabelsInText("UNASSIGNED (continued)", ["Unassigned", "Barcelona"], "group")).toEqual([
+      "Unassigned",
+    ]);
+    expect(
+      unreadPaperSheetReason({
+        kind: "group",
+        payload: null,
+        pageText: "Group Report Unassigned GUNASSIGNED",
+        expectedLabels: ["Barcelona", "Koalas"],
+      }),
+    ).toBe("This page is Unassigned, which is not a group in this season.");
     const pdf = new TextEncoder().encode("%PDF-1.4\nBT (Bus 7) Tj (Bus 9) Tj ET");
     expect(extractPdfLiteralStrings(pdf)).toContain("Bus 7");
     expect(findPaperSheetLabelsInText(extractPdfLiteralStrings(pdf), ["Bus 7", "Bus 8"], "bus")).toEqual(["Bus 7"]);
@@ -286,6 +309,74 @@ describe("paper attendance", () => {
       flags,
     );
     expect(roster.map((r) => r.absent)).toEqual([true, false, true]);
+  });
+
+  it("flips an upside-down group page and reads Tuesday on the printed name", () => {
+    const width = 420;
+    const height = 520;
+    const image = makeWhite(width, height);
+    rasterCode39(image, 250, 12, "GUNASSIGNED", { narrow: 1, height: 28 });
+    const cols = nestGroupCols(width);
+    const names = ["Aayhan Kazmi", "Adam Detore", "Alex Rubel", "Alexandra Simon"];
+    const rowsY = [90, 170, 250, 330];
+    for (const y of rowsY) {
+      for (let c = 0; c < 5; c += 1) {
+        if (c === 1 && y === 250) fillCircle(image, cols[c], y, 7, 40);
+        else strokeCircle(image, cols[c], y, 7);
+      }
+    }
+    const flipped = flipRgbaVertical(image);
+    expect(uprightPaperScanImage(flipped).flipped).toBe(true);
+    const longRoster = [
+      ...names.map((name, i) => ({ id: String(i), name })),
+      ...Array.from({ length: 30 }, (_, i) => ({ id: `x${i}`, name: `Camper ${i}` })),
+    ];
+    const options = {
+      kind: "group" as const,
+      expectedLabels: ["Unassigned", "Barcelona"],
+      rosterForLabel: () => longRoster,
+    };
+    const tuesday = processPaperAttendancePages(
+      [{ image: flipped, sourceName: "group-p1", pageText: "Group Report · Unassigned" }],
+      { ...options, weekdayIndex: 1 },
+    );
+    const monday = processPaperAttendancePages(
+      [{ image: flipped, sourceName: "group-p1", pageText: "Group Report · Unassigned" }],
+      { ...options, weekdayIndex: 0 },
+    );
+    expect(tuesday.scannedLabels).toEqual(["Unassigned"]);
+    expect(tuesday.sheets[0]?.absents.map((row) => row.camperName)).toEqual(["Alex Rubel"]);
+    expect(monday.sheets[0]?.absents).toEqual([]);
+  });
+
+  it("keeps a Tuesday group mark on the printed name when the Nest list is in a different order", () => {
+    const width = 240;
+    const height = 360;
+    const image = makeWhite(width, height);
+    const cols = nestGroupCols(width);
+    const rowsY = [80, 160, 240];
+    for (const y of rowsY) {
+      for (let c = 0; c < 5; c += 1) {
+        if (c === 1 && y === 160) fillCircle(image, cols[c], y, 7, 40);
+        else strokeCircle(image, cols[c], y, 7);
+      }
+    }
+    const names = ["Andi Robbins", "Cali Robbins", "Alina Haynes"];
+    const result = analyzePaperAttendanceImage(image, {
+      kind: "group",
+      weekdayIndex: 1,
+      camperCount: names.length,
+      camperNames: names,
+      textItems: [
+        { str: "Alina Haynes", x: 20, y: 80 },
+        { str: "Andi Robbins", x: 20, y: 160 },
+      ],
+    });
+    expect(omrRowsToAbsentFlags(result.rows, "group").map((row) => row.absent)).toEqual([
+      true,
+      false,
+      false,
+    ]);
   });
 
   it("reads AM/PM marks on a bus sheet as one row per camper", () => {
@@ -716,12 +807,67 @@ describe("paper attendance", () => {
     const jpeg = new Uint8Array(9000);
     jpeg[0] = 0xff;
     jpeg[1] = 0xd8;
+    jpeg[2] = 0xff;
+    jpeg[3] = 0xe0;
     jpeg[8998] = 0xff;
     jpeg[8999] = 0xd9;
     const pdf = new Uint8Array(20 + jpeg.length);
     pdf.set([0x25, 0x50, 0x44, 0x46], 0);
     pdf.set(jpeg, 10);
     expect(extractJpegBuffersFromPdf(pdf)).toHaveLength(1);
+  });
+
+  it("ignores stray FFD8 bytes inside Canon Flate streams", () => {
+    const junk = new Uint8Array(9000);
+    junk[0] = 0xff;
+    junk[1] = 0xd8;
+    junk[2] = 0x41;
+    junk[8998] = 0xff;
+    junk[8999] = 0xd9;
+    const pdf = new Uint8Array(40 + junk.length);
+    pdf.set(new TextEncoder().encode("%PDF-1.4 /CCITTFaxDecode "), 0);
+    pdf.set(junk, 30);
+    expect(extractJpegBuffersFromPdf(pdf)).toHaveLength(0);
+    expect(pdfUsesMixedRasterContent(pdf)).toBe(true);
+  });
+
+  it("inflates Flate+DCT page JPEGs from a copier PDF", async () => {
+    const { deflateSync, inflateSync } = await import("node:zlib");
+    const jpeg = new Uint8Array(9000);
+    jpeg[0] = 0xff;
+    jpeg[1] = 0xd8;
+    jpeg[2] = 0xff;
+    jpeg[3] = 0xe0;
+    jpeg[8998] = 0xff;
+    jpeg[8999] = 0xd9;
+    const compressed = deflateSync(jpeg);
+    const header = new TextEncoder().encode(
+      "%PDF-1.4\n1 0 obj\n<< /Filter [ /FlateDecode /DCTDecode ] >>\nstream\n",
+    );
+    const tail = new TextEncoder().encode("\nendstream\n");
+    const pdf = new Uint8Array(header.length + compressed.length + tail.length);
+    pdf.set(header, 0);
+    pdf.set(compressed, header.length);
+    pdf.set(tail, header.length + compressed.length);
+    const pages = extractFlateDctJpegBuffers(pdf, (data) => inflateSync(data));
+    expect(pages).toHaveLength(1);
+    expect(pages[0][0]).toBe(0xff);
+    expect(pages[0][1]).toBe(0xd8);
+  });
+
+  it("extracts eight Flate+DCT pages from Todd's Canon group scan", async () => {
+    const { existsSync, readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { inflateSync } = await import("node:zlib");
+    const pdfPath = join(process.cwd(), "..", "3963_001.pdf");
+    if (!existsSync(pdfPath)) return;
+    const buf = new Uint8Array(readFileSync(pdfPath));
+    expect(pdfUsesMixedRasterContent(buf)).toBe(true);
+    expect(extractJpegBuffersFromPdf(buf)).toHaveLength(0);
+    const pages = extractFlateDctJpegBuffers(buf, (data) => inflateSync(data));
+    expect(pages).toHaveLength(8);
+    expect(pages[0][0]).toBe(0xff);
+    expect(pages[0][1]).toBe(0xd8);
   });
 
   it("uses paper-scan confirmed names instead of electronic bus attendance", () => {

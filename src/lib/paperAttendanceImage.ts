@@ -4,6 +4,29 @@ import type { PaperScanPage } from "@/lib/paperAttendanceScan";
 
 const MAX_SIDE = 1600;
 
+function findAscii(buf: Uint8Array, ascii: string, from = 0): number {
+  const n = ascii.length;
+  outer: for (let i = from; i <= buf.length - n; i += 1) {
+    for (let j = 0; j < n; j += 1) {
+      if (buf[i + j] !== ascii.charCodeAt(j)) continue outer;
+    }
+    return i;
+  }
+  return -1;
+}
+
+/** Real JPEGs start SOI + another marker. Copier Flate streams often contain stray FFD8 bytes. */
+export function isStandaloneJpegPayload(buf: Uint8Array): boolean {
+  return (
+    buf.length >= 8000
+    && buf[0] === 0xff
+    && buf[1] === 0xd8
+    && buf[2] === 0xff
+    && buf[buf.length - 2] === 0xff
+    && buf[buf.length - 1] === 0xd9
+  );
+}
+
 export function extractJpegBuffersFromPdf(buf: Uint8Array): Uint8Array[] {
   const out: Uint8Array[] = [];
   let i = 0;
@@ -13,12 +36,59 @@ export function extractJpegBuffersFromPdf(buf: Uint8Array): Uint8Array[] {
       while (j < buf.length - 1 && !(buf[j] === 0xff && buf[j + 1] === 0xd9)) j += 1;
       if (j < buf.length - 1) {
         const slice = buf.slice(i, j + 2);
-        if (slice.length >= 8000) out.push(slice);
+        if (isStandaloneJpegPayload(slice)) out.push(slice);
         i = j + 2;
         continue;
       }
     }
     i += 1;
+  }
+  return out;
+}
+
+/** Canon MRC pages: JPEG photo wrapped in Flate, plus a 1-bit text overlay. */
+export function pdfUsesMixedRasterContent(buf: Uint8Array): boolean {
+  return findAscii(buf, "/CCITTFaxDecode") >= 0 || findAscii(buf, "/FlateDecode /DCTDecode") >= 0;
+}
+
+export function extractFlateDctJpegBuffers(
+  buf: Uint8Array,
+  inflate: (data: Uint8Array) => Uint8Array,
+): Uint8Array[] {
+  const out: Uint8Array[] = [];
+  let from = 0;
+  while (from < buf.length) {
+    const streamAt = findAscii(buf, "stream", from);
+    if (streamAt < 0) break;
+    if (
+      streamAt >= 3
+      && buf[streamAt - 3] === 101
+      && buf[streamAt - 2] === 110
+      && buf[streamAt - 1] === 100
+    ) {
+      from = streamAt + 6;
+      continue;
+    }
+    const header = new TextDecoder("latin1").decode(buf.subarray(Math.max(0, streamAt - 480), streamAt));
+    let dataStart = streamAt + 6;
+    if (buf[dataStart] === 13 && buf[dataStart + 1] === 10) dataStart += 2;
+    else if (buf[dataStart] === 10 || buf[dataStart] === 13) dataStart += 1;
+    const end = findAscii(buf, "endstream", dataStart);
+    if (end < 0) break;
+    from = end + 9;
+    if (!header.includes("DCTDecode") || !header.includes("FlateDecode")) continue;
+    let data = buf.subarray(dataStart, end);
+    if (data.length >= 2 && data[data.length - 2] === 13 && data[data.length - 1] === 10) {
+      data = data.subarray(0, data.length - 2);
+    } else if (data.length >= 1 && (data[data.length - 1] === 10 || data[data.length - 1] === 13)) {
+      data = data.subarray(0, data.length - 1);
+    }
+    try {
+      const raw = inflate(data);
+      if (raw.length >= 8000 && raw[0] === 0xff && raw[1] === 0xd8) out.push(raw);
+    } catch {
+      /* skip a bad stream */
+    }
   }
   return out;
 }
@@ -132,11 +202,9 @@ export async function loadPaperScanInputFromBrowserFiles(files: File[]): Promise
       const buf = new Uint8Array(await file.arrayBuffer());
       const documentText = extractPdfLiteralStrings(buf);
       if (documentText.trim()) texts.push(documentText);
-      const jpegPages = await decodePdfJpegPages(extractJpegBuffersFromPdf(buf), file.name || "roster.pdf");
-      if (jpegPages.length) {
-        pages.push(...jpegPages);
-        continue;
-      }
+      // Canon copier PDFs store printed titles in a 1-bit overlay. Raw JPEG
+      // bytes in the file are either Flate-wrapped or incomplete, so pdf.js
+      // must paint the page before we fall back to JPEG extraction.
       let rendered: PaperScanPage[] = [];
       try {
         rendered = await renderPdfPagesWithPdfJs(buf.slice(), file.name || "roster.pdf");
@@ -148,6 +216,19 @@ export async function loadPaperScanInputFromBrowserFiles(files: File[]): Promise
         for (const page of rendered) {
           if (page.pageText?.trim()) texts.push(page.pageText);
         }
+        continue;
+      }
+      let jpegBufs = extractJpegBuffersFromPdf(buf);
+      try {
+        const { unzlibSync } = await import("fflate");
+        const inflated = extractFlateDctJpegBuffers(buf, (data) => unzlibSync(data));
+        if (inflated.length) jpegBufs = inflated;
+      } catch {
+        /* pdf.js already tried; plain DCT JPEGs still work below */
+      }
+      const jpegPages = await decodePdfJpegPages(jpegBufs, file.name || "roster.pdf");
+      if (jpegPages.length) {
+        pages.push(...jpegPages);
       }
       continue;
     }

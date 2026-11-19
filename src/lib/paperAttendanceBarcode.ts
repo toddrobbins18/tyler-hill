@@ -189,6 +189,7 @@ function decodeFromGrayBand(
 export function decodePaperSheetBarcodeFromImage(image: RgbaImage): string | null {
   const src = rgbaToGray(image);
   const bands = [
+    { x0: 0.68, y0: 0.02, x1: 0.995, y1: 0.12 },
     { x0: 0.35, y0: 0.01, x1: 0.995, y1: 0.22 },
     { x0: 0.5, y0: 0.0, x1: 1, y1: 0.16 },
     { x0: 0.2, y0: 0.02, x1: 0.98, y1: 0.28 },

@@ -296,8 +296,9 @@ function scoreRows(
   xs: number[],
   radius: number,
   paper: number,
+  y0Frac = 0.16,
 ): { ys: number[]; score: number } {
-  const y0 = Math.floor(image.height * 0.16);
+  const y0 = Math.floor(image.height * y0Frac);
   const y1 = Math.floor(image.height * 0.97);
   const scores = new Float32Array(image.height);
   const xShift = Math.max(2, Math.round(radius * 0.8));
@@ -342,10 +343,11 @@ function pickRadiusAndColumns(
   ])].filter((r) => r >= 3 && r <= image.width * 0.06);
   const pageCap = kind === "bus" ? 10 : 14;
   const expected = Math.min(Math.max(camperCount, 1), pageCap) * (kind === "bus" ? 2 : 1);
+  const y0Frac = kind === "group" ? 0.1 : 0.16;
   let best: { xs: number[]; radius: number; ys: number[]; rank: number; score: number } | null = null;
   for (const xs of columnSets(image.width, kind)) {
     for (const radius of radii) {
-      const found = scoreRows(image, xs, radius, paper);
+      const found = scoreRows(image, xs, radius, paper, y0Frac);
       const extra = Math.max(0, found.ys.length - expected);
       const rank = found.score / Math.max(1, found.ys.length) - extra * 8;
       if (!best || rank > best.rank) best = { xs, radius, ys: found.ys, rank, score: found.score };
@@ -361,7 +363,7 @@ function pickRadiusAndColumns(
   if (image.width >= 800) {
     const printed = Math.max(4, Math.round(image.width * (2 / PAGE_W_MM)));
     const nest = columnSets(image.width, kind)[0];
-    const found = scoreRows(image, nest, printed, paper);
+    const found = scoreRows(image, nest, printed, paper, y0Frac);
     if (found.ys.length >= 4) {
       picked.xs = nest;
       picked.ys = found.ys;
@@ -485,10 +487,13 @@ export function analyzePaperAttendanceImage(
   let rowYs = options.kind === "bus"
     ? pairBusRows(geometry.ys, radius)
     : geometry.ys.map((y) => ({ y, amY: y, pmY: y }));
-  if (options.kind === "bus") {
-    rowYs = rowYs.filter((row) => row.y >= gray.height * 0.16);
-  }
+  rowYs = rowYs.filter((row) => row.y >= gray.height * (options.kind === "group" ? 0.1 : 0.16));
   rowYs = dropHeaderArtifact(rowYs);
+  if (options.kind === "group" && rowYs.length >= 4) {
+    const firstGap = rowYs[1].y - rowYs[0].y;
+    const secondGap = rowYs[2].y - rowYs[1].y;
+    if (secondGap > 0 && firstGap < secondGap * 0.6) rowYs = rowYs.slice(1);
+  }
   const pageCap = options.kind === "bus" ? 10 : 14;
   if (rowYs.length > pageCap) rowYs = rowYs.slice(0, pageCap);
 
@@ -646,7 +651,8 @@ export function analyzePaperAttendanceImage(
       if (options.kind === "bus") {
         out.push(sampleAt(col, row.amY), sampleAt(col, row.pmY));
       } else {
-        out.push(sampleAt(col, row.y));
+        const span = rowSpan(row);
+        out.push(bandSample(col, span.y0, span.y1));
       }
     }
     return out;
@@ -671,7 +677,8 @@ export function analyzePaperAttendanceImage(
       continue;
     }
     if (options.kind === "group") {
-      const bubbles = daySamplesAt(sample.y);
+      const span = rowSpan(sample);
+      const bubbles = [0, 1, 2, 3, 4].map((col) => bandSample(col, span.y0, span.y1));
       const marked = bubbles.map((bubble, col) =>
         isMarkedVsPeers(
           bubble,

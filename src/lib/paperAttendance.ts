@@ -152,7 +152,7 @@ export function textContainsPaperSheetLabel(
     if (compact.includes("PARENTTRANSPOR") || compact.includes("BPARENTTRANSPORT")) return true;
   }
   const compactTail = /\d$/.test(key) ? "(?![0-9])" : "(?![0-9A-Z])";
-  if (new RegExp(`${escapeRegExp(key)}${compactTail}`).test(compact)) return true;
+  if (new RegExp(`${escapeRegExp(key)}(?:CONTINUED)?${compactTail}`).test(compact)) return true;
   const body = escapeRegExp(visible).replace(/\\s+/g, "\\s+");
   const tail = /\d$/.test(visible) ? "(?:$|[^0-9A-Za-z])" : "(?:$|[^A-Za-z0-9])";
   return new RegExp(`(?:^|[^A-Za-z0-9])${body}${tail}`, "i").test(hay);
@@ -165,6 +165,27 @@ export function findPaperSheetLabelsInText(
 ): string[] {
   if (!text.trim()) return [];
   return labels.filter((label) => textContainsPaperSheetLabel(text, label, kind));
+}
+
+/** Why a scanned page did not match a bus/group in this season. */
+export function unreadPaperSheetReason(options: {
+  kind: PaperAttendanceListKind;
+  payload: string | null;
+  pageText?: string;
+  expectedLabels: string[];
+}): string {
+  if (options.payload) {
+    return `Header barcode ${options.payload} is not a ${options.kind} sheet in this season.`;
+  }
+  const compact = (options.pageText ?? "").replace(/[^0-9A-Za-z]/g, "").toUpperCase();
+  if (
+    options.kind === "group"
+    && compact.includes("UNASSIGNED")
+    && !options.expectedLabels.some((label) => paperSheetKey(label) === "UNASSIGNED")
+  ) {
+    return "This page is Unassigned, which is not a group in this season.";
+  }
+  return "Could not read the bus/group title on this page.";
 }
 
 export function mergePaperScannedLabels(...groups: string[][]): string[] {

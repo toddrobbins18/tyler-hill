@@ -6,6 +6,7 @@ import {
   missingPaperSheets,
   paperSheetKey,
   uniquePaperAbsents,
+  unreadPaperSheetReason,
   type PaperAbsentCamper,
   type PaperAttendanceListKind,
 } from "@/lib/paperAttendance";
@@ -124,9 +125,12 @@ export function processPaperAttendancePages(
       if (!(options.extraFoundLabels ?? []).length) {
         unreadPages.push({
           sourceName: page.sourceName,
-          reason: found.payload
-            ? `Header barcode ${found.payload} is not a ${options.kind} sheet in this season.`
-            : "Could not read the bus/group title on this page.",
+          reason: unreadPaperSheetReason({
+            kind: options.kind,
+            payload: found.payload,
+            pageText: page.pageText,
+            expectedLabels: options.expectedLabels,
+          }),
         });
       }
       continue;
