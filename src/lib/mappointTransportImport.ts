@@ -1,4 +1,5 @@
 import { parseCSV } from "@/lib/csv";
+import { sanitizeTransportGeocodeAddress } from "@/lib/transportAddressNormalize";
 import mappointRoutesCsv2026 from "../../data/north_shore_mappoint_routes_2026.csv?raw";
 import mappointAddressesCsv2026 from "../../data/north_shore_mappoint_addresses_2026.csv?raw";
 import bundledGeocodes2026 from "../../data/north_shore_mappoint_geocodes_2026.json";
@@ -98,9 +99,25 @@ function stripGeocodeUnit(address: string): string {
     .trim();
 }
 
+const ZIP_ONLY_PART = /^\d{5}(?:-\d{4})?$/;
+
+function cityFromCanonicalParts(parts: string[]): string {
+  for (let i = 1; i < parts.length; i++) {
+    const part = parts[i];
+    if (ZIP_ONLY_PART.test(part)) continue;
+    if (/^(ny|new york)(\s+\d{5}(?:-\d{4})?)?$/.test(part)) continue;
+    return part
+      .replace(/\s+\bny\b.*$/i, "")
+      .replace(/\s+\d{5}(?:-\d{4})?$/, "")
+      .trim();
+  }
+  return "";
+}
+
 /** Drive → Dr so CampMinder "Soundview Drive" hits MapPoint "Soundview Dr". */
 export function canonicalizeGeocodeKey(address: string): string {
-  let raw = normGeocodeKey(stripGeocodeUnit(address)).replace(/\./g, "");
+  const cleaned = sanitizeTransportGeocodeAddress(address) || address;
+  let raw = normGeocodeKey(stripGeocodeUnit(cleaned)).replace(/\./g, "");
   raw = raw.replace(
     /\b(drive|avenue|street|road|lane|court|place|boulevard|terrace|circle|highway|parkway|trail)\b/g,
     (word) => STREET_SUFFIX[word] ?? word,
@@ -128,7 +145,7 @@ function parseCanonicalStreet(address: string): ParsedStreet | null {
   return {
     house: Number(match[1]),
     street: match[2].toLowerCase(),
-    city: (parts[1] ?? "").toLowerCase(),
+    city: cityFromCanonicalParts(parts),
     zip: canonical.match(/\b(\d{5})\b/)?.[1] ?? "",
   };
 }

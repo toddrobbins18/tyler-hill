@@ -124,6 +124,7 @@ import {
   normalizeTransportBoardForSeason,
   prepareBoardForPersist,
   repinTransportBoardCoordinates,
+  sanitizeTransportBoardPins,
   transportBoardSeasonSyncChanged,
   type TransportRoutesSource,
 } from "@/lib/transportRoster";
@@ -162,7 +163,14 @@ import {
   normalizeTransportBoardSettings,
   type TransportBoardSettings,
 } from "@/lib/transportBoardSettings";
-import { normalizeTransportAddress as normalizeAddress } from "@/lib/transportAddressNormalize";
+import {
+  geocodeLabelMatchScore,
+  isSuspiciousStreetSuffixAddress,
+  normalizeTransportAddress as normalizeAddress,
+  pickPreferredStreetGeocode,
+  sanitizeTransportGeocodeAddress,
+  streetSuffixGeocodeCandidates,
+} from "@/lib/transportAddressNormalize";
 import {
   consolidateRouteStopsByAddress,
   mergeCampersIntoStops,
@@ -277,10 +285,10 @@ interface UnplottedCamper {
 
 type GeocodeProvider = "ors" | "nominatim" | "census";
 type GeocodeResult =
-  | { lat: number; lng: number; provider?: GeocodeProvider; label?: string }
+  | { lat: number; lng: number; provider?: GeocodeProvider; label?: string; correctedAddress?: string }
   | { error: string; retryable?: boolean; message?: string };
 
-const isGeocodePoint = (result: GeocodeResult | null): result is { lat: number; lng: number; provider?: GeocodeProvider; label?: string } =>
+const isGeocodePoint = (result: GeocodeResult | null): result is { lat: number; lng: number; provider?: GeocodeProvider; label?: string; correctedAddress?: string } =>
   !!result && "lat" in result && "lng" in result;
 
 const PROVIDER_LABEL: Record<GeocodeProvider, string> = {
@@ -364,7 +372,7 @@ function restoreStopCampersToUnplotted(
 
 const initialUnplottedCampers: UnplottedCamper[] = [];
 
-const GEOCODE_CACHE_KEY = "transport-geocode-cache-v1";
+const GEOCODE_CACHE_KEY = "transport-geocode-cache-v3";
 const ROUTE_LEG_CACHE_KEY = "transport-route-leg-cache-v3";
 const OPTIMIZE_UNDO_KEY = "transport-optimize-undo-v1";
 
@@ -1345,21 +1353,20 @@ export default function Transport() {
     if (!isRetryable) geocodeCacheRef.current.set(cacheKey, result);
   };
 
-  const geocodeAddress = async (address: string): Promise<GeocodeResult | null> => {
-    const bundled = useNsMappoint ? resolveBundledGeocodeResult(address) : null;
+  const geocodeOnce = async (query: string): Promise<GeocodeResult | null> => {
+    const bundled = useNsMappoint ? resolveBundledGeocodeResult(query) : null;
     if (bundled) {
-      cacheGeocodeResult(address, bundled);
+      cacheGeocodeResult(query, bundled);
       return bundled;
     }
-    const cacheKey = address.trim().toLowerCase();
+    const cacheKey = query.trim().toLowerCase();
     const cached = geocodeCacheRef.current.get(cacheKey);
     if (cached !== undefined) return cached;
-    // Retry transient errors (404 NOT_FOUND during cold-start, network blips)
     const maxAttempts = 3;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const { data, error } = await supabase.functions.invoke("route-optimizer", {
-          body: { action: "geocode", address },
+          body: { action: "geocode", address: query },
         });
         if (error) {
           const msg = error.message || "";
@@ -1371,9 +1378,9 @@ export default function Transport() {
           return { error: msg, retryable: true };
         }
         const result = geocodePayloadToResult(data as Record<string, unknown>);
-        cacheGeocodeResult(address, result);
+        cacheGeocodeResult(query, result);
         return result;
-      } catch (e: unknown) {
+      } catch {
         if (attempt < maxAttempts) {
           await new Promise(r => setTimeout(r, 400 * attempt));
           continue;
@@ -1381,6 +1388,42 @@ export default function Transport() {
       }
     }
     return null;
+  };
+
+  const geocodeAddress = async (address: string): Promise<GeocodeResult | null> => {
+    const query = sanitizeTransportGeocodeAddress(address) || address.trim();
+    const candidates = streetSuffixGeocodeCandidates(query);
+    const scored: { address: string; lat: number; lng: number; label?: string }[] = [];
+    let lastError: GeocodeResult | null = null;
+
+    for (const candidate of candidates) {
+      const result = await geocodeOnce(candidate);
+      if (isGeocodePoint(result)) {
+        scored.push({
+          address: candidate,
+          lat: result.lat,
+          lng: result.lng,
+          label: result.label,
+        });
+        if (geocodeLabelMatchScore(candidate, result.label) >= 6) break;
+      } else {
+        lastError = result;
+      }
+      if (!isSuspiciousStreetSuffixAddress(query)) break;
+    }
+
+    const picked = pickPreferredStreetGeocode(query, scored);
+    if (!picked) return lastError;
+    const result: GeocodeResult = {
+      lat: picked.lat,
+      lng: picked.lng,
+      label: picked.label,
+      correctedAddress: picked.address.toLowerCase() !== query.toLowerCase() ? picked.address : undefined,
+    };
+    cacheGeocodeResult(address, result);
+    cacheGeocodeResult(query, result);
+    cacheGeocodeResult(picked.address, result);
+    return result;
   };
 
   // Parallel geocoder with concurrency limit. Preserves input order.
@@ -1393,21 +1436,23 @@ export default function Transport() {
     const pending: { index: number; address: string }[] = [];
 
     addresses.forEach((address, i) => {
-      const bundled = useNsMappoint ? resolveBundledGeocodeResult(address) : null;
+      const query = sanitizeTransportGeocodeAddress(address) || address.trim();
+      const bundled = useNsMappoint ? resolveBundledGeocodeResult(query) : null;
       if (bundled) {
         cacheGeocodeResult(address, bundled);
+        cacheGeocodeResult(query, bundled);
         results[i] = bundled;
         onEach?.(i, bundled);
         return;
       }
-      const cacheKey = address.trim().toLowerCase();
+      const cacheKey = query.trim().toLowerCase();
       const cached = geocodeCacheRef.current.get(cacheKey);
       if (cached !== undefined) {
         results[i] = cached;
         onEach?.(i, cached);
         return;
       }
-      pending.push({ index: i, address });
+      pending.push({ index: i, address: query });
     });
 
     const CHUNK = 50;
@@ -1506,6 +1551,16 @@ export default function Transport() {
           await new Promise((r) => setTimeout(r, 2000));
         }
       }
+    }
+
+    for (let i = 0; i < addresses.length; i++) {
+      const query = sanitizeTransportGeocodeAddress(addresses[i] ?? "") || (addresses[i] ?? "").trim();
+      if (!isSuspiciousStreetSuffixAddress(query)) continue;
+      const current = results[i];
+      if (isGeocodePoint(current) && geocodeLabelMatchScore(query, current.label) >= 6) continue;
+      const refined = await geocodeAddress(query);
+      results[i] = refined;
+      onEach?.(i, refined);
     }
 
     persistGeocodeCache(geocodeCacheRef.current);
@@ -2222,14 +2277,23 @@ export default function Transport() {
     setGeocodingBoard(true);
     try {
       const results = await geocodeBatch(addresses, 8);
-      const resultsByAddress = new Map<string, { lat: number; lng: number }>();
+      const resultsByAddress = new Map<string, { lat: number; lng: number; address?: string }>();
       addresses.forEach((address, index) => {
         const result = results[index];
         if (isGeocodePoint(result)) {
-          resultsByAddress.set(address.trim().toLowerCase(), {
+          const pin = {
             lat: result.lat,
             lng: result.lng,
-          });
+            address: result.correctedAddress,
+          };
+          resultsByAddress.set(address.trim().toLowerCase(), pin);
+          const cleaned = sanitizeTransportGeocodeAddress(address);
+          if (cleaned && cleaned.trim().toLowerCase() !== address.trim().toLowerCase()) {
+            resultsByAddress.set(cleaned.trim().toLowerCase(), pin);
+          }
+          if (result.correctedAddress) {
+            resultsByAddress.set(result.correctedAddress.trim().toLowerCase(), pin);
+          }
         }
       });
 
@@ -2271,7 +2335,7 @@ export default function Transport() {
     );
     if (pending.length === 0) return;
 
-    const signature = pending.sort().join("|");
+    const signature = `${pending.sort().join("|")}::suffix-fallback-v1`;
     if (geocodeAttemptRef.current === signature) return;
     geocodeAttemptRef.current = signature;
 
@@ -3173,7 +3237,7 @@ export default function Transport() {
           subtitle: `${addresses.length} addresses need pins · ${transportLogTime()}`,
         });
 
-        const resolved = new Map<string, { lat: number; lng: number }>();
+        const resolved = new Map<string, { lat: number; lng: number; address?: string }>();
         const BATCH = 12;
         const batchTotal = Math.ceil(addresses.length / BATCH);
         for (let start = 0; start < addresses.length; start += BATCH) {
@@ -3198,7 +3262,11 @@ export default function Transport() {
           slice.forEach((address, i) => {
             const r = results[i];
             if (isGeocodePoint(r)) {
-              resolved.set(address.trim().toLowerCase(), { lat: r.lat, lng: r.lng });
+              resolved.set(address.trim().toLowerCase(), {
+                lat: r.lat,
+                lng: r.lng,
+                address: r.correctedAddress,
+              });
             }
           });
           const applied = applyGeocodeResultsToTransportBoard(
@@ -3351,17 +3419,25 @@ export default function Transport() {
     toast({ title: "Resetting map pins", description: `Re-pinning ${addresses.length} address${addresses.length === 1 ? "" : "es"} from the street…` });
 
     try {
-      const snapped = repinTransportBoardCoordinates({
+      const cleaned = sanitizeTransportBoardPins({
         coreStops,
         unplottedCampers,
         useBundledMappoint: useNsMappoint,
       });
+      const snapped = repinTransportBoardCoordinates({
+        coreStops: cleaned.coreStops,
+        unplottedCampers: cleaned.unplottedCampers,
+        useBundledMappoint: useNsMappoint,
+      });
       let nextCore = snapped.coreStops;
       let nextUnplotted = snapped.unplottedCampers;
-      let moved = snapped.movedCount;
+      let moved = snapped.movedCount + cleaned.rewrittenCount;
       let failed = 0;
 
-      const leftover = addresses.filter((address) => !useNsMappoint || !resolveBundledGeocodeResult(address));
+      const leftover = Array.from(new Set([
+        ...nextUnplotted.map((c) => c.address).filter(Boolean),
+        ...Object.values(nextCore).flatMap((stops) => (stops || []).map((s) => s.address)).filter((address) => address && address !== campLocation.address),
+      ])).filter((address) => !useNsMappoint || !resolveBundledGeocodeResult(address));
       if (leftover.length > 0) {
         const results = await geocodeBatch(leftover, 6, (index) => {
           if (index % 5 !== 0 && index !== leftover.length - 1) return;
@@ -3379,12 +3455,16 @@ export default function Transport() {
             subtitle: `Still running — last update ${transportLogTime()}`,
           });
         });
-        const resolved = new Map<string, { lat: number; lng: number }>();
+        const resolved = new Map<string, { lat: number; lng: number; address?: string }>();
         leftover.forEach((address, i) => {
           const r = results[i];
           if (isGeocodePoint(r)) {
-            const pin = useNsMappoint ? snapToBundledGeocode(address, r.lat, r.lng) : r;
-            resolved.set(address, pin);
+            const snapped = useNsMappoint ? snapToBundledGeocode(r.correctedAddress || address, r.lat, r.lng) : r;
+            resolved.set(address, {
+              lat: snapped.lat,
+              lng: snapped.lng,
+              address: r.correctedAddress || address,
+            });
           } else {
             failed++;
           }
@@ -3393,15 +3473,19 @@ export default function Transport() {
           Math.abs(a.lat - b.lat) > 0.0002 || Math.abs(a.lng - b.lng) > 0.0002;
         nextUnplotted = nextUnplotted.map((c) => {
           const hit = resolved.get(c.address);
-          if (hit && changed(c, hit)) { moved++; return { ...c, lat: hit.lat, lng: hit.lng }; }
-          return c;
+          if (!hit) return c;
+          if (!changed(c, hit) && hit.address === c.address) return c;
+          moved++;
+          return { ...c, lat: hit.lat, lng: hit.lng, address: hit.address || c.address };
         });
         const patchedCore: typeof nextCore = {};
         Object.entries(nextCore).forEach(([routeId, stops]) => {
           patchedCore[Number(routeId)] = (stops || []).map((stop) => {
             const hit = resolved.get(stop.address);
-            if (hit && changed(stop, hit)) { moved++; return { ...stop, lat: hit.lat, lng: hit.lng }; }
-            return stop;
+            if (!hit) return stop;
+            if (!changed(stop, hit) && hit.address === stop.address) return stop;
+            moved++;
+            return { ...stop, lat: hit.lat, lng: hit.lng, address: hit.address || stop.address };
           });
         });
         nextCore = patchedCore;

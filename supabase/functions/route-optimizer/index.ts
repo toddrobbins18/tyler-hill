@@ -1,4 +1,6 @@
 // OpenRouteService proxy: geocoding + route optimization
+import { sanitizeTransportGeocodeAddress } from "../_shared/transportAddressSanitize.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -45,7 +47,8 @@ const inLongIsland = (la: number, ln: number) =>
 
 type GeocodeOneResult = Record<string, unknown>;
 
-async function geocodeOneAddress(address: string): Promise<GeocodeOneResult> {
+async function geocodeOneAddress(rawAddress: string): Promise<GeocodeOneResult> {
+  const address = sanitizeTransportGeocodeAddress(rawAddress) || rawAddress.trim();
   const params = ORS_KEY
     ? new URLSearchParams({
       api_key: ORS_KEY,

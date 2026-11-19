@@ -3,6 +3,8 @@
  * Household addresses live on family records (GetFamilyAddresses), not always on person rows.
  */
 
+import { sanitizeTransportGeocodeAddress } from "./transportAddressSanitize.ts";
+
 const CM_ENTITY_FAMILY_BASES = [
   "https://api.campminder.com/entity/family",
   "https://webapi.campminder.com/api/entity/family",
@@ -63,10 +65,15 @@ export function formatCmAddress(parts: CmAddressParts | null | undefined): strin
   if (!parts) return null;
   const line1 = parts.line1?.trim();
   if (!line1) return null;
-  const street = [line1, parts.line2?.trim()].filter(Boolean).join(", ");
-  const cityState = [parts.city?.trim(), parts.state?.trim()].filter(Boolean).join(", ");
-  const cityStateZip = [cityState, parts.zip?.trim()].filter(Boolean).join(" ");
-  return [street, cityStateZip].filter(Boolean).join(", ") || null;
+  const zipToken = /^\d{5}(?:-\d{4})?$/;
+  const line2 = parts.line2?.trim() ?? "";
+  const street = line2 && !zipToken.test(line2) ? [line1, line2].filter(Boolean).join(", ") : line1;
+  const city = parts.city?.trim() && !zipToken.test(parts.city.trim()) ? parts.city.trim() : "";
+  const cityState = [city, parts.state?.trim()].filter(Boolean).join(", ");
+  const zip = parts.zip?.trim()?.replace(/^(\d{5})(?:-\d{4})?$/, "$1") ?? "";
+  const cityStateZip = [cityState, zip].filter(Boolean).join(" ");
+  const formatted = [street, cityStateZip].filter(Boolean).join(", ") || null;
+  return formatted ? sanitizeTransportGeocodeAddress(formatted) : null;
 }
 
 function addressPartsFromRecord(raw: unknown): CmAddressParts | null {
