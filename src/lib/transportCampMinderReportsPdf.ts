@@ -4,6 +4,7 @@ import type { RouteSummaryStopRow } from "@/lib/transportReportData";
 import {
   addTransportPdfFooters,
   drawCode39Barcode,
+  drawPdfTextBlock,
   drawTransportPdfHeader,
   encodePaperSheetBarcode,
   type TransportPdfLogo,
@@ -241,19 +242,21 @@ export function buildGroupReportPdf(options: {
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
+  const innerWidth = pageWidth - margin * 2;
   if (options.staffNames?.length) {
-    doc.text(`Staff List: ${options.staffNames.join(", ")}`, margin, y);
-    y += 4;
+    y = drawPdfTextBlock(doc, `Staff List: ${options.staffNames.join(", ")}`, margin, y, innerWidth, {
+      lineHeight: 3.6,
+    });
+    y += 0.4;
   }
   if (options.capacity != null) {
-    doc.text(`Capacity: ${options.capacity}`, margin, y);
-    y += 4;
+    y = drawPdfTextBlock(doc, `Capacity: ${options.capacity}`, margin, y, innerWidth, { lineHeight: 3.6 });
+    y += 0.4;
   }
   const sessionSummary = options.sessionSummary?.trim();
   const sessionLine = `Total Campers: ${options.totalCampers}${sessionSummary ? `; Sessions: ${sessionSummary}` : ""}`;
-  const sessionLines = doc.splitTextToSize(sessionLine, pageWidth - margin * 2) as string[];
-  doc.text(sessionLines, margin, y);
-  y += sessionLines.length * 3.6 + 1.4;
+  y = drawPdfTextBlock(doc, sessionLine, margin, y, innerWidth, { lineHeight: 3.6 });
+  y += 1.4;
   y = drawBubbleDayHeader(doc, margin, pageWidth, y, "daily");
 
   for (const camper of options.campers) {

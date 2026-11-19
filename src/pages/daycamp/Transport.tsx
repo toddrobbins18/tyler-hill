@@ -67,7 +67,7 @@ import {
 import {
   buildDayBusBubbleSheetPdf,
   buildGroupBubbleSheetPdf,
-  triggerBlobDownload,
+  downloadTransportPdfs,
 } from "@/lib/transportBubbleSheetPdf";
 import {
   buildBusBubbleSheetRoutes,
@@ -4130,21 +4130,22 @@ export default function Transport() {
           toast({ title: "No campers to print", variant: "destructive" });
           return;
         }
-        groups.forEach((group, index) => {
-          window.setTimeout(() => {
-            const built = buildGroupBubbleSheetPdf({
-              companyName: currentCompany?.name ?? "Day Camp",
-              enrollmentWeek: week,
-              weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : undefined,
-              weekDays: enrollmentWeekDayColumns(weekRow),
-              groups: [group],
-            });
-            if (built) triggerBlobDownload(built.blob, built.filename);
-          }, index * 400);
-        });
+        const files: { blob: Blob; filename: string }[] = [];
+        for (const group of groups) {
+          const built = buildGroupBubbleSheetPdf({
+            companyName: currentCompany?.name ?? "Day Camp",
+            enrollmentWeek: week,
+            weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : undefined,
+            weekDays: enrollmentWeekDayColumns(weekRow),
+            groups: [group],
+          });
+          if (built) files.push(built);
+        }
+        const mode = await downloadTransportPdfs(files, `group-bubble-sheets-week-${week}.zip`);
         toast({
-          title: "Downloading group PDFs",
-          description: `${groups.length} PDF(s), one per group.`,
+          title: files.length ? `Downloaded ${files.length} group PDF${files.length === 1 ? "" : "s"}` : "No campers to print",
+          description: mode === "zip" ? `${files.length} PDFs in one zip, one per group.` : `${files.length} PDF(s), one per group.`,
+          variant: files.length ? "default" : "destructive",
         });
         return;
       }
@@ -4183,22 +4184,25 @@ export default function Transport() {
         return;
       }
       const safeDate = overrideDate.replace(/[^0-9-]/g, "");
-      printableRoutes.forEach((route, index) => {
-        window.setTimeout(() => {
-          const built = buildDayBusBubbleSheetPdf({
-            companyName: currentCompany?.name ?? "Day Camp",
-            date: overrideDate,
-            enrollmentWeek: week,
-            weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : undefined,
-            routes: [route],
-            filename: `bus-bubble-${safeDate}-${route.bus.replace(/\s+/g, "-")}.pdf`,
-          });
-          if (built) triggerBlobDownload(built.blob, built.filename);
-        }, index * 400);
-      });
+      const files: { blob: Blob; filename: string }[] = [];
+      for (const route of printableRoutes) {
+        const built = buildDayBusBubbleSheetPdf({
+          companyName: currentCompany?.name ?? "Day Camp",
+          date: overrideDate,
+          enrollmentWeek: week,
+          weekDateRange: weekRow ? formatEnrollmentWeekRange(weekRow) : undefined,
+          routes: [route],
+          filename: `bus-bubble-${safeDate}-${route.bus.replace(/\s+/g, "-")}.pdf`,
+        });
+        if (built) files.push(built);
+      }
+      const mode = await downloadTransportPdfs(files, `bus-bubble-sheets-${safeDate}.zip`);
       toast({
-        title: "Downloading bus PDFs",
-        description: `${printableRoutes.length} PDF(s), one per bus. ${weekLabel}`,
+        title: files.length ? `Downloaded ${files.length} bus PDF${files.length === 1 ? "" : "s"}` : "No campers to print",
+        description: mode === "zip"
+          ? `${files.length} PDFs in one zip, one per bus. ${weekLabel}`
+          : `${files.length} PDF(s), one per bus. ${weekLabel}`,
+        variant: files.length ? "default" : "destructive",
       });
       return;
     }

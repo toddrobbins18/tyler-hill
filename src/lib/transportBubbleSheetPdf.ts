@@ -226,8 +226,11 @@ function drawTitleBlock(
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
-  doc.text(metaLines.join("    "), pageWidth / 2, y, { align: "center" });
-  y += 5;
+  const meta = metaLines.filter((line) => line.trim()).join("    ");
+  const metaWidth = tableRight - tableLeft;
+  const metaWrapped = doc.splitTextToSize(meta, metaWidth) as string[];
+  doc.text(metaWrapped, pageWidth / 2, y, { align: "center" });
+  y += Math.max(5, metaWrapped.length * 4);
 
   doc.setFontSize(7.5);
   doc.setFont("helvetica", "italic");
@@ -282,16 +285,19 @@ function drawSectionHeader(
   subtitle: string | undefined,
   y: number,
 ): number {
+  const sectionWidth = layout.tableRight - layout.tableLeft;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9.5);
-  doc.text(title.toUpperCase(), layout.tableLeft, y);
+  const titleLines = doc.splitTextToSize(title.toUpperCase(), sectionWidth) as string[];
+  doc.text(titleLines, layout.tableLeft, y);
 
-  let nextY = y + 4.5;
+  let nextY = y + Math.max(4.5, titleLines.length * 4.2);
   if (subtitle) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
-    doc.text(subtitle, layout.tableLeft, nextY);
-    nextY += 4;
+    const subLines = doc.splitTextToSize(subtitle, sectionWidth) as string[];
+    doc.text(subLines, layout.tableLeft, nextY);
+    nextY += Math.max(4, subLines.length * 3.6);
   }
 
   doc.setDrawColor(0);

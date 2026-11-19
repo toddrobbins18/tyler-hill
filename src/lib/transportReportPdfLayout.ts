@@ -44,6 +44,29 @@ export async function loadTransportPdfLogo(
   }
 }
 
+export function wrapPdfText(doc: jsPDF, text: string, maxWidth: number): string[] {
+  return doc.splitTextToSize(text || "", Math.max(8, maxWidth)) as string[];
+}
+
+export function drawPdfTextBlock(
+  doc: jsPDF,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  opts?: { align?: "left" | "center" | "right"; lineHeight?: number },
+): number {
+  const lines = wrapPdfText(doc, text, maxWidth);
+  const lineHeight = opts?.lineHeight ?? 3.8;
+  const align = opts?.align ?? "left";
+  for (const line of lines) {
+    if (align === "left") doc.text(line, x, y);
+    else doc.text(line, x, y, { align });
+    y += lineHeight;
+  }
+  return y;
+}
+
 export function sanitizeBarcodePayload(raw: string): string {
   const cleaned = raw.replace(/[^0-9A-Za-z]/g, "").toUpperCase();
   return cleaned.slice(0, 24);
@@ -185,18 +208,29 @@ export function drawTransportPdfHeader(
     }
   }
 
+  const half = Math.max(40, (pageWidth - margin * 2) / 2 - 4);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(options.logo ? 11 : 12);
-  doc.text(options.companyName, textX, y + 5);
+  const companyBottom = drawPdfTextBlock(doc, options.companyName, textX, y + 5, half, { lineHeight: 4.4 });
   doc.setFontSize(10);
-  doc.text(options.reportTitle, pageWidth - margin, y + 5, { align: "right" });
-
-  y += options.logo ? logoH + 2 : 8;
+  const titleBottom = drawPdfTextBlock(
+    doc,
+    options.reportTitle,
+    pageWidth - margin,
+    y + 5,
+    half,
+    { align: "right", lineHeight: 4.4 },
+  );
+  y = Math.max(companyBottom, titleBottom, options.logo ? y + logoH + 2 : y + 8);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
+  const metaWidth = pageWidth - margin * 2;
   for (const line of options.metaLines) {
-    doc.text(line, pageWidth - margin, y, { align: "right" });
-    y += 4;
+    if (!line.trim()) continue;
+    y = drawPdfTextBlock(doc, line, pageWidth - margin, y, metaWidth, {
+      align: "right",
+      lineHeight: 4,
+    });
   }
   const printed = options.printedAt ?? new Date();
   doc.setFontSize(7);
@@ -270,7 +304,8 @@ export function buildTransportTableReportPdf(options: {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
     options.headers.forEach((header, i) => {
-      doc.text(header, margin + i * colW + 1, y + 4);
+      const lines = wrapPdfText(doc, header, colW - 2);
+      doc.text(lines[0] ?? "", margin + i * colW + 1, y + 4);
     });
     y += 7;
     doc.setLineWidth(0.2);
