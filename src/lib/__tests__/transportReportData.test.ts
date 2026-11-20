@@ -3,6 +3,7 @@ import {
   childToGroupReportCamper,
   reportCampersForBusRoster,
   sessionSummaryForCampers,
+  sortReportChildren,
   type TransportReportChildRow,
 } from "@/lib/transportReportData";
 
@@ -62,6 +63,29 @@ describe("reportCampersForBusRoster", () => {
     expect(row.demographicsLine).toContain("1st");
     expect(row.demographicsLine).not.toContain("Kindergarten");
     expect(childToGroupReportCamper(child, "", "2026").demographicsLine).toContain("Kindergarten");
+  });
+
+  it("sorts group campers by last name or grade", () => {
+    const kids: TransportReportChildRow[] = [
+      { ...child, id: "1", name: "Aayhan Kazmi", grade: "1st" },
+      { ...child, id: "2", name: "Adam Detore", grade: "2nd" },
+      { ...child, id: "3", name: "Aidan Sardelli", grade: "3rd" },
+    ];
+    expect(sortReportChildren(kids, "first-name").map((row) => row.name)).toEqual([
+      "Aayhan Kazmi",
+      "Adam Detore",
+      "Aidan Sardelli",
+    ]);
+    expect(sortReportChildren(kids, "last-name").map((row) => row.name)).toEqual([
+      "Adam Detore",
+      "Aayhan Kazmi",
+      "Aidan Sardelli",
+    ]);
+    expect(sortReportChildren(kids, "grade").map((row) => row.name)).toEqual([
+      "Aayhan Kazmi",
+      "Adam Detore",
+      "Aidan Sardelli",
+    ]);
   });
 
   it("keeps mixed sessions as separate labels", () => {

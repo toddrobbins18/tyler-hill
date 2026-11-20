@@ -12,7 +12,7 @@ import { withCounselorPickupStops } from "@/lib/transportCounselorPickup";
 import { loadRouteReferenceAssignments } from "@/lib/routeReferenceWarehouse";
 import type { BubbleSheetCamper } from "@/lib/transportBubbleSheetPdf";
 import type { GroupReportCamper } from "@/lib/transportCampMinderReportsPdf";
-import { gradeLabelForReportSeason } from "@/lib/divisionFilterUtils";
+import { getDayCampGradeSortIndex, gradeLabelForReportSeason } from "@/lib/divisionFilterUtils";
 import { formatSessionReportLabel } from "@/lib/enrolledWeeks";
 import { encodeCamperBarcode } from "@/lib/transportReportPdfLayout";
 
@@ -295,7 +295,48 @@ export function childToGroupReportCamper(
     divisionLine: child.divisionName?.trim() || undefined,
     town: townFromHomeAddress(child.homeAddress) || undefined,
     sessionLine,
+    grade: child.grade,
   };
+}
+
+export const REPORT_CAMPER_SORTS = ["first-name", "last-name", "grade"] as const;
+export type ReportCamperSort = (typeof REPORT_CAMPER_SORTS)[number];
+export const REPORT_CAMPER_SORT_LABELS: Record<ReportCamperSort, string> = {
+  "first-name": "First name",
+  "last-name": "Last name",
+  grade: "Grade",
+};
+
+export function reportCamperLastName(name: string): string {
+  const cleaned = name.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  return (parts[parts.length - 1] ?? cleaned).toLowerCase();
+}
+
+export function reportCamperFirstName(name: string): string {
+  const cleaned = name.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  return (parts[0] ?? cleaned).toLowerCase();
+}
+
+export function sortReportChildren<T extends { name: string; grade?: string | null }>(
+  rows: T[],
+  sort: ReportCamperSort = "first-name",
+): T[] {
+  const copy = [...rows];
+  copy.sort((a, b) => {
+    if (sort === "last-name") {
+      const last = reportCamperLastName(a.name).localeCompare(reportCamperLastName(b.name));
+      if (last) return last;
+      return reportCamperFirstName(a.name).localeCompare(reportCamperFirstName(b.name));
+    }
+    if (sort === "grade") {
+      const byGrade = getDayCampGradeSortIndex(a.grade) - getDayCampGradeSortIndex(b.grade);
+      if (byGrade) return byGrade;
+    }
+    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  });
+  return copy;
 }
 
 export function sessionSummaryForCampers(children: { session: string | null }[]): string | null {

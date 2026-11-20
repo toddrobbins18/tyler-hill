@@ -29,7 +29,11 @@ import {
   childToGroupReportCamper,
   loadGroupStaffNames,
   loadTransportReportChildren,
+  REPORT_CAMPER_SORT_LABELS,
+  REPORT_CAMPER_SORTS,
   sessionSummaryForCampers,
+  sortReportChildren,
+  type ReportCamperSort,
 } from "@/lib/transportReportData";
 import { resolveTransportPdfBranding } from "@/lib/transportReportPdfBranding";
 import { TransportReportPreviewDialog, type TransportReportPreview } from "@/components/TransportReportPreviewDialog";
@@ -80,6 +84,7 @@ export default function GroupBubbleSheets() {
   const [week1Start, setWeek1Start] = useState("");
   const [selectedWeek, setSelectedWeek] = useState<number>(1);
   const [selectedGroup, setSelectedGroup] = useState(ALL_GROUPS);
+  const [reportSort, setReportSort] = useState<ReportCamperSort>("first-name");
   const [roster, setRoster] = useState<GroupRosterCamper[]>([]);
   const [rosterLoading, setRosterLoading] = useState(true);
   const [reportPreview, setReportPreview] = useState<TransportReportPreview | null>(null);
@@ -208,7 +213,7 @@ export default function GroupBubbleSheets() {
       totalCampers: groupKids.length,
       staffNames,
       sessionSummary: sessionSummaryForCampers(groupKids),
-      campers: groupKids.map((child) => ({
+      campers: sortReportChildren(groupKids, reportSort).map((child) => ({
         ...childToGroupReportCamper(child, "", currentSeason),
         transportLine: "",
       })),
@@ -397,6 +402,22 @@ export default function GroupBubbleSheets() {
                   {groupNames.map((name) => (
                     <SelectItem key={name} value={name}>
                       {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Print order</Label>
+              <Select value={reportSort} onValueChange={(v) => setReportSort(v as ReportCamperSort)}>
+                <SelectTrigger className="w-[160px] mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {REPORT_CAMPER_SORTS.map((sort) => (
+                    <SelectItem key={sort} value={sort}>
+                      {REPORT_CAMPER_SORT_LABELS[sort]}
                     </SelectItem>
                   ))}
                 </SelectContent>

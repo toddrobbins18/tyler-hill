@@ -588,6 +588,66 @@ describe("paper attendance", () => {
     expect(omrRowsToAbsentFlags(result.rows, "bus").every((row) => !row.absent)).toBe(true);
   });
 
+  it("still reads one X on a group sheet of empty rings", () => {
+    const image = makeWhite(240, 360);
+    const cols = nestGroupCols(240);
+    const rowsY = [80, 160, 240];
+    for (const y of rowsY) {
+      for (const cx of cols) strokeCircle(image, cx, y, 6);
+    }
+    drawX(image, cols[1], 80, 5);
+    const result = analyzePaperAttendanceImage(image, {
+      kind: "group",
+      weekdayIndex: 1,
+      camperCount: 3,
+      camperNames: ["Aayhan Kazmi", "Adam Detore", "Aidan Sardelli"],
+    });
+    expect(omrRowsToAbsentFlags(result.rows, "group").map((row) => row.absent)).toEqual([
+      true,
+      false,
+      false,
+    ]);
+  });
+
+  it("does not mark noisy empty group circles as absent", () => {
+    const image = makeWhite(240, 960);
+    const cols = nestGroupCols(240);
+    for (let r = 0; r < 10; r += 1) {
+      const top = 64 + r * 86;
+      for (const cx of cols) {
+        strokeCircle(image, cx, top + 18, 6);
+      }
+      for (const cx of cols) {
+        for (let n = 0; n < 3; n += 1) {
+          const i = (Math.round(top + 18 + (n % 2) - 0.5) * image.width + Math.round(cx + n - 1)) * 4;
+          if (i < 0 || i + 3 >= image.data.length) continue;
+          image.data[i] = 198;
+          image.data[i + 1] = 198;
+          image.data[i + 2] = 198;
+        }
+      }
+    }
+    const names = [
+      "Aayhan Kazmi",
+      "Adam Detore",
+      "Aidan Sardelli",
+      "Alexandra Simon",
+      "Cade Wallack",
+      "Charlotte Simon",
+      "Hannah Smolinsky",
+      "Harper Barash",
+      "Hudson Wein",
+      "Isla Valsamopoulos",
+    ];
+    const result = analyzePaperAttendanceImage(image, {
+      kind: "group",
+      weekdayIndex: 1,
+      camperCount: names.length,
+      camperNames: names,
+    });
+    expect(omrRowsToAbsentFlags(result.rows, "group").every((row) => !row.absent)).toBe(true);
+  });
+
   it("does not invent absents on an unmarked bus page", () => {
     const image = makeWhite(240, 720);
     const cols = nestBusCols(240);

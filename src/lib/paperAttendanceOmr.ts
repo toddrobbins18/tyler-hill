@@ -193,7 +193,7 @@ function sampleInkFraction(image: GrayImage, cx: number, cy: number, radius: num
       const dx = x - cx;
       if (dx * dx + dy * dy > r2) continue;
       count += 1;
-      if (image.gray[y * image.width + x] < 205) dark += 1;
+      if (image.gray[y * image.width + x] < 185) dark += 1;
     }
   }
   return count ? dark / count : 0;
@@ -253,12 +253,13 @@ function percentile(values: number[], p: number): number {
 }
 
 function isFilledBubble(sample: BubbleSample, paper: number, emptyInner: number): boolean {
-  // Hollow circle with fill, X, check, or scribble is absent.
-  if (isHollowCircle(sample, paper)) return sample.ink >= 0.08 || sample.wideInk >= 0.1;
-  if (sample.ink >= 0.18) return true;
-  if (emptyInner - sample.inner < 24) return false;
-  if (sample.inner > 205) return false;
-  return paper - sample.inner > 36;
+  // Printed empty rings are hollow. Require a real X/check in the interior, not
+  // ring toner or a light shadow from the scan.
+  if (isHollowCircle(sample, paper)) return sample.ink >= 0.14 && sample.wideInk >= 0.12;
+  if (sample.ink >= 0.22) return true;
+  if (emptyInner - sample.inner < 28) return false;
+  if (sample.inner > 200) return false;
+  return paper - sample.inner > 42;
 }
 
 function isMarkedVsPeers(
@@ -271,7 +272,7 @@ function isMarkedVsPeers(
   if (peers.length < 2) return true;
   const medInk = percentile(peers.map((s) => s.ink), 0.5);
   const medInner = percentile(peers.map((s) => s.inner), 0.5);
-  return selected.ink >= medInk + 0.05 || medInner - selected.inner >= 22;
+  return selected.ink >= medInk + 0.08 || medInner - selected.inner >= 30;
 }
 
 function nonMaxima(scores: Float32Array, y0: number, y1: number, minSep: number): number[] {

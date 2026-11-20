@@ -27,6 +27,7 @@ export type GroupReportCamper = {
   divisionLine?: string;
   town?: string;
   sessionLine?: string;
+  grade?: string | null;
 };
 
 const FOOTER = 12;
@@ -253,9 +254,6 @@ export function buildGroupReportPdf(options: {
     y = drawPdfTextBlock(doc, `Capacity: ${options.capacity}`, margin, y, innerWidth, { lineHeight: 3.6 });
     y += 0.4;
   }
-  const sessionSummary = options.sessionSummary?.trim();
-  const sessionLine = `Total Campers: ${options.totalCampers}${sessionSummary ? `; Sessions: ${sessionSummary}` : ""}`;
-  y = drawPdfTextBlock(doc, sessionLine, margin, y, innerWidth, { lineHeight: 3.6 });
   y += 1.4;
   y = drawBubbleDayHeader(doc, margin, pageWidth, y, "daily");
 

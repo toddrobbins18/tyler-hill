@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildGroupReportPdf, groupReportRowColumns } from "@/lib/transportCampMinderReportsPdf";
 import { encodeCamperBarcode, sanitizeBarcodePayload } from "@/lib/transportReportPdfLayout";
+import { extractPdfLiteralStrings } from "@/lib/paperAttendancePdfText";
 
 describe("transportReportPdfLayout", () => {
   it("sanitizeBarcodePayload strips invalid chars", () => {
@@ -28,7 +29,7 @@ describe("transportReportPdfLayout", () => {
     expect(cols.bubbleRight).toBeLessThanOrEqual(215.9 - 12);
   });
 
-  it("wraps a long Unassigned sessions line inside the page", () => {
+  it("hides the Unassigned sessions blob instead of printing it", async () => {
     const sessions = Array.from({ length: 12 }, (_, i) => `Weeks 1, ${i + 2}-8`).join(" · ");
     const built = buildGroupReportPdf({
       companyName: "North Shore Day Camp",
@@ -49,6 +50,10 @@ describe("transportReportPdfLayout", () => {
     });
     expect(built).not.toBeNull();
     expect(built!.blob.size).toBeGreaterThan(800);
+    const joined = extractPdfLiteralStrings(new Uint8Array(await built!.blob.arrayBuffer()));
+    expect(joined.includes("Sessions:")).toBe(false);
+    expect(/Weeks 1, \d+-8/.test(joined)).toBe(false);
+    expect(joined.includes("Total Campers")).toBe(true);
   });
 
   it("builds a group report with the weekday labels in the circle column", () => {

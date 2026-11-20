@@ -11,6 +11,13 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { downloadTransportPdfs, triggerBlobDownload } from "@/lib/transportBubbleSheetPdf";
 import type { TransportRouteMeta, TransportRouteStop } from "@/lib/transportRoster";
 import { consolidateRouteStopsByAddress } from "@/lib/transportRouteStops";
@@ -30,8 +37,12 @@ import {
   loadGroupStaffNames,
   loadTransportReportChildren,
   reportCampersForBusRoster,
+  REPORT_CAMPER_SORT_LABELS,
+  REPORT_CAMPER_SORTS,
   resolveCamperTransportLine,
   sessionSummaryForCampers,
+  sortReportChildren,
+  type ReportCamperSort,
 } from "@/lib/transportReportData";
 import {
   enrollmentWeekForDate,
@@ -62,6 +73,7 @@ export default function TransportPrintReports() {
   const [loading, setLoading] = useState(true);
   const [selectedRouteIds, setSelectedRouteIds] = useState<number[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
+  const [reportSort, setReportSort] = useState<ReportCamperSort>("first-name");
   const [preview, setPreview] = useState<TransportReportPreview | null>(null);
   const [exporting, setExporting] = useState(false);
 
@@ -210,7 +222,7 @@ export default function TransportPrintReports() {
   const handleGroupReport = async (groupName: string, downloadOnly = false): Promise<boolean> => {
     const groupKids = children.filter((c) => c.groupName === groupName);
     if (!groupKids.length) return false;
-    const campers = groupKids.map((c) => ({
+    const campers = sortReportChildren(groupKids, reportSort).map((c) => ({
       ...childToGroupReportCamper(
         c,
         resolveCamperTransportLine(
@@ -260,7 +272,7 @@ export default function TransportPrintReports() {
     for (const name of names) {
       const groupKids = children.filter((c) => c.groupName === name);
       if (!groupKids.length) continue;
-      const campers = groupKids.map((c) => ({
+      const campers = sortReportChildren(groupKids, reportSort).map((c) => ({
         ...childToGroupReportCamper(
           c,
           resolveCamperTransportLine(
@@ -306,15 +318,18 @@ export default function TransportPrintReports() {
 
     if (routeId === PT_ROSTER_ROUTE_ID) {
       if (!ptRosterCampers.length) return null;
-      const reportCampers = reportCampersForBusRoster(
-        ptRosterCampers,
-        children,
-        routeMeta,
-        coreStops,
-        parentTransportCampers,
-        schedules,
-        PARENT_TRANSPORT_CHANGE_SHEET_BUS,
-        currentSeason,
+      const reportCampers = sortReportChildren(
+        reportCampersForBusRoster(
+          ptRosterCampers,
+          children,
+          routeMeta,
+          coreStops,
+          parentTransportCampers,
+          schedules,
+          PARENT_TRANSPORT_CHANGE_SHEET_BUS,
+          currentSeason,
+        ),
+        reportSort,
       );
       const built = buildBusRosterReportPdf({
         companyName: branding.companyName,
@@ -353,15 +368,18 @@ export default function TransportPrintReports() {
         ? await loadBusCounselorForRoute(supabase, companyId, currentSeason, route.bus)
         : null);
 
-    const reportCampers = reportCampersForBusRoster(
-      bubbleRoute.campers,
-      children,
-      routeMeta,
-      coreStops,
-      parentTransportCampers,
-      schedules,
-      route.bus,
-      currentSeason,
+    const reportCampers = sortReportChildren(
+      reportCampersForBusRoster(
+        bubbleRoute.campers,
+        children,
+        routeMeta,
+        coreStops,
+        parentTransportCampers,
+        schedules,
+        route.bus,
+        currentSeason,
+      ),
+      reportSort,
     );
 
     const built = buildBusRosterReportPdf({
@@ -549,7 +567,22 @@ export default function TransportPrintReports() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <Label className="text-xs text-muted-foreground">Print order</Label>
+              <Select value={reportSort} onValueChange={(v) => setReportSort(v as ReportCamperSort)}>
+                <SelectTrigger className="h-9 w-[160px] mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {REPORT_CAMPER_SORTS.map((sort) => (
+                    <SelectItem key={sort} value={sort}>
+                      {REPORT_CAMPER_SORT_LABELS[sort]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <Button size="sm" variant="outline" onClick={() => setSelectedRouteIds(allRosterRouteIds)}>
               Select all buses
             </Button>
@@ -631,9 +664,31 @@ export default function TransportPrintReports() {
           <CardDescription>One PDF per camp group (Cheetahs, etc.) — parent contacts and weekday bubbles.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <Label className="text-xs text-muted-foreground">Print order</Label>
+              <Select value={reportSort} onValueChange={(v) => setReportSort(v as ReportCamperSort)}>
+                <SelectTrigger className="h-9 w-[160px] mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {REPORT_CAMPER_SORTS.map((sort) => (
+                    <SelectItem key={sort} value={sort}>
+                      {REPORT_CAMPER_SORT_LABELS[sort]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <Button size="sm" variant="outline" onClick={() => setSelectedGroups(new Set(groupNames))}>
               Select all groups
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setSelectedGroups(new Set())}
+            >
+              Clear
             </Button>
             <Button
               size="sm"
