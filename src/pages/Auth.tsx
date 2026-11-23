@@ -1,42 +1,53 @@
 import { Auth as SupabaseAuth } from "@supabase/auth-ui-react";
 import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { DEFAULT_SEASON } from "@/lib/seasonConstants";
-import { isNestSandboxCompany } from "@/lib/camps";
+import { DEFAULT_COMPANY_SLUG, isNestSandboxCompany } from "@/lib/camps";
 import { isSandboxDemoStaffEmail } from "@/lib/nestSandboxStaffDemo";
 import { setNestSandboxModeActive } from "@/lib/nestSandboxMode";
+import { loginAudienceFromSearch } from "@/lib/loginAudience";
+import { LoginAudienceToggle } from "@/components/parentPortal/LoginAudienceToggle";
+import ParentAuth from "./ParentAuth";
 
 export default function Auth() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
-  const authRedirectTo = `${window.location.origin}/auth`;
+  const authRedirectTo = `${window.location.origin}/auth?role=staff`;
+  const audience = loginAudienceFromSearch(searchParams);
 
-  // Extract company_id and email from URL query parameters
-  const companyId = searchParams.get('company_id');
-  const inviteEmail = searchParams.get('email');
+  const companyId = searchParams.get("company_id");
+  const inviteEmail = searchParams.get("email");
 
   const awaitingFreshLoginRef = useRef(true);
 
   useEffect(() => {
-    // Handle password recovery redirects (hash-based and query-based)
+    if (audience !== "parent") return;
+    if (searchParams.get("company")) return;
+    const next = new URLSearchParams(searchParams);
+    next.set("company", DEFAULT_COMPANY_SLUG);
+    setSearchParams(next, { replace: true });
+  }, [audience, searchParams, setSearchParams]);
+
+  useEffect(() => {
     const hash = window.location.hash;
     const queryParams = new URLSearchParams(window.location.search);
-    const hasRecoveryHash = hash.includes('type=recovery') || hash.includes('type=signup');
+    const hasRecoveryHash = hash.includes("type=recovery") || hash.includes("type=signup");
     const hasRecoveryQuery =
-      queryParams.get('type') === 'recovery' ||
-      !!queryParams.get('code') ||
-      !!queryParams.get('token_hash');
+      queryParams.get("type") === "recovery" ||
+      !!queryParams.get("code") ||
+      !!queryParams.get("token_hash");
 
     if (hasRecoveryHash || hasRecoveryQuery) {
-      navigate('/update-password' + window.location.search + window.location.hash);
+      navigate("/update-password" + window.location.search + window.location.hash);
       return;
     }
+
+    if (audience === "parent") return;
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
@@ -48,19 +59,18 @@ export default function Auth() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      // Handle password recovery event
-      if (event === 'PASSWORD_RECOVERY') {
-        navigate('/update-password' + window.location.search + window.location.hash);
+      if (event === "PASSWORD_RECOVERY") {
+        navigate("/update-password" + window.location.search + window.location.hash);
         return;
       }
 
-      if (event === 'SIGNED_OUT') {
+      if (event === "SIGNED_OUT") {
         awaitingFreshLoginRef.current = true;
         return;
       }
-      
+
       if (session) {
-        const applyLoginDefaults = event === 'SIGNED_IN' && awaitingFreshLoginRef.current;
+        const applyLoginDefaults = event === "SIGNED_IN" && awaitingFreshLoginRef.current;
         if (applyLoginDefaults) {
           awaitingFreshLoginRef.current = false;
         }
@@ -69,15 +79,15 @@ export default function Auth() {
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, audience]);
 
   const checkUserCompany = async (userId: string, applyLoginDefaults: boolean) => {
     setLoading(true);
     try {
       const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('approved, company_id, companies(slug)')
-        .eq('id', userId)
+        .from("profiles")
+        .select("approved, company_id, companies(slug)")
+        .eq("id", userId)
         .single();
 
       if (error) throw error;
@@ -103,9 +113,9 @@ export default function Auth() {
       }
 
       if (applyLoginDefaults) {
-        sessionStorage.removeItem('viewing_company_id');
-        sessionStorage.setItem('nest_login_defaults', '1');
-        localStorage.setItem('currentSeason', DEFAULT_SEASON);
+        sessionStorage.removeItem("viewing_company_id");
+        sessionStorage.setItem("nest_login_defaults", "1");
+        localStorage.setItem("currentSeason", DEFAULT_SEASON);
       }
 
       const profileSlug = (profile?.companies as { slug?: string } | null)?.slug;
@@ -116,7 +126,7 @@ export default function Auth() {
 
       navigate("/");
     } catch (error) {
-      console.error('Error checking user company:', error);
+      console.error("Error checking user company:", error);
       toast({
         title: "Error",
         description: "Failed to verify account. Please try again.",
@@ -128,8 +138,23 @@ export default function Auth() {
     }
   };
 
+  if (audience === "parent") {
+    return <ParentAuth />;
+  }
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
+      <LoginAudienceToggle
+        audience="staff"
+        onAudienceChange={(next) => {
+          if (next === "parent") {
+            navigate(
+              `/auth?role=parent&company=${encodeURIComponent(DEFAULT_COMPANY_SLUG)}`,
+            );
+          }
+        }}
+        className="mb-6"
+      />
       <div className="w-full max-w-md p-8">
         {loading ? (
           <div className="flex justify-center items-center h-64">

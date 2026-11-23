@@ -30,6 +30,7 @@ export default defineConfig({
       "src/lib/__tests__/parentReminderLayout.test.ts",
       "src/lib/__tests__/camperGroupDisplay.test.ts",
       "src/lib/__tests__/amPmTime.test.ts",
+      "src/lib/__tests__/loginAudience.test.ts",
     ],
   },
 });

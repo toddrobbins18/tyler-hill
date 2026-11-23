@@ -1,10 +1,17 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Shield, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,16 +24,36 @@ import {
   resolveParentPortalHeroImageUrl,
 } from "@/lib/parentPortalTheme";
 import { cn } from "@/lib/utils";
-import { AppStoreDownloadBadge } from "@/components/parentPortal/AppStoreDownloadBadge";
+import { NestAppDownloadBadges } from "@/components/parentPortal/AppStoreDownloadBadge";
+import { LoginAudienceToggle } from "@/components/parentPortal/LoginAudienceToggle";
 import { NestSandboxParentFlowGuide } from "@/components/parentPortal/NestSandboxParentFlowGuide";
 import { isNestSandboxParentTraining } from "@/lib/nestSandboxParentDemo";
+import { CAMP_SLUG, PARENT_PORTAL_LOGIN_CAMPS } from "@/lib/camps";
 
 export default function ParentAuth() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { userRoles, loading: authLoading } = useAuth();
   const { companyId, companySlug, companyName, themeColor, loading: companyLoading } =
     useParentCompany();
   const rootRef = useParentPortalTheme(themeColor, companySlug);
+
+  const setCampSlug = (slug: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("company", slug);
+    if (location.pathname === "/auth") next.set("role", "parent");
+    else next.delete("role");
+    setSearchParams(next, { replace: true });
+  };
+
+  const campOptions =
+    companySlug === CAMP_SLUG.NEST_SANDBOX_DAY_CAMP
+      ? [
+          ...PARENT_PORTAL_LOGIN_CAMPS,
+          { slug: CAMP_SLUG.NEST_SANDBOX_DAY_CAMP, name: "Training sandbox" },
+        ]
+      : PARENT_PORTAL_LOGIN_CAMPS;
   const [loading, setLoading] = useState(false);
 
   const [email, setEmail] = useState("");
@@ -57,7 +84,7 @@ export default function ParentAuth() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!companyId) {
-      toast.error("Missing camp link. Open Parent Portal from your camp's menu.");
+      toast.error("Pick your camp first.");
       return;
     }
     setLoading(true);
@@ -70,7 +97,7 @@ export default function ParentAuth() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!companyId) {
-      toast.error("Missing camp link. Open Parent Portal from your camp's menu.");
+      toast.error("Pick your camp first.");
       return;
     }
     setLoading(true);
@@ -126,12 +153,39 @@ export default function ParentAuth() {
 
   if (!companyId) {
     return (
-      <div className="parent-portal flex min-h-screen items-center justify-center pp-page-bg p-4">
+      <div className="parent-portal flex min-h-screen flex-col items-center justify-center pp-page-bg p-4">
+        <LoginAudienceToggle
+          audience="parent"
+          onAudienceChange={(next) => {
+            if (next === "staff") navigate("/auth");
+          }}
+          className="mb-6"
+        />
         <div className="pp-card w-full max-w-md rounded-3xl p-8 shadow-lg">
-          <h1 className="text-xl font-semibold">Camp not found</h1>
+          <h1 className="text-xl font-semibold">Choose your camp</h1>
           <p className="pp-text-muted mt-2 text-sm">
-            Open the Parent Portal using the link from your camp&apos;s menu (Parent Facing → Login / Signup).
+            Pick the camp your child attends to sign in to the parent portal.
           </p>
+          <div className="mt-5 space-y-2">
+            <Label>Camp</Label>
+            <Select value={companySlug ?? ""} onValueChange={setCampSlug}>
+              <SelectTrigger className="rounded-xl">
+                <SelectValue placeholder="Select a camp" />
+              </SelectTrigger>
+              <SelectContent>
+                {campOptions.map((camp) => (
+                  <SelectItem key={camp.slug} value={camp.slug}>
+                    {camp.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="mt-8 border-t border-[hsl(var(--pp-border))] pt-6">
+            <p className="text-sm font-medium text-slate-700">Get The Nest on your phone</p>
+            <p className="mt-1 text-xs pp-text-muted">iPhone and Android</p>
+            <NestAppDownloadBadges className="mt-3" />
+          </div>
         </div>
       </div>
     );
@@ -154,6 +208,14 @@ export default function ParentAuth() {
           style={parentPortalMainBackdropStyle(heroImageUrl!)}
         />
       ) : null}
+      <div className="relative z-30 flex justify-center px-4 pt-5">
+        <LoginAudienceToggle
+          audience="parent"
+          onAudienceChange={(next) => {
+            if (next === "staff") navigate("/auth");
+          }}
+        />
+      </div>
       {isStaffPreview && (
         <div className="relative z-20 border-b border-[hsl(var(--pp-brand)/0.15)] bg-white/95 px-4 py-3 shadow-sm backdrop-blur-sm">
           <div className="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -278,12 +340,12 @@ export default function ParentAuth() {
             )}
           >
             <p className={cn("text-sm font-medium", hasPhotoBg ? "text-white" : "text-slate-700")}>
-              Get The Nest on your iPhone
+              Get The Nest on your phone
             </p>
             <p className={cn("mt-1 max-w-sm text-sm", hasPhotoBg ? "text-white/85" : "pp-text-muted")}>
-              Download the app for quick access to pickups, absences, and camp updates on the go.
+              Download the app for iPhone or Android for pickups, absences, and camp updates on the go.
             </p>
-            <AppStoreDownloadBadge className="mt-4 inline-block" />
+            <NestAppDownloadBadges className="mt-4" />
           </div>
         </section>
 
@@ -327,10 +389,26 @@ export default function ParentAuth() {
             <div className="pp-brand-bg flex h-12 w-12 items-center justify-center rounded-2xl">
               <Shield className="h-6 w-6" />
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold">{companyName}</p>
               <p className="pp-text-muted text-xs">Parent sign in</p>
             </div>
+          </div>
+
+          <div className="mb-5 space-y-2">
+            <Label htmlFor="parent-camp">Camp</Label>
+            <Select value={companySlug ?? ""} onValueChange={setCampSlug}>
+              <SelectTrigger id="parent-camp" className="rounded-xl">
+                <SelectValue placeholder="Select a camp" />
+              </SelectTrigger>
+              <SelectContent>
+                {campOptions.map((camp) => (
+                  <SelectItem key={camp.slug} value={camp.slug}>
+                    {camp.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <Tabs defaultValue="login">
@@ -452,8 +530,8 @@ export default function ParentAuth() {
 
           <div className="mt-8 border-t border-[hsl(var(--pp-border))] pt-6 text-center">
             <p className="text-sm font-medium text-slate-700">Prefer the app?</p>
-            <p className="mt-1 text-xs pp-text-muted">Download The Nest for iPhone</p>
-            <AppStoreDownloadBadge className="mx-auto mt-3 inline-block" />
+            <p className="mt-1 text-xs pp-text-muted">Download The Nest for iPhone or Android</p>
+            <NestAppDownloadBadges className="mt-3 justify-center" />
           </div>
         </section>
       </div>

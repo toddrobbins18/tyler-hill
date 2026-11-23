@@ -13,6 +13,16 @@ export const CAMP_SLUG = {
 /** Default camp when opening The Nest (North Shore day-camp focus). */
 export const DEFAULT_COMPANY_SLUG = CAMP_SLUG.NORTH_SHORE_DAY_CAMP;
 
+/** Camps parents can pick on thenest.com / parent login. Sandbox is staff-only. */
+export const PARENT_PORTAL_LOGIN_CAMPS = [
+  { slug: CAMP_SLUG.NORTH_SHORE_DAY_CAMP, name: "North Shore Day Camp" },
+  { slug: CAMP_SLUG.HAMPTON_COUNTRY_DAY_CAMP, name: "Hampton Country Day Camp" },
+  { slug: CAMP_SLUG.SOUTHAMPTON_CAMP_CLUB, name: "Southampton Camp & Club" },
+  { slug: CAMP_SLUG.TYLER_HILL_CAMP, name: "Tyler Hill Camp" },
+  { slug: CAMP_SLUG.TIMBER_LAKE_CAMP, name: "Timber Lake Camp" },
+  { slug: CAMP_SLUG.TIMBER_LAKE_WEST, name: "Timber Lake West" },
+] as const;
+
 /** Bump to reset saved camp selection once (localStorage bootstrap). */
 export const COMPANY_BOOTSTRAP_VERSION = "north-shore-default-v2";
 
